@@ -1,0 +1,20 @@
+{
+  "name": "dp-gnosis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Retrieval over a curated markdown atom vault. Liftable unit: code here, vault at gnosis/, runtime at .dp-gnosis/.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "comment:dependencies": "better-sqlite3 backs the FTS5 adapter. It already resolves from the repo root, so nothing new is installed — it is declared here so this package stays a liftable unit (decision N-1) rather than depending on an undeclared ambient package.",
+  "dependencies": {
+    "better-sqlite3": "^12.11.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  },
+  "comment:optionalDependencies": "Adapter-gated packages (minisearch + stemmer, @lancedb/lancedb) land here ONLY after their COMMON.md §IX round is approved (plan T-18 / T-20). They are loaded by lazy dynamic import so a missing one skips its adapter instead of breaking the suite.",
+  "optionalDependencies": {}
+}

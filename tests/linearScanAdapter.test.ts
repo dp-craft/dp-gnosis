@@ -1,0 +1,260 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { createLinearScanAdapter } from '../src/adapters/linearScanAdapter.js';
+import type { AtomFrontmatter } from '../src/atom.js';
+import { serializeAtom } from '../src/atom.js';
+import type { RetrievalResult } from '../src/port.js';
+
+const NOW = new Date('2026-08-08T00:00:00.000Z');
+
+const frontmatter = (id: string, overrides: Partial<AtomFrontmatter> = {}): AtomFrontmatter => ({
+  type: 'knowledge_atom',
+  id,
+  title: `Title ${id}`,
+  x_domain: 'runner',
+  status: 'stable',
+  sources: ['RUNNER-GUIDE.md'],
+  ...overrides,
+});
+
+interface AtomSpec {
+  readonly file: string;
+  readonly id: string;
+  readonly body: string;
+  readonly overrides?: Partial<AtomFrontmatter>;
+}
+
+const writeAtom = async (dir: string, spec: AtomSpec): Promise<void> => {
+  const fm = frontmatter(spec.id, spec.overrides ?? {});
+  await writeFile(join(dir, spec.file), serializeAtom(fm, `${spec.body}\n`), 'utf8');
+};
+
+const writeAll = async (dir: string, specs: readonly AtomSpec[]): Promise<void> => {
+  for (const spec of specs) {
+    await writeAtom(dir, spec);
+  }
+};
+
+const ids = (result: RetrievalResult): readonly string[] => result.atoms.map(atom => atom.id);
+
+let root = '';
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'gnosis-linear-'));
+});
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+const atomsDir = async (name = 'atoms'): Promise<string> => {
+  const dir = join(root, name);
+  await mkdir(dir, { recursive: true });
+  return dir;
+};
+
+describe('createLinearScanAdapter', () => {
+  it('names itself after the scan strategy', async () => {
+    expect(createLinearScanAdapter(await atomsDir()).name).toBe('linear-scan');
+  });
+
+  it('ranks the denser match first and drops non-matching atoms', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'a.md', id: 'dense', body: 'bm25 bm25 bm25 ranking of atoms' },
+      { file: 'b.md', id: 'sparse', body: 'bm25 is mentioned once here only' },
+      { file: 'c.md', id: 'other', body: 'zustand selector stability rules' },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('bm25', { k: 10 });
+
+    expect(ids(result)).toEqual(['dense', 'sparse']);
+    expect(result.indexState).toBe('ready');
+  });
+
+  it('produces a byte-identical ranking regardless of file creation order', async () => {
+    const forward = await atomsDir('forward');
+    const reverse = await atomsDir('reverse');
+    const specs: readonly AtomSpec[] = [
+      { file: 'zulu.md', id: 'alpha-atom', body: 'index scan determinism' },
+      { file: 'mike.md', id: 'bravo-atom', body: 'index scan determinism' },
+      { file: 'alfa.md', id: 'charlie-atom', body: 'index scan determinism' },
+    ];
+    await writeAll(forward, specs);
+    await writeAll(reverse, [...specs].reverse());
+
+    const first = await createLinearScanAdapter(forward, { now: NOW }).retrieve('index', { k: 10 });
+    const second = await createLinearScanAdapter(reverse, { now: NOW }).retrieve('index', { k: 10 });
+
+    expect(ids(first)).toEqual(['alpha-atom', 'bravo-atom', 'charlie-atom']);
+    expect(ids(second)).toEqual(ids(first));
+    expect(second.atoms.map(a => a.score)).toEqual(first.atoms.map(a => a.score));
+  });
+
+  it('breaks a deliberate score tie by atomId ascending', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'first-written.md', id: 'zeta', body: 'identical tie breaking text' },
+      { file: 'second-written.md', id: 'alpha', body: 'identical tie breaking text' },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('tie', { k: 10 });
+
+    expect(ids(result)).toEqual(['alpha', 'zeta']);
+  });
+
+  it('returns no atoms and an empty index state for an empty corpus', async () => {
+    const result = await createLinearScanAdapter(await atomsDir(), { now: NOW }).retrieve('bm25', {
+      k: 5,
+    });
+
+    expect(result.atoms).toEqual([]);
+    expect(result.indexState).toBe('empty');
+  });
+
+  it('truncates to exactly k when more atoms match', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'a.md', id: 'a', body: 'retrieval retrieval retrieval' },
+      { file: 'b.md', id: 'b', body: 'retrieval retrieval' },
+      { file: 'c.md', id: 'c', body: 'retrieval' },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('retrieval', { k: 2 });
+
+    expect(ids(result)).toEqual(['a', 'b']);
+  });
+
+  it('never pads when k exceeds the corpus size', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'retrieval scoring' }]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('retrieval', {
+      k: 50,
+    });
+
+    expect(result.atoms).toHaveLength(1);
+  });
+
+  it('returns no atoms for a term absent from the corpus, with a ready index', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'retrieval scoring' }]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('kubernetes', {
+      k: 5,
+    });
+
+    expect(result.atoms).toEqual([]);
+    expect(result.indexState).toBe('ready');
+  });
+
+  it('excludes foreign domains when a domain filter is given', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'a.md', id: 'runner-atom', body: 'gate pipeline escalation' },
+      {
+        file: 'b.md',
+        id: 'standards-atom',
+        body: 'gate pipeline escalation',
+        overrides: { x_domain: 'standards' },
+      },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
+      k: 10,
+      domain: 'standards',
+    });
+
+    expect(ids(result)).toEqual(['standards-atom']);
+    expect(result.atoms[0]?.domain).toBe('standards');
+  });
+
+  it('reads the body from disk on every call, so an edit needs no reindex', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'original oscillation text' }]);
+    const port = createLinearScanAdapter(dir, { now: NOW });
+
+    const before = await port.retrieve('oscillation', { k: 5 });
+    await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'rewritten oscillation text' }]);
+    const after = await port.retrieve('oscillation', { k: 5 });
+
+    expect(before.atoms[0]?.body).toContain('original');
+    expect(after.atoms[0]?.body).toContain('rewritten');
+  });
+
+  it('skips a corrupt atom and a non-markdown file instead of throwing', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'good.md', id: 'good', body: 'compaction budget' }]);
+    await writeFile(join(dir, 'broken.md'), 'no frontmatter compaction here\n', 'utf8');
+    await writeFile(join(dir, 'notes.txt'), 'compaction compaction compaction\n', 'utf8');
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('compaction', {
+      k: 10,
+    });
+
+    expect(ids(result)).toEqual(['good']);
+  });
+
+  it('applies the shared retrievability rule to deprecated and expired atoms', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'a.md', id: 'live', body: 'telemetry ledger' },
+      { file: 'b.md', id: 'dead', body: 'telemetry ledger', overrides: { status: 'deprecated' } },
+      {
+        file: 'c.md',
+        id: 'expired',
+        body: 'telemetry ledger',
+        overrides: { stale_after: '2026-08-07' },
+      },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('telemetry', {
+      k: 10,
+    });
+
+    expect(ids(result)).toEqual(['live']);
+  });
+
+  it('reports an empty index when every atom in the corpus is unretrievable', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'a.md', id: 'dead', body: 'telemetry ledger', overrides: { status: 'deprecated' } },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('telemetry', {
+      k: 10,
+    });
+
+    expect(result.indexState).toBe('empty');
+  });
+
+  it('cannot reach a markdown file that sits in the proposals directory', async () => {
+    const atoms = await atomsDir('atoms');
+    const proposals = await atomsDir('proposals');
+    await writeAll(atoms, [{ file: 'a.md', id: 'curated', body: 'shared vault text' }]);
+    await writeAll(proposals, [{ file: 'b.md', id: 'proposed', body: 'shared vault text' }]);
+
+    const result = await createLinearScanAdapter(atoms, { now: NOW }).retrieve('vault', { k: 10 });
+
+    expect(ids(result)).toEqual(['curated']);
+  });
+
+  it('applies processTerm on both the document side and the query side', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'the index rebuild step' }]);
+    const stem = (term: string): string => (term.endsWith('ing') ? term.slice(0, -3) : term);
+
+    const stemmed = await createLinearScanAdapter(dir, { now: NOW, processTerm: stem }).retrieve(
+      'indexing',
+      { k: 5 }
+    );
+    const identity = await createLinearScanAdapter(dir, { now: NOW }).retrieve('indexing', {
+      k: 5,
+    });
+
+    expect(ids(stemmed)).toEqual(['a']);
+    expect(identity.atoms).toEqual([]);
+  });
+});
