@@ -32,3 +32,21 @@ export const INDEX_DIR: string = resolve(RUNTIME_ROOT, 'index');
 
 /** Default destination of the FTS5 index the CLI builds and reads. */
 export const FTS5_INDEX_PATH: string = resolve(INDEX_DIR, 'atoms-fts5.db');
+
+/**
+ * Scratch root for the benchmark: corpus working copies and their indexes.
+ * Under `RUNTIME_ROOT` because it is derived and disposable — the bench never
+ * measures `ATOMS_DIR` in place, so a run cannot mutate the curated vault.
+ */
+export const BENCH_WORK_DIR: string = resolve(RUNTIME_ROOT, 'bench');
+
+/**
+ * The FROZEN golden relevance set the benchmark scores every adapter against.
+ * Tracked next to the code, NOT under `RUNTIME_ROOT`: it is authored evidence,
+ * not derived state, and regenerating it from a retriever's output would make
+ * the measurement circular.
+ */
+export const GOLDEN_SET_PATH: string = resolve(SRC_DIR, '..', 'golden', 'golden-set.v1.json');
+
+/** Where reproducible, comparable reports are persisted (repo convention). */
+export const DOCS_TEST_DIR: string = resolve(REPO_ROOT, 'docs', 'test');
