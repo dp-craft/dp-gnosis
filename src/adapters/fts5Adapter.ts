@@ -247,20 +247,102 @@ interface IndexSnapshot {
   readonly rows: readonly IndexRow[];
 }
 
-const queryIndex = (indexPath: string, match: string | undefined): IndexSnapshot => {
-  const db = new Database(indexPath, { readonly: true });
-  const count = (db.prepare(COUNT_META_SQL).get() as { readonly n: number }).n;
-  const rows = match === undefined ? [] : (db.prepare(SEARCH_SQL).all(match) as readonly IndexRow[]);
-  db.close();
-  return { count, rows };
+/** One open index file plus its already-prepared statements. */
+interface OpenIndex {
+  readonly identity: string;
+  readonly db: Database.Database;
+  readonly count: Database.Statement;
+  readonly search: Database.Statement;
+}
+
+/**
+ * Which FILE the cached handle is holding — inode, mtime and size together.
+ * `buildFts5Index` unlinks and recreates the index, so a live adapter would
+ * otherwise keep reading the deleted inode: an index rebuilt under a running
+ * instance would go permanently invisible to it. Comparing identity per call
+ * means a rebuild is picked up on the very next retrieve, and a `stat` is
+ * cheaper than the open + prepare it guards.
+ */
+const identityOf = (indexPath: string): string => {
+  const info = statSync(indexPath);
+  return `${info.ino}:${info.mtimeMs}:${info.size}`;
 };
 
-const search = (options: Fts5AdapterOptions, query: string, opts: RetrieveOptions): RetrievalResult => {
-  const snapshot = queryIndex(options.indexPath, toMatchExpression(query));
+const openIndex = (indexPath: string): OpenIndex => {
+  const db = new Database(indexPath, { readonly: true });
   return {
-    atoms: selectAtoms(options, snapshot.rows, opts),
+    identity: identityOf(indexPath),
+    db,
+    count: db.prepare(COUNT_META_SQL),
+    search: db.prepare(SEARCH_SQL),
+  };
+};
+
+/**
+ * The per-instance index handle. Opening the database and preparing its
+ * statements is REAL per-call cost: doing it inside `retrieve` made the
+ * benchmark's warm regime a second measurement of the cold regime, which is the
+ * one comparison the harness exists to make.
+ *
+ * The single mutable cell is deliberate and contained: it is the only way a
+ * closure can amortize a resource across calls without a process-global cache
+ * keyed by path, which would outlive the instance that owns it.
+ */
+interface IndexHandle {
+  readonly snapshot: (indexPath: string, match: string | undefined) => IndexSnapshot;
+  readonly close: () => void;
+}
+
+/** The one mutable cell in this module: the handle being amortized. */
+interface HandleCell {
+  open: OpenIndex | undefined;
+}
+
+const release = (cell: HandleCell): void => {
+  cell.open?.db.close();
+  cell.open = undefined;
+};
+
+const reopen = (cell: HandleCell, indexPath: string): OpenIndex => {
+  release(cell);
+  const opened = openIndex(indexPath);
+  cell.open = opened;
+  return opened;
+};
+
+const acquire = (cell: HandleCell, indexPath: string): OpenIndex => {
+  const current = cell.open;
+  return current !== undefined && current.identity === identityOf(indexPath)
+    ? current
+    : reopen(cell, indexPath);
+};
+
+const snapshotOf = (index: OpenIndex, match: string | undefined): IndexSnapshot => ({
+  count: (index.count.get() as { readonly n: number }).n,
+  rows: match === undefined ? [] : (index.search.all(match) as readonly IndexRow[]),
+});
+
+const createIndexHandle = (): IndexHandle => {
+  const cell: HandleCell = { open: undefined };
+  return {
+    close: (): void => release(cell),
+    snapshot: (indexPath: string, match: string | undefined): IndexSnapshot =>
+      snapshotOf(acquire(cell, indexPath), match),
+  };
+};
+
+/** One adapter instance: its immutable options and the handle it amortizes. */
+interface Fts5Instance {
+  readonly options: Fts5AdapterOptions;
+  readonly handle: IndexHandle;
+}
+
+const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): RetrievalResult => {
+  const snapshot = self.handle.snapshot(self.options.indexPath, toMatchExpression(query));
+  return {
+    atoms: selectAtoms(self.options, snapshot.rows, opts),
     mode: FTS5_MODE,
-    indexState: resolveState(options, snapshot.count),
+    indexState: resolveState(self.options, snapshot.count),
   };
 };
 
@@ -269,14 +351,28 @@ const search = (options: Fts5AdapterOptions, query: string, opts: RetrieveOption
  * Conflating "no search happened" with "searched and found nothing" is what
  * lets a later evaluation measure nothing and report a clean null result.
  */
-const retrieveFrom = (options: Fts5AdapterOptions, query: string, opts: RetrieveOptions): RetrievalResult =>
-  existsSync(options.indexPath)
-    ? search(options, query, opts)
+const retrieveFrom = (
+  self: Fts5Instance,
+  query: string,
+  opts: RetrieveOptions
+): RetrievalResult =>
+  existsSync(self.options.indexPath)
+    ? search(self, query, opts)
     : { atoms: [], mode: FTS5_MODE, indexState: 'unavailable' };
 
-/** Build a port reading the index at `options.indexPath` over `options.atomsDir`. */
-export const createFts5Adapter = (options: Fts5AdapterOptions): KnowledgePort => ({
-  name: FTS5_MODE,
-  retrieve: (query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>
-    Promise.resolve(retrieveFrom(options, query, opts)),
-});
+/**
+ * Build a port reading the index at `options.indexPath` over `options.atomsDir`.
+ *
+ * The database is opened LAZILY, on first use, and reused for the life of this
+ * instance — so an index created after the instance exists is still found, and
+ * `unavailable` never becomes a sticky verdict. Call `close()` when done.
+ */
+export const createFts5Adapter = (options: Fts5AdapterOptions): KnowledgePort => {
+  const self: Fts5Instance = { options, handle: createIndexHandle() };
+  return {
+    name: FTS5_MODE,
+    retrieve: (query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>
+      Promise.resolve(retrieveFrom(self, query, opts)),
+    close: self.handle.close,
+  };
+};

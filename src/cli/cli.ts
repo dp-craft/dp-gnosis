@@ -18,6 +18,7 @@ import type { AdapterName } from './adapter.js';
 import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
 import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag } from './args.js';
+import { runBenchCommand } from './benchCommand.js';
 import type { CommandContext, CommandHandler } from './context.js';
 import { HELP_TEXT } from './help.js';
 import { runIndexCommand } from './indexCommand.js';
@@ -37,6 +38,7 @@ const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   ingest: runIngestCommand,
   index: runIndexCommand,
   retrieve: runRetrieveCommand,
+  bench: runBenchCommand,
 };
 
 type ContextResult =

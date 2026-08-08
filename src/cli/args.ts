@@ -19,6 +19,7 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--atoms-dir': { kind: 'value', placeholder: '<dir>' },
   '--index-path': { kind: 'value', placeholder: '<file>' },
   '--repo-root': { kind: 'value', placeholder: '<dir>' },
+  '--golden-set': { kind: 'value', placeholder: '<file>' },
   '-k': { kind: 'value', placeholder: '<n>' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },

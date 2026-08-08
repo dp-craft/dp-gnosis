@@ -2,6 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } f
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
+import Database from 'better-sqlite3';
+
 import { buildFts5Index, createFts5Adapter } from '../src/adapters/fts5Adapter.js';
 import type { KnowledgePort } from '../src/port.js';
 
@@ -274,6 +276,98 @@ describe('createFts5Adapter', () => {
     const result = await port().retrieve('shared token', { k: 5 });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-a']);
+  });
+
+  /**
+   * REGRESSION GUARD. Re-opening the database per call made the benchmark's warm
+   * regime a second measurement of the cold regime. `prepare` is the observable:
+   * a reopen must re-prepare, so a constant prepare count across N retrieves
+   * pins that one handle served them all.
+   */
+  it('opens and prepares once per instance however many retrieves it serves', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+    build();
+    const instance = port();
+    const spy = vi.spyOn(Database.prototype, 'prepare');
+
+    await instance.retrieve('zustand', { k: 5 });
+    const afterFirst = spy.mock.calls.length;
+    await instance.retrieve('zustand', { k: 5 });
+    await instance.retrieve('selector', { k: 5 });
+
+    expect(afterFirst).toBeGreaterThan(0);
+    expect(spy.mock.calls.length).toBe(afterFirst);
+    spy.mockRestore();
+    instance.close?.();
+  });
+
+  it('picks up an index built after the instance exists, so unavailable is not sticky', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+    const instance = port();
+    expect((await instance.retrieve('zustand', { k: 5 })).indexState).toBe('unavailable');
+
+    build();
+    settleCorpusBehindIndex(['a.md']);
+
+    const result = await instance.retrieve('zustand', { k: 5 });
+
+    expect(result.indexState).toBe('ready');
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-a']);
+    instance.close?.();
+  });
+
+  it('serves a rebuilt index to a live instance instead of the deleted file it held open', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'alpha only' });
+    build();
+    const instance = port();
+    expect((await instance.retrieve('newterm', { k: 5 })).atoms).toEqual([]);
+
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'alpha only newterm' });
+    build();
+
+    const result = await instance.retrieve('newterm', { k: 5 });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-a']);
+    instance.close?.();
+  });
+
+  it('still reports stale per call when the corpus moves under a live instance', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+    build();
+    settleCorpusBehindIndex(['a.md']);
+    const instance = port();
+    expect((await instance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+
+    touchAhead('a.md');
+
+    expect((await instance.retrieve('zustand', { k: 5 })).indexState).toBe('stale');
+    instance.close?.();
+  });
+
+  it('re-reads the body from disk on every call of one long-lived instance', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+    build();
+    settleCorpusBehindIndex(['a.md']);
+    const instance = port();
+    await instance.retrieve('zustand', { k: 5 });
+
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability REWRITTEN BODY' });
+
+    const result = await instance.retrieve('zustand', { k: 5 });
+
+    expect(result.atoms[0]?.body).toContain('REWRITTEN BODY');
+    instance.close?.();
+  });
+
+  it('tolerates close being called twice', async () => {
+    build();
+    const instance = port();
+    await instance.retrieve('zustand', { k: 1 });
+
+    expect(() => {
+      instance.close?.();
+      instance.close?.();
+    }).not.toThrow();
   });
 
   it('reports the fts5 mode on every call', async () => {

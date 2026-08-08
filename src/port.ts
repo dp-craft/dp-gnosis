@@ -54,4 +54,13 @@ export interface RetrievalResult {
 export interface KnowledgePort {
   readonly name: string;
   retrieve(query: string, opts: RetrieveOptions): Promise<RetrievalResult>;
+  /**
+   * Release whatever this instance holds open between calls (a database handle,
+   * prepared statements). OPTIONAL precisely because it is not universal: a
+   * scan-based adapter keeps nothing open between calls and so has nothing to
+   * release, and forcing it to implement an empty `close` would state a
+   * lifecycle it does not have. A caller that owns a port SHOULD call it when
+   * present (`port.close?.()`); calling it more than once MUST be harmless.
+   */
+  close?(): void;
 }

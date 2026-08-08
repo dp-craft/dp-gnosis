@@ -85,6 +85,7 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   const { context, query, k } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
   const result = await port.retrieve(query, { k });
+  port.close?.();
   return {
     exitCode: exitCodeFor(result),
     data: payload(request, result),
