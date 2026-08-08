@@ -1,0 +1,32 @@
+/**
+ * The `--help` text. It documents the exit codes because the CLI is driven by
+ * an agent through a bash tool, and the exit code is the only signal that
+ * survives without parsing output.
+ */
+import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
+import { flagList } from './args.js';
+
+export const HELP_TEXT: string = [
+  'dp-gnosis — retrieval over a curated markdown atom vault',
+  '',
+  'Usage: dp-gnosis <command> [args] [flags]',
+  '',
+  'Commands:',
+  '  ingest <path...>   chunk markdown sources into atom files',
+  '  index              build the selected adapter index (no-op where none exists)',
+  '  retrieve <query>   rank atoms for a query',
+  '',
+  `Flags: ${flagList()}`,
+  `Adapters: ${ADAPTER_NAMES.join(', ')} (default ${DEFAULT_ADAPTER}); the adapter changes ranking and speed only`,
+  '',
+  'Exit codes:',
+  '  exit 0  success',
+  '  exit 2  bad input or usage; the message names the correction',
+  '  exit 3  partial result — some work succeeded and some was refused (e.g. ingest skips)',
+  '',
+  'JSON keys with --json (plus exitCode on every object):',
+  '  ingest    command, written, skipped[{source,title,reasons}]',
+  '  index     command, adapter, built, indexPath, note',
+  '  retrieve  command, adapter, query, k, mode, indexState, count, atoms[{id,title,domain,body,score,sourcePath}]',
+  '  failure   error',
+].join('\n');

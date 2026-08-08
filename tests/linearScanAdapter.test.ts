@@ -114,6 +114,28 @@ describe('createLinearScanAdapter', () => {
     expect(result.indexState).toBe('empty');
   });
 
+  it('reports unavailable without throwing when the corpus root does not exist', async () => {
+    const missing = join(root, 'never-created');
+
+    const result = await createLinearScanAdapter(missing, { now: NOW }).retrieve('bm25', { k: 5 });
+
+    expect(result.atoms).toEqual([]);
+    expect(result.indexState).toBe('unavailable');
+  });
+
+  it('keeps a missing corpus root distinct from a corpus holding no atoms', async () => {
+    const missing = join(root, 'also-never-created');
+
+    const absent = await createLinearScanAdapter(missing, { now: NOW }).retrieve('bm25', { k: 5 });
+    const empty = await createLinearScanAdapter(await atomsDir('vacant'), { now: NOW }).retrieve(
+      'bm25',
+      { k: 5 }
+    );
+
+    expect(absent.indexState).toBe('unavailable');
+    expect(empty.indexState).toBe('empty');
+  });
+
   it('truncates to exactly k when more atoms match', async () => {
     const dir = await atomsDir();
     await writeAll(dir, [

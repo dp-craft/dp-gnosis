@@ -114,11 +114,20 @@ const asDomain = (value: string): AtomDomain | undefined =>
 const isAtomFile = (entry: Dirent): boolean =>
   entry.isFile() && entry.name.endsWith(MARKDOWN_EXT);
 
-/** Explicitly sorted: `readdir` order is not part of any contract. */
-const listAtomFiles = async (dir: string): Promise<readonly string[]> => {
-  const entries = await readdir(dir, { withFileTypes: true });
+/**
+ * Explicitly sorted: `readdir` order is not part of any contract.
+ *
+ * An unreadable root — most often one that does not exist yet, before the first
+ * `ingest` — yields `undefined` rather than throwing, matching how the port
+ * already treats an unreadable FILE, and matching `readExistingIds` in
+ * `validate.ts`. `undefined` and `[]` are kept DISTINCT on purpose: `[]` is a
+ * real corpus holding no atoms, and collapsing the two would erase the
+ * `unavailable`/`empty` split the port depends on.
+ */
+const listAtomFiles = async (dir: string): Promise<readonly string[] | undefined> => {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => undefined);
   return entries
-    .filter(isAtomFile)
+    ?.filter(isAtomFile)
     .map(entry => entry.name)
     .sort(compareStrings);
 };
@@ -182,9 +191,12 @@ const buildCorpus = (docs: readonly ScannedDoc[]): Corpus => ({
 /**
  * `Promise.all` preserves ARGUMENT order, so the corpus order is the sorted
  * file order regardless of which read settles first.
+ *
+ * `undefined` means the corpus root itself could not be read, so NO scan ran.
  */
-const scanCorpus = async (context: ScanContext): Promise<Corpus> => {
+const scanCorpus = async (context: ScanContext): Promise<Corpus | undefined> => {
   const files = await listAtomFiles(context.dir);
+  if (files === undefined) return undefined;
   const docs = await Promise.all(files.map(file => readDoc(context, file)));
   return buildCorpus(docs.filter(isDefined));
 };
@@ -236,11 +248,19 @@ const rank = (corpus: Corpus, terms: readonly string[], opts: RetrieveOptions): 
 
 /**
  * This adapter has NO index, so it can never be `stale` (nothing can lag the
- * corpus) and never `unavailable` (a scan always runs). The remaining split
- * still matters: it lets a caller tell "searched, found nothing" (`empty`
- * corpus) from "searched a populated corpus and nothing matched" (`ready`).
+ * corpus). It IS `unavailable` when the corpus root cannot be read, because
+ * then no scan ran at all — see `UNAVAILABLE_RESULT`. The remaining split still
+ * matters: it lets a caller tell "searched, found nothing" (`empty` corpus)
+ * from "searched a populated corpus and nothing matched" (`ready`).
  */
 const indexStateOf = (corpus: Corpus): IndexState => (corpus.docs.length === 0 ? 'empty' : 'ready');
+
+/** No corpus root, so no search happened — NEVER reported as an `empty` corpus. */
+const UNAVAILABLE_RESULT: RetrievalResult = {
+  atoms: [],
+  mode: RETRIEVAL_MODE,
+  indexState: 'unavailable',
+};
 
 const queryTerms = (query: string, processTerm: TermProcessor): readonly string[] => [
   ...new Set(tokenize(query).map(processTerm)),
@@ -252,6 +272,7 @@ const retrieve = async (
   opts: RetrieveOptions
 ): Promise<RetrievalResult> => {
   const corpus = await scanCorpus(context);
+  if (corpus === undefined) return UNAVAILABLE_RESULT;
   const scored = rank(corpus, queryTerms(query, context.processTerm), opts);
   return { atoms: scored.map(toRetrieved), mode: RETRIEVAL_MODE, indexState: indexStateOf(corpus) };
 };

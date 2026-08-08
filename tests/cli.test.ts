@@ -209,8 +209,35 @@ describe('runCli', () => {
 
       const result = await runCli(retrieveArgv(fixture, 'fts5'));
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(3);
       expect(parseJson(result.stdout)['indexState']).toBe('unavailable');
+    });
+
+    it('exits 3 naming the correction when the corpus directory does not exist', async () => {
+      const fixture = await makeFixture();
+
+      const result = await runCli([
+        'retrieve',
+        'retrieval',
+        '--atoms-dir',
+        fixture.atomsDir,
+      ]);
+
+      expect(result.exitCode).toBe(3);
+      expect(result.stdout).toContain('unavailable');
+      expect(result.stdout).toContain('gnosis ingest');
+    });
+
+    it('keeps indexState machine-readable in --json when the corpus is missing', async () => {
+      const fixture = await makeFixture();
+
+      const result = await runCli(retrieveArgv(fixture, 'linear'));
+
+      expect(result.exitCode).toBe(3);
+      const data = parseJson(result.stdout);
+      expect(data['indexState']).toBe('unavailable');
+      expect(data['count']).toBe(0);
+      expect(data['exitCode']).toBe(3);
     });
   });
 
