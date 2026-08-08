@@ -42,13 +42,47 @@ describe('domainForSource', () => {
     expect(mapped).toEqual(SOURCE_ROOT_DOMAINS.map(rule => rule.domain));
   });
 
-  it('maps the four known prefixes explicitly', () => {
+  it('maps every known prefix explicitly', () => {
     expect(domainForSource('RUNNER-GUIDE.md')).toBe('runner');
     expect(domainForSource('tools/agentic-code-runner/README.md')).toBe('runner');
     expect(domainForSource('claude-artifacts/standards/TS-TESTING.md')).toBe('standards');
     expect(domainForSource('doc/40-code-standards/90-decisions/adr-018-layered-tests.md')).toBe(
       'adr'
     );
+    expect(domainForSource('claude-artifacts/speckit/workflow.md')).toBe('standards');
+    expect(domainForSource('doc/50-testing-strategy/overview.md')).toBe('docs');
+    expect(domainForSource('.claude/agents/code-logic-writer.md')).toBe('claude');
+  });
+
+  /**
+   * The precedence pair that a broad catch-all row can silently break: both
+   * nested roots sit inside a broader one, and losing longest-prefix-wins would
+   * relabel every atom under them without failing anything else.
+   */
+  it('prefers the longest matching prefix over the broader root containing it', () => {
+    expect(domainForSource('claude-artifacts/standards/TS-TESTING.md')).toBe('standards');
+    expect(domainForSource('doc/40-code-standards/90-decisions/adr-1.md')).toBe('adr');
+    expect(domainForSource('doc/40-code-standards/naming.md')).toBe('docs');
+  });
+
+  /**
+   * Guards the mechanism itself: every nested root MUST still resolve to its
+   * own domain, however the table happens to be ordered. Derived from the table
+   * rather than hardcoded, so a future nested root is covered on the day it is
+   * added.
+   */
+  it('resolves every nested root to its own domain, not the broader one', () => {
+    const nested = SOURCE_ROOT_DOMAINS.filter(rule =>
+      SOURCE_ROOT_DOMAINS.some(
+        other => other.prefix.length < rule.prefix.length && rule.prefix.startsWith(other.prefix)
+      )
+    );
+
+    expect(nested.map(rule => rule.prefix)).toEqual([
+      'claude-artifacts/standards/',
+      'doc/40-code-standards/90-decisions/',
+    ]);
+    expect(nested.map(rule => domainForSource(`${rule.prefix}x.md`))).toEqual(['standards', 'adr']);
   });
 
   it('returns undefined for an unmapped path', () => {

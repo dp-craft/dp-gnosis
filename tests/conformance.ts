@@ -274,26 +274,20 @@ export const describeConformance = (adapterName: string, createAdapter: AdapterF
       expect(idsOf(result.atoms)).toEqual(['atom-a']);
     });
 
-    // 9 — EXPECTED FAILURE, asserted honestly via `it.fails`.
-    //
-    // No stemmer exists on EITHER side: `linearScanAdapter`'s `processTerm`
-    // defaults to identity and the FTS5 table uses `unicode61`, not `porter`.
-    // A stemmer is a new runtime dependency and needs its COMMON.md §IX round
-    // (plan T-18) before any adapter may stem. Adding `tokenize='porter
-    // unicode61'` to FTS5 alone would make ONE adapter stem and turn the
-    // benchmark into a comparison of tokenizers.
-    it.fails(
-      'matches an inflected query against a base-form document — BLOCKED on T-18 (stemmer dependency, COMMON.md §IX)',
-      async () => {
-        const port = await portFor([
-          { file: 'a.md', id: 'atom-a', body: 'the index is rebuilt wholesale' },
-        ]);
+    // 9 — the ONE shared stemmer (`stemTerm`, `query.ts`), applied index-side
+    // and query-side by every adapter. FTS5 keeps `unicode61` and stems its
+    // text before insert rather than switching to the built-in `porter`
+    // tokenizer: a second Porter implementation on one adapter only would turn
+    // this suite's comparability guarantee into a comparison of tokenizers.
+    it('matches an inflected query against a base-form document', async () => {
+      const port = await portFor([
+        { file: 'a.md', id: 'atom-a', body: 'the index is rebuilt wholesale' },
+      ]);
 
-        const result = await port.retrieve('indexing', { k: 5 });
+      const result = await port.retrieve('indexing', { k: 5 });
 
-        expect(idsOf(result.atoms)).toEqual(['atom-a']);
-      }
-    );
+      expect(idsOf(result.atoms)).toEqual(['atom-a']);
+    });
 
     // 10a
     it('returns the edited body on the very next retrieval, with no reindex', async () => {

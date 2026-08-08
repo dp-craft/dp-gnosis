@@ -13,6 +13,8 @@
  * nothing like a focused query. `buildQuery` reduces it to the `QUERY_MAX_TERMS`
  * rarest distinct terms.
  */
+import { stemmer } from 'stemmer';
+
 import { BM25_IDF_SMOOTHING, QUERY_MAX_TERMS } from './config.js';
 
 /** The raw task-side material a query is distilled from. */
@@ -61,6 +63,39 @@ export const tokenize = (text: string): readonly string[] =>
   foldDiacritics(text.toLowerCase())
     .split(NON_WORD_RE)
     .filter(token => token.length > 0);
+
+/** Applied to every term, on BOTH the document side and the query side. */
+export type TermProcessor = (term: string) => string;
+
+/**
+ * THE English normalizer for the whole package — every adapter's default
+ * `processTerm`, so a third or fourth adapter cannot drift into its own
+ * stemming.
+ *
+ * It lives beside `tokenize` for the same reason `tokenize` lives here: a
+ * second normalizer is a second, invisible query, and an adapter that stemmed
+ * while its neighbour did not would turn the benchmark from a comparison of
+ * RETRIEVAL into a comparison of tokenizers. That is also why SQLite FTS5's
+ * free built-in `porter` tokenizer is deliberately NOT used: it is a different
+ * Porter implementation, so binding it to one adapter reintroduces exactly that
+ * confound. FTS5 keeps `unicode61` and stems its text through THIS function on
+ * both sides instead.
+ *
+ * `stemmer` is the Porter (1980) algorithm, English only, MIT, zero transitive
+ * dependencies — approved in the COMMON.md §IX round of 2026-08-08.
+ */
+export const stemTerm: TermProcessor = term => stemmer(term);
+
+/**
+ * Tokenize `text` and stem every token back into a space-separated string.
+ *
+ * For an adapter that hands TEXT rather than terms to its engine (FTS5 inserts
+ * a string and tokenizes it internally with `unicode61`): stemming the text
+ * before it reaches the engine is what makes that adapter's index hold the same
+ * stems the linear scan computes in memory. Token ORDER is preserved, so phrase
+ * and NEAR queries still work over the stems.
+ */
+export const stemText = (text: string): string => tokenize(text).map(stemTerm).join(' ');
 
 /** One term with its inverse-document-frequency weight. */
 interface ScoredTerm {

@@ -30,6 +30,15 @@
  * Size is bought back by never storing bodies; query capability is not
  * recoverable without a rebuild, so capability wins.
  *
+ * TOKENIZER stays `unicode61` (the FTS5 default) — RECORDED CHOICE. FTS5 ships a
+ * free `porter` tokenizer, and binding it here would be the cheap way to satisfy
+ * the inflection case. It is refused: that is a DIFFERENT Porter implementation
+ * from the one every other adapter uses, so this adapter would stem by its own
+ * rules and `--adapter` would stop being a comparison of retrieval. Instead the
+ * text is stemmed through the package-wide `stemText` (`query.ts`) BEFORE it is
+ * inserted, and every query chunk is stemmed before it reaches `MATCH` — one
+ * stemmer, both sides, shared with every other adapter.
+ *
  * NO `prefix=` index — RECORDED CHOICE AND TRAP. `buildQuery` (`query.ts`) emits
  * plain terms only, so a prefix index would index nothing anyone asks for. If a
  * future query builder ever emits `term*`, a prefix query against a table
@@ -51,6 +60,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
+import { stemText } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
 /** `mode`/`name` reported by this adapter. */
@@ -140,7 +150,10 @@ const writeEntries = (db: Database.Database, entries: readonly IndexEntry[]): vo
   db.transaction(() =>
     entries.forEach((entry, index) => {
       meta.run(index + 1, entry.id, entry.path);
-      fts.run(index + 1, entry.body);
+      // INDEX SIDE of the shared stemmer: `unicode61` then tokenizes text that
+      // is already stems, so the inverted index holds the same terms the linear
+      // scan computes in memory.
+      fts.run(index + 1, stemText(entry.body));
     })
   )();
 };
@@ -166,19 +179,29 @@ export const buildFts5Index = (options: BuildFts5IndexOptions): void => {
  * Every term is wrapped in an FTS5 string literal (inner `"` doubled). Without
  * it a technical term carrying `-`, `*`, `:` or `^` is parsed as FTS5 SYNTAX and
  * either throws (`adr-018` → "no such column: 018") or silently becomes a
- * different query. Terms are split on whitespace ONLY: `query.ts` owns
- * tokenization and an adapter MUST NOT re-tokenize.
+ * different query.
  */
 const escapeTerm = (term: string): string => `"${term.replaceAll('"', '""')}"`;
 
 /**
+ * QUERY SIDE of the shared stemmer. The query is still split on whitespace ONLY
+ * — `query.ts` owns tokenization and an adapter MUST NOT re-tokenize — but each
+ * whitespace chunk is then run through the package-wide `stemText`, so it
+ * carries the same stems the index holds. A chunk whose characters are all
+ * FTS5 syntax (a lone `"`) stems to the empty string and is dropped rather than
+ * emitted as an empty literal.
+ *
+ * Stemming a chunk keeps its internal token ORDER, so a multi-token chunk such
+ * as `adr-018` stays the adjacency-requiring phrase `"adr 018"` it already was
+ * — the stemmer changes the terms, never the query's shape.
+ *
  * Disjunction, not FTS5's implicit AND: a `buildQuery` string carries up to 32
  * distilled terms, and requiring all of them would match nothing. `undefined`
  * for a term-free query — an empty `MATCH` is a syntax error.
  */
 const toMatchExpression = (query: string): string | undefined => {
-  const terms = query.split(WHITESPACE_RE).filter(term => term.length > 0);
-  return terms.length === 0 ? undefined : terms.map(escapeTerm).join(' OR ');
+  const phrases = query.split(WHITESPACE_RE).map(stemText).filter(phrase => phrase.length > 0);
+  return phrases.length === 0 ? undefined : phrases.map(escapeTerm).join(' OR ');
 };
 
 const newestCorpusMs = (atomsDir: string): number =>

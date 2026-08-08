@@ -31,7 +31,8 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
-import { tokenize } from '../query.js';
+import type { TermProcessor } from '../query.js';
+import { stemTerm, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
 const ADAPTER_NAME = 'linear-scan';
@@ -50,9 +51,6 @@ const MARKDOWN_EXT = '.md';
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 
-/** Applied to every term, on BOTH the document side and the query side. */
-export type TermProcessor = (term: string) => string;
-
 export interface LinearScanOptions {
   /**
    * Injected for the same reason `isRetrievable` takes it: a time-dependent
@@ -61,19 +59,16 @@ export interface LinearScanOptions {
    */
   readonly now?: Date;
   /**
-   * Optional normalizer (a stemmer, once one is approved). Applied index-side
-   * and query-side so the two can never drift apart.
+   * Term normalizer, applied index-side and query-side so the two can never
+   * drift apart.
    *
-   * Default is IDENTITY, and with identity this adapter does NOT yet satisfy
-   * the inflection conformance case — a query `indexing` will not match a
-   * document that only says `index`. A real stemmer is a new runtime
-   * dependency and needs its COMMON.md §IX round first; hand-rolling a Porter
-   * implementation here instead is the same decision made silently.
+   * Defaults to the package-wide `stemTerm` — the SAME function every other
+   * adapter defaults to, which is what keeps `--adapter` a comparison of
+   * retrieval rather than of tokenizers. Overriding it is a test affordance,
+   * not a production knob.
    */
   readonly processTerm?: TermProcessor;
 }
-
-const identity: TermProcessor = term => term;
 
 interface ScanContext {
   readonly dir: string;
@@ -280,7 +275,7 @@ const retrieve = async (
 const contextFor = (dir: string, options: LinearScanOptions): ScanContext => ({
   dir,
   now: options.now ?? new Date(),
-  processTerm: options.processTerm ?? identity,
+  processTerm: options.processTerm ?? stemTerm,
 });
 
 /**

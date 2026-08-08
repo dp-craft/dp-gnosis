@@ -8,13 +8,18 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
-  "comment:dependencies": "better-sqlite3 backs the FTS5 adapter. It already resolves from the repo root, so nothing new is installed — it is declared here so this package stays a liftable unit (decision N-1) rather than depending on an undeclared ambient package.",
+  "comment:dependencies": "better-sqlite3 backs the FTS5 adapter; it already resolves from the repo root, so nothing new is installed — declared here so this package stays a liftable unit (decision N-1). `stemmer` is NOT optional: it is applied uniformly via processTerm to every adapter, so a missing one would silently change ranking rather than skip a leg. MIT, zero transitive deps (§IX round approved 2026-08-08).",
   "dependencies": {
-    "better-sqlite3": "^12.11.1"
+    "better-sqlite3": "^12.11.1",
+    "stemmer": "^2.0.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13"
   },
-  "comment:optionalDependencies": "Adapter-gated packages (minisearch + stemmer, @lancedb/lancedb) land here ONLY after their COMMON.md §IX round is approved (plan T-18 / T-20). They are loaded by lazy dynamic import so a missing one skips its adapter instead of breaking the suite.",
-  "optionalDependencies": {}
+  "comment:optionalDependencies": "Adapter-gated packages, approved in the COMMON.md §IX round of 2026-08-08 (plan T-18 / T-20). Loaded by LAZY DYNAMIC IMPORT so an absent one skips its adapter instead of breaking the suite. The loader MUST catch ALL import errors, not just MODULE_NOT_FOUND: @lancedb/lancedb can fail at import time with a native BINDING error on a platform whose prebuilt binary lags the root version, and a narrow catch would hard-fail the suite instead of skipping the adapter. apache-arrow is @lancedb/lancedb's required peer.",
+  "optionalDependencies": {
+    "@lancedb/lancedb": "^0.33.0",
+    "apache-arrow": "^18.1.0",
+    "minisearch": "^7.2.0"
+  }
 }

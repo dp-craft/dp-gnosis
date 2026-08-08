@@ -263,20 +263,30 @@ describe('createLinearScanAdapter', () => {
     expect(ids(result)).toEqual(['curated']);
   });
 
-  it('applies processTerm on both the document side and the query side', async () => {
+  it('applies an injected processTerm on both the document side and the query side', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'the qqindex rebuild step' }]);
+    const dropPrefix = (term: string): string => (term.startsWith('qq') ? term.slice(2) : term);
+
+    const processed = await createLinearScanAdapter(dir, {
+      now: NOW,
+      processTerm: dropPrefix,
+    }).retrieve('qqindex', { k: 5 });
+    const raw = await createLinearScanAdapter(dir, {
+      now: NOW,
+      processTerm: term => term,
+    }).retrieve('index', { k: 5 });
+
+    expect(ids(processed)).toEqual(['a']);
+    expect(raw.atoms).toEqual([]);
+  });
+
+  it('defaults processTerm to the shared English stemmer', async () => {
     const dir = await atomsDir();
     await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'the index rebuild step' }]);
-    const stem = (term: string): string => (term.endsWith('ing') ? term.slice(0, -3) : term);
 
-    const stemmed = await createLinearScanAdapter(dir, { now: NOW, processTerm: stem }).retrieve(
-      'indexing',
-      { k: 5 }
-    );
-    const identity = await createLinearScanAdapter(dir, { now: NOW }).retrieve('indexing', {
-      k: 5,
-    });
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('indexing', { k: 5 });
 
-    expect(ids(stemmed)).toEqual(['a']);
-    expect(identity.atoms).toEqual([]);
+    expect(ids(result)).toEqual(['a']);
   });
 });

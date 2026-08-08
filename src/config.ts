@@ -45,7 +45,7 @@ export const BM25_IDF_SMOOTHING = 0.5;
  * time: a free-form string fragments on typos and makes an atom silently
  * invisible to every domain-filtered query.
  */
-export const ATOM_DOMAINS = ['runner', 'standards', 'adr'] as const;
+export const ATOM_DOMAINS = ['runner', 'standards', 'adr', 'docs', 'claude'] as const;
 
 /** A member of the closed domain vocabulary. */
 export type AtomDomain = (typeof ATOM_DOMAINS)[number];
@@ -59,15 +59,31 @@ export interface SourceRootDomain {
 /**
  * The mechanical source→domain assignment table, longest-prefix-wins. Ingest
  * MUST derive `x_domain` from this alone, so re-running over unchanged input
- * reproduces identical domains.
+ * reproduces identical domains — no per-atom judgement, hence no drift between
+ * two ingests of the same corpus.
+ *
+ * Order here is PRESENTATION only (narrow roots first, for reading); resolution
+ * sorts by prefix length, so a broad catch-all row may be added anywhere. The
+ * two rows that make that load-bearing: `claude-artifacts/` catches everything
+ * `claude-artifacts/standards/` does not, and `doc/` everything the ADR root
+ * does not. Getting that precedence wrong silently relabels hundreds of atoms,
+ * so it is asserted directly rather than left to row order.
  */
 export const SOURCE_ROOT_DOMAINS: readonly SourceRootDomain[] = [
   { prefix: 'RUNNER-', domain: 'runner' },
   { prefix: 'tools/agentic-code-runner/', domain: 'runner' },
   { prefix: 'claude-artifacts/standards/', domain: 'standards' },
   { prefix: 'doc/40-code-standards/90-decisions/', domain: 'adr' },
+  { prefix: 'claude-artifacts/', domain: 'standards' },
+  { prefix: 'doc/', domain: 'docs' },
+  { prefix: '.claude/', domain: 'claude' },
 ];
 
+/**
+ * Longest prefix first, so a nested root always outranks the broader one that
+ * contains it. `find` then returns the FIRST — and therefore most specific —
+ * match. Sorting is what enforces the rule; declaration order must not matter.
+ */
 const LONGEST_PREFIX_FIRST: readonly SourceRootDomain[] = [...SOURCE_ROOT_DOMAINS].sort(
   (a, b) => b.prefix.length - a.prefix.length
 );
