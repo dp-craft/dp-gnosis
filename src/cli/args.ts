@@ -9,15 +9,18 @@
  * driven by an LLM can have. Every rejection names the valid alternatives.
  */
 
+import { ADAPTER_NAMES } from './adapter.js';
+
 type FlagSpec =
   | { readonly kind: 'boolean' }
   | { readonly kind: 'value'; readonly placeholder: string };
 
 /** The closed flag vocabulary. A token outside it is refused, never ignored. */
 export const FLAGS: Readonly<Record<string, FlagSpec>> = {
-  '--adapter': { kind: 'value', placeholder: '<linear|fts5>' },
+  '--adapter': { kind: 'value', placeholder: `<${ADAPTER_NAMES.join('|')}>` },
   '--atoms-dir': { kind: 'value', placeholder: '<dir>' },
-  '--index-path': { kind: 'value', placeholder: '<file>' },
+  // A file for fts5/minisearch; a DIRECTORY for lancedb, which persists a tree.
+  '--index-path': { kind: 'value', placeholder: '<file|dir>' },
   '--repo-root': { kind: 'value', placeholder: '<dir>' },
   '--golden-set': { kind: 'value', placeholder: '<file>' },
   '-k': { kind: 'value', placeholder: '<n>' },

@@ -10,10 +10,21 @@
  * An adapter is reached through the `KnowledgePort` only, so the harness cannot
  * branch on which implementation it is timing.
  */
-import { stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import type * as Fts5Namespace from '../adapters/fts5Adapter.js';
+import {
+  buildLanceDbIndex,
+  createLanceDbAdapter,
+  lanceDbAvailability
+} from '../adapters/lanceDbAdapter.js';
 import { createLinearScanAdapter } from '../adapters/linearScanAdapter.js';
+import {
+  buildMiniSearchIndex,
+  createMiniSearchAdapter,
+  miniSearchAvailability
+} from '../adapters/miniSearchAdapter.js';
 import type { KnowledgePort } from '../port.js';
 
 /** Where one adapter reads its corpus and writes its index. */
@@ -55,6 +66,37 @@ const fileSize = async (path: string): Promise<number> => {
   return info?.size ?? 0;
 };
 
+/** Only regular files count: a directory entry's own `size` is not stored bytes. */
+const regularFileSize = async (path: string): Promise<number> => {
+  const info = await stat(path).catch(() => undefined);
+  return info?.isFile() === true ? info.size : 0;
+};
+
+/**
+ * Bytes held by a whole directory TREE. LanceDB persists a dataset as a tree, so
+ * `stat` on its root would report the directory entry — a few kilobytes,
+ * independent of the index — and the reported index size would be a fiction.
+ */
+const treeSize = async (dir: string): Promise<number> => {
+  const entries = await readdir(dir, { recursive: true, encoding: 'utf8' }).catch(() => []);
+  const sizes = await Promise.all(entries.map(rel => regularFileSize(join(dir, rel))));
+  return sizes.reduce((total, size) => total + size, 0);
+};
+
+/** A candidate that cannot run: reported as skipped, and never silently opened. */
+const unavailableCandidate = (name: string, reason: string): AdapterCandidate => ({
+  name,
+  unavailableReason: reason,
+  index: () => Promise.resolve(0),
+  open: (): KnowledgePort => {
+    throw new Error(reason);
+  },
+});
+
+/** Why an optional-dependency adapter was skipped, in the report's own words. */
+const optionalReason = (packageName: string, reason: string | undefined): string =>
+  `optional dependency ${packageName} could not be loaded (${reason ?? 'no reason reported'}) — run \`npm install\` in tools/dp-gnosis to include this adapter`;
+
 /** The reference line: no index at all, so `index` is a stated no-op of 0 bytes. */
 export const linearScanCandidate = (): AdapterCandidate => ({
   name: 'linear-scan',
@@ -78,22 +120,57 @@ const fts5From = (module: Fts5Module): AdapterCandidate => ({
     module.createFts5Adapter({ ...location, now: new Date() }),
 });
 
-const fts5Unavailable = (): AdapterCandidate => ({
-  name: 'fts5',
-  unavailableReason: FTS5_UNAVAILABLE,
-  index: () => Promise.resolve(0),
-  open: (): KnowledgePort => {
-    throw new Error(FTS5_UNAVAILABLE);
-  },
-});
-
 export const fts5Candidate = async (): Promise<AdapterCandidate> => {
   const module = await loadFts5();
-  return module === undefined ? fts5Unavailable() : fts5From(module);
+  return module === undefined
+    ? unavailableCandidate('fts5', FTS5_UNAVAILABLE)
+    : fts5From(module);
+};
+
+const miniSearchFrom = (): AdapterCandidate => ({
+  name: 'minisearch',
+  index: async (location: CorpusLocation): Promise<number> => {
+    await buildMiniSearchIndex(location);
+    return await fileSize(location.indexPath);
+  },
+  open: (location: CorpusLocation): KnowledgePort =>
+    createMiniSearchAdapter({ ...location, now: new Date() }),
+});
+
+export const miniSearchCandidate = async (): Promise<AdapterCandidate> => {
+  const probe = await miniSearchAvailability();
+  return probe.available
+    ? miniSearchFrom()
+    : unavailableCandidate('minisearch', optionalReason('minisearch', probe.reason));
+};
+
+/** LanceDB persists a DIRECTORY, so the shared `indexPath` names a tree here. */
+const lanceLocation = (location: CorpusLocation): { atomsDir: string; indexDir: string } => ({
+  atomsDir: location.atomsDir,
+  indexDir: location.indexPath,
+});
+
+const lanceDbFrom = (): AdapterCandidate => ({
+  name: 'lancedb',
+  index: async (location: CorpusLocation): Promise<number> => {
+    await buildLanceDbIndex(lanceLocation(location));
+    return await treeSize(location.indexPath);
+  },
+  open: (location: CorpusLocation): KnowledgePort =>
+    createLanceDbAdapter({ ...lanceLocation(location), now: new Date() }),
+});
+
+export const lanceDbCandidate = async (): Promise<AdapterCandidate> => {
+  const probe = await lanceDbAvailability();
+  return probe.available
+    ? lanceDbFrom()
+    : unavailableCandidate('lancedb', optionalReason('@lancedb/lancedb', probe.reason));
 };
 
 /** Every adapter this package ships, available or not. */
 export const defaultCandidates = async (): Promise<readonly AdapterCandidate[]> => [
   linearScanCandidate(),
   await fts5Candidate(),
+  await miniSearchCandidate(),
+  await lanceDbCandidate(),
 ];

@@ -3,9 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createFakeAdapter } from '../src/adapters/fakeAdapter.js';
+import { lanceDbAvailability } from '../src/adapters/lanceDbAdapter.js';
+import { miniSearchAvailability } from '../src/adapters/miniSearchAdapter.js';
 import type { BenchOptions, BenchReport } from '../src/bench.js';
 import { COLD_REGIME, runBenchmark, WARM_REGIME } from '../src/bench.js';
 import type { AdapterCandidate } from '../src/bench/candidates.js';
+import { defaultCandidates, isAvailable, skippedOf } from '../src/bench/candidates.js';
 import type { BenchCorpus } from '../src/bench/corpora.js';
 import { aggregate, recallAtK, reciprocalRank, scoreQuery } from '../src/bench/metrics.js';
 import { renderReportMarkdown } from '../src/bench/report.js';
@@ -308,5 +311,42 @@ describe('renderReportMarkdown', () => {
     const report = await reportWith([fakeCandidate('fake', createFakeAdapter(FIXED_RANKING))]);
 
     expect(renderReportMarkdown(report)).toContain('None — every declared adapter ran.');
+  });
+});
+
+// Registration, not measurement: a full benchmark takes minutes, so these
+// assert only that all four shipped adapters ARE candidates and that an
+// optional dependency that failed to load is REPORTED rather than dropped.
+describe('defaultCandidates', () => {
+  it('registers all four shipped adapters', async () => {
+    const candidates = await defaultCandidates();
+
+    expect(candidates.map(candidate => candidate.name)).toEqual([
+      'linear-scan',
+      'fts5',
+      'minisearch',
+      'lancedb',
+    ]);
+  });
+
+  it('gives every unavailable candidate a non-empty reason and a throwing open', async () => {
+    const candidates = await defaultCandidates();
+    const unavailable = candidates.filter(candidate => !isAvailable(candidate));
+
+    expect(skippedOf(candidates)).toHaveLength(unavailable.length);
+    skippedOf(candidates).forEach(entry => {
+      expect(entry.reason.length).toBeGreaterThan(0);
+    });
+    unavailable.forEach(candidate => {
+      expect(() => candidate.open({ atomsDir: '/nonexistent', indexPath: '/nonexistent' })).toThrow();
+    });
+  });
+
+  it('reports the optional-dependency adapters as available in this checkout', async () => {
+    const byName = new Map((await defaultCandidates()).map(c => [c.name, c]));
+    const probes = { minisearch: await miniSearchAvailability(), lancedb: await lanceDbAvailability() };
+
+    expect(isAvailable(byName.get('minisearch') as AdapterCandidate)).toBe(probes.minisearch.available);
+    expect(isAvailable(byName.get('lancedb') as AdapterCandidate)).toBe(probes.lancedb.available);
   });
 });

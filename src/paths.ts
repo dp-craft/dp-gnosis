@@ -33,6 +33,24 @@ export const INDEX_DIR: string = resolve(RUNTIME_ROOT, 'index');
 /** Default destination of the FTS5 index the CLI builds and reads. */
 export const FTS5_INDEX_PATH: string = resolve(INDEX_DIR, 'atoms-fts5.db');
 
+/** Default destination of the MiniSearch index the CLI builds and reads. */
+export const MINISEARCH_INDEX_PATH: string = resolve(INDEX_DIR, 'atoms-minisearch.json');
+
+/**
+ * Default LanceDB dataset DIRECTORY — LanceDB writes a tree, not a single file,
+ * and rebuilds it by REMOVING the directory. Every adapter therefore owns a
+ * distinct default location: sharing one would let a LanceDB rebuild delete
+ * another adapter's index.
+ */
+export const LANCEDB_INDEX_DIR: string = resolve(INDEX_DIR, 'atoms-lancedb');
+
+/**
+ * Stated index location for an adapter that keeps no index. It is never created
+ * nor read; it exists so every adapter has its OWN location and the scan adapter
+ * cannot silently inherit another adapter's index file.
+ */
+export const NO_INDEX_PATH: string = resolve(INDEX_DIR, 'none');
+
 /**
  * Scratch root for the benchmark: corpus working copies and their indexes.
  * Under `RUNTIME_ROOT` because it is derived and disposable — the bench never

@@ -2,6 +2,9 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { lanceDbAvailability } from '../src/adapters/lanceDbAdapter.js';
+import { miniSearchAvailability } from '../src/adapters/miniSearchAdapter.js';
+import { mapSequential } from '../src/bench/sequential.js';
 import { runCli } from '../src/cli/cli.js';
 
 const DOC = '# Layered Test Model\n\nintro text about retrieval\n\n## Unit tier\n\nfast retrieval tests\n';
@@ -36,6 +39,10 @@ const ingestArgv = (fixture: Fixture): readonly string[] => [
   fixture.repoRoot,
 ];
 
+/** Distinct per adapter so one adapter's build cannot clobber another's index. */
+const indexPathFor = (fixture: Fixture, adapter: string): string =>
+  join(fixture.repoRoot, 'index', `atoms-${adapter}`);
+
 const retrieveArgv = (fixture: Fixture, adapter: string): readonly string[] => [
   'retrieve',
   'retrieval',
@@ -46,9 +53,33 @@ const retrieveArgv = (fixture: Fixture, adapter: string): readonly string[] => [
   '--atoms-dir',
   fixture.atomsDir,
   '--index-path',
-  fixture.indexPath,
+  indexPathFor(fixture, adapter),
   '--json',
 ];
+
+const indexArgv = (fixture: Fixture, adapter: string): readonly string[] => [
+  'index',
+  '--adapter',
+  adapter,
+  '--atoms-dir',
+  fixture.atomsDir,
+  '--index-path',
+  indexPathFor(fixture, adapter),
+  '--json',
+];
+
+/**
+ * The adapters whose optional dependency actually loaded here. An absent one is
+ * SKIPPED rather than failed: the parity property is about the adapters that can
+ * run, and a missing optional package is not a contract violation.
+ */
+const availableAdapters = async (): Promise<readonly string[]> => {
+  const probes = [
+    ['minisearch', (await miniSearchAvailability()).available] as const,
+    ['lancedb', (await lanceDbAvailability()).available] as const,
+  ];
+  return ['linear', 'fts5', ...probes.filter(([, ok]) => ok).map(([name]) => name)];
+};
 
 const parseJson = (stdout: string): Record<string, unknown> =>
   JSON.parse(stdout) as Record<string, unknown>;
@@ -252,13 +283,18 @@ describe('runCli', () => {
       expect(result.stdout).toBe('');
     });
 
+    // AC delta: `minisearch` and `lancedb` are now VALID adapters, so the
+    // unknown-adapter probe uses a name outside the vocabulary and the message
+    // must name all four members of it.
     it('rejects an unknown adapter with exit 2 and names the valid adapters', async () => {
-      const result = await runCli(['retrieve', 'x', '--adapter', 'lancedb']);
+      const result = await runCli(['retrieve', 'x', '--adapter', 'elasticsearch']);
 
       expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('lancedb');
+      expect(result.stderr).toContain('elasticsearch');
       expect(result.stderr).toContain('linear');
       expect(result.stderr).toContain('fts5');
+      expect(result.stderr).toContain('minisearch');
+      expect(result.stderr).toContain('lancedb');
     });
 
     it('rejects an unknown subcommand with exit 2 and names the valid ones', async () => {
@@ -288,6 +324,15 @@ describe('runCli', () => {
       expect(result.stdout).toContain('index');
       expect(result.stdout).toContain('retrieve');
     });
+
+    it('names every valid adapter in --help so the set is discoverable', async () => {
+      const result = await runCli(['--help']);
+
+      expect(result.stdout).toContain('linear');
+      expect(result.stdout).toContain('fts5');
+      expect(result.stdout).toContain('minisearch');
+      expect(result.stdout).toContain('lancedb');
+    });
   });
 
   // Adapter parity. Ranking ORDER and score VALUES legitimately differ between a
@@ -297,32 +342,35 @@ describe('runCli', () => {
   // typeof of every value, at the envelope and at one atom — and asserts
   // `mode`/`indexState` only as "present and well-typed", never as equal.
   describe('adapter parity', () => {
-    it('emits an identically shaped retrieve payload through both adapters', async () => {
+    const retrieveThrough = async (
+      fixture: Fixture,
+      adapter: string
+    ): Promise<Record<string, unknown>> => {
+      const built = await runCli(indexArgv(fixture, adapter));
+      expect(built.exitCode).toBe(0);
+      const result = await runCli(retrieveArgv(fixture, adapter));
+      expect(result.exitCode).toBe(0);
+      return parseJson(result.stdout);
+    };
+
+    it('emits an identically shaped retrieve payload through every available adapter', async () => {
       const fixture = await makeFixture();
       await runCli(ingestArgv(fixture));
-      await runCli([
-        'index',
-        '--adapter',
-        'fts5',
-        '--atoms-dir',
-        fixture.atomsDir,
-        '--index-path',
-        fixture.indexPath,
-      ]);
+      const adapters = await availableAdapters();
+      expect(adapters).toContain('linear');
+      expect(adapters).toContain('fts5');
 
-      const linear = await runCli(retrieveArgv(fixture, 'linear'));
-      const fts5 = await runCli(retrieveArgv(fixture, 'fts5'));
+      const payloads = await mapSequential(adapters, adapter =>
+        retrieveThrough(fixture, adapter)
+      );
 
-      expect(linear.exitCode).toBe(fts5.exitCode);
-      expect(fts5.exitCode).toBe(0);
-      const linearData = parseJson(linear.stdout);
-      const fts5Data = parseJson(fts5.stdout);
-      expect(shapeOf(fts5Data)).toEqual(shapeOf(linearData));
-      expect(shapeOf(firstAtom(fts5Data))).toEqual(shapeOf(firstAtom(linearData)));
-      expect(linearData['mode']).toBeTypeOf('string');
-      expect(fts5Data['mode']).toBeTypeOf('string');
-      expect(String(linearData['indexState']).length).toBeGreaterThan(0);
-      expect(String(fts5Data['indexState']).length).toBeGreaterThan(0);
+      const baseline = payloads[0] as Record<string, unknown>;
+      payloads.forEach(data => {
+        expect(shapeOf(data)).toEqual(shapeOf(baseline));
+        expect(shapeOf(firstAtom(data))).toEqual(shapeOf(firstAtom(baseline)));
+        expect(data['mode']).toBeTypeOf('string');
+        expect(String(data['indexState']).length).toBeGreaterThan(0);
+      });
     });
   });
 });

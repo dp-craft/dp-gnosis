@@ -13,9 +13,9 @@
  * file — the parser, the context, the renderer and the exit-code contract are
  * already command-agnostic.
  */
-import { ATOMS_DIR, FTS5_INDEX_PATH, REPO_ROOT } from '../paths.js';
+import { ATOMS_DIR, REPO_ROOT } from '../paths.js';
 import type { AdapterName } from './adapter.js';
-import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
+import { adapterError, DEFAULT_ADAPTER, defaultIndexPath, resolveAdapter } from './adapter.js';
 import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
@@ -53,7 +53,7 @@ const contextFor = (args: ParsedArgs, adapter: AdapterName): CommandContext => (
   flags: args.flags,
   adapter,
   atomsDir: stringFlag(args.flags, '--atoms-dir') ?? ATOMS_DIR,
-  indexPath: stringFlag(args.flags, '--index-path') ?? FTS5_INDEX_PATH,
+  indexPath: stringFlag(args.flags, '--index-path') ?? defaultIndexPath(adapter),
   repoRoot: stringFlag(args.flags, '--repo-root') ?? REPO_ROOT,
 });
 
