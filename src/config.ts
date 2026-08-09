@@ -117,6 +117,7 @@ export const SOURCE_ROOT_DOMAINS: readonly SourceRootDomain[] = [
   { prefix: 'claude-artifacts/', domain: 'standards' },
   { prefix: 'doc/', domain: 'docs' },
   { prefix: '.claude/', domain: 'claude' },
+  { prefix: 'dp-gnosis/corpus-hu/', domain: 'docs' },
 ];
 
 /**
