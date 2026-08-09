@@ -24,6 +24,12 @@ export interface CommandOutcome {
   readonly data: Readonly<Record<string, unknown>>;
   /** The human-readable rendering of the same result. */
   readonly text: string;
+  /**
+   * The `--format xml` rendering, when the command has one. Absent for every
+   * command that does not accept `--format`, and for a usage failure — those
+   * render as text, since an argv the CLI refused cannot select a format.
+   */
+  readonly xml?: string;
 }
 
 /**

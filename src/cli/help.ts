@@ -5,6 +5,7 @@
  */
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
+import { OUTPUT_FORMATS } from './format.js';
 
 export const HELP_TEXT: string = [
   'dp-gnosis — retrieval over a curated markdown atom vault',
@@ -18,6 +19,9 @@ export const HELP_TEXT: string = [
   '  bench              measure every adapter over the golden set; writes a report to docs/test/',
   '',
   `Flags: ${flagList()}`,
+  `Output: --format ${OUTPUT_FORMATS.join('|')} on \`retrieve\` only (default text); --json means \`--format json\``,
+  '  xml emits a <retrieved_context> block carrying each atom body — paste-ready for an LLM',
+  '  passing --json together with --format xml is a usage error; another command with --format is too',
   `Adapters: ${ADAPTER_NAMES.join(' | ')} (default ${DEFAULT_ADAPTER}); the adapter changes ranking and speed only`,
   '  minisearch and lancedb are optional dependencies — an absent one is reported, never hidden',
   '',

@@ -40,7 +40,7 @@ Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried bl
 |---|---|---|
 | `ingest` | **none** (passing one is exit 2) | `--atoms-dir`, `--repo-root`, `--json` |
 | `index` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--json` |
-| `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `-k`, `--json` |
+| `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json` |
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
 
 ### Flags
@@ -53,10 +53,26 @@ Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried bl
 | `--repo-root` | dir | repo root |
 | `--golden-set` | file | `tools/dp-gnosis/golden/golden-set.v1.json` |
 | `-k` | positive integer | `5` |
-| `--json` | boolean | off |
+| `--format` | `text\|json\|xml` — **`retrieve` only** | `text` |
+| `--json` | boolean — alias for `--format json` | off |
 | `--help` / `-h` | boolean | off |
 
 `bench` deliberately IGNORES `--adapter`: a benchmark of one adapter is not a comparison.
+
+### Output format
+
+`--json` is an **alias** for `--format json` and its bytes are unchanged — `bench`, the tests and the agent prompt below all depend on it.
+
+| Invocation | Result |
+|---|---|
+| no flag / `--format text` | the compact human line per hit (score, id, domain, title — **no body**) |
+| `--json` / `--format json` / both together | the JSON object in § `--json` key shape |
+| `--format xml` | a `<retrieved_context>` block carrying each atom **body** — paste-ready for an LLM |
+| `--json --format xml` | **exit 2**, naming both flags — a contradiction is refused, never resolved |
+| `--format <anything else>` | exit 2, naming `text, json, xml` |
+| `--format` on `ingest` / `index` / `bench` | exit 2 through the unknown-flag path |
+
+Exit codes are identical across formats; `xml` is a rendering, never a different search.
 
 ### `--json` key shape
 
@@ -101,6 +117,45 @@ npm run gnosis -- bench --json
 ```
 
 `bench` measures at k=5 over the seed vault plus two synthetic ceiling rungs, cold and warm regimes side by side. It picks **no winner** — a human reads the report.
+
+### `xml` shape
+
+```bash
+npm run gnosis -- retrieve "functional programming immutability pure functions" -k 1 --format xml
+```
+
+```xml
+<retrieved_context query="functional programming immutability pure functions" adapter="linear" mode="lexical:bm25-linear" indexState="ready" count="1">
+  <document id="typescript-typescript-principles-functional-programming-mandatory" score="24.0523" domain="standards">
+    <metadata>
+      <source>dp-gnosis/vault/atoms/typescript-typescript-principles-functional-programming-mandatory.md</source>
+      <section>Functional Programming (MANDATORY)</section>
+    </metadata>
+    <content>
+| Immutability | `const` only (never `let`/`var`) &amp; spread/map/filter/reduce |
+    </content>
+  </document>
+</retrieved_context>
+```
+
+| Element / attribute | Content |
+|---|---|
+| root attributes | `query`, `adapter`, `mode`, `indexState`, `count` — the same values `--json` reports |
+| `<source>` | the atom file path **relative to the repo root** (`--repo-root` sets the base); `--json` keeps the absolute form |
+| `<section>` | the atom's `title` — see the limitation below |
+| `<content>` | the atom body verbatim, entity-escaped |
+
+**Escaping.** Entity escaping (`&` `<` `>` `"` `'`), never CDATA: an atom body containing the literal `]]>` closes a CDATA section early, and code fences and markdown tables make `<`/`&` routine. Output is well-formed for every atom in the vault; a consumer parses it with any XML reader.
+
+**`<section>` limitation.** It carries the atom's `title`, which `ingest` sets to the **leaf heading** — promoted to the full `>`-joined heading chain only when that leaf is ambiguous across sources. The chain is otherwise consumed to build the atom id and is not stored on the atom, so most sections show one heading with no ancestry. Reconstructing it would mean re-reading the source document; no `headingChain` field exists.
+
+**Zero results vs no search.** Both render the same empty block, and the difference stays machine-readable: a real search that matched nothing is `indexState="ready" count="0"` with no `<note>`; `indexState="unavailable"` (exit 3) adds a `<note>` and means **nothing was searched**.
+
+```xml
+<retrieved_context query="…" adapter="linear" mode="lexical:bm25-linear" indexState="unavailable" count="0">
+  <note>retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `gnosis ingest &lt;path...&gt;`</note>
+</retrieved_context>
+```
 
 ### Adapters
 

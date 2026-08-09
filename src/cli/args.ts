@@ -24,6 +24,9 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--repo-root': { kind: 'value', placeholder: '<dir>' },
   '--golden-set': { kind: 'value', placeholder: '<file>' },
   '-k': { kind: 'value', placeholder: '<n>' },
+  // `retrieve` only — every other command refuses it through the same
+  // unknown-flag path, because a format it cannot honour MUST NOT look accepted.
+  '--format': { kind: 'value', placeholder: '<text|json|xml>' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },
@@ -64,7 +67,8 @@ const EMPTY_STATE: ParseState = {
   error: undefined,
 };
 
-const unknownFlagMessage = (token: string): string =>
+/** The single wording for "this flag is not accepted here". */
+export const unknownFlagMessage = (token: string): string =>
   `unknown flag "${token}" — remove it or replace it with one of: ${flagList()}`;
 
 const placeholderOf = (name: string): string => {

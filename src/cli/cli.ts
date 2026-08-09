@@ -17,9 +17,11 @@ import { ATOMS_DIR, REPO_ROOT } from '../paths.js';
 import type { AdapterName } from './adapter.js';
 import { adapterError, DEFAULT_ADAPTER, defaultIndexPath, resolveAdapter } from './adapter.js';
 import type { ParsedArgs } from './args.js';
-import { parseArgs, stringFlag } from './args.js';
+import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
 import type { CommandContext, CommandHandler } from './context.js';
+import type { OutputFormat } from './format.js';
+import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { HELP_TEXT } from './help.js';
 import { runIndexCommand } from './indexCommand.js';
 import { runIngestCommand } from './ingestCommand.js';
@@ -75,6 +77,16 @@ const helpOutcome = (): CommandOutcome => ({
 const wantsHelp = (args: ParsedArgs): boolean =>
   args.command === undefined || args.flags['--help'] === true || args.flags['-h'] === true;
 
+/**
+ * `--format` belongs to `retrieve` alone. Elsewhere it is refused through the
+ * SAME message an unknown flag gets: a format no command can honour MUST NOT
+ * look accepted, and one wording keeps the correction identical either way.
+ */
+const FORMAT_COMMAND = 'retrieve';
+
+const misplacedFormat = (args: ParsedArgs): boolean =>
+  args.flags[FORMAT_FLAG] !== undefined && args.command !== FORMAT_COMMAND;
+
 const handlerFor = (command: string | undefined): CommandHandler | undefined =>
   command === undefined ? undefined : COMMANDS[command];
 
@@ -88,6 +100,7 @@ const withContext = async (
 
 const outcomeFor = async (args: ParsedArgs): Promise<CommandOutcome> => {
   if (wantsHelp(args)) return helpOutcome();
+  if (misplacedFormat(args)) return usageError(unknownFlagMessage(FORMAT_FLAG));
   const handler = handlerFor(args.command);
   if (handler === undefined) return usageError(commandError(args.command));
   return await withContext(args, handler);
@@ -106,16 +119,31 @@ const renderText = (outcome: CommandOutcome): CliResult =>
     ? { exitCode: outcome.exitCode, stdout: '', stderr: `${outcome.text}\n` }
     : { exitCode: outcome.exitCode, stdout: `${outcome.text}\n`, stderr: '' };
 
-const render = (outcome: CommandOutcome, json: boolean): CliResult =>
-  json ? renderJson(outcome) : renderText(outcome);
+/**
+ * XML mode: only a command that PRODUCED an xml rendering gets one. Anything
+ * else — help, a usage failure — falls back to text rather than wrapping prose
+ * in a tag it does not satisfy.
+ */
+const renderXml = (outcome: CommandOutcome): CliResult =>
+  outcome.xml === undefined
+    ? renderText(outcome)
+    : { exitCode: outcome.exitCode, stdout: `${outcome.xml}\n`, stderr: '' };
+
+const RENDERERS: Readonly<Record<OutputFormat, (outcome: CommandOutcome) => CliResult>> = {
+  text: renderText,
+  json: renderJson,
+  xml: renderXml,
+};
 
 /**
  * Run one CLI invocation. `argv` excludes the node executable and script path.
- * A parse failure renders in human mode: `--json` cannot be trusted from an
- * argv that did not parse.
+ * A parse failure, or a format that did not resolve, renders in human mode: no
+ * format can be trusted from an argv the CLI refused.
  */
 export const runCli = async (argv: readonly string[]): Promise<CliResult> => {
   const parsed = parseArgs(argv);
   if (!parsed.ok) return renderText(usageError(parsed.error));
-  return render(await outcomeFor(parsed.args), parsed.args.flags['--json'] === true);
+  const format = resolveFormat(parsed.args.flags);
+  if (!format.ok) return renderText(usageError(format.error));
+  return RENDERERS[format.format](await outcomeFor(parsed.args));
 };

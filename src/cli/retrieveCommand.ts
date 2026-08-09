@@ -7,6 +7,8 @@
  * read an empty result as evidence about the corpus when it is evidence about
  * the index.
  */
+import { relative } from 'node:path';
+
 import type { RetrievalResult, RetrievedAtom } from '../port.js';
 import { createPort } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -14,6 +16,7 @@ import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
+import { escapeXml, xmlAttribute } from './xml.js';
 
 const DEFAULT_K = 5;
 const SCORE_DIGITS = 4;
@@ -49,8 +52,10 @@ const isUnavailable = (result: RetrievalResult): boolean => result.indexState ==
 const exitCodeFor = (result: RetrievalResult): number =>
   isUnavailable(result) ? EXIT_PARTIAL : EXIT_OK;
 
+const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
+
 const atomLine = (atom: RetrievedAtom): string =>
-  `  ${atom.score.toFixed(SCORE_DIGITS)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
+  `  ${formatScore(atom.score)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
 
 const retrieveText = (result: RetrievalResult): string =>
   [
@@ -81,6 +86,51 @@ const payload = (
   ...(isUnavailable(result) ? { note: NO_CORPUS } : {}),
 });
 
+/**
+ * `<section>` carries the atom's own `title`, which ingest sets to the LEAF
+ * heading and promotes to the full `>`-joined chain only when that leaf is
+ * ambiguous across sources. The chain is otherwise consumed to build the atom id
+ * and not kept on the atom, so reconstructing it here would mean re-reading the
+ * source document — a different job.
+ *
+ * `<source>` is stated RELATIVE to the repo root: an absolute path is noise in a
+ * pasted prompt, and the absolute form stays available in `--json`.
+ */
+const documentXml = (atom: RetrievedAtom, repoRoot: string): string =>
+  [
+    `  <document ${xmlAttribute('id', atom.id)} ${xmlAttribute('score', formatScore(atom.score))} ${xmlAttribute('domain', atom.domain)}>`,
+    '    <metadata>',
+    `      <source>${escapeXml(relative(repoRoot, atom.sourcePath))}</source>`,
+    `      <section>${escapeXml(atom.title)}</section>`,
+    '    </metadata>',
+    '    <content>',
+    escapeXml(atom.body),
+    '    </content>',
+    '  </document>',
+  ].join('\n');
+
+const rootAttributes = (request: RetrieveRequest, result: RetrievalResult): string =>
+  [
+    xmlAttribute('query', request.query),
+    xmlAttribute('adapter', request.context.adapter),
+    xmlAttribute('mode', result.mode),
+    xmlAttribute('indexState', result.indexState),
+    xmlAttribute('count', String(result.atoms.length)),
+  ].join(' ');
+
+/**
+ * An `unavailable` run emits the SAME empty block plus a `<note>`, so a consumer
+ * separates "searched, found nothing" (`count="0"`, no note) from "no search
+ * happened" (`indexState="unavailable"` + note) without parsing prose.
+ */
+const retrieveXml = (request: RetrieveRequest, result: RetrievalResult): string =>
+  [
+    `<retrieved_context ${rootAttributes(request, result)}>`,
+    ...(isUnavailable(result) ? [`  <note>${escapeXml(NO_CORPUS)}</note>`] : []),
+    ...result.atoms.map(atom => documentXml(atom, request.context.repoRoot)),
+    '</retrieved_context>',
+  ].join('\n');
+
 const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   const { context, query, k } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
@@ -90,6 +140,7 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
     exitCode: exitCodeFor(result),
     data: payload(request, result),
     text: retrieveText(result),
+    xml: retrieveXml(request, result),
   };
 };
 
