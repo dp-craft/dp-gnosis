@@ -12,7 +12,7 @@ export const HELP_TEXT: string = [
   'Usage: dp-gnosis <command> [args] [flags]',
   '',
   'Commands:',
-  '  ingest <path...>   chunk markdown sources into atom files',
+  '  ingest             chunk the configured corpus roots into atom files',
   '  index              build the selected adapter index (no-op where none exists)',
   '  retrieve <query>   rank atoms for a query',
   '  bench              measure every adapter over the golden set; writes a report to docs/test/',

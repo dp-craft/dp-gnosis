@@ -18,9 +18,9 @@ interface Fixture {
 
 const makeFixture = async (): Promise<Fixture> => {
   const repoRoot = await mkdtemp(join(tmpdir(), 'gnosis-cli-'));
-  const standards = join(repoRoot, 'claude-artifacts', 'standards');
-  await mkdir(standards, { recursive: true });
-  const source = join(standards, 'TS-TESTING.md');
+  const corpus = join(repoRoot, 'doc');
+  await mkdir(corpus, { recursive: true });
+  const source = join(corpus, 'TS-TESTING.md');
   await writeFile(source, DOC, 'utf8');
   return {
     repoRoot,
@@ -32,7 +32,6 @@ const makeFixture = async (): Promise<Fixture> => {
 
 const ingestArgv = (fixture: Fixture): readonly string[] => [
   'ingest',
-  fixture.source,
   '--atoms-dir',
   fixture.atomsDir,
   '--repo-root',
@@ -95,6 +94,19 @@ const firstAtom = (data: Record<string, unknown>): Record<string, unknown> => {
 };
 
 describe('runCli', () => {
+  /**
+   * The fixture repo carries a `doc/` tree alone, so the scope is narrowed to it
+   * here — the real default also names `claude-artifacts` and `RUNNER-*.md`, and
+   * a root matching nothing is a refusal by design.
+   */
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   describe('ingest', () => {
     it('writes atoms from a fixture source and exits 0', async () => {
       const fixture = await makeFixture();
@@ -106,38 +118,45 @@ describe('runCli', () => {
       expect(result.stderr).toBe('');
     });
 
+    /**
+     * The refusal needs a file the corpus scope REACHES but the domain table
+     * does not claim, so the scope is widened here through the documented
+     * override — which also pins that the override is honoured end-to-end.
+     */
     it('exits 3 and names each skip reason when a source is refused', async () => {
       const fixture = await makeFixture();
-      const stray = join(fixture.repoRoot, 'notes.md');
-      await writeFile(stray, DOC, 'utf8');
+      const notes = join(fixture.repoRoot, 'notes');
+      await mkdir(notes, { recursive: true });
+      await writeFile(join(notes, 'stray.md'), DOC, 'utf8');
+      vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc,notes');
 
       const result = await runCli([
         'ingest',
-        fixture.source,
-        stray,
         '--atoms-dir',
         fixture.atomsDir,
         '--repo-root',
         fixture.repoRoot,
         '--json',
       ]);
+      vi.unstubAllEnvs();
 
       expect(result.exitCode).toBe(3);
       const data = parseJson(result.stdout);
       expect(data['written']).toBe(2);
       const skipped = data['skipped'] as readonly Record<string, unknown>[];
       expect(skipped).toHaveLength(1);
-      expect(skipped[0]?.['source']).toBe('notes.md');
+      expect(skipped[0]?.['source']).toBe('notes/stray.md');
       expect(String((skipped[0]?.['reasons'] as readonly string[])[0])).toContain(
         'outside every declared ingest root'
       );
     });
 
-    it('exits 2 naming the correction when no source path is given', async () => {
-      const result = await runCli(['ingest']);
+    it('exits 2 naming the correction when a source path is passed', async () => {
+      const result = await runCli(['ingest', 'doc/some-file.md']);
 
       expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('at least one source path');
+      expect(result.stderr).toContain('takes no source path');
+      expect(result.stderr).toContain('DP_GNOSIS_CORPUS_ROOTS');
       expect(result.stdout).toBe('');
     });
   });

@@ -41,6 +41,46 @@ export const QUERY_MAX_TERMS = 32;
 export const BM25_IDF_SMOOTHING = 0.5;
 
 /**
+ * The repo-relative roots ingest walks — the corpus SCOPE, stated explicitly
+ * rather than implied by whatever `SOURCE_ROOT_DOMAINS` happens to list. Scope
+ * (what is read) and labelling (what domain a read file gets) are two
+ * decisions, and conflating them means widening either one silently widens the
+ * other.
+ *
+ * An entry containing `*` is a glob resolved against the repo root and
+ * contributes the matching FILES; every other entry is a directory walked
+ * recursively. `RUNNER-*.md` is the repo-root runner doc set, which has no
+ * containing directory of its own.
+ *
+ * Scope covers the whole authored knowledge base, not `doc/` alone: the frozen
+ * golden set draws 46 of its 103 atoms from `claude-artifacts/` and 30 from the
+ * repo-root `RUNNER-*.md` files, so a `doc/`-only corpus leaves most of the
+ * benchmark unscoreable.
+ */
+export const CORPUS_ROOTS: readonly string[] = ['doc', 'claude-artifacts', 'RUNNER-*.md'];
+
+/** Comma-separated override of `CORPUS_ROOTS`, read in `resolveCorpusRoots` alone. */
+export const CORPUS_ROOTS_ENV_VAR = 'DP_GNOSIS_CORPUS_ROOTS';
+
+const ROOT_SEPARATOR = ',';
+
+/**
+ * The ONE place the corpus scope is resolved. Every caller imports this instead
+ * of reading the environment itself: a second `process.env` read is how one
+ * command ends up indexing a different corpus than the command beside it.
+ * An unset, empty or all-blank override falls back to `CORPUS_ROOTS`.
+ */
+export const resolveCorpusRoots = (
+  env: Readonly<Record<string, string | undefined>> = process.env
+): readonly string[] => {
+  const declared = (env[CORPUS_ROOTS_ENV_VAR] ?? '')
+    .split(ROOT_SEPARATOR)
+    .map(root => root.trim())
+    .filter(root => root.length > 0);
+  return declared.length > 0 ? declared : CORPUS_ROOTS;
+};
+
+/**
  * The closed `x_domain` vocabulary. An unknown domain is REFUSED at write
  * time: a free-form string fragments on typos and makes an atom silently
  * invisible to every domain-filtered query.

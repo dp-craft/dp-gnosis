@@ -15,8 +15,16 @@ const SRC_DIR: string = dirname(fileURLToPath(import.meta.url));
 /** Absolute path of the repository root (`<repo>`). */
 export const REPO_ROOT: string = resolve(SRC_DIR, '..', '..', '..');
 
-/** The markdown atom vault, the liftable knowledge unit (`<repo>/gnosis`). */
-export const VAULT_ROOT: string = resolve(REPO_ROOT, 'gnosis');
+/**
+ * The single top-level directory dp-gnosis owns (`<repo>/dp-gnosis`). Both the
+ * tracked vault and the disposable cache hang off it, so the package occupies
+ * ONE entry at the repo root instead of two siblings whose names implied no
+ * relationship.
+ */
+const GNOSIS_ROOT: string = resolve(REPO_ROOT, 'dp-gnosis');
+
+/** The markdown atom vault, the liftable knowledge unit (`<repo>/dp-gnosis/vault`). */
+export const VAULT_ROOT: string = resolve(GNOSIS_ROOT, 'vault');
 
 /** Tracked, curated atoms — the ONLY root the indexer is allowed to read. */
 export const ATOMS_DIR: string = resolve(VAULT_ROOT, 'atoms');
@@ -24,8 +32,11 @@ export const ATOMS_DIR: string = resolve(VAULT_ROOT, 'atoms');
 /** Gitignored draft atoms awaiting review. MUST never be retrievable. */
 export const PROPOSALS_DIR: string = resolve(VAULT_ROOT, 'proposals');
 
-/** Derived, disposable runtime state (`<repo>/.dp-gnosis`). */
-export const RUNTIME_ROOT: string = resolve(REPO_ROOT, '.dp-gnosis');
+/**
+ * Derived, disposable runtime state (`<repo>/dp-gnosis/cache`). Gitignored as a
+ * whole; everything under it is rebuildable from `ATOMS_DIR`.
+ */
+export const RUNTIME_ROOT: string = resolve(GNOSIS_ROOT, 'cache');
 
 /** Built search indexes; rebuildable from `ATOMS_DIR` alone. */
 export const INDEX_DIR: string = resolve(RUNTIME_ROOT, 'index');

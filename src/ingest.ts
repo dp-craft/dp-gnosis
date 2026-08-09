@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { globSync } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
 
@@ -7,7 +8,12 @@ import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
 import { chunkMarkdown } from './chunker.js';
 import type { AtomDomain } from './config.js';
-import { domainForSource, SOURCE_ROOT_DOMAINS } from './config.js';
+import {
+  CORPUS_ROOTS_ENV_VAR,
+  domainForSource,
+  resolveCorpusRoots,
+  SOURCE_ROOT_DOMAINS
+} from './config.js';
 import { ATOMS_DIR, REPO_ROOT } from './paths.js';
 import { readExistingIds, validateAtom } from './validate.js';
 
@@ -15,7 +21,7 @@ import { readExistingIds, validateAtom } from './validate.js';
  * WAVE-1 INGEST — a knowingly TEMPORARY write path.
  *
  * This module reads local markdown and writes atoms STRAIGHT INTO
- * `gnosis/atoms/`. The admission gate, the `proposals/` staging boundary and
+ * `dp-gnosis/vault/atoms/`. The admission gate, the `proposals/` staging boundary and
  * the "only validated, reviewed atoms reach the vault" invariant all arrive in
  * Wave 2, which REPLACES this module. Do not mistake it for the finished write
  * path and do not build on its file-writing behaviour.
@@ -27,7 +33,7 @@ import { readExistingIds, validateAtom } from './validate.js';
  * corpus always yields byte-identical atom files. That is why `sources` carries
  * the repo-relative source path — provenance is the smaller half of the reason.
  * The larger half is DRIFT DETECTION: because a re-run reproduces every byte, a
- * non-empty `git diff` over `gnosis/atoms/` after re-ingesting means the
+ * non-empty `git diff` over `dp-gnosis/vault/atoms/` after re-ingesting means the
  * underlying document actually changed. Without byte-stability that signal is
  * lost in incidental churn, and an atom can silently outlive the doc it came
  * from. Encounter-order-dependent ids, absolute paths and timestamps would each
@@ -55,8 +61,12 @@ const KEY_SEPARATOR = '\u0000';
 
 /** Where the ingest run reads from and writes to; every path is injectable for tests. */
 export interface IngestOptions {
-  /** Markdown files and/or directories to ingest. */
-  readonly sources: readonly string[];
+  /**
+   * Repo-relative roots to walk. Defaults to the configured corpus scope, which
+   * is the ONLY thing that decides what ingest reads — a caller cannot reach a
+   * document outside it by naming a path.
+   */
+  readonly corpusRoots?: readonly string[];
   /** Atom output directory. Defaults to the real vault. */
   readonly outputDir?: string;
   /**
@@ -118,8 +128,39 @@ const listMarkdown = async (path: string): Promise<readonly string[]> => {
     .sort();
 };
 
-const expandSources = async (sources: readonly string[]): Promise<readonly string[]> => {
-  const nested = await Promise.all(sources.map(listMarkdown));
+/** A root carrying this is a glob over repo-root-relative paths, not a directory. */
+const GLOB_MARKER = '*';
+
+const listGlob = (repoRoot: string, pattern: string): readonly string[] =>
+  globSync(pattern, { cwd: repoRoot })
+    .filter(name => name.endsWith(MD_SUFFIX))
+    .map(name => join(repoRoot, name))
+    .sort();
+
+/** A missing root is not distinguished from an empty one — both are zero matches. */
+const listRoot = async (repoRoot: string, root: string): Promise<readonly string[]> =>
+  root.includes(GLOB_MARKER)
+    ? listGlob(repoRoot, root)
+    : await listMarkdown(join(repoRoot, root)).catch(() => []);
+
+/**
+ * A configured root that matches nothing is a CONFIGURATION ERROR, not an empty
+ * corpus: a typo'd root would otherwise index zero documents in silence and the
+ * only symptom would be queries that return nothing.
+ */
+const resolveRoot = async (repoRoot: string, root: string): Promise<readonly string[]> => {
+  const files = await listRoot(repoRoot, root);
+  if (files.length > 0) return files;
+  throw new Error(
+    `corpus root "${root}" matched no markdown files under ${repoRoot} — fix or remove it in CORPUS_ROOTS (src/config.ts) or ${CORPUS_ROOTS_ENV_VAR}`
+  );
+};
+
+const expandCorpus = async (
+  repoRoot: string,
+  corpusRoots: readonly string[]
+): Promise<readonly string[]> => {
+  const nested = await Promise.all(corpusRoots.map(root => resolveRoot(repoRoot, root)));
   return [...new Set(nested.flat())];
 };
 
@@ -263,10 +304,9 @@ const checkAtoms = (
  */
 export const ingest = async (options: IngestOptions): Promise<IngestSummary> => {
   const outputDir = options.outputDir ?? ATOMS_DIR;
-  const files = await expandSources(options.sources);
-  const loaded = await Promise.all(
-    [...files].sort().map(file => loadSource(file, options.repoRoot ?? REPO_ROOT))
-  );
+  const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const files = await expandCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots());
+  const loaded = await Promise.all([...files].sort().map(file => loadSource(file, repoRoot)));
   const unmapped = loaded.filter(source => source.domain === undefined).map(unmappedSkip);
   const candidates = [...loaded.flatMap(toCandidates)].sort(byOrder);
   const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir));

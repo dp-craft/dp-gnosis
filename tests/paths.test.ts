@@ -4,11 +4,15 @@ import {
   ATOM_CHUNK_TARGET_CHARS,
   ATOM_DOMAINS,
   ATOM_MAX_CHARS,
+  CORPUS_ROOTS,
+  CORPUS_ROOTS_ENV_VAR,
   domainForSource,
+  resolveCorpusRoots,
   SOURCE_ROOT_DOMAINS
 } from '../src/config.js';
 import {
   ATOMS_DIR,
+  DOCS_TEST_DIR,
   INDEX_DIR,
   PROPOSALS_DIR,
   REPO_ROOT,
@@ -22,17 +26,43 @@ describe('paths', () => {
     expect(all.every(p => isAbsolute(p))).toBe(true);
   });
 
-  it('composes the vault and runtime trees under the repo root', () => {
-    expect(VAULT_ROOT).toBe(`${REPO_ROOT}/gnosis`);
+  it('composes the vault and cache trees under one top-level dp-gnosis dir', () => {
+    expect(VAULT_ROOT).toBe(`${REPO_ROOT}/dp-gnosis/vault`);
     expect(ATOMS_DIR).toBe(`${VAULT_ROOT}/atoms`);
     expect(PROPOSALS_DIR).toBe(`${VAULT_ROOT}/proposals`);
-    expect(RUNTIME_ROOT).toBe(`${REPO_ROOT}/.dp-gnosis`);
+    expect(RUNTIME_ROOT).toBe(`${REPO_ROOT}/dp-gnosis/cache`);
     expect(INDEX_DIR).toBe(`${RUNTIME_ROOT}/index`);
+  });
+
+  /**
+   * Reports are committed human-facing documents, so they stay in the repo's
+   * shared docs tree — putting them under the gitignored cache would delete the
+   * comparison history the bench exists to produce.
+   */
+  it('keeps benchmark reports outside the disposable cache', () => {
+    expect(DOCS_TEST_DIR).toBe(`${REPO_ROOT}/docs/test`);
+    expect(DOCS_TEST_DIR.startsWith(RUNTIME_ROOT)).toBe(false);
   });
 
   it('anchors REPO_ROOT on this package, not the working directory', () => {
     expect(REPO_ROOT.endsWith('/tools/dp-gnosis')).toBe(false);
-    expect(ATOMS_DIR).toContain('/gnosis/atoms');
+    expect(ATOMS_DIR).toContain('/dp-gnosis/vault/atoms');
+  });
+});
+
+describe('resolveCorpusRoots', () => {
+  it('defaults to the declared corpus roots when the override is absent or blank', () => {
+    expect(CORPUS_ROOTS).toEqual(['doc', 'claude-artifacts', 'RUNNER-*.md']);
+    expect(resolveCorpusRoots({})).toEqual(CORPUS_ROOTS);
+    expect(resolveCorpusRoots({ [CORPUS_ROOTS_ENV_VAR]: '' })).toEqual(CORPUS_ROOTS);
+    expect(resolveCorpusRoots({ [CORPUS_ROOTS_ENV_VAR]: ' , ' })).toEqual(CORPUS_ROOTS);
+  });
+
+  it('reads a comma-separated override, trimming blanks and dropping empties', () => {
+    expect(resolveCorpusRoots({ [CORPUS_ROOTS_ENV_VAR]: 'doc, claude-artifacts ,,' })).toEqual([
+      'doc',
+      'claude-artifacts',
+    ]);
   });
 });
 
