@@ -69,6 +69,10 @@ describe('shipped golden set', () => {
     expect(mismatched.map(query => query.id)).toEqual([]);
   });
 
+  it('should load the shipped v1 artefact, which declares no type, with type null', () => {
+    expect(shipped.queries.every(query => query.type === null)).toBe(true);
+  });
+
   it('should keep every domain-filtered judgement inside its own declared domain', () => {
     const filtered = shipped.queries.filter(query => query.domain !== null);
     expect(filtered.length).toBeGreaterThan(0);
@@ -89,6 +93,23 @@ describe('parseGoldenSet', () => {
     expect(() => parseGoldenSet(documentWith({ queries: [withoutDomain] }))).toThrow(
       /field "domain" MUST be a string or null/
     );
+  });
+
+  it('should read an absent type field as null, so a pre-type artefact still loads', () => {
+    const set = parseGoldenSet(documentWith({}));
+    expect(set.queries[0]?.type).toBeNull();
+  });
+
+  it('should keep a declared type string', () => {
+    const set = parseGoldenSet(
+      documentWith({ queries: [{ ...validDocument.queries[0], type: 'adr' }] })
+    );
+    expect(set.queries[0]?.type).toBe('adr');
+  });
+
+  it('should reject a type field that is neither a string nor null', () => {
+    const bad = documentWith({ queries: [{ ...validDocument.queries[0], type: 7 }] });
+    expect(() => parseGoldenSet(bad)).toThrow(/field "type" MUST be a string or null/);
   });
 
   it('should reject an empty relevantAtomIds list', () => {

@@ -21,8 +21,8 @@ import { join } from 'node:path';
 
 import type { Atom } from '../atom.js';
 import { parseAtom } from '../atom.js';
-import type { AtomDomain } from '../config.js';
-import { ATOM_DOMAINS, BM25_IDF_SMOOTHING } from '../config.js';
+import type { AtomDomain, AtomType } from '../config.js';
+import { ATOM_DOMAINS, ATOM_TYPES, BM25_IDF_SMOOTHING, DEFAULT_ATOM_TYPE } from '../config.js';
 import { ATOMS_DIR } from '../paths.js';
 import type {
   IndexState,
@@ -80,6 +80,7 @@ interface ScannedDoc {
   readonly id: string;
   readonly title: string;
   readonly domain: AtomDomain;
+  readonly type: AtomType;
   readonly body: string;
   readonly sourcePath: string;
   readonly terms: readonly string[];
@@ -105,6 +106,14 @@ const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 /** Membership test rather than a cast: an unknown domain is not an `AtomDomain`. */
 const asDomain = (value: string): AtomDomain | undefined =>
   ATOM_DOMAINS.find(domain => domain === value);
+
+/**
+ * An unknown or absent `type` falls back to the default rather than dropping the
+ * atom: the type vocabulary classifies an atom, it does not gate scanning, so a
+ * typo must not make an otherwise valid atom unreachable.
+ */
+const asType = (value: string): AtomType =>
+  ATOM_TYPES.find(type => type === value) ?? DEFAULT_ATOM_TYPE;
 
 const isAtomFile = (entry: Dirent): boolean =>
   entry.isFile() && entry.name.endsWith(MARKDOWN_EXT);
@@ -150,6 +159,7 @@ const fromAtom = (context: ScanContext, file: string, atom: Atom): ScannedDoc | 
         id: atom.frontmatter.id,
         title: atom.frontmatter.title,
         domain,
+        type: asType(atom.frontmatter.type),
         body: atom.body,
         sourcePath: join(context.dir, file),
         terms: documentTerms(context, atom),
@@ -224,10 +234,14 @@ const byScoreThenId = (a: ScoredDoc, b: ScoredDoc): number =>
 const inDomain = (doc: ScannedDoc, domain: AtomDomain | undefined): boolean =>
   domain === undefined || doc.domain === domain;
 
+const matchType = (doc: ScannedDoc, type: AtomType | undefined): boolean =>
+  type === undefined || doc.type === type;
+
 const toRetrieved = (scored: ScoredDoc): RetrievedAtom => ({
   id: scored.doc.id,
   title: scored.doc.title,
   domain: scored.doc.domain,
+  type: scored.doc.type,
   body: scored.doc.body,
   score: scored.score,
   sourcePath: scored.doc.sourcePath,
@@ -236,6 +250,7 @@ const toRetrieved = (scored: ScoredDoc): RetrievedAtom => ({
 const rank = (corpus: Corpus, terms: readonly string[], opts: RetrieveOptions): readonly ScoredDoc[] =>
   corpus.docs
     .filter(doc => inDomain(doc, opts.domain))
+    .filter(doc => matchType(doc, opts.type))
     .map(doc => ({ doc, score: scoreDoc(doc, terms, corpus) }))
     .filter(scored => scored.score > 0)
     .sort(byScoreThenId)

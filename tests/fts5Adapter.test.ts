@@ -13,6 +13,7 @@ interface AtomSpec {
   readonly file: string;
   readonly id: string;
   readonly domain?: string;
+  readonly type?: string;
   readonly status?: string;
   readonly staleAfter?: string;
   readonly body: string;
@@ -21,7 +22,7 @@ interface AtomSpec {
 const atomText = (spec: AtomSpec): string =>
   [
     '---',
-    'type: knowledge',
+    `type: ${spec.type ?? 'knowledge'}`,
     `id: ${spec.id}`,
     `title: title of ${spec.id}`,
     `x_domain: ${spec.domain ?? 'runner'}`,
@@ -196,6 +197,26 @@ describe('createFts5Adapter', () => {
     const result = await port().retrieve('shared token', { k: 5, domain: 'standards' });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-b']);
+  });
+
+  it('excludes foreign-type atoms when a type filter is set', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', type: 'knowledge', body: 'shared token here' });
+    writeAtom({ file: 'b.md', id: 'atom-b', type: 'adr', body: 'shared token here' });
+    build();
+
+    const result = await port().retrieve('shared token', { k: 5, type: 'adr' });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-b']);
+  });
+
+  it('keeps an atom whose type is outside the closed vocabulary under the default type', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', type: 'invented_type', body: 'shared token here' });
+    build();
+
+    const result = await port().retrieve('shared token', { k: 5, type: 'knowledge' });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-a']);
+    expect(result.atoms[0]?.type).toBe('knowledge');
   });
 
   it('excludes deprecated and expired atoms via the shared retrievability rule', async () => {

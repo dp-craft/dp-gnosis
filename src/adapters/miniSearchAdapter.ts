@@ -47,7 +47,13 @@ import type MiniSearch from 'minisearch';
 import type { Options } from 'minisearch';
 
 import { type Atom, parseAtom } from '../atom.js';
-import { ATOM_DOMAINS, type AtomDomain } from '../config.js';
+import {
+  ATOM_DOMAINS,
+  ATOM_TYPES,
+  type AtomDomain,
+  type AtomType,
+  DEFAULT_ATOM_TYPE
+} from '../config.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -145,6 +151,14 @@ const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1
 
 const asDomain = (value: string): AtomDomain | undefined =>
   ATOM_DOMAINS.find(domain => domain === value);
+
+/**
+ * An unknown or absent `type` falls back to the default rather than dropping the
+ * atom: the type vocabulary classifies an atom, it does not gate indexing, so a
+ * typo must not make an otherwise valid atom unreachable.
+ */
+const asType = (value: string): AtomType =>
+  ATOM_TYPES.find(type => type === value) ?? DEFAULT_ATOM_TYPE;
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 
@@ -244,6 +258,7 @@ const fromAtom = (atom: Atom, hit: SearchHit, sourcePath: string): RetrievedAtom
         id: hit.id,
         title: atom.frontmatter.title,
         domain,
+        type: asType(atom.frontmatter.type),
         body: atom.body,
         score: hit.score,
         sourcePath,
@@ -267,6 +282,9 @@ const byScoreThenId = (a: RetrievedAtom, b: RetrievedAtom): number =>
 const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boolean =>
   domain === undefined || atom.domain === domain;
 
+const matchType = (atom: RetrievedAtom, type: AtomType | undefined): boolean =>
+  type === undefined || atom.type === type;
+
 const selectAtoms = (
   options: MiniSearchAdapterOptions,
   hits: readonly unknown[],
@@ -278,6 +296,7 @@ const selectAtoms = (
     .map(hit => readHit(options, hit))
     .filter(isDefined)
     .filter(atom => matchDomain(atom, opts.domain))
+    .filter(atom => matchType(atom, opts.type))
     .sort(byScoreThenId)
     .slice(0, opts.k);
 

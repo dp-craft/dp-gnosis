@@ -193,6 +193,45 @@ describe('createLinearScanAdapter', () => {
     expect(result.atoms[0]?.domain).toBe('standards');
   });
 
+  it('excludes foreign types when a type filter is given', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      {
+        file: 'a.md',
+        id: 'knowledge-atom',
+        body: 'gate pipeline escalation',
+        overrides: { type: 'knowledge' },
+      },
+      {
+        file: 'b.md',
+        id: 'adr-atom',
+        body: 'gate pipeline escalation',
+        overrides: { type: 'adr' },
+      },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
+      k: 10,
+      type: 'adr',
+    });
+
+    expect(ids(result)).toEqual(['adr-atom']);
+    expect(result.atoms[0]?.type).toBe('adr');
+  });
+
+  it('keeps an atom whose type is outside the closed vocabulary under the default type', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'a.md', id: 'odd-atom', body: 'gate pipeline escalation' }]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
+      k: 10,
+      type: 'knowledge',
+    });
+
+    expect(ids(result)).toEqual(['odd-atom']);
+    expect(result.atoms[0]?.type).toBe('knowledge');
+  });
+
   it('reads the body from disk on every call, so an edit needs no reindex', async () => {
     const dir = await atomsDir();
     await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'original oscillation text' }]);

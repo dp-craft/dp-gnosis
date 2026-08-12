@@ -5,6 +5,7 @@ const atom = (id: string, domain: RetrievedAtom['domain'], score: number): Retri
   id,
   title: `title-${id}`,
   domain,
+  type: 'knowledge',
   body: `body-${id}`,
   score,
   sourcePath: `RUNNER-${id}.md`,

@@ -42,6 +42,15 @@ export interface GoldenQuery {
   readonly query: string;
   /** `null` = unfiltered; otherwise only same-`x_domain` atoms may be relevant. */
   readonly domain: string | null;
+  /**
+   * `null` = unfiltered; otherwise only same-`type` atoms may be relevant.
+   *
+   * Deliberately OPTIONAL in the document, unlike `domain`: the frozen v1
+   * artefact predates the field, and an artefact is frozen precisely so it is
+   * never rewritten. An absent field therefore reads as `null` (unfiltered),
+   * which is exactly what those queries meant.
+   */
+  readonly type: string | null;
   readonly relevantAtomIds: readonly string[];
   readonly rationale: string;
 }
@@ -104,6 +113,16 @@ const requireDomain = (record: Record<string, unknown>, where: string): string |
     : fail(`${where}: field "domain" MUST be a string or null (an absent field is not null)`);
 };
 
+/** Absent reads as `null` — the frozen v1 artefact declares no `type` at all. */
+const readType = (record: Record<string, unknown>, where: string): string | null => {
+  const value = record['type'];
+  return typeof value === 'string'
+    ? value
+    : value === undefined || value === null
+      ? null
+      : fail(`${where}: field "type" MUST be a string or null when present`);
+};
+
 const requireAxis = (record: Record<string, unknown>, where: string): GoldenAxis => {
   const value = record['axis'];
   return isAxis(value)
@@ -126,6 +145,7 @@ const parseQuery = (value: unknown, index: number): GoldenQuery => {
     axis: requireAxis(record, where),
     query: requireString(record, 'query', where),
     domain: requireDomain(record, where),
+    type: readType(record, where),
     relevantAtomIds: requireAtomIds(record, where),
     rationale: requireString(record, 'rationale', where),
   };

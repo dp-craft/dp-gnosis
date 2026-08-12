@@ -1,4 +1,4 @@
-import type { AtomDomain } from './config.js';
+import type { AtomDomain, AtomType } from './config.js';
 
 /**
  * Whether a retrieval leg actually ran, and against what.
@@ -20,6 +20,13 @@ export interface RetrievedAtom {
   readonly id: string;
   readonly title: string;
   readonly domain: AtomDomain;
+  /**
+   * Always populated: unlike `x_domain`, a `type` outside the closed vocabulary
+   * falls back to `DEFAULT_ATOM_TYPE` rather than dropping the atom. An unknown
+   * domain means the atom was never indexed; an unknown type must not make an
+   * indexed atom unreachable.
+   */
+  readonly type: AtomType;
   readonly body: string;
   readonly score: number;
   readonly sourcePath: string;
@@ -29,6 +36,7 @@ export interface RetrievedAtom {
 export interface RetrieveOptions {
   readonly k: number;
   readonly domain?: AtomDomain;
+  readonly type?: AtomType;
 }
 
 /** The outcome of one retrieval call. */

@@ -25,6 +25,7 @@ const atom = (id: string): RetrievedAtom => ({
   id,
   title: `title-${id}`,
   domain: 'runner',
+  type: 'knowledge',
   body: `body-${id}`,
   score: 1,
   sourcePath: `RUNNER-${id}.md`,
@@ -42,6 +43,7 @@ const query = (
   axis,
   query: `query text for ${id}`,
   domain: null,
+  type: null,
   relevantAtomIds,
   rationale: `rationale for ${id}`,
 });
