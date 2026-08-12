@@ -291,9 +291,23 @@ const initialState: ScanState = {
 const joinBodies = (first: string, second: string): string =>
   [first, second].filter(body => body.length > 0).join('\n\n');
 
+/**
+ * `true` when one heading chain is a prefix of the other (equal chains
+ * included) — a real ancestor/descendant pair, or two sub-chunks of one
+ * section. `absorbBefore` hands the result the TARGET's title and heading
+ * chain, so absorbing across branches files text under a heading that is not
+ * its own. Measured on this corpus: of 325 under-floor sections only 37
+ * (11.4%) were followed by a descendant; the other 288 were siblings, uncles,
+ * or a document's last section.
+ */
+const sameBranch = (left: readonly string[], right: readonly string[]): boolean =>
+  left.every((title, index) => title === right[index]) ||
+  right.every((title, index) => title === left[index]);
+
 /** `ATOM_MAX_CHARS` outranks the floor, so an over-cap join is left unmerged. */
 const canAbsorb = (source: MarkdownChunk, target: MarkdownChunk): boolean =>
   source.body.length < ATOM_MIN_CHARS &&
+  sameBranch(source.headingChain, target.headingChain) &&
   joinBodies(source.body, target.body).length <= ATOM_MAX_CHARS;
 
 /** `source` lands ahead of `target`, whose heading and title own the result. */
@@ -326,14 +340,53 @@ const mergeTail = (chunks: readonly MarkdownChunk[]): readonly MarkdownChunk[] =
     : chunks;
 };
 
+const FRONT_MATTER_DELIMITER = '---';
+
+/**
+ * Drop a source document's own YAML front-matter before any scanning.
+ *
+ * Measured on the live corpus: 838 of 1 037 source docs open with a
+ * front-matter block, and 745 of 12 621 atoms carried that raw
+ * `---\ntitle: ...\n---` header as body text. The block is only front-matter
+ * when line 1 is exactly `---` AND a later line closes it — an unterminated
+ * opener is a horizontal rule, so nothing is stripped.
+ */
+const frontMatterEnd = (lines: readonly string[]): number => {
+  const close = lines.indexOf(FRONT_MATTER_DELIMITER, 1);
+  return lines[0] === FRONT_MATTER_DELIMITER ? close : -1;
+};
+
+const stripFrontMatter = (lines: readonly string[]): readonly string[] => {
+  const close = frontMatterEnd(lines);
+  return close === -1 ? lines : lines.slice(close + 1);
+};
+
+const TITLE_FIELD_RE = /^title:(.*)$/;
+const SURROUNDING_QUOTES_RE = /^(["'])(.*)\1$/;
+
+/**
+ * The `title:` field of a document's OWN front-matter, or `undefined` when the
+ * block carries none. Read from the same leading block `stripFrontMatter`
+ * removes, so a `title:` line in the prose can never be mistaken for it.
+ */
+export const frontMatterTitle = (text: string): string | undefined => {
+  const lines = text.split('\n');
+  const close = frontMatterEnd(lines);
+  const field = lines
+    .slice(1, Math.max(close, 0))
+    .map(line => TITLE_FIELD_RE.exec(line)?.[1])
+    .find(value => value !== undefined);
+  const title = (field ?? '').trim().replace(SURROUNDING_QUOTES_RE, '$2').trim();
+  return title.length > 0 ? title : undefined;
+};
+
 /**
  * Split `text` at heading boundaries, sub-splitting any section whose body
  * exceeds `ATOM_MAX_CHARS` and folding away any body under `ATOM_MIN_CHARS`.
  * Pure and deterministic: identical input always yields byte-identical output.
  */
 export const chunkMarkdown = (text: string): readonly MarkdownChunk[] => {
-  const final = text
-    .split('\n')
+  const final = stripFrontMatter(text.split('\n'))
     .reduce((state, line, index) => scanLine(state, line, index + 1), initialState);
   const chunks = [...final.done, final.open].filter(isMeaningful).flatMap(emitChunks);
   return mergeTail(mergeForward(chunks));

@@ -23,12 +23,25 @@ export const ATOM_CHUNK_TARGET_CHARS = 3200;
 /**
  * Body floor below which a chunk is not an atom of its own.
  *
- * Measured on the 13 858-atom corpus: 1 232 bodies fall under 50 characters —
- * one-line lead-ins to the subsections that follow them. They assert nothing
- * alone, yet occupy candidate slots ahead of substantive atoms, so the chunker
- * folds them into a neighbour instead of emitting them.
+ * The floor is enforced by `canAbsorb`, which since the `sameBranch` guard
+ * merges ONLY within one heading branch, so raising it cannot fuse unrelated
+ * sections: at 200 characters, 799 of the 2 471 under-floor sections are
+ * genuine lead-ins folded into their own branch, and the remaining 1 672 —
+ * siblings, uncles and last sections — are simply left as their own atoms.
+ * (The earlier "one-line lead-ins" reading of the under-floor population is
+ * falsified: of 325 under-floor sections only 37, 11.4%, were followed by a
+ * deeper heading; 238 were siblings, 41 uncles and 9 a document's last
+ * section.)
+ *
+ * 200 was chosen because the reranker's narrowest measured extraction window
+ * is 100–300 characters, so a body under 200 cannot fill even one window while
+ * still occupying a candidate slot.
+ *
+ * Measured in CHARACTERS against the RAW chunk body, before ingest prepends
+ * the heading line — measuring the prefixed body would let the prefix mask an
+ * empty atom.
  */
-export const ATOM_MIN_CHARS = 50;
+export const ATOM_MIN_CHARS = 200;
 
 /**
  * Hard cap on how many terms a constructed retrieval query may carry.
@@ -145,3 +158,93 @@ const LONGEST_PREFIX_FIRST: readonly SourceRootDomain[] = [...SOURCE_ROOT_DOMAIN
  */
 export const domainForSource = (repoRelativePath: string): AtomDomain | undefined =>
   LONGEST_PREFIX_FIRST.find(rule => repoRelativePath.startsWith(rule.prefix))?.domain;
+
+/**
+ * The closed `type` vocabulary. Same reasoning as `ATOM_DOMAINS`: an unknown
+ * type is REFUSED at write time, because a typo would make the atom silently
+ * invisible to every type-filtered query.
+ *
+ * `knowledge` is the FALLBACK, not the norm — the directory an authored document
+ * lives in already carries what kind of document it is (a decision record, a
+ * benchmark run, a review), and collapsing all of them into one label discards
+ * that. It stays in the vocabulary for the sources no rule below claims.
+ */
+export const ATOM_TYPES = [
+  'knowledge',
+  'feature-log',
+  'paper',
+  'benchmark',
+  'review',
+  'adr',
+  'brainstorm',
+  'vendor-doc',
+  'teaching',
+  'meta',
+  'runner-rule',
+  'standard',
+] as const;
+
+/** A member of the closed type vocabulary. */
+export type AtomType = (typeof ATOM_TYPES)[number];
+
+/** The type of a source no prefix and no segment rule claims. */
+export const DEFAULT_ATOM_TYPE: AtomType = 'knowledge';
+
+/** One mechanical assignment rule: repo-relative path prefix → type. */
+export interface SourceRootType {
+  readonly prefix: string;
+  readonly type: AtomType;
+}
+
+/**
+ * The mechanical source→type assignment table, longest-prefix-wins, exactly as
+ * `SOURCE_ROOT_DOMAINS` works: declaration order is presentation only, and a
+ * re-run over unchanged input reproduces identical types because no rule needs
+ * per-atom judgement.
+ *
+ * The precedence that matters: `doc/40-code-standards/90-decisions/` (adr) must
+ * outrank `doc/40-code-standards/` (standard), which the length sort — not the
+ * row order — is what guarantees.
+ */
+export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = [
+  { prefix: 'doc/90-history/10-feature-log/', type: 'feature-log' },
+  { prefix: 'doc/80-research-library/papers/', type: 'paper' },
+  { prefix: 'doc/90-history/20-benchmark-runs/', type: 'benchmark' },
+  { prefix: 'doc/90-history/30-reviews/', type: 'review' },
+  { prefix: 'doc/40-code-standards/90-decisions/', type: 'adr' },
+  { prefix: 'doc/80-research-library/vendor-docs/', type: 'vendor-doc' },
+  { prefix: 'doc/85-teaching/', type: 'teaching' },
+  { prefix: 'doc/_meta/', type: 'meta' },
+  { prefix: 'claude-artifacts/agentic-runner-rules/', type: 'runner-rule' },
+  { prefix: 'claude-artifacts/standards/', type: 'standard' },
+  { prefix: 'doc/40-code-standards/', type: 'standard' },
+  { prefix: 'doc/50-testing-strategy/', type: 'standard' },
+];
+
+/**
+ * Brainstorms are a SEGMENT rule, not a prefix rule: the directory appears under
+ * three unrelated parents (`doc/30-spec-driven-workflow/`, `doc/10-agentic-runner/`,
+ * `doc/60-aichatney-app/`), and enumerating those parents would silently mislabel
+ * the fourth one somebody adds. Matched on whole path segments so a directory
+ * merely ENDING in the name cannot claim it.
+ */
+export const BRAINSTORM_SEGMENT = '95-brainstorms';
+
+const LONGEST_TYPE_PREFIX_FIRST: readonly SourceRootType[] = [...SOURCE_ROOT_TYPES].sort(
+  (a, b) => b.prefix.length - a.prefix.length
+);
+
+const isBrainstorm = (repoRelativePath: string): boolean =>
+  repoRelativePath.split('/').includes(BRAINSTORM_SEGMENT);
+
+const prefixType = (repoRelativePath: string): AtomType =>
+  LONGEST_TYPE_PREFIX_FIRST.find(rule => repoRelativePath.startsWith(rule.prefix))?.type ??
+  DEFAULT_ATOM_TYPE;
+
+/**
+ * Resolve the type for a repo-relative source path. Unlike the domain, an
+ * unclaimed source is not out of scope — it simply keeps the `knowledge`
+ * fallback.
+ */
+export const typeForSource = (repoRelativePath: string): AtomType =>
+  isBrainstorm(repoRelativePath) ? 'brainstorm' : prefixType(repoRelativePath);

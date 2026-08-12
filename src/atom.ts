@@ -32,6 +32,8 @@ export interface AtomFrontmatter {
   readonly id: string;
   readonly title: string;
   readonly x_domain: string;
+  /** The source document's own one-line summary, when it declared one. */
+  readonly summary?: string;
   readonly status: AtomStatus;
   readonly stale_after?: string;
   readonly sources: readonly string[];
@@ -57,7 +59,7 @@ const DELIMITER = '---';
 const SOURCES_KEY = 'sources:';
 const SOURCE_ITEM_PREFIX = '  - ';
 const REQUIRED_SCALARS = ['type', 'id', 'title', 'x_domain', 'status'] as const;
-const OPTIONAL_SCALARS = ['stale_after', 'verified_by', 'verified_at'] as const;
+const OPTIONAL_SCALARS = ['summary', 'stale_after', 'verified_by', 'verified_at'] as const;
 const KNOWN_SCALARS: readonly string[] = [...REQUIRED_SCALARS, ...OPTIONAL_SCALARS];
 const DATE_SCALARS = ['stale_after', 'verified_at'] as const;
 
@@ -205,26 +207,31 @@ const validationError = (
 
 const required = (map: ReadonlyMap<string, string>, key: string): string => map.get(key) ?? '';
 
+/** An optional scalar as a spreadable fragment: absent stays absent, never `undefined`. */
+const optionalField = (
+  map: ReadonlyMap<string, string>,
+  key: string
+): Readonly<Record<string, string>> => {
+  const value = map.get(key);
+  return value === undefined ? {} : { [key]: value };
+};
+
 const composeFrontmatter = (
   map: ReadonlyMap<string, string>,
   status: AtomStatus,
   sources: readonly string[]
-): AtomFrontmatter => {
-  const staleAfter = map.get('stale_after');
-  const verifiedBy = map.get('verified_by');
-  const verifiedAt = map.get('verified_at');
-  return {
-    type: required(map, 'type'),
-    id: required(map, 'id'),
-    title: required(map, 'title'),
-    x_domain: required(map, 'x_domain'),
-    status,
-    ...(staleAfter === undefined ? {} : { stale_after: staleAfter }),
-    sources,
-    ...(verifiedBy === undefined ? {} : { verified_by: verifiedBy }),
-    ...(verifiedAt === undefined ? {} : { verified_at: verifiedAt }),
-  };
-};
+): AtomFrontmatter => ({
+  type: required(map, 'type'),
+  id: required(map, 'id'),
+  title: required(map, 'title'),
+  x_domain: required(map, 'x_domain'),
+  ...optionalField(map, 'summary'),
+  status,
+  ...optionalField(map, 'stale_after'),
+  sources,
+  ...optionalField(map, 'verified_by'),
+  ...optionalField(map, 'verified_at'),
+});
 
 const withStatus = (
   map: ReadonlyMap<string, string>,
@@ -265,6 +272,7 @@ const frontmatterLines = (frontmatter: AtomFrontmatter): readonly string[] => [
   `id: ${frontmatter.id}`,
   `title: ${frontmatter.title}`,
   `x_domain: ${frontmatter.x_domain}`,
+  ...optionalLine('summary', frontmatter.summary),
   `status: ${frontmatter.status}`,
   ...optionalLine('stale_after', frontmatter.stale_after),
   SOURCES_KEY,

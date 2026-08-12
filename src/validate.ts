@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises';
 
 import type { Atom } from './atom.js';
-import { ATOM_DOMAINS, ATOM_MAX_CHARS } from './config.js';
+import { ATOM_DOMAINS, ATOM_MAX_CHARS, ATOM_TYPES } from './config.js';
 import { ATOMS_DIR } from './paths.js';
 
 /**
@@ -64,6 +64,16 @@ const domainError = (domain: string): string | undefined =>
     : `field "x_domain" is "${domain}", outside the closed vocabulary — replace it with one of ${ATOM_DOMAINS.join(' | ')}`;
 
 /**
+ * The same argument as `domainError`, on the other axis: a free-form type makes
+ * the atom silently invisible to every type-filtered query, so the vocabulary is
+ * closed and a typo is refused at the write rather than discovered at retrieval.
+ */
+const typeError = (type: string): string | undefined =>
+  ATOM_TYPES.some(known => known === type)
+    ? undefined
+    : `field "type" is "${type}", outside the closed vocabulary — replace it with one of ${ATOM_TYPES.join(' | ')}`;
+
+/**
  * Every reason the atom MUST NOT be written, each naming the correction its
  * author has to make. An empty list means the write is allowed.
  */
@@ -73,6 +83,7 @@ export const validateAtom = (atom: Atom, existingIds: ReadonlySet<string>): read
     idUniquenessError(atom.frontmatter.id, existingIds),
     sizeError(atom.body),
     domainError(atom.frontmatter.x_domain),
+    typeError(atom.frontmatter.type),
   ].filter(isDefined);
 
 const toId = (filename: string): string => filename.slice(0, -MD_SUFFIX.length);

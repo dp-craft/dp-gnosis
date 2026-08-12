@@ -6,14 +6,15 @@ import { basename, join, relative, sep } from 'node:path';
 import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
-import { chunkMarkdown } from './chunker.js';
+import { chunkMarkdown, frontMatterTitle } from './chunker.js';
 import type { AtomDomain } from './config.js';
 import {
   ATOM_MAX_CHARS,
   CORPUS_ROOTS_ENV_VAR,
   domainForSource,
   resolveCorpusRoots,
-  SOURCE_ROOT_DOMAINS
+  SOURCE_ROOT_DOMAINS,
+  typeForSource
 } from './config.js';
 import { ATOMS_DIR, REPO_ROOT } from './paths.js';
 import { readExistingIds, validateAtom } from './validate.js';
@@ -101,6 +102,12 @@ interface Candidate {
   readonly index: number;
   readonly chunk: MarkdownChunk;
   readonly domain: AtomDomain;
+  /** The document this chunk came from, named once per source. */
+  readonly docTitle: string;
+  /** The document's declared summary, resolved once per source; absent when it declared none. */
+  readonly summary: string | undefined;
+  /** ` (i/n)` when the section emitted several chunks, else empty. */
+  readonly part: string;
 }
 
 interface BasedCandidate {
@@ -180,14 +187,81 @@ const unmappedSkip = (source: LoadedSource): IngestSkip => ({
   ],
 });
 
+const isNamed = (part: string | undefined): boolean => part !== undefined && part.trim().length > 0;
+
+const firstH1 = (chunks: readonly MarkdownChunk[]): string | undefined =>
+  chunks.map(chunk => chunk.headingChain[0]).find(isNamed);
+
+/** The last resort: a file name is the one name a document always has. */
+const stemTitle = (sourcePath: string): string =>
+  basename(sourcePath, MD_SUFFIX).split('-').join(' ');
+
+/**
+ * One name per document, the same for every chunk it yields: an atom retrieved
+ * from a deep subsection has to say which document it belongs to, and its own
+ * heading chain never carries that.
+ */
+const documentTitle = (source: LoadedSource, chunks: readonly MarkdownChunk[]): string =>
+  frontMatterTitle(source.text) ?? firstH1(chunks) ?? stemTitle(source.sourcePath);
+
+/**
+ * A document's own summary: the FIRST `<!-- LLM-PRIMARY: … -->` comment,
+ * wherever it sits in the text. Whitespace is collapsed because the comment may
+ * wrap over several lines while a frontmatter scalar is one line by definition.
+ */
+const SUMMARY_COMMENT_RE = /<!--\s*LLM-PRIMARY:\s*([\s\S]*?)-->/;
+const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
+const WHITESPACE_RUN_RE = /\s+/g;
+/** Removing a comment leaves the blank lines that framed it; three or more collapse to one break. */
+const BLANK_RUN_RE = /\n{3,}/g;
+
+const documentSummary = (text: string): string | undefined => {
+  const raw = SUMMARY_COMMENT_RE.exec(text)?.[1] ?? '';
+  const collapsed = raw.replace(WHITESPACE_RUN_RE, ' ').trim();
+  return collapsed.length > 0 ? collapsed : undefined;
+};
+
+/**
+ * An HTML comment is invisible to a reader but indexed as text, so it can only
+ * mislead retrieval — and an atom whose whole body is one asserts nothing.
+ */
+const stripComments = (body: string): string =>
+  body.replace(HTML_COMMENT_RE, '').replace(BLANK_RUN_RE, '\n\n').trim();
+
+const chainKey = (chunk: MarkdownChunk): string => chunk.headingChain.join(KEY_SEPARATOR);
+
+/**
+ * ` (i/n)` for a section the chunker split, empty for one it did not. Measured
+ * on the live corpus, 3 133 atoms shared a title with another atom of their own
+ * section — 42 of them from one appendix — so a retrieved part could not say
+ * which part it was. The heading chain is deliberately untouched: atom ids are
+ * derived from it.
+ */
+const partSuffix = (
+  chunks: readonly MarkdownChunk[],
+  chunk: MarkdownChunk,
+  index: number
+): string => {
+  const key = chainKey(chunk);
+  const peers = chunks.filter(peer => chainKey(peer) === key);
+  const ordinal = chunks.slice(0, index + 1).filter(peer => chainKey(peer) === key).length;
+  return peers.length > 1 ? ` (${ordinal}/${peers.length})` : '';
+};
+
 const toCandidates = (source: LoadedSource): readonly Candidate[] => {
   const domain = source.domain;
   if (domain === undefined) return [];
-  return chunkMarkdown(source.text).map((chunk, index) => ({
+  const chunks = chunkMarkdown(source.text);
+  const docTitle = documentTitle(source, chunks);
+  const summary = documentSummary(source.text);
+  return chunks.map((chunk, index) => ({
     sourcePath: source.sourcePath,
     index,
     chunk,
     domain,
+    docTitle,
+    summary,
+    part: partSuffix(chunks, chunk, index),
   }));
 };
 
@@ -243,52 +317,72 @@ const ambiguousTitles = (candidates: readonly Candidate[]): ReadonlySet<string> 
   return duplicatesOf(pairs.map(pair => pair.split(KEY_SEPARATOR)[0] ?? ''));
 };
 
-const resolveTitle = (candidate: Candidate, ambiguous: ReadonlySet<string>): string =>
-  ambiguous.has(candidate.chunk.title)
-    ? candidate.chunk.headingChain.join(TITLE_SEPARATOR)
+/** No atom ships an unnamed title: an empty resolution falls back to the document. */
+const resolveTitle = (candidate: Candidate, ambiguous: ReadonlySet<string>): string => {
+  const resolved = ambiguous.has(candidate.chunk.title)
+    ? candidate.chunk.headingChain.filter(isNamed).join(TITLE_SEPARATOR)
     : candidate.chunk.title;
+  return resolved.trim().length > 0 ? resolved : candidate.docTitle;
+};
 
 /**
- * The heading chain restated INSIDE the body, as one `# a > b > c` line.
+ * The chunk's OWN heading chain restated INSIDE the body, as one `# a > b`
+ * line — and nothing else.
  *
  * Why the body and not only the frontmatter: every index and reranker reads
  * `atom.body` alone, so a body that never names its own section cannot be
  * scored on meaning — measured on the live corpus, 12 254 of 13 858 atoms did
- * not contain their own heading anywhere in the text.
+ * not contain their own heading anywhere in the text, and adding the chain
+ * measured +0.0876 MRR.
+ *
+ * Why ONLY the chain: document-level text (the document title, the document
+ * summary) is IDENTICAL across every atom of that document, so it adds no
+ * discriminative signal within it while lengthening every body — BM25 penalises
+ * the length and the reranker loses extraction window. Measured on the best
+ * configuration, carrying it in the body cost nDCG@10 −0.0286 and MRR −0.0591,
+ * same sign in every cell and both models. It lives in the frontmatter instead.
  *
  * Why ONE line rather than a heading per level: an atom is retrieved
  * standalone, so the chain is its topic sentence, not a document outline. One
  * line reads the same way to a person and to a model, costs the body cap the
  * least, and has exactly one form — no per-depth variation to reproduce.
+ *
+ * An empty chain (the synthetic preamble, or a heading with no text) yields no
+ * line at all: the document is named in the frontmatter, which is where naming
+ * it stops costing body length.
  */
 const BODY_HEADING_PREFIX = '# ';
 
 const headingLine = (chain: readonly string[]): string => {
-  const named = chain.filter(part => part.trim().length > 0);
-  return named.length === 0 ? '' : `${BODY_HEADING_PREFIX}${named.join(TITLE_SEPARATOR)}`;
+  const named = chain.filter(isNamed);
+  return named.length > 0 ? `${BODY_HEADING_PREFIX}${named.join(TITLE_SEPARATOR)}` : '';
 };
 
+/** Head lines and body joined by a blank line; an empty side contributes nothing. */
+const composeBody = (head: readonly string[], body: string): string =>
+  `${[head.join('\n'), body].filter(part => part.length > 0).join('\n\n')}\n`;
+
 /**
- * An empty chain (the synthetic preamble, or a heading with no text) adds
- * nothing, and the cap outranks the heading: a body the heading cannot fit
- * beside is written unprefixed rather than refused for being oversize.
+ * The cap outranks the heading line: a body it cannot fit beside is written
+ * unprefixed rather than refused for being oversize.
  */
-const bodyWithHeading = (chunk: MarkdownChunk): string => {
-  const heading = headingLine(chunk.headingChain);
-  const prefixed = `${heading}\n\n${chunk.body}\n`;
-  return heading === '' || prefixed.length > ATOM_MAX_CHARS ? `${chunk.body}\n` : prefixed;
+const bodyWithHeading = (candidate: Candidate): string => {
+  const body = stripComments(candidate.chunk.body);
+  const prefixed = composeBody([headingLine(candidate.chunk.headingChain)], body);
+  return prefixed.length <= ATOM_MAX_CHARS ? prefixed : composeBody([], body);
 };
 
 const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({
   frontmatter: {
-    type: 'knowledge',
+    type: typeForSource(candidate.sourcePath),
     id,
     title,
     x_domain: candidate.domain,
+    ...(candidate.summary === undefined ? {} : { summary: candidate.summary }),
     status: 'stable',
     sources: [candidate.sourcePath],
   },
-  body: bodyWithHeading(candidate.chunk),
+  body: bodyWithHeading(candidate),
 });
 
 const planAtoms = (candidates: readonly Candidate[]): readonly PlannedAtom[] => {
@@ -297,7 +391,11 @@ const planAtoms = (candidates: readonly Candidate[]): readonly PlannedAtom[] => 
   const ambiguous = ambiguousTitles(candidates);
   return based.map(entry => ({
     candidate: entry.candidate,
-    atom: toAtom(entry.candidate, resolveId(entry, collided), resolveTitle(entry.candidate, ambiguous)),
+    atom: toAtom(
+      entry.candidate,
+      resolveId(entry, collided),
+      `${resolveTitle(entry.candidate, ambiguous)}${entry.candidate.part}`
+    ),
   }));
 };
 

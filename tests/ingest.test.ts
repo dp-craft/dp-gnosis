@@ -43,8 +43,10 @@ const bodyOf = (text: string): string => text.split('\n---\n').slice(1).join('\n
 const STANDARDS_ROOT = 'claude-artifacts/standards';
 
 /** Both section bodies clear `ATOM_MIN_CHARS`, so the doc stays two atoms. */
-const INTRO_BODY = 'intro text about the layered test model and its tiers';
-const UNIT_BODY = 'fast unit tier tests run in under a millisecond each';
+const INTRO_BODY =
+  'intro text about the layered test model and its tiers, describing what each tier covers and why the introduction of a document carries enough prose of its own to stand as a separate atom of the whole corpus';
+const UNIT_BODY =
+  'fast unit tier tests run in under a millisecond each, and the unit tier section carries enough prose of its own that it stands alone as an atom of the corpus instead of folding into the introduction above it';
 const DOC = `# Layered Test Model\n\n${INTRO_BODY}\n\n## Unit tier\n\n${UNIT_BODY}\n`;
 
 describe('ingest', () => {
@@ -66,7 +68,7 @@ describe('ingest', () => {
       'ts-testing-layered-test-model.md',
     ]);
     const first = files.get('ts-testing-layered-test-model.md') ?? '';
-    expect(first).toContain('type: knowledge\n');
+    expect(first).toContain('type: standard\n');
     expect(first).toContain('status: stable\n');
     expect(first).toContain('x_domain: standards\n');
     expect(first).toContain('title: Layered Test Model\n');
@@ -85,6 +87,21 @@ describe('ingest', () => {
     const first = files.get('ts-testing-layered-test-model.md') ?? '';
     expect(first).toContain('sources:\n  - claude-artifacts/standards/TS-TESTING.md\n');
     expect(first).not.toContain(fixture.root);
+  });
+
+  it('derives the type from the source directory and keeps it out of the body', async () => {
+    const fixture = await makeFixture();
+    const logRoot = 'doc/90-history/10-feature-log';
+    await writeDoc(join(fixture.root, ...logRoot.split('/')), 'FEATURE-047.md', DOC);
+
+    await ingest({ corpusRoots: [logRoot], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const files = await readAll(fixture.out);
+    const first = files.get('feature-047-layered-test-model.md') ?? '';
+    expect(first).toContain('type: feature-log\n');
+    expect(bodyOf(first)).toBe(`# Layered Test Model\n\n${INTRO_BODY}\n`);
+    const bodies = [...files.values()].map(bodyOf);
+    expect(bodies.filter(body => body.includes('feature-log'))).toEqual([]);
   });
 
   it('produces byte-identical output when re-run over unchanged input', async () => {
@@ -275,15 +292,37 @@ describe('ingest', () => {
     );
   });
 
-  it('leaves a body with no heading chain untouched, adding no empty heading', async () => {
+  it('names the document in the frontmatter only when the chunk has no heading chain', async () => {
     const fixture = await makeFixture();
-    const preamble = 'text that precedes every heading of this document entirely';
+    const preamble =
+      'text that precedes every heading of this document entirely, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding forward into the first titled section of the document';
     await writeDoc(fixture.standards, 'PRE.md', `${preamble}\n`);
 
     await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
 
     const files = await readAll(fixture.out);
     expect([...files.values()].map(bodyOf)).toEqual([`${preamble}\n`]);
+    const titles = ([...files.values()][0] ?? '')
+      .split('\n')
+      .filter(line => line.startsWith('title: '));
+    expect(titles).toHaveLength(1);
+    expect(titles[0]).not.toBe('title: ');
+  });
+
+  it('falls back to the document title rather than shipping an empty one', async () => {
+    const fixture = await makeFixture();
+    const lead =
+      'lead text about the untitled section that clears the atom floor, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding forward into the untitled section that follows it';
+    const tail =
+      'body of the section whose own heading carries no text at all, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding back into the lead section that precedes it here';
+    await writeDoc(fixture.standards, 'BLANK.md', `# Named Doc\n\n${lead}\n\n## \n\n${tail}\n`);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const texts = [...(await readAll(fixture.out)).values()];
+    const titles = texts.flatMap(text => text.split('\n').filter(l => l.startsWith('title: ')));
+    expect(titles).toContain('title: Named Doc');
+    expect(titles.some(title => title.trim() === 'title:')).toBe(false);
   });
 
   it('keeps the body cap when the heading would not fit, leaving that body unprefixed', async () => {
@@ -322,5 +361,227 @@ describe('ingest', () => {
       'ts-testing-layered-test-model-unit-tier.md',
       'ts-testing-layered-test-model.md',
     ]);
+  });
+});
+
+/** The blank `## ` heading leaves that chunk titleless, so the document title resolves it. */
+const BLANK_SECTION_DOC = `# H One\n\n${INTRO_BODY}\n\n## \n\n${UNIT_BODY}\n`;
+
+describe('ingest — document title in the frontmatter, never the body', () => {
+  const NESTED = `# H One\n\n${INTRO_BODY}\n\n## Unit tier\n\n${UNIT_BODY}\n`;
+
+  const bodiesOf = async (dir: string): Promise<readonly string[]> =>
+    [...(await readAll(dir)).values()].map(bodyOf);
+
+  const titlesOf = async (dir: string): Promise<readonly string[]> =>
+    [...(await readAll(dir)).values()].flatMap(text =>
+      text.split('\n').filter(line => line.startsWith('title: '))
+    );
+
+  it('prefers the front-matter title over the first H1', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'DOC.md', `---\ntitle: Front Title\n---\n${BLANK_SECTION_DOC}`);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    expect(await titlesOf(fixture.out)).toContain('title: Front Title');
+    expect((await bodiesOf(fixture.out)).some(body => body.includes('Front Title'))).toBe(false);
+  });
+
+  it('falls back to the first H1 when no front-matter title exists', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'DOC.md', BLANK_SECTION_DOC);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    expect(await titlesOf(fixture.out)).toContain('title: H One');
+  });
+
+  it('falls back to the filename stem, hyphens as spaces, when neither exists', async () => {
+    const fixture = await makeFixture();
+    const preamble =
+      'text that precedes every heading of this document entirely, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding forward into the first titled section of the document';
+    await writeDoc(fixture.standards, 'my-plain-doc.md', `# \n\n${preamble}\n\n## \n\n${UNIT_BODY}\n`);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    expect(await titlesOf(fixture.out)).toContain('title: my plain doc');
+    expect(await bodiesOf(fixture.out)).toContain(`${UNIT_BODY}\n`);
+  });
+
+  it('prefixes the body with the chunk chain alone', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'DOC.md', `---\ntitle: Front Title\n---\n${NESTED}`);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const bodies = await bodiesOf(fixture.out);
+    expect(bodies).toContain(`# H One > Unit tier\n\n${UNIT_BODY}\n`);
+    expect(bodies).toContain(`# H One\n\n${INTRO_BODY}\n`);
+  });
+});
+
+/** Both docs carry the same leaf title, so the chain is what resolves it. */
+const EMPTY_SEGMENT_DOC = (body: string): string =>
+  `# Prompting best practices\n\nlead text about prompting that clears the atom floor, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding forward into the leaf tactics section that follows it\n\n## \n\n### Leaf tactics\n\n${body}\n`;
+
+describe('ingest — heading chain with an empty segment', () => {
+  it('joins only the named chain parts, never emitting a blank separator run', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(
+      fixture.standards,
+      'ONE.md',
+      EMPTY_SEGMENT_DOC(
+        'first leaf body long enough to survive the merge pass, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding into any neighbouring section of the same source document'
+      )
+    );
+    await writeDoc(
+      fixture.standards,
+      'TWO.md',
+      EMPTY_SEGMENT_DOC(
+        'second leaf body long enough to survive the merge pass, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding into any neighbouring section of the same source document'
+      )
+    );
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.skipped).toEqual([]);
+    const texts = [...(await readAll(fixture.out)).values()];
+    const titles = texts.flatMap(text => text.split('\n').filter(line => line.startsWith('title: ')));
+    expect(titles.some(title => title.includes('>  >'))).toBe(false);
+    expect(titles).toContain('title: Prompting best practices > Leaf tactics');
+  });
+});
+
+const SUMMARY_TEXT = 'what this document is for, in one line a reader can act on';
+const SUMMARY_COMMENT = `<!-- LLM-PRIMARY: ${SUMMARY_TEXT} -->`;
+
+describe('ingest — document summary and HTML comments', () => {
+  const readTexts = async (dir: string): Promise<readonly string[]> =>
+    [...(await readAll(dir)).values()];
+
+  it('puts the LLM-PRIMARY summary in the frontmatter of every atom and in no body', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'TS-TESTING.md', `${SUMMARY_COMMENT}\n\n${DOC}`);
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.skipped).toEqual([]);
+    const texts = await readTexts(fixture.out);
+    expect(texts.length).toBeGreaterThan(1);
+    expect(texts.every(text => text.includes(`summary: ${SUMMARY_TEXT}\n`))).toBe(true);
+    expect(texts.every(text => !bodyOf(text).includes(SUMMARY_TEXT))).toBe(true);
+    expect(bodyOf(texts.find(text => text.includes('title: Unit tier')) ?? '')).toBe(
+      `# Layered Test Model > Unit tier\n\n${UNIT_BODY}\n`
+    );
+  });
+
+  it('omits the summary field entirely when the document carries no LLM-PRIMARY comment', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'TS-TESTING.md', DOC);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const texts = await readTexts(fixture.out);
+    expect(texts.some(text => text.includes('summary:'))).toBe(false);
+  });
+
+  it('strips every HTML comment from the body', async () => {
+    const fixture = await makeFixture();
+    const doc = `# Layered Test Model\n\n${INTRO_BODY}\n\n<!-- an aside nobody reads -->\n\n## Unit tier\n\n<!-- another\nmultiline aside -->\n${UNIT_BODY}\n`;
+    await writeDoc(fixture.standards, 'TS-TESTING.md', doc);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const bodies = (await readTexts(fixture.out)).map(bodyOf);
+    expect(bodies.some(body => body.includes('<!--'))).toBe(false);
+    expect(bodies.some(body => body.includes('aside'))).toBe(false);
+  });
+
+  it('still ships a named body for an atom whose whole body was a comment', async () => {
+    const fixture = await makeFixture();
+    const onlyComment =
+      '<!-- a comment long enough on its own to clear the atom floor, carrying enough characters of raw body that the chunker keeps this section as its own atom before ingest strips the comment away entirely -->';
+    await writeDoc(fixture.standards, 'DOC.md', `# Doc Head\n\n${INTRO_BODY}\n\n## Note\n\n${onlyComment}\n`);
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.skipped).toEqual([]);
+    const note = (await readTexts(fixture.out)).find(text => text.includes('title: Note')) ?? '';
+    expect(bodyOf(note)).toBe('# Doc Head > Note\n');
+  });
+
+  it('keeps the document title and the summary in the frontmatter and out of the body', async () => {
+    const fixture = await makeFixture();
+    const doc = `---\ntitle: Front Title\n---\n${SUMMARY_COMMENT}\n\n${BLANK_SECTION_DOC}`;
+    await writeDoc(fixture.standards, 'DOC.md', doc);
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.skipped).toEqual([]);
+    const text = (await readTexts(fixture.out)).find(entry => entry.includes(UNIT_BODY)) ?? '';
+    expect(text).toContain('title: Front Title\n');
+    expect(text).toContain(`summary: ${SUMMARY_TEXT}\n`);
+    expect(bodyOf(text)).toBe(`# H One\n\n${UNIT_BODY}\n`);
+  });
+});
+
+/** Three paragraphs, each just under the pack target, so one section emits three chunks. */
+const PART_DOC = `# Split Section\n\n${'a'.repeat(3000)}\n\n${'b'.repeat(3000)}\n\n${'c'.repeat(3000)}\n`;
+
+describe('ingest — part index for a split section', () => {
+  it('numbers every atom of a three-way split in its title, never in its body heading', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'SPLIT.md', PART_DOC);
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.written).toBe(3);
+    const texts = [...(await readAll(fixture.out)).values()];
+    const titles = texts.flatMap(text => text.split('\n').filter(line => line.startsWith('title: ')));
+    expect([...titles].sort()).toEqual([
+      'title: Split Section (1/3)',
+      'title: Split Section (2/3)',
+      'title: Split Section (3/3)',
+    ]);
+    const headings = texts.map(text => bodyOf(text).split('\n')[0] ?? '');
+    expect(headings).toEqual(['# Split Section', '# Split Section', '# Split Section']);
+  });
+
+  it('leaves a single-chunk section unsuffixed and its id unchanged', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'SPLIT.md', PART_DOC);
+    await writeDoc(fixture.standards, 'TS-TESTING.md', DOC);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const files = await readAll(fixture.out);
+    expect([...files.keys()]).toContain('ts-testing-layered-test-model-unit-tier.md');
+    expect(files.get('ts-testing-layered-test-model-unit-tier.md') ?? '').toContain(
+      'title: Unit tier\n'
+    );
+    const splitNames = [...files.keys()].filter(name => name.startsWith('split-'));
+    expect(splitNames).toHaveLength(3);
+    expect(splitNames.every(name => /^split-split-section-[0-9a-f]{8}\.md$/.test(name))).toBe(true);
   });
 });

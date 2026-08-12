@@ -1,5 +1,5 @@
-import { chunkMarkdown, PREAMBLE_TITLE } from '../src/chunker.js';
-import { ATOM_MAX_CHARS, ATOM_MIN_CHARS } from '../src/config.js';
+import { chunkMarkdown, frontMatterTitle, PREAMBLE_TITLE } from '../src/chunker.js';
+import { ATOM_CHUNK_TARGET_CHARS, ATOM_MAX_CHARS, ATOM_MIN_CHARS } from '../src/config.js';
 
 const FENCE = '```';
 const TILDE_FENCE = '~~~';
@@ -227,13 +227,13 @@ describe('chunkMarkdown — minimum atom size', () => {
   });
 
   it('takes the earlier startLine of the absorbed chunk', () => {
-    const chunks = chunkMarkdown(`# A\n${long('a')}\n## S\ntiny\n## T\n${long('t')}\n`);
+    const chunks = chunkMarkdown(`# A\n${long('a')}\n## S\ntiny\n### T\n${long('t')}\n`);
     expect(chunks.map(c => c.title)).toEqual(['A', 'T']);
     expect(chunks[1]?.startLine).toBe(3);
   });
 
   it('accumulates consecutive under-floor chunks until the floor is cleared', () => {
-    const text = `# A\none\n## B\ntwo\n## C\nthree\n## D\n${long('d')}\n`;
+    const text = `# A\none\n## B\ntwo\n### C\nthree\n#### D\n${long('d')}\n`;
     const chunks = chunkMarkdown(text);
     expect(chunks).toHaveLength(1);
     expect(chunks[0]?.body).toBe(`one\n\ntwo\n\nthree\n\n${long('d')}`);
@@ -260,9 +260,91 @@ describe('chunkMarkdown — minimum atom size', () => {
     expect(chunks[0]?.body).toBe('tiny');
   });
 
-  it('emits no under-floor atom for a document of many short sections', () => {
-    const text = Array.from({ length: 12 }, (_, i) => `## H${i}\nbody ${i}`).join('\n');
-    const bodies = chunkMarkdown(text).map(c => c.body);
-    expect(bodies.every(b => b.length >= ATOM_MIN_CHARS)).toBe(true);
+  it('keeps every short section of a flat sibling document as its own atom', () => {
+    const sections = Array.from({ length: 12 }, (_, i) => `## H${i}\nbody ${i}`).join('\n');
+    const chunks = chunkMarkdown(`# Root\n${long('root')}\n${sections}\n`);
+    expect(chunks.map(c => c.title)).toEqual([
+      'Root',
+      ...Array.from({ length: 12 }, (_, i) => `H${i}`),
+    ]);
+    expect(chunks.slice(1).map(c => c.body)).toEqual(
+      Array.from({ length: 12 }, (_, i) => `body ${i}`)
+    );
+  });
+
+  it('does not merge a short section into a SIBLING at the same heading level', () => {
+    const chunks = chunkMarkdown(`# A\n${long('a')}\n## S1\ntiny\n## S2\n${long('s2')}\n`);
+    expect(chunks.map(c => c.title)).toEqual(['A', 'S1', 'S2']);
+    expect(chunks[1]?.body).toBe('tiny');
+    expect(chunks[2]?.body).toBe(long('s2'));
+  });
+
+  it('does not merge a short section into an UNCLE section', () => {
+    const chunks = chunkMarkdown(`# A\n## P\n### C\ntiny\n## Q\n${long('q')}\n`);
+    expect(chunks.map(c => c.title)).toEqual(['C', 'Q']);
+    expect(chunks[0]?.headingChain).toEqual(['A', 'P', 'C']);
+    expect(chunks[0]?.body).toBe('tiny');
+  });
+
+  it('merges a short section into a DEEPER descendant on the same chain', () => {
+    const chunks = chunkMarkdown(`# A\n${long('a')}\n## P\nlead\n### C\n${long('c')}\n`);
+    expect(chunks.map(c => c.title)).toEqual(['A', 'C']);
+    expect(chunks[1]?.headingChain).toEqual(['A', 'P', 'C']);
+    expect(chunks[1]?.body).toBe(`lead\n\n${long('c')}`);
+  });
+
+  it('merges an under-floor sub-chunk back into its own oversize section', () => {
+    const chunks = chunkMarkdown(`# Big\n${'y'.repeat(ATOM_CHUNK_TARGET_CHARS * 2 + 10)}\n`);
+    expect(chunks).toHaveLength(2);
+    expect(chunks.every(c => c.body.length >= ATOM_MIN_CHARS)).toBe(true);
+    chunks.forEach(c => expect(c.headingChain).toEqual(['Big']));
+  });
+});
+
+describe('chunkMarkdown — source front-matter', () => {
+  it('drops a leading front-matter block so it never reaches a chunk body', () => {
+    const chunks = chunkMarkdown(`---\ntitle: Doc\ntags: [a]\n---\n# A\n\n${PAD}\n`);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.title).toBe('A');
+    expect(chunks[0]?.body).toBe(PAD);
+    expect(chunks.some(c => c.body.includes('title: Doc'))).toBe(false);
+    expect(chunks.some(c => c.body.startsWith('---'))).toBe(false);
+  });
+
+  it('leaves the document untouched when the opening --- has no closing ---', () => {
+    const text = `---\n\n${PAD}\n\n# A\n\n${PAD}\n`;
+    const chunks = chunkMarkdown(text);
+    expect(chunks[0]?.title).toBe(PREAMBLE_TITLE);
+    expect(chunks[0]?.body).toBe(`---\n\n${PAD}`);
+  });
+
+  it('keeps a --- that appears later in the document as a horizontal rule', () => {
+    const chunks = chunkMarkdown(`# A\n\n${PAD}\n\n---\n\n${PAD}\n`);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.body).toBe(`${PAD}\n\n---\n\n${PAD}`);
+  });
+});
+
+describe('frontMatterTitle', () => {
+  it('reads the title field of a leading front-matter block', () => {
+    expect(frontMatterTitle(`---\ntags: [a]\ntitle: Doc Title\n---\n# A\n\n${PAD}\n`)).toBe(
+      'Doc Title'
+    );
+  });
+
+  it('strips surrounding quotes from the value', () => {
+    expect(frontMatterTitle('---\ntitle: "Quoted Doc"\n---\nbody\n')).toBe('Quoted Doc');
+    expect(frontMatterTitle('---\ntitle: \'Quoted Doc\'\n---\nbody\n')).toBe('Quoted Doc');
+  });
+
+  it('returns undefined when the block has no title, a blank title, or does not exist', () => {
+    expect(frontMatterTitle('---\ntags: [a]\n---\nbody\n')).toBeUndefined();
+    expect(frontMatterTitle('---\ntitle:   \n---\nbody\n')).toBeUndefined();
+    expect(frontMatterTitle('# A\n\ntitle: Not Front Matter\n')).toBeUndefined();
+  });
+
+  it('ignores a title line outside the leading block, including an unterminated opener', () => {
+    expect(frontMatterTitle('---\ntags: [a]\n---\ntitle: Body Line\n')).toBeUndefined();
+    expect(frontMatterTitle('---\ntitle: Never Closed\n')).toBeUndefined();
   });
 });

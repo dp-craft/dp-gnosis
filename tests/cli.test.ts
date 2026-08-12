@@ -11,11 +11,11 @@ import { runCli } from '../src/cli/cli.js';
 const DOC = [
   '# Layered Test Model',
   '',
-  'intro text about retrieval and the layered test model',
+  'intro text about retrieval and the layered test model, describing how each tier is retrieved and scored, and why an intro section carries enough prose of its own to stand as a separate atom of the whole corpus',
   '',
   '## Unit tier',
   '',
-  'fast retrieval tests over the unit tier corpus atoms',
+  'fast retrieval tests over the unit tier corpus atoms, exercising the unit tier of the layered test model with enough prose that this section stands alone as an atom instead of folding into the one just above it',
   '',
 ].join('\n');
 
