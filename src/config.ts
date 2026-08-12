@@ -131,6 +131,12 @@ export interface SourceRootDomain {
  * `claude-artifacts/standards/` does not, and `doc/` everything the ADR root
  * does not. Getting that precedence wrong silently relabels hundreds of atoms,
  * so it is asserted directly rather than left to row order.
+ *
+ * `dp-gnosis/cache/bench/corpus-ext/` is a BENCHMARK corpus root, not product
+ * knowledge: it lives under the gitignored `dp-gnosis/cache/` and holds copies of
+ * external projects' documentation (SQL dialects, CSS preprocessors, React state
+ * managers, plus one Hungarian-language Odoo doc copy). It exists solely to measure
+ * scaling and cross-corpus bleed, so nothing retrieved from it describes this repo.
  */
 export const SOURCE_ROOT_DOMAINS: readonly SourceRootDomain[] = [
   { prefix: 'RUNNER-', domain: 'runner' },
@@ -141,6 +147,7 @@ export const SOURCE_ROOT_DOMAINS: readonly SourceRootDomain[] = [
   { prefix: 'doc/', domain: 'docs' },
   { prefix: '.claude/', domain: 'claude' },
   { prefix: 'dp-gnosis/corpus-hu/', domain: 'docs' },
+  { prefix: 'dp-gnosis/cache/bench/corpus-ext/', domain: 'docs' },
 ];
 
 /**
@@ -205,6 +212,10 @@ export interface SourceRootType {
  * The precedence that matters: `doc/40-code-standards/90-decisions/` (adr) must
  * outrank `doc/40-code-standards/` (standard), which the length sort — not the
  * row order — is what guarantees.
+ *
+ * The external BENCHMARK corpus root (see `SOURCE_ROOT_DOMAINS`) types as
+ * `vendor-doc` because that is literally what it holds — other projects' published
+ * documentation — so a type filter alone separates it from authored repo knowledge.
  */
 export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = [
   { prefix: 'doc/90-history/10-feature-log/', type: 'feature-log' },
@@ -219,6 +230,7 @@ export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = [
   { prefix: 'claude-artifacts/standards/', type: 'standard' },
   { prefix: 'doc/40-code-standards/', type: 'standard' },
   { prefix: 'doc/50-testing-strategy/', type: 'standard' },
+  { prefix: 'dp-gnosis/cache/bench/corpus-ext/', type: 'vendor-doc' },
 ];
 
 /**

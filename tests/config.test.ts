@@ -1,4 +1,38 @@
-import { ATOM_TYPES, typeForSource } from '../src/config.js';
+import { ATOM_TYPES, domainForSource, typeForSource } from '../src/config.js';
+
+/** The measured prefix→domain table, restated as the contract ingest must satisfy. */
+const DOMAIN_CASES: readonly (readonly [string, string | undefined])[] = [
+  ['RUNNER-CHANGE.md', 'runner'],
+  ['tools/agentic-code-runner/src/index.ts', 'runner'],
+  ['claude-artifacts/standards/TS-TESTING.md', 'standards'],
+  ['doc/40-code-standards/90-decisions/ADR-018.md', 'adr'],
+  ['claude-artifacts/speckit/workflow.md', 'standards'],
+  ['doc/85-teaching/retrieval-101.md', 'docs'],
+  ['.claude/agents/code-logic-writer.md', 'claude'],
+  ['dp-gnosis/corpus-hu/odoo/bevezetes.md', 'docs'],
+  ['dp-gnosis/cache/bench/corpus-ext/sql-postgresql/x.md', 'docs'],
+  ['src/db/idb.ts', undefined],
+];
+
+describe('domainForSource', () => {
+  it('maps every declared root to its domain, and an unclaimed path to undefined', () => {
+    expect(DOMAIN_CASES.map(([path]) => domainForSource(path))).toEqual(
+      DOMAIN_CASES.map(([, domain]) => domain)
+    );
+  });
+
+  it('lets the longer root win over the shorter one containing it', () => {
+    expect(domainForSource('claude-artifacts/standards/TS-E2E-TESTING.md')).toBe('standards');
+    expect(domainForSource('doc/40-code-standards/90-decisions/ADR-001.md')).toBe('adr');
+    expect(domainForSource('doc/40-code-standards/naming.md')).toBe('docs');
+  });
+
+  it('claims the external benchmark corpus root without claiming its parents', () => {
+    expect(domainForSource('dp-gnosis/cache/bench/corpus-ext/css-sass/x.md')).toBe('docs');
+    expect(domainForSource('dp-gnosis/cache/bench/other/x.md')).toBeUndefined();
+    expect(domainForSource('dp-gnosis/cache/index.json')).toBeUndefined();
+  });
+});
 
 /** The measured prefix→type table, restated as the contract ingest must satisfy. */
 const CASES: readonly (readonly [string, string])[] = [
@@ -14,6 +48,7 @@ const CASES: readonly (readonly [string, string])[] = [
   ['claude-artifacts/standards/TS-TESTING.md', 'standard'],
   ['doc/40-code-standards/naming.md', 'standard'],
   ['doc/50-testing-strategy/layers.md', 'standard'],
+  ['dp-gnosis/cache/bench/corpus-ext/sql-postgresql/x.md', 'vendor-doc'],
 ];
 
 describe('typeForSource', () => {
