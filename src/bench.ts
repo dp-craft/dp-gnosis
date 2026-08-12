@@ -36,7 +36,7 @@ import { aggregate, scoreQuery } from './bench/metrics.js';
 import { mapSequential } from './bench/sequential.js';
 import type { Thunk, TimingPolicy, TimingSample } from './bench/timing.js';
 import { measureAll, timeValue } from './bench/timing.js';
-import { ATOM_DOMAINS, type AtomDomain } from './config.js';
+import { ATOM_DOMAINS, ATOM_TYPES, type AtomDomain, type AtomType } from './config.js';
 import type { GoldenQuery, GoldenSet, MinimumMeaningfulDifference } from './goldenSet.js';
 import type { KnowledgePort, RetrievalResult, RetrieveOptions } from './port.js';
 
@@ -138,9 +138,21 @@ export interface BenchOptions {
 const asDomain = (value: string | null): AtomDomain | undefined =>
   value === null ? undefined : ATOM_DOMAINS.find(domain => domain === value);
 
+/** Same membership test, on the closed `type` vocabulary. */
+const asType = (value: string | null): AtomType | undefined =>
+  value === null ? undefined : ATOM_TYPES.find(type => type === value);
+
+// The two filters are INDEPENDENT: a query may carry both, either, or neither,
+// and each is omitted rather than sent as `undefined` so an adapter cannot
+// mistake "no filter asked for" for "filter on nothing".
 const retrieveOptions = (query: GoldenQuery, k: number): RetrieveOptions => {
   const domain = asDomain(query.domain);
-  return domain === undefined ? { k } : { k, domain };
+  const type = asType(query.type);
+  return {
+    k,
+    ...(domain === undefined ? {} : { domain }),
+    ...(type === undefined ? {} : { type }),
+  };
 };
 
 /** One adapter × one corpus, with everything needed to measure it resolved. */

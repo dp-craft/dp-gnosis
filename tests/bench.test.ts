@@ -14,7 +14,7 @@ import { aggregate, recallAtK, reciprocalRank, scoreQuery } from '../src/bench/m
 import { renderReportMarkdown } from '../src/bench/report.js';
 import { generateSyntheticAtoms } from '../src/bench/syntheticCorpus.js';
 import type { GoldenAxis, GoldenQuery, GoldenSet } from '../src/goldenSet.js';
-import type { KnowledgePort, RetrievedAtom } from '../src/port.js';
+import type { KnowledgePort, RetrievedAtom, RetrieveOptions } from '../src/port.js';
 
 // The FAKE adapter is the whole point of this file's metric assertions: its
 // ranking is fixed and query-independent, so every expected value below is
@@ -350,5 +350,66 @@ describe('defaultCandidates', () => {
 
     expect(isAvailable(byName.get('minisearch') as AdapterCandidate)).toBe(probes.minisearch.available);
     expect(isAvailable(byName.get('lancedb') as AdapterCandidate)).toBe(probes.lancedb.available);
+  });
+});
+
+// A golden query's `domain` and `type` are FILTERS, not annotations: unless the
+// harness forwards them into `RetrieveOptions` the adapter answers an unfiltered
+// question and the measured recall belongs to a query nobody authored.
+describe('golden-query filters reach the port', () => {
+  const filtered = (id: string, domain: string | null, type: string | null): GoldenQuery => ({
+    ...query(id, ['a']),
+    domain,
+    type,
+  });
+
+  const recordingPort = (calls: RetrieveOptions[]): KnowledgePort => ({
+    name: 'recording',
+    retrieve: (_query: string, opts: RetrieveOptions) => {
+      calls.push(opts);
+      return Promise.resolve({
+        atoms: FIXED_RANKING,
+        mode: 'fixed',
+        indexState: 'ready' as const,
+      });
+    },
+  });
+
+  const optionsSeen = async (queries: readonly GoldenQuery[]): Promise<RetrieveOptions[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), 'gnosis-filter-'));
+    await mkdir(join(workDir, 'atoms'), { recursive: true });
+    const calls: RetrieveOptions[] = [];
+    await runBenchmark(
+      benchOptions(workDir, [fakeCandidate('recording', recordingPort(calls))], goldenSet(queries))
+    );
+    await rm(workDir, { recursive: true, force: true });
+    return calls;
+  };
+
+  it('forwards a type-only golden query as a type filter', async () => {
+    const calls = await optionsSeen([filtered('q-type', null, 'adr')]);
+
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls).toContainEqual({ k: 3, type: 'adr' });
+  });
+
+  it('leaves a null-type query unfiltered', async () => {
+    const calls = await optionsSeen([filtered('q-none', null, null)]);
+
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every(opts => opts.type === undefined)).toBe(true);
+    expect(calls).toContainEqual({ k: 3 });
+  });
+
+  it('combines domain and type independently', async () => {
+    const calls = await optionsSeen([filtered('q-both', 'runner', 'adr')]);
+
+    expect(calls).toContainEqual({ k: 3, domain: 'runner', type: 'adr' });
+  });
+
+  it('keeps a domain-only query free of a type filter', async () => {
+    const calls = await optionsSeen([filtered('q-domain', 'runner', null)]);
+
+    expect(calls).toContainEqual({ k: 3, domain: 'runner' });
   });
 });
