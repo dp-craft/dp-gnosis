@@ -9,6 +9,7 @@ import type { MarkdownChunk } from './chunker.js';
 import { chunkMarkdown } from './chunker.js';
 import type { AtomDomain } from './config.js';
 import {
+  ATOM_MAX_CHARS,
   CORPUS_ROOTS_ENV_VAR,
   domainForSource,
   resolveCorpusRoots,
@@ -247,6 +248,37 @@ const resolveTitle = (candidate: Candidate, ambiguous: ReadonlySet<string>): str
     ? candidate.chunk.headingChain.join(TITLE_SEPARATOR)
     : candidate.chunk.title;
 
+/**
+ * The heading chain restated INSIDE the body, as one `# a > b > c` line.
+ *
+ * Why the body and not only the frontmatter: every index and reranker reads
+ * `atom.body` alone, so a body that never names its own section cannot be
+ * scored on meaning — measured on the live corpus, 12 254 of 13 858 atoms did
+ * not contain their own heading anywhere in the text.
+ *
+ * Why ONE line rather than a heading per level: an atom is retrieved
+ * standalone, so the chain is its topic sentence, not a document outline. One
+ * line reads the same way to a person and to a model, costs the body cap the
+ * least, and has exactly one form — no per-depth variation to reproduce.
+ */
+const BODY_HEADING_PREFIX = '# ';
+
+const headingLine = (chain: readonly string[]): string => {
+  const named = chain.filter(part => part.trim().length > 0);
+  return named.length === 0 ? '' : `${BODY_HEADING_PREFIX}${named.join(TITLE_SEPARATOR)}`;
+};
+
+/**
+ * An empty chain (the synthetic preamble, or a heading with no text) adds
+ * nothing, and the cap outranks the heading: a body the heading cannot fit
+ * beside is written unprefixed rather than refused for being oversize.
+ */
+const bodyWithHeading = (chunk: MarkdownChunk): string => {
+  const heading = headingLine(chunk.headingChain);
+  const prefixed = `${heading}\n\n${chunk.body}\n`;
+  return heading === '' || prefixed.length > ATOM_MAX_CHARS ? `${chunk.body}\n` : prefixed;
+};
+
 const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({
   frontmatter: {
     type: 'knowledge',
@@ -256,7 +288,7 @@ const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({
     status: 'stable',
     sources: [candidate.sourcePath],
   },
-  body: `${candidate.chunk.body}\n`,
+  body: bodyWithHeading(candidate.chunk),
 });
 
 const planAtoms = (candidates: readonly Candidate[]): readonly PlannedAtom[] => {

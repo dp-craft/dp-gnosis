@@ -7,7 +7,17 @@ import { miniSearchAvailability } from '../src/adapters/miniSearchAdapter.js';
 import { mapSequential } from '../src/bench/sequential.js';
 import { runCli } from '../src/cli/cli.js';
 
-const DOC = '# Layered Test Model\n\nintro text about retrieval\n\n## Unit tier\n\nfast retrieval tests\n';
+/** Both section bodies clear `ATOM_MIN_CHARS`, so the doc stays two atoms. */
+const DOC = [
+  '# Layered Test Model',
+  '',
+  'intro text about retrieval and the layered test model',
+  '',
+  '## Unit tier',
+  '',
+  'fast retrieval tests over the unit tier corpus atoms',
+  '',
+].join('\n');
 
 interface Fixture {
   readonly repoRoot: string;

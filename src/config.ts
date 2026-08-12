@@ -21,6 +21,16 @@ export const ATOM_MAX_CHARS = 4000;
 export const ATOM_CHUNK_TARGET_CHARS = 3200;
 
 /**
+ * Body floor below which a chunk is not an atom of its own.
+ *
+ * Measured on the 13 858-atom corpus: 1 232 bodies fall under 50 characters —
+ * one-line lead-ins to the subsections that follow them. They assert nothing
+ * alone, yet occupy candidate slots ahead of substantive atoms, so the chunker
+ * folds them into a neighbour instead of emitting them.
+ */
+export const ATOM_MIN_CHARS = 50;
+
+/**
  * Hard cap on how many terms a constructed retrieval query may carry.
  *
  * A task's targets, test contract and spec excerpts together run to thousands

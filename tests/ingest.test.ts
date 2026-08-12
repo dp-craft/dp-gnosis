@@ -42,7 +42,10 @@ const bodyOf = (text: string): string => text.split('\n---\n').slice(1).join('\n
 /** A root the corpus scope is pointed at explicitly, so the walk stays inside the fixture. */
 const STANDARDS_ROOT = 'claude-artifacts/standards';
 
-const DOC = '# Layered Test Model\n\nintro text\n\n## Unit tier\n\nfast tests\n';
+/** Both section bodies clear `ATOM_MIN_CHARS`, so the doc stays two atoms. */
+const INTRO_BODY = 'intro text about the layered test model and its tiers';
+const UNIT_BODY = 'fast unit tier tests run in under a millisecond each';
+const DOC = `# Layered Test Model\n\n${INTRO_BODY}\n\n## Unit tier\n\n${UNIT_BODY}\n`;
 
 describe('ingest', () => {
   it('turns a fixture doc into one atom file per chunk', async () => {
@@ -69,7 +72,7 @@ describe('ingest', () => {
     expect(first).toContain('title: Layered Test Model\n');
     expect(first).not.toContain('stale_after');
     expect(first).not.toContain('verified_');
-    expect(bodyOf(first)).toBe('intro text\n');
+    expect(bodyOf(first)).toBe(`# Layered Test Model\n\n${INTRO_BODY}\n`);
   });
 
   it('records the repo-relative source path, never an absolute one', async () => {
@@ -256,6 +259,49 @@ describe('ingest', () => {
     const files = await readAll(fixture.out);
     expect([...files.values()].every(text => bodyOf(text).length <= ATOM_MAX_CHARS)).toBe(true);
     expect(new Set(files.keys()).size).toBe(summary.written);
+  });
+
+  it('starts the atom body with its heading chain, not only the frontmatter title', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'TS-TESTING.md', DOC);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const files = await readAll(fixture.out);
+    const nested = files.get('ts-testing-layered-test-model-unit-tier.md') ?? '';
+    expect(bodyOf(nested)).toBe(`# Layered Test Model > Unit tier\n\n${UNIT_BODY}\n`);
+    expect(bodyOf(files.get('ts-testing-layered-test-model.md') ?? '')).toBe(
+      `# Layered Test Model\n\n${INTRO_BODY}\n`
+    );
+  });
+
+  it('leaves a body with no heading chain untouched, adding no empty heading', async () => {
+    const fixture = await makeFixture();
+    const preamble = 'text that precedes every heading of this document entirely';
+    await writeDoc(fixture.standards, 'PRE.md', `${preamble}\n`);
+
+    await ingest({ corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root });
+
+    const files = await readAll(fixture.out);
+    expect([...files.values()].map(bodyOf)).toEqual([`${preamble}\n`]);
+  });
+
+  it('keeps the body cap when the heading would not fit, leaving that body unprefixed', async () => {
+    const fixture = await makeFixture();
+    const heading = 'Very Long Heading Name For The Body Cap Test';
+    const filler = 'x'.repeat(ATOM_MAX_CHARS - 10);
+    await writeDoc(fixture.standards, 'CAP.md', `# ${heading}\n\n${filler}\n`);
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.skipped).toEqual([]);
+    const body = bodyOf([...(await readAll(fixture.out)).values()][0] ?? '');
+    expect(body).toBe(`${filler}\n`);
+    expect(body.length).toBeLessThanOrEqual(ATOM_MAX_CHARS);
   });
 
   it('skips and reports a refused source while still writing the valid ones', async () => {
