@@ -37,7 +37,7 @@ const K_INIT = 200;
 const DEFAULT_DOC_MAX_CHARS = 200;
 
 /** Models excluded by D-01: hard n_ctx_train=512 limit makes them unsuitable for extended benchmark. */
-const EXCLUDED_MODEL_NAMES = new Set(['bge-reranker-large', 'bge-reranker-base']);
+const EXCLUDED_MODEL_NAMES = new Set(['bge-reranker-base']);
 
 /** Filtered reranker list for extended benchmark (D-01). */
 const EXTENDED_RERANKERS = DEFAULT_RERANKERS.filter(m => !EXCLUDED_MODEL_NAMES.has(m.name));

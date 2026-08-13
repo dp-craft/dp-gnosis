@@ -255,12 +255,14 @@ export const createRerankerClient = (
  * here on every change: ports are its `port` field, and `maxBatchTokens` for an
  * untuned entry is its `ubatch` field. `zerank-2` is absent because models.sh
  * removed it on 2026-08-11 — its GGUF carries no rank head, so every document
- * scored 0.0. The per-model `maxBatchTokens` / `maxDocsPerChunk` below that sit
+ * scored 0.0. `bge-reranker-large` is absent because models.sh removed it on
+ * 2026-08-13 — P7-5 measured it both worse and slower than `bge-reranker-v2-m3`
+ * (nDCG@10 0.4712 @ p50 2144 ms vs 0.4938 @ 2017 ms), so it can never be the
+ * right pick. The per-model `maxBatchTokens` / `maxDocsPerChunk` below that sit
  * under `ubatch` are measured client-side chunking limits; keep them.
  */
 export const DEFAULT_RERANKERS: readonly RerankerModelConfig[] = [
   { name: 'bge-reranker-v2-m3', baseUrl: 'http://127.0.0.1:11104', modelId: 'bge-reranker-v2-m3', maxBatchTokens: 8000 },
-  { name: 'bge-reranker-large', baseUrl: 'http://127.0.0.1:11102', modelId: 'bge-reranker-large', maxBatchTokens: 400, maxDocsPerChunk: 2 },
   { name: 'bge-reranker-base', baseUrl: 'http://127.0.0.1:11101', modelId: 'bge-reranker-base', maxBatchTokens: 400, maxDocsPerChunk: 2 },
   { name: 'jina-reranker-v2-base-multilingual', baseUrl: 'http://127.0.0.1:11103', modelId: 'jina-reranker-v2-base-multilingual', maxBatchTokens: 800 },
   { name: 'qwen3-06b', baseUrl: 'http://127.0.0.1:11105', modelId: 'qwen3-06b', maxBatchTokens: 8192 },
