@@ -12,8 +12,9 @@ import { relative } from 'node:path';
 import type { SkippedAtom } from '../budget.js';
 import { fitToTokenBudget } from '../budget.js';
 import type { AtomType } from '../config.js';
-import { ATOM_TYPES, RETRIEVE_TOKEN_BUDGET } from '../config.js';
+import { ATOM_TYPES, RERANK_K_INIT, RETRIEVE_TOKEN_BUDGET } from '../config.js';
 import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
+import { rerankAtoms } from '../rerank.js';
 import { createPort } from './adapter.js';
 import type { FlagValues } from './args.js';
 import { stringFlag } from './args.js';
@@ -46,6 +47,12 @@ export const TYPE_FLAG = '--type';
 
 /** The budget override, `retrieve` only; `cli.ts` refuses it elsewhere. */
 export const MAX_TOKENS_FLAG = '--max-tokens';
+
+/**
+ * The reranker, `retrieve` only and OPT-IN: without it the ranking is exactly
+ * what it was before the reranker existed. `cli.ts` refuses it elsewhere.
+ */
+export const RERANK_FLAG = '--rerank';
 
 const maxTokensError = (raw: string): string =>
   `${MAX_TOKENS_FLAG} must be a non-negative integer — got "${raw}"; pass e.g. \`${MAX_TOKENS_FLAG} ${RETRIEVE_TOKEN_BUDGET}\``;
@@ -154,6 +161,7 @@ type ArgsResult =
     readonly k: number;
     readonly maxTokens: number;
     readonly types: readonly AtomType[] | undefined;
+    readonly rerank: boolean;
   }
   | { readonly ok: false; readonly error: string };
 
@@ -167,7 +175,7 @@ const resolveArgs = (flags: FlagValues): ArgsResult => {
     return { ok: false, error: maxTokensError(rawFlag(flags, MAX_TOKENS_FLAG)) };
   }
   return types.ok
-    ? { ok: true, k, maxTokens, types: types.types }
+    ? { ok: true, k, maxTokens, types: types.types, rerank: flags[RERANK_FLAG] === true }
     : { ok: false, error: types.error };
 };
 
@@ -178,6 +186,7 @@ interface RetrieveRequest {
   readonly maxTokens: number;
   /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
   readonly types: readonly AtomType[] | undefined;
+  readonly rerank: boolean;
 }
 
 /**
@@ -269,8 +278,40 @@ const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string
     '</retrieved_context>',
   ].join('\n');
 
-const retrieveOptions = (request: RetrieveRequest): RetrieveOptions =>
-  request.types === undefined ? { k: request.k } : { k: request.k, types: request.types };
+/**
+ * The reranker reorders a POOL, so the first pass must fetch one: `k` alone
+ * would hand it the very ranking it exists to change. A caller asking for more
+ * than the measured depth keeps its own `k` — never fewer candidates than
+ * results.
+ */
+const firstPassK = (request: RetrieveRequest): number =>
+  request.rerank ? Math.max(request.k, RERANK_K_INIT) : request.k;
+
+const retrieveOptions = (request: RetrieveRequest): RetrieveOptions => {
+  const k = firstPassK(request);
+  return request.types === undefined ? { k } : { k, types: request.types };
+};
+
+type RankedResult =
+  | { readonly ok: true; readonly result: RetrievalResult }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * The reranked-and-fused ranking, or the refusal that explains why there is
+ * none. A failure MUST NOT degrade to the first-pass ranking: `--rerank` is a
+ * quality claim, and a silent fallback would make it a false one. `mode` names
+ * the extra leg so a caller reads which ranking it got.
+ */
+const rankedResult = async (
+  request: RetrieveRequest,
+  result: RetrievalResult
+): Promise<RankedResult> => {
+  if (!request.rerank) return { ok: true, result };
+  const reranked = await rerankAtoms(request.query, result.atoms);
+  if (!reranked.ok) return reranked;
+  const atoms = reranked.atoms.slice(0, request.k);
+  return { ok: true, result: { ...result, atoms, mode: `${result.mode}+rerank` } };
+};
 
 /**
  * The budget is applied HERE, between the port and the renderings: the adapters
@@ -287,9 +328,11 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
   const result = await port.retrieve(query, retrieveOptions(request));
   port.close?.();
-  const budgeted = applyBudget(result, request.maxTokens);
+  const ranked = await rankedResult(request, result);
+  if (!ranked.ok) return usageError(ranked.error);
+  const budgeted = applyBudget(ranked.result, request.maxTokens);
   return {
-    exitCode: exitCodeFor(result),
+    exitCode: exitCodeFor(ranked.result),
     data: payload(request, budgeted),
     text: retrieveText(budgeted),
     xml: retrieveXml(request, budgeted),
@@ -301,5 +344,12 @@ export const runRetrieveCommand = async (context: CommandContext): Promise<Comma
   const args = resolveArgs(context.flags);
   if (query.length === 0) return usageError(NO_QUERY);
   if (!args.ok) return usageError(args.error);
-  return await search({ context, query, k: args.k, maxTokens: args.maxTokens, types: args.types });
+  return await search({
+    context,
+    query,
+    k: args.k,
+    maxTokens: args.maxTokens,
+    types: args.types,
+    rerank: args.rerank,
+  });
 };

@@ -132,6 +132,51 @@ export const ATOM_MIN_CHARS = 200;
 export const RETRIEVE_TOKEN_BUDGET = 16000;
 
 /**
+ * The reranker `retrieve --rerank` calls, served by llama-swap under this id.
+ * One id, one model: the measured configuration below was measured against
+ * THIS model, so serving another one under the flag would report its numbers.
+ */
+export const RERANK_MODEL_ID = 'bge-reranker-v2-m3';
+
+/** llama-swap's OpenAI-compatible base URL, overridden by {@link RERANK_URL_ENV_VAR}. */
+export const RERANK_DEFAULT_URL = 'http://127.0.0.1:9292';
+
+/** Environment override for {@link RERANK_DEFAULT_URL}, read in `resolveRerankUrl` alone. */
+export const RERANK_URL_ENV_VAR = 'DP_GNOSIS_RERANK_URL';
+
+/**
+ * First-pass depth: how many candidates the reranker reorders. Measured
+ * (2026-08-13,
+ * `docs/benchmarks/2026-08-13-dp-gnosis-evolution-and-maturity-analysis.md`
+ * §5.1) — it is the pool the fusion below was measured over, so it moves with
+ * {@link RERANK_RRF_K} and {@link RERANK_RRF_WEIGHT}, never alone.
+ */
+export const RERANK_K_INIT = 20;
+
+/**
+ * Characters of an atom body sent to the reranker, taken from the HEAD.
+ * The measured extraction: `extractDoc(body, 'head', 2000)`.
+ */
+export const RERANK_DOC_MAX_CHARS = 2000;
+
+/**
+ * The RRF rank constant, and the weight the RERANKED order carries against the
+ * first-pass order (the first pass carries `1 - weight`):
+ * `score(d) = 0.5/(20 + rank_rerank(d)) + 0.5/(20 + rank_firstpass(d))`.
+ *
+ * FUSED, not pure — these three numbers are measured, not taste. Pure
+ * reranking REGRESSES MRR (0.6078 → 0.5737); the fused cell improves all four
+ * metrics over the first-pass floor (r@10 / r@20 / nDCG@10 / MRR):
+ *
+ *   first pass (floor)      0.5420 / 0.6990 / 0.6176 / 0.6078
+ *   RRF K=20, w_rerank=0.5  0.5760 / 0.6990 / 0.6464 / 0.6270
+ */
+export const RERANK_RRF_K = 20;
+
+/** See {@link RERANK_RRF_K} — the two are one measured pair. */
+export const RERANK_RRF_WEIGHT = 0.5;
+
+/**
  * Hard cap on how many terms a constructed retrieval query may carry.
  *
  * A task's targets, test contract and spec excerpts together run to thousands

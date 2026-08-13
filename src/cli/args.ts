@@ -34,6 +34,8 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--type': { kind: 'value', placeholder: '<type[,type]>' },
   // `retrieve` only: the injection budget in estimated tokens (UTF-8 bytes).
   '--max-tokens': { kind: 'value', placeholder: '<n>' },
+  // `retrieve` only, OPT-IN: RRF-fuse a reranker pass over the first pass.
+  '--rerank': { kind: 'boolean' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },

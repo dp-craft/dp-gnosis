@@ -3,7 +3,14 @@
  * an agent through a bash tool, and the exit code is the only signal that
  * survives without parsing output.
  */
-import { ATOM_TYPES, RETRIEVE_TOKEN_BUDGET } from '../config.js';
+import {
+  ATOM_TYPES,
+  RERANK_DEFAULT_URL,
+  RERANK_K_INIT,
+  RERANK_MODEL_ID,
+  RERANK_URL_ENV_VAR,
+  RETRIEVE_TOKEN_BUDGET
+} from '../config.js';
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
 import { OUTPUT_FORMATS } from './format.js';
@@ -27,6 +34,9 @@ export const HELP_TEXT: string = [
   `  vocabulary: ${ATOM_TYPES.join(' | ')}`,
   `Budget: --max-tokens <n> on \`retrieve\` only (default ${RETRIEVE_TOKEN_BUDGET}), counted as UTF-8 bytes — a proven upper bound on the real token count`,
   '  an atom over the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size',
+  `Rerank: --rerank on \`retrieve\` only, OFF by default — reranks the top ${RERANK_K_INIT} with ${RERANK_MODEL_ID} and RRF-fuses that order with the first pass, then applies the budget`,
+  `  the endpoint is a llama-swap OpenAI-compatible server at ${RERANK_DEFAULT_URL}, overridable with ${RERANK_URL_ENV_VAR}`,
+  '  an unreachable server, or one not serving that model, is a usage error (exit 2) naming which of the two happened — the results are never silently unreranked',
   'Profile: --profile <file> selects one named instance — its vocabulary, its labelling tables and its own repoRoot, corpusRoots, atomsDir and indexPath',
   '  precedence is flag > profile > default, so --atoms-dir / --index-path / --repo-root still override whatever the profile states',
   '  each profile MUST own its atomsDir AND its indexPath: an atoms directory is stamped with its owner and refuses a second profile',
