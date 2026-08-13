@@ -7,15 +7,9 @@ import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
 import { chunkMarkdown, frontMatterTitle, headingLine, headingPath } from './chunker.js';
-import type { AtomDomain } from './config.js';
-import {
-  bodyMaxChars,
-  CORPUS_ROOTS_ENV_VAR,
-  domainForSource,
-  resolveCorpusRoots,
-  SOURCE_ROOT_DOMAINS,
-  typeForSource
-} from './config.js';
+import { bodyMaxChars, CORPUS_ROOTS_ENV_VAR, DEFAULT_INGEST_PROFILE, resolveCorpusRoots } from './config.js';
+import type { IngestProfile } from './ingestProfile.js';
+import { domainForPath, typeForPath } from './ingestProfile.js';
 import { ATOMS_DIR, REPO_ROOT } from './paths.js';
 import { readExistingIds, validateAtom } from './validate.js';
 
@@ -75,6 +69,11 @@ export interface IngestOptions {
    * can build a fixture tree under a temp dir without writing into the vault.
    */
   readonly repoRoot?: string;
+  /**
+   * The vocabulary and labelling policy the run applies. Defaults to the
+   * shipped profile, which is what the repo's own corpus is ingested with.
+   */
+  readonly profile?: IngestProfile;
 }
 
 /** One refused chunk or source, with the reasons naming its correction. */
@@ -95,14 +94,17 @@ export interface IngestSummary {
 interface LoadedSource {
   readonly sourcePath: string;
   readonly text: string;
-  readonly domain: AtomDomain | undefined;
+  /** A profile-declared domain; `undefined` when no declared root claims the source. */
+  readonly domain: string | undefined;
 }
 
 interface Candidate {
   readonly sourcePath: string;
   readonly index: number;
   readonly chunk: MarkdownChunk;
-  readonly domain: AtomDomain;
+  readonly domain: string;
+  /** The profile-declared type, resolved once per source. */
+  readonly type: string;
   /** The document this chunk came from, named once per source. */
   readonly docTitle: string;
   /** The document's declared summary, resolved once per source; absent when it declared none. */
@@ -173,18 +175,24 @@ const expandCorpus = async (
   return [...new Set(nested.flat())];
 };
 
-const loadSource = async (absolutePath: string, repoRoot: string): Promise<LoadedSource> => {
+const loadSource = async (
+  absolutePath: string,
+  repoRoot: string,
+  profile: IngestProfile
+): Promise<LoadedSource> => {
   const sourcePath = toPosix(relative(repoRoot, absolutePath));
-  return { sourcePath, text: await readFile(absolutePath, 'utf8'), domain: domainForSource(sourcePath) };
+  return {
+    sourcePath,
+    text: await readFile(absolutePath, 'utf8'),
+    domain: domainForPath(profile, sourcePath),
+  };
 };
 
-const ROOT_LIST = SOURCE_ROOT_DOMAINS.map(rule => rule.prefix).join(' | ');
-
-const unmappedSkip = (source: LoadedSource): IngestSkip => ({
+const unmappedSkip = (source: LoadedSource, profile: IngestProfile): IngestSkip => ({
   source: source.sourcePath,
   title: basename(source.sourcePath),
   reasons: [
-    `source "${source.sourcePath}" is outside every declared ingest root — move it under one of ${ROOT_LIST}, or declare its root in SOURCE_ROOT_DOMAINS (src/config.ts); ingest MUST NOT guess a domain`,
+    `source "${source.sourcePath}" is outside every declared ingest root — move it under one of ${profile.domainRules.map(rule => rule.prefix).join(' | ')}, or declare its root in the "domainRules" table of the ingest profile (profiles/default.profile.json); ingest MUST NOT guess a domain`,
   ],
 });
 
@@ -249,7 +257,7 @@ const partSuffix = (
   return peers.length > 1 ? ` (${ordinal}/${peers.length})` : '';
 };
 
-const toCandidates = (source: LoadedSource): readonly Candidate[] => {
+const toCandidates = (source: LoadedSource, profile: IngestProfile): readonly Candidate[] => {
   const domain = source.domain;
   if (domain === undefined) return [];
   const chunks = chunkMarkdown(source.text);
@@ -260,6 +268,7 @@ const toCandidates = (source: LoadedSource): readonly Candidate[] => {
     index,
     chunk,
     domain,
+    type: typeForPath(profile, source.sourcePath),
     docTitle,
     summary,
     part: partSuffix(chunks, chunk, index),
@@ -347,7 +356,7 @@ const bodyWithHeading = (candidate: Candidate): string => {
 
 const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({
   frontmatter: {
-    type: typeForSource(candidate.sourcePath),
+    type: candidate.type,
     id,
     title,
     x_domain: candidate.domain,
@@ -430,13 +439,14 @@ const emptyBodyReasons = (planned: PlannedAtom): readonly string[] =>
 
 const checkAtoms = (
   planned: readonly PlannedAtom[],
-  existing: ReadonlySet<string>
+  existing: ReadonlySet<string>,
+  profile: IngestProfile
 ): readonly CheckedAtom[] => {
   const runIds = new Set(planned.map(entry => entry.atom.frontmatter.id));
   const reserved = foreignIds(existing, runIds);
   return planned.map(entry => ({
     ...entry,
-    reasons: [...validateAtom(entry.atom, reserved), ...emptyBodyReasons(entry)],
+    reasons: [...validateAtom(entry.atom, reserved, profile), ...emptyBodyReasons(entry)],
   }));
 };
 
@@ -444,14 +454,19 @@ const checkAtoms = (
  * Ingest local markdown into atom files. Refusals are reported, never thrown
  * and never silently defaulted; the write set is always fully valid.
  */
+const profileOf = (options: IngestOptions): IngestProfile => options.profile ?? DEFAULT_INGEST_PROFILE;
+
 export const ingest = async (options: IngestOptions): Promise<IngestSummary> => {
   const outputDir = options.outputDir ?? ATOMS_DIR;
   const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const profile = profileOf(options);
   const files = await expandCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots());
-  const loaded = await Promise.all([...files].sort().map(file => loadSource(file, repoRoot)));
-  const unmapped = loaded.filter(source => source.domain === undefined).map(unmappedSkip);
-  const candidates = [...loaded.flatMap(toCandidates)].sort(byOrder);
-  const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir));
+  const loaded = await Promise.all([...files].sort().map(file => loadSource(file, repoRoot, profile)));
+  const unmapped = loaded
+    .filter(source => source.domain === undefined)
+    .map(source => unmappedSkip(source, profile));
+  const candidates = [...loaded.flatMap(source => toCandidates(source, profile))].sort(byOrder);
+  const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), profile);
   const writable = checked.filter(entry => entry.reasons.length === 0);
   await mkdir(outputDir, { recursive: true });
   await Promise.all(writable.map(entry => writeAtom(outputDir, entry)));

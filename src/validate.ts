@@ -1,7 +1,8 @@
 import { readdir } from 'node:fs/promises';
 
 import type { Atom } from './atom.js';
-import { ATOM_DOMAINS, ATOM_FENCE_MAX_CHARS, ATOM_TYPES, bodyMaxChars } from './config.js';
+import { ATOM_FENCE_MAX_CHARS, bodyMaxChars, DEFAULT_INGEST_PROFILE } from './config.js';
+import type { IngestProfile } from './ingestProfile.js';
 import { ATOMS_DIR } from './paths.js';
 
 /**
@@ -70,32 +71,36 @@ const sizeError = (body: string): string | undefined => {
  * A free-form domain fragments on typos and makes the atom silently invisible
  * to every domain-filtered query, so the vocabulary is closed.
  */
-const domainError = (domain: string): string | undefined =>
-  ATOM_DOMAINS.some(known => known === domain)
+const domainError = (domain: string, vocabulary: readonly string[]): string | undefined =>
+  vocabulary.some(known => known === domain)
     ? undefined
-    : `field "x_domain" is "${domain}", outside the closed vocabulary — replace it with one of ${ATOM_DOMAINS.join(' | ')}`;
+    : `field "x_domain" is "${domain}", outside the closed vocabulary — replace it with one of ${vocabulary.join(' | ')}`;
 
 /**
  * The same argument as `domainError`, on the other axis: a free-form type makes
  * the atom silently invisible to every type-filtered query, so the vocabulary is
  * closed and a typo is refused at the write rather than discovered at retrieval.
  */
-const typeError = (type: string): string | undefined =>
-  ATOM_TYPES.some(known => known === type)
+const typeError = (type: string, vocabulary: readonly string[]): string | undefined =>
+  vocabulary.some(known => known === type)
     ? undefined
-    : `field "type" is "${type}", outside the closed vocabulary — replace it with one of ${ATOM_TYPES.join(' | ')}`;
+    : `field "type" is "${type}", outside the closed vocabulary — replace it with one of ${vocabulary.join(' | ')}`;
 
 /**
  * Every reason the atom MUST NOT be written, each naming the correction its
  * author has to make. An empty list means the write is allowed.
  */
-export const validateAtom = (atom: Atom, existingIds: ReadonlySet<string>): readonly string[] =>
+export const validateAtom = (
+  atom: Atom,
+  existingIds: ReadonlySet<string>,
+  profile: IngestProfile = DEFAULT_INGEST_PROFILE
+): readonly string[] =>
   [
     idFormatError(atom.frontmatter.id),
     idUniquenessError(atom.frontmatter.id, existingIds),
     sizeError(atom.body),
-    domainError(atom.frontmatter.x_domain),
-    typeError(atom.frontmatter.type),
+    domainError(atom.frontmatter.x_domain, profile.domains),
+    typeError(atom.frontmatter.type, profile.types),
   ].filter(isDefined);
 
 const toId = (filename: string): string => filename.slice(0, -MD_SUFFIX.length);

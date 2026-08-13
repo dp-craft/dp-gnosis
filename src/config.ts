@@ -2,7 +2,14 @@
  * Retrieval and authoring policy constants. Deliberately separate from
  * `paths.ts` (SRP): that module owns WHERE things live, this one owns the
  * limits and vocabulary an atom must satisfy.
+ *
+ * The vocabularies and the path→label tables are DATA, loaded from the shipped
+ * ingest profile (`profiles/default.profile.json`); this module only narrows
+ * them to the union types the rest of the package is written against.
  */
+import type { IngestProfile } from './ingestProfile.js';
+import { domainForPath, loadIngestProfile, typeForPath } from './ingestProfile.js';
+import { INGEST_PROFILE_PATH } from './paths.js';
 
 /**
  * Hard write-time cap on a single atom's body.
@@ -177,79 +184,23 @@ export const resolveCorpusRoots = (
 };
 
 /**
- * The closed `x_domain` vocabulary. An unknown domain is REFUSED at write
- * time: a free-form string fragments on typos and makes an atom silently
- * invisible to every domain-filtered query.
+ * The SHIPPED ingest profile: the ONE place the vocabularies and the
+ * path→label tables are authored. Loaded once at module init, so a missing or
+ * malformed data file stops the process with the defect named instead of
+ * relabelling a whole corpus from built-in values.
  */
-export const ATOM_DOMAINS = ['runner', 'standards', 'adr', 'docs', 'claude'] as const;
-
-/** A member of the closed domain vocabulary. */
-export type AtomDomain = (typeof ATOM_DOMAINS)[number];
-
-/** One mechanical assignment rule: repo-relative path prefix → domain. */
-export interface SourceRootDomain {
-  readonly prefix: string;
-  readonly domain: AtomDomain;
-}
+export const DEFAULT_INGEST_PROFILE: IngestProfile = loadIngestProfile(INGEST_PROFILE_PATH);
 
 /**
- * The mechanical source→domain assignment table, longest-prefix-wins. Ingest
- * MUST derive `x_domain` from this alone, so re-running over unchanged input
- * reproduces identical domains — no per-atom judgement, hence no drift between
- * two ingests of the same corpus.
- *
- * Order here is PRESENTATION only (narrow roots first, for reading); resolution
- * sorts by prefix length, so a broad catch-all row may be added anywhere. The
- * two rows that make that load-bearing: `claude-artifacts/` catches everything
- * `claude-artifacts/standards/` does not, and `doc/` everything the ADR root
- * does not. Getting that precedence wrong silently relabels hundreds of atoms,
- * so it is asserted directly rather than left to row order.
- *
- * `dp-gnosis/cache/bench/corpus-ext/` is a BENCHMARK corpus root, not product
- * knowledge: it lives under the gitignored `dp-gnosis/cache/` and holds copies of
- * external projects' documentation (SQL dialects, CSS preprocessors, React state
- * managers, plus one Hungarian-language Odoo doc copy). It exists solely to measure
- * scaling and cross-corpus bleed, so nothing retrieved from it describes this repo.
+ * The shipped vocabularies restated as literal tuples, and for ONE reason: they
+ * are what gives `AtomDomain` / `AtomType` their union types, which every
+ * filter, adapter and CLI flag is typed against. They decide nothing — the
+ * profile is still the source, and `expectVocabulary` refuses to start when the
+ * two disagree, so a value is added to the data file and mirrored here.
  */
-export const SOURCE_ROOT_DOMAINS: readonly SourceRootDomain[] = [
-  { prefix: 'RUNNER-', domain: 'runner' },
-  { prefix: 'tools/agentic-code-runner/', domain: 'runner' },
-  { prefix: 'claude-artifacts/standards/', domain: 'standards' },
-  { prefix: 'doc/40-code-standards/90-decisions/', domain: 'adr' },
-  { prefix: 'claude-artifacts/', domain: 'standards' },
-  { prefix: 'doc/', domain: 'docs' },
-  { prefix: '.claude/', domain: 'claude' },
-  { prefix: 'dp-gnosis/corpus-hu/', domain: 'docs' },
-  { prefix: 'dp-gnosis/cache/bench/corpus-ext/', domain: 'docs' },
-];
+const DECLARED_DOMAINS = ['runner', 'standards', 'adr', 'docs', 'claude'] as const;
 
-/**
- * Longest prefix first, so a nested root always outranks the broader one that
- * contains it. `find` then returns the FIRST — and therefore most specific —
- * match. Sorting is what enforces the rule; declaration order must not matter.
- */
-const LONGEST_PREFIX_FIRST: readonly SourceRootDomain[] = [...SOURCE_ROOT_DOMAINS].sort(
-  (a, b) => b.prefix.length - a.prefix.length
-);
-
-/**
- * Resolve the domain for a repo-relative source path, or `undefined` when no
- * declared root claims it (such a source is out of scope for ingest).
- */
-export const domainForSource = (repoRelativePath: string): AtomDomain | undefined =>
-  LONGEST_PREFIX_FIRST.find(rule => repoRelativePath.startsWith(rule.prefix))?.domain;
-
-/**
- * The closed `type` vocabulary. Same reasoning as `ATOM_DOMAINS`: an unknown
- * type is REFUSED at write time, because a typo would make the atom silently
- * invisible to every type-filtered query.
- *
- * `knowledge` is the FALLBACK, not the norm — the directory an authored document
- * lives in already carries what kind of document it is (a decision record, a
- * benchmark run, a review), and collapsing all of them into one label discards
- * that. It stays in the vocabulary for the sources no rule below claims.
- */
-export const ATOM_TYPES = [
+const DECLARED_TYPES = [
   'knowledge',
   'feature-log',
   'paper',
@@ -262,13 +213,97 @@ export const ATOM_TYPES = [
   'meta',
   'runner-rule',
   'standard',
+  'research',
+  'plan',
+  'lessons-learned',
 ] as const;
+
+const expectVocabulary = <T extends readonly string[]>(
+  actual: readonly string[],
+  declared: T,
+  field: string
+): T => {
+  if (actual.length !== declared.length || declared.some((value, index) => actual[index] !== value)) {
+    throw new Error(
+      `ingest profile "${INGEST_PROFILE_PATH}" declares ${field} ${actual.join(' | ')}, while src/config.ts mirrors ${declared.join(' | ')} — a vocabulary value MUST be present in both, or the TypeScript union lies about what a valid label is`
+    );
+  }
+  return declared;
+};
+
+/** Narrow a profile-declared label to its union member, refusing anything else. */
+const expectMember = <T extends string>(value: string, vocabulary: readonly T[], field: string): T => {
+  const known = vocabulary.find(member => member === value);
+  if (known === undefined) {
+    throw new Error(
+      `ingest profile "${INGEST_PROFILE_PATH}" resolved ${field} "${value}", outside the closed vocabulary — replace it with one of ${vocabulary.join(' | ')}`
+    );
+  }
+  return known;
+};
+
+/**
+ * The closed `x_domain` vocabulary. An unknown domain is REFUSED at write
+ * time: a free-form string fragments on typos and makes an atom silently
+ * invisible to every domain-filtered query.
+ */
+export const ATOM_DOMAINS = expectVocabulary(DEFAULT_INGEST_PROFILE.domains, DECLARED_DOMAINS, 'domains');
+
+/** A member of the closed domain vocabulary. */
+export type AtomDomain = (typeof ATOM_DOMAINS)[number];
+
+/** One mechanical assignment rule: repo-relative path prefix → domain. */
+export interface SourceRootDomain {
+  readonly prefix: string;
+  readonly domain: AtomDomain;
+}
+
+/**
+ * The shipped source→domain assignment table, as declared in the profile data
+ * file (`profiles/default.profile.json`, `domainRules`). Ingest MUST derive
+ * `x_domain` from this alone, so re-running over unchanged input reproduces
+ * identical domains — no per-atom judgement, hence no drift between two
+ * ingests of the same corpus. Resolution is longest-prefix-wins; the rows keep
+ * their declaration order here so a caller may render the table as authored.
+ */
+export const SOURCE_ROOT_DOMAINS: readonly SourceRootDomain[] = DEFAULT_INGEST_PROFILE.domainRules.map(
+  rule => ({ prefix: rule.prefix, domain: expectMember(rule.domain, ATOM_DOMAINS, 'domainRules[].domain') })
+);
+
+/**
+ * Resolve the domain for a repo-relative source path, or `undefined` when no
+ * declared root claims it (such a source is out of scope for ingest).
+ */
+export const domainForSource = (repoRelativePath: string): AtomDomain | undefined => {
+  const domain = domainForPath(DEFAULT_INGEST_PROFILE, repoRelativePath);
+  return domain === undefined ? undefined : expectMember(domain, ATOM_DOMAINS, 'x_domain');
+};
+
+/**
+ * The closed `type` vocabulary. Same reasoning as `ATOM_DOMAINS`: an unknown
+ * type is REFUSED at write time, because a typo would make the atom silently
+ * invisible to every type-filtered query.
+ *
+ * `knowledge` is the FALLBACK, not the norm — the directory an authored document
+ * lives in already carries what kind of document it is (a decision record, a
+ * benchmark run, a review), and collapsing all of them into one label discards
+ * that. It stays in the vocabulary for the sources no rule below claims.
+ *
+ * A value here that NO rule claims is deliberate, not an oversight: it is
+ * accepted on write while its directory convention is still unsettled, and a
+ * guessed path rule would mislabel silently.
+ */
+export const ATOM_TYPES = expectVocabulary(DEFAULT_INGEST_PROFILE.types, DECLARED_TYPES, 'types');
 
 /** A member of the closed type vocabulary. */
 export type AtomType = (typeof ATOM_TYPES)[number];
 
 /** The type of a source no prefix and no segment rule claims. */
-export const DEFAULT_ATOM_TYPE: AtomType = 'knowledge';
+export const DEFAULT_ATOM_TYPE: AtomType = expectMember(
+  DEFAULT_INGEST_PROFILE.defaultType,
+  ATOM_TYPES,
+  'defaultType'
+);
 
 /** One mechanical assignment rule: repo-relative path prefix → type. */
 export interface SourceRootType {
@@ -277,54 +312,15 @@ export interface SourceRootType {
 }
 
 /**
- * The mechanical source→type assignment table, longest-prefix-wins, exactly as
- * `SOURCE_ROOT_DOMAINS` works: declaration order is presentation only, and a
- * re-run over unchanged input reproduces identical types because no rule needs
- * per-atom judgement.
- *
- * The precedence that matters: `doc/40-code-standards/90-decisions/` (adr) must
- * outrank `doc/40-code-standards/` (standard), which the length sort — not the
- * row order — is what guarantees.
- *
- * The external BENCHMARK corpus root (see `SOURCE_ROOT_DOMAINS`) types as
- * `vendor-doc` because that is literally what it holds — other projects' published
- * documentation — so a type filter alone separates it from authored repo knowledge.
+ * The shipped source→type assignment table, as declared in the profile data
+ * file (`profiles/default.profile.json`, `typeRules`), and read exactly as
+ * `SOURCE_ROOT_DOMAINS` is: longest-prefix-wins, so declaration order is
+ * presentation only and a re-run over unchanged input reproduces identical
+ * types. A segment rule (also in the profile) overrides every prefix rule.
  */
-export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = [
-  { prefix: 'doc/90-history/10-feature-log/', type: 'feature-log' },
-  { prefix: 'doc/80-research-library/papers/', type: 'paper' },
-  { prefix: 'doc/90-history/20-benchmark-runs/', type: 'benchmark' },
-  { prefix: 'doc/90-history/30-reviews/', type: 'review' },
-  { prefix: 'doc/40-code-standards/90-decisions/', type: 'adr' },
-  { prefix: 'doc/80-research-library/vendor-docs/', type: 'vendor-doc' },
-  { prefix: 'doc/85-teaching/', type: 'teaching' },
-  { prefix: 'doc/_meta/', type: 'meta' },
-  { prefix: 'claude-artifacts/agentic-runner-rules/', type: 'runner-rule' },
-  { prefix: 'claude-artifacts/standards/', type: 'standard' },
-  { prefix: 'doc/40-code-standards/', type: 'standard' },
-  { prefix: 'doc/50-testing-strategy/', type: 'standard' },
-  { prefix: 'dp-gnosis/cache/bench/corpus-ext/', type: 'vendor-doc' },
-];
-
-/**
- * Brainstorms are a SEGMENT rule, not a prefix rule: the directory appears under
- * three unrelated parents (`doc/30-spec-driven-workflow/`, `doc/10-agentic-runner/`,
- * `doc/60-aichatney-app/`), and enumerating those parents would silently mislabel
- * the fourth one somebody adds. Matched on whole path segments so a directory
- * merely ENDING in the name cannot claim it.
- */
-export const BRAINSTORM_SEGMENT = '95-brainstorms';
-
-const LONGEST_TYPE_PREFIX_FIRST: readonly SourceRootType[] = [...SOURCE_ROOT_TYPES].sort(
-  (a, b) => b.prefix.length - a.prefix.length
+export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = DEFAULT_INGEST_PROFILE.typeRules.map(
+  rule => ({ prefix: rule.prefix, type: expectMember(rule.type, ATOM_TYPES, 'typeRules[].type') })
 );
-
-const isBrainstorm = (repoRelativePath: string): boolean =>
-  repoRelativePath.split('/').includes(BRAINSTORM_SEGMENT);
-
-const prefixType = (repoRelativePath: string): AtomType =>
-  LONGEST_TYPE_PREFIX_FIRST.find(rule => repoRelativePath.startsWith(rule.prefix))?.type ??
-  DEFAULT_ATOM_TYPE;
 
 /**
  * Resolve the type for a repo-relative source path. Unlike the domain, an
@@ -332,4 +328,4 @@ const prefixType = (repoRelativePath: string): AtomType =>
  * fallback.
  */
 export const typeForSource = (repoRelativePath: string): AtomType =>
-  isBrainstorm(repoRelativePath) ? 'brainstorm' : prefixType(repoRelativePath);
+  expectMember(typeForPath(DEFAULT_INGEST_PROFILE, repoRelativePath), ATOM_TYPES, 'type');

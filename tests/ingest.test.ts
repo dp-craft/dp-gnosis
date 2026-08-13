@@ -255,7 +255,8 @@ describe('ingest', () => {
     const reason = summary.skipped[0]?.reasons.join(' ') ?? '';
     expect(summary.skipped[0]?.source).toBe('notes/stray.md');
     expect(reason).toContain('claude-artifacts/standards/');
-    expect(reason).toContain('SOURCE_ROOT_DOMAINS');
+    expect(reason).toContain('domainRules');
+    expect(reason).toContain('default.profile.json');
   });
 
   it('keeps every written atom under the body cap by sub-splitting an oversize section', async () => {
