@@ -8,7 +8,7 @@ import {
   CORPUS_ROOTS,
   CORPUS_ROOTS_ENV_VAR
 } from '../src/config.js';
-import { ingest } from '../src/ingest.js';
+import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 
 interface Fixture {
   readonly root: string;
@@ -31,8 +31,9 @@ const writeDoc = async (dir: string, name: string, text: string): Promise<string
   return path;
 };
 
+/** Everything the run left BUT its owner marker, which is bookkeeping, not corpus. */
 const readAll = async (dir: string): Promise<ReadonlyMap<string, string>> => {
-  const names = [...(await readdir(dir))].sort();
+  const names = [...(await readdir(dir))].filter(name => name !== ATOMS_OWNER_FILE).sort();
   const entries = await Promise.all(
     names.map(async (name): Promise<readonly [string, string]> => [
       name,

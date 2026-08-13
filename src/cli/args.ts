@@ -22,6 +22,9 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // A file for fts5/minisearch; a DIRECTORY for lancedb, which persists a tree.
   '--index-path': { kind: 'value', placeholder: '<file|dir>' },
   '--repo-root': { kind: 'value', placeholder: '<dir>' },
+  // One named instance: vocabulary, labelling tables AND its own locations. Any
+  // location flag above still outranks what the profile states.
+  '--profile': { kind: 'value', placeholder: '<file>' },
   '--golden-set': { kind: 'value', placeholder: '<file>' },
   '-k': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only — every other command refuses it through the same

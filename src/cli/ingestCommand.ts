@@ -5,7 +5,7 @@
  * refused some exits 3, not 0. Reporting a partial corpus as a clean success is
  * how a caller ends up querying a vault that is quietly missing documents.
  */
-import { CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from '../config.js';
+import { CORPUS_ROOTS_ENV_VAR } from '../config.js';
 import type { IngestSkip, IngestSummary } from '../ingest.js';
 import { ingest } from '../ingest.js';
 import type { CommandContext } from './context.js';
@@ -13,8 +13,8 @@ import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
 
 /** Built per call so the message names the scope THIS invocation would use. */
-const unexpectedSource = (): string =>
-  `ingest takes no source path — it walks the configured corpus roots (${resolveCorpusRoots().join(
+const unexpectedSource = (corpusRoots: readonly string[]): string =>
+  `ingest takes no source path — it walks the configured corpus roots (${corpusRoots.join(
     ', '
   )}); change the scope with ${CORPUS_ROOTS_ENV_VAR}=<comma-separated repo-relative roots>`;
 
@@ -34,7 +34,16 @@ const summarize = (summary: IngestSummary): CommandOutcome => ({
 });
 
 const ingestCorpus = async (context: CommandContext): Promise<CommandOutcome> =>
-  summarize(await ingest({ outputDir: context.atomsDir, repoRoot: context.repoRoot }));
+  summarize(
+    await ingest({
+      corpusRoots: context.corpusRoots,
+      outputDir: context.atomsDir,
+      repoRoot: context.repoRoot,
+      profile: context.profile,
+    })
+  );
 
 export const runIngestCommand = async (context: CommandContext): Promise<CommandOutcome> =>
-  context.positionals.length > 0 ? usageError(unexpectedSource()) : await ingestCorpus(context);
+  context.positionals.length > 0
+    ? usageError(unexpectedSource(context.corpusRoots))
+    : await ingestCorpus(context);

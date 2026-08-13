@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 /**
  * The ingest PROFILE: the closed label vocabularies and the mechanical
@@ -32,7 +33,18 @@ export interface ProfileSegmentRule {
   readonly type: string;
 }
 
-/** One complete ingest vocabulary + labelling policy. */
+/**
+ * One complete, named instance: the vocabulary and labelling policy PLUS where
+ * that instance keeps its corpus, its atoms and its index.
+ *
+ * `name` is the profile ID — the identity an atoms directory is stamped with
+ * (see `ATOMS_OWNER_FILE`), so two instances that share a directory are caught
+ * instead of overwriting each other.
+ *
+ * Every location is OPTIONAL, and that is the whole compatibility story: a
+ * profile that states none behaves exactly as before, and a CLI flag still
+ * outranks whatever a profile does state (flag > profile > default).
+ */
 export interface IngestProfile {
   readonly name: string;
   readonly domains: readonly string[];
@@ -42,7 +54,21 @@ export interface IngestProfile {
   readonly domainRules: readonly ProfileDomainRule[];
   readonly typeRules: readonly ProfileTypeRule[];
   readonly segmentRules: readonly ProfileSegmentRule[];
+  /** Root the corpus roots are walked under and `sources` is made relative to. */
+  readonly repoRoot?: string | undefined;
+  /** Repo-relative roots this instance ingests — its corpus SCOPE. */
+  readonly corpusRoots?: readonly string[] | undefined;
+  /** Where this instance's atoms are written and read. */
+  readonly atomsDir?: string | undefined;
+  /** Where this instance's index is built; a DIRECTORY for lancedb. */
+  readonly indexPath?: string | undefined;
 }
+
+/** The location half of a profile — what T-3 added to the vocabulary half. */
+type ProfileLocations = Pick<
+  IngestProfile,
+  'repoRoot' | 'corpusRoots' | 'atomsDir' | 'indexPath'
+>;
 
 /** Keys carrying authored rationale rather than data; every other key is unknown. */
 const COMMENT_KEY_PREFIX = 'comment:';
@@ -55,6 +81,10 @@ const KNOWN_KEYS: readonly string[] = [
   'domainRules',
   'typeRules',
   'segmentRules',
+  'repoRoot',
+  'corpusRoots',
+  'atomsDir',
+  'indexPath',
 ];
 
 const fail = (source: string, detail: string): never => {
@@ -99,6 +129,31 @@ const stringList = (
     ? value
     : fail(source, `field "${key}" is missing or is not a non-empty array of strings`);
 };
+
+/**
+ * An optional location path, resolved against the DIRECTORY THE PROFILE LIVES
+ * IN rather than the caller's shell: a profile is moved and copied as one file,
+ * and a `process.cwd()`-relative location would point somewhere else for every
+ * caller. An absolute value passes through `resolve` untouched.
+ */
+const optionalPath = (
+  raw: Readonly<Record<string, unknown>>,
+  key: string,
+  source: string
+): string | undefined => {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  return isString(value) && value.length > 0
+    ? resolve(dirname(source), value)
+    : fail(source, `field "${key}" is present but is not a non-empty string`);
+};
+
+const optionalStringList = (
+  raw: Readonly<Record<string, unknown>>,
+  key: string,
+  source: string
+): readonly string[] | undefined =>
+  raw[key] === undefined ? undefined : stringList(raw, key, source);
 
 const ruleList = (
   raw: Readonly<Record<string, unknown>>,
@@ -163,6 +218,16 @@ const segmentRule = (
   }),
 });
 
+const locationsOf = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string
+): ProfileLocations => ({
+  repoRoot: optionalPath(raw, 'repoRoot', source),
+  corpusRoots: optionalStringList(raw, 'corpusRoots', source),
+  atomsDir: optionalPath(raw, 'atomsDir', source),
+  indexPath: optionalPath(raw, 'indexPath', source),
+});
+
 const unknownKeys = (raw: Readonly<Record<string, unknown>>): readonly string[] =>
   Object.keys(raw).filter(key => !KNOWN_KEYS.includes(key) && !key.startsWith(COMMENT_KEY_PREFIX));
 
@@ -195,6 +260,7 @@ export const parseIngestProfile = (raw: unknown, source: string): IngestProfile 
     domainRules: ruleList(raw, 'domainRules', source).map((rule, i) => domainRule(rule, i, domainCtx)),
     typeRules: ruleList(raw, 'typeRules', source).map((rule, i) => typeRule(rule, i, typeCtx)),
     segmentRules: ruleList(raw, 'segmentRules', source).map((rule, i) => segmentRule(rule, i, typeCtx)),
+    ...locationsOf(raw, source),
   };
 };
 

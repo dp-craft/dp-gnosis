@@ -181,6 +181,43 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 
 A root matching **zero** files THROWS, naming that root — a typo would otherwise index nothing in silence, and the only symptom would be empty queries. Override with `DP_GNOSIS_CORPUS_ROOTS=<comma-separated repo-relative roots>`; unset, empty or all-blank falls back to the default. `SOURCE_ROOT_DOMAINS` maps a source path prefix → `x_domain` (`runner|standards|adr|docs|claude`), longest prefix wins; a source under no declared root is skipped with a reason, never guessed.
 
+### Profiles — one named instance, and the two-instance contract
+
+A **profile** is one named, versionable unit: the labelling vocabulary AND the locations it operates on. `profiles/default.profile.json` is the shipped one; `--profile <file>` selects another.
+
+| Key | Meaning |
+|---|---|
+| `name` | the profile ID — what an atoms directory is stamped with |
+| `domains` / `types` / `defaultType` | the closed label vocabularies |
+| `domainRules` / `typeRules` / `segmentRules` | the mechanical path→label tables |
+| `repoRoot` | root the corpus roots are walked under, and what `sources` is relative to |
+| `corpusRoots` | repo-relative roots this instance ingests — its corpus SCOPE |
+| `atomsDir` | where this instance's atoms are written and read |
+| `indexPath` | where this instance's index is built (a DIRECTORY for `lancedb`) |
+
+The four location keys are OPTIONAL, and a relative one resolves against the directory the profile file lives in — a profile is copied and moved as one file, so `process.cwd()` would point somewhere else for every caller.
+
+**Precedence: flag > profile > default.** The shipped profile declares no location, so every existing invocation resolves exactly as before.
+
+| Location | Flag | Profile key | Default |
+|---|---|---|---|
+| atoms | `--atoms-dir` | `atomsDir` | `dp-gnosis/vault/atoms` |
+| index | `--index-path` | `indexPath` | per-adapter, under `dp-gnosis/cache/index/` |
+| repo root | `--repo-root` | `repoRoot` | the repository root |
+| corpus scope | `DP_GNOSIS_CORPUS_ROOTS` | `corpusRoots` | `CORPUS_ROOTS` (`src/config.ts`) |
+
+**Operating contract for two instances.** Each profile MUST own its `atomsDir` AND its `indexPath`. The defaults are per-adapter, NOT per-profile, so two instances run without `--index-path` write the same index file and the second silently overwrites the first. Sharing an atoms directory is worse: `ingest` makes the tree hold EXACTLY the current run's write set, so the second profile PRUNES every atom the first one wrote.
+
+That contract is enforced, not conventional. `ingest` stamps its output directory with a `.dp-gnosis-owner` marker naming the owning profile:
+
+| Directory state | Behaviour |
+|---|---|
+| no marker | ADOPTED — the marker is written with this profile's id (the migration path for the pre-existing vault) |
+| marker names this profile | proceeds |
+| marker names another profile | REFUSED — the error names both ids and the directory |
+
+The marker is not a `.md` file, so pruning and id-collision checks ignore it.
+
 ## Query rephrasing (MANDATORY before every `retrieve`)
 
 This is a **lexical BM25 engine**. It matches stemmed tokens. It has no idea what a question means.

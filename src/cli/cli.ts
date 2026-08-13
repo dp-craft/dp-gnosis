@@ -13,9 +13,11 @@
  * file — the parser, the context, the renderer and the exit-code contract are
  * already command-agnostic.
  */
-import { ATOMS_DIR, REPO_ROOT } from '../paths.js';
+import { DEFAULT_INGEST_PROFILE } from '../config.js';
+import type { IngestProfile } from '../ingestProfile.js';
+import { loadIngestProfile } from '../ingestProfile.js';
 import type { AdapterName } from './adapter.js';
-import { adapterError, DEFAULT_ADAPTER, defaultIndexPath, resolveAdapter } from './adapter.js';
+import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
 import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
@@ -25,6 +27,7 @@ import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { HELP_TEXT } from './help.js';
 import { runIndexCommand } from './indexCommand.js';
 import { runIngestCommand } from './ingestCommand.js';
+import { resolveLocations } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import { MAX_TOKENS_FLAG, runRetrieveCommand, TYPE_FLAG } from './retrieveCommand.js';
@@ -50,21 +53,49 @@ type ContextResult =
 const commandError = (command: string | undefined): string =>
   `unknown command "${String(command)}" — use one of: ${Object.keys(COMMANDS).join(', ')}; run \`--help\` for usage`;
 
-const contextFor = (args: ParsedArgs, adapter: AdapterName): CommandContext => ({
+const contextFor = (
+  args: ParsedArgs,
+  adapter: AdapterName,
+  profile: IngestProfile
+): CommandContext => ({
   positionals: args.positionals,
   flags: args.flags,
   adapter,
-  atomsDir: stringFlag(args.flags, '--atoms-dir') ?? ATOMS_DIR,
-  indexPath: stringFlag(args.flags, '--index-path') ?? defaultIndexPath(adapter),
-  repoRoot: stringFlag(args.flags, '--repo-root') ?? REPO_ROOT,
+  profile,
+  ...resolveLocations(args.flags, adapter, profile),
 });
 
+/** The named instance to run as. `--profile` is the only way to leave the shipped one. */
+export const PROFILE_FLAG = '--profile';
+
+type ProfileResult =
+  | { readonly ok: true; readonly profile: IngestProfile }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * A profile that cannot be read or is malformed is a USAGE error, not a crash:
+ * the loader already names the file and the exact defect, and exit 2 is what a
+ * scripted caller reads. Falling back to the shipped profile is FORBIDDEN — that
+ * would silently ingest one instance's corpus with another's labels.
+ */
+const loadProfile = (args: ParsedArgs): ProfileResult => {
+  const path = stringFlag(args.flags, PROFILE_FLAG);
+  if (path === undefined) return { ok: true, profile: DEFAULT_INGEST_PROFILE };
+  try {
+    return { ok: true, profile: loadIngestProfile(path) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+};
+
 const buildContext = (args: ParsedArgs): ContextResult => {
+  const profile = loadProfile(args);
+  if (!profile.ok) return { ok: false, error: profile.error };
   const requested = stringFlag(args.flags, '--adapter') ?? DEFAULT_ADAPTER;
   const adapter = resolveAdapter(requested);
   return adapter === undefined
     ? { ok: false, error: adapterError(requested) }
-    : { ok: true, context: contextFor(args, adapter) };
+    : { ok: true, context: contextFor(args, adapter, profile.profile) };
 };
 
 const helpOutcome = (): CommandOutcome => ({

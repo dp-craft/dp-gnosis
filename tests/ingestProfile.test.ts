@@ -53,8 +53,9 @@ const writeDoc = async (root: string, relative: string, text: string): Promise<v
   await writeFile(path, text, 'utf8');
 };
 
+/** Atom files only — the owner marker is not an atom and is not read as one. */
 const readAll = async (dir: string): Promise<readonly string[]> => {
-  const names = [...(await readdir(dir))].sort();
+  const names = [...(await readdir(dir))].filter(name => name.endsWith('.md')).sort();
   return await Promise.all(names.map(name => readFile(join(dir, name), 'utf8')));
 };
 

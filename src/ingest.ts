@@ -402,6 +402,46 @@ const writeAtom = async (outputDir: string, planned: PlannedAtom): Promise<void>
 };
 
 /**
+ * The OWNER MARKER: one file naming the profile that owns this atoms directory.
+ *
+ * Two instances that keep their atoms in one directory destroy each other
+ * silently — `pruneOrphans` makes the tree hold EXACTLY the current run's write
+ * set, so ingesting profile B into profile A's directory deletes every A atom
+ * and answers every later A query with B's corpus. The marker turns that from a
+ * convention into a checked fact. Not a `.md` file, so `pruneOrphans` and
+ * `readExistingIds` both ignore it.
+ */
+export const ATOMS_OWNER_FILE = '.dp-gnosis-owner';
+
+const ownerPath = (outputDir: string): string => join(outputDir, ATOMS_OWNER_FILE);
+
+/** `undefined` = unmarked, which is the ADOPTION path for a pre-marker vault. */
+const readOwner = async (outputDir: string): Promise<string | undefined> => {
+  const text = await readFile(ownerPath(outputDir), 'utf8').catch(() => '');
+  const owner = text.trim();
+  return owner.length > 0 ? owner : undefined;
+};
+
+/**
+ * Claim the output directory for this run's profile, or refuse the run. The
+ * message names BOTH ids and the directory, because the correction is either
+ * "point this profile elsewhere" or "run the other profile" and the reader
+ * cannot choose without seeing all three.
+ */
+const claimOutputDir = async (outputDir: string, profile: IngestProfile): Promise<void> => {
+  const owner = await readOwner(outputDir);
+  if (owner === undefined) {
+    await writeFile(ownerPath(outputDir), `${profile.name}\n`, 'utf8');
+    return;
+  }
+  if (owner !== profile.name) {
+    throw new Error(
+      `atoms directory ${outputDir} is owned by ingest profile "${owner}", so profile "${profile.name}" MUST NOT write into it — a second profile's ingest prunes every atom the first one wrote; give "${profile.name}" its own atomsDir (and its own indexPath) or re-run as "${owner}"`
+    );
+  }
+};
+
+/**
  * An atom the current corpus no longer produces stays retrievable forever
  * otherwise: measured on a re-ingest, 11 345 atoms were written while 11 692
  * files sat in the tree, so 347 atoms from a superseded chunker kept answering
@@ -469,6 +509,7 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
   const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), profile);
   const writable = checked.filter(entry => entry.reasons.length === 0);
   await mkdir(outputDir, { recursive: true });
+  await claimOutputDir(outputDir, profile);
   await Promise.all(writable.map(entry => writeAtom(outputDir, entry)));
   const pruned = await pruneOrphans(outputDir, writable);
   const refused = checked.filter(entry => entry.reasons.length > 0).map(toSkip);

@@ -171,16 +171,24 @@ const ROOT_SEPARATOR = ',';
  * The ONE place the corpus scope is resolved. Every caller imports this instead
  * of reading the environment itself: a second `process.env` read is how one
  * command ends up indexing a different corpus than the command beside it.
- * An unset, empty or all-blank override falls back to `CORPUS_ROOTS`.
+ * An unset, empty or all-blank override falls back to `fallback`, which is the
+ * profile's own scope when it declared one and `CORPUS_ROOTS` when it did not —
+ * the env override therefore outranks a profile exactly as a flag does.
  */
-export const resolveCorpusRoots = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): readonly string[] => {
-  const declared = (env[CORPUS_ROOTS_ENV_VAR] ?? '')
+const declaredRoots = (
+  env: Readonly<Record<string, string | undefined>>
+): readonly string[] =>
+  (env[CORPUS_ROOTS_ENV_VAR] ?? '')
     .split(ROOT_SEPARATOR)
     .map(root => root.trim())
     .filter(root => root.length > 0);
-  return declared.length > 0 ? declared : CORPUS_ROOTS;
+
+export const resolveCorpusRoots = (
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  fallback: readonly string[] = CORPUS_ROOTS
+): readonly string[] => {
+  const declared = declaredRoots(env);
+  return declared.length > 0 ? declared : fallback;
 };
 
 /**
