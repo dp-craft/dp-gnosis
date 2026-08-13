@@ -21,6 +21,62 @@ export const ATOM_MAX_CHARS = 4000;
 export const ATOM_CHUNK_TARGET_CHARS = 3200;
 
 /**
+ * Per-block escape hatch above `ATOM_MAX_CHARS`, for a single INDIVISIBLE
+ * fenced block only.
+ *
+ * A fenced block has no readable interior boundary: measured on the benchmark
+ * corpus, one oversize ASCII box diagram was cut into 16 parts that each began
+ * and ended mid-figure, and 9 such cut sites produced 61 atoms nobody can read.
+ * Emitting such a block whole is strictly better than emitting 16 fragments, so
+ * up to this ceiling the chunker keeps it intact; a fenced block ABOVE the
+ * ceiling is still split, because at some size a fragment beats an atom that
+ * cannot be injected at all.
+ *
+ * 8000 is twice `ATOM_MAX_CHARS`, which is the largest single item the current
+ * reranker batch can hold. RAISING it requires the reranker's PHYSICAL batch
+ * (`-ub`) to rise with it — an atom longer than the physical batch is dropped
+ * at score time rather than ranked badly, so the two numbers move together.
+ */
+export const ATOM_FENCE_MAX_CHARS = 8000;
+
+/**
+ * Opens a fenced block: three or more backticks or tildes, after at most three
+ * spaces of indentation (four would make the line an indented code block).
+ */
+const FENCE_OPEN_RE = /^ {0,3}(?:`{3,}|~{3,})/;
+
+/** The ingest heading line, the ONE line a body may carry before its fence. */
+const BODY_HEADING_RE = /^# /;
+
+const contentLines = (body: string): readonly string[] =>
+  body.split('\n').filter(line => line.trim().length > 0);
+
+/**
+ * `true` when the body IS one indivisible fenced block — the chunker's escape
+ * hatch, seen from the far end.
+ *
+ * The heading line is skipped before the test because ingest prepends `# chain`
+ * to the chunker's output: measured on the benchmark corpus a 5053-character
+ * diagram atom presents to the validator as heading-first, so testing line 1
+ * alone would refuse exactly the atom the escape hatch exists to keep whole.
+ * Only ONE leading heading is skipped — prose under a heading is still prose.
+ */
+const opensWithFence = (body: string): boolean => {
+  const lines = contentLines(body);
+  const first = lines[0] ?? '';
+  return FENCE_OPEN_RE.test(BODY_HEADING_RE.test(first) ? (lines[1] ?? '') : first);
+};
+
+/**
+ * The cap this body must satisfy — the ONE place the fence escape hatch is
+ * decided, imported by every module that enforces a body length. A second copy
+ * of the fence test is how the writer and the validator end up disagreeing
+ * about the same atom.
+ */
+export const bodyMaxChars = (body: string): number =>
+  opensWithFence(body) ? ATOM_FENCE_MAX_CHARS : ATOM_MAX_CHARS;
+
+/**
  * Body floor below which a chunk is not an atom of its own.
  *
  * The floor is enforced by `canAbsorb`, which since the `sameBranch` guard

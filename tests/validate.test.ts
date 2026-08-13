@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { Atom } from '../src/atom.js';
-import { ATOM_MAX_CHARS, ATOM_TYPES } from '../src/config.js';
+import { ATOM_FENCE_MAX_CHARS, ATOM_MAX_CHARS, ATOM_TYPES } from '../src/config.js';
 import { readExistingIds, validateAtom } from '../src/validate.js';
 
 const atomWith = (overrides: Partial<Atom['frontmatter']>, body: string): Atom => ({
@@ -21,6 +21,13 @@ const atomWith = (overrides: Partial<Atom['frontmatter']>, body: string): Atom =
 
 const valid = atomWith({}, 'body text\n');
 const none: ReadonlySet<string> = new Set<string>();
+
+const FENCE_OPEN = '```text\n';
+const FENCE_CLOSE = '\n```\n';
+
+/** A body of exactly `total` characters whose first line opens a fence. */
+const fencedBody = (total: number): string =>
+  `${FENCE_OPEN}${'x'.repeat(total - FENCE_OPEN.length - FENCE_CLOSE.length)}${FENCE_CLOSE}`;
 
 describe('validateAtom', () => {
   it('accepts a valid atom with zero errors', () => {
@@ -43,6 +50,26 @@ describe('validateAtom', () => {
 
   it('accepts a body exactly at the cap', () => {
     expect(validateAtom(atomWith({}, 'x'.repeat(ATOM_MAX_CHARS)), none)).toEqual([]);
+  });
+
+  it('should accept a 6000-character body whose first line opens a fence', () => {
+    const body = fencedBody(6000);
+    expect(body).toHaveLength(6000);
+    expect(validateAtom(atomWith({}, body), none)).toEqual([]);
+  });
+
+  it('should refuse the same 6000 characters as prose, naming the standard cap', () => {
+    const errors = validateAtom(atomWith({}, 'x'.repeat(6000)), none);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain(String(ATOM_MAX_CHARS));
+    expect(errors[0]).toMatch(/no markdown fence/i);
+  });
+
+  it('should refuse a 9000-character fenced body, naming the fenced ceiling', () => {
+    const errors = validateAtom(atomWith({}, fencedBody(9000)), none);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain(String(ATOM_FENCE_MAX_CHARS));
+    expect(errors[0]).toMatch(/fence/i);
   });
 
   it('refuses a domain outside the closed vocabulary', () => {

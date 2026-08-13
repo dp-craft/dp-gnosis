@@ -1,5 +1,5 @@
-import { chunkMarkdown, frontMatterTitle, PREAMBLE_TITLE } from '../src/chunker.js';
-import { ATOM_CHUNK_TARGET_CHARS, ATOM_MAX_CHARS, ATOM_MIN_CHARS } from '../src/config.js';
+import { chunkMarkdown, frontMatterTitle, headingLine, PREAMBLE_TITLE } from '../src/chunker.js';
+import { ATOM_MAX_CHARS, ATOM_MIN_CHARS } from '../src/config.js';
 
 const FENCE = '```';
 const TILDE_FENCE = '~~~';
@@ -175,7 +175,7 @@ describe('chunkMarkdown — oversize sub-splitting', () => {
 
   it('repeats the opening fence and closes every part of an oversize fenced block', () => {
     const open = `${FENCE}ts`;
-    const body = Array.from({ length: 60 }, (_, i) => `const v${i} = '${'x'.repeat(100)}';`);
+    const body = Array.from({ length: 100 }, (_, i) => `const v${i} = '${'x'.repeat(100)}';`);
     const chunks = chunkMarkdown(`# A\n${[open, ...body, FENCE].join('\n')}\n`);
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every(c => c.body.length <= ATOM_MAX_CHARS)).toBe(true);
@@ -184,6 +184,34 @@ describe('chunkMarkdown — oversize sub-splitting', () => {
     expect(chunks.every(c => c.body.split('\n').filter(l => l.startsWith(FENCE)).length === 2)).toBe(
       true
     );
+  });
+
+  it('should emit an oversize fenced block whole when it fits the fence ceiling', () => {
+    const open = `${FENCE}text`;
+    const chunks = chunkMarkdown(`# A\n${[open, 'y'.repeat(5000), FENCE].join('\n')}\n`);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.body).toBe([open, 'y'.repeat(5000), FENCE].join('\n'));
+    expect(chunks[0]?.body.split('\n').filter(l => l.startsWith(FENCE))).toHaveLength(2);
+  });
+
+  it('should still split a fenced block larger than the fence ceiling', () => {
+    const open = `${FENCE}text`;
+    const body = Array.from({ length: 90 }, (_, i) => `d${i} ${'y'.repeat(100)}`);
+    const chunks = chunkMarkdown(`# A\n${[open, ...body, FENCE].join('\n')}\n`);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(c => c.body.length <= ATOM_MAX_CHARS)).toBe(true);
+    expect(chunks.every(c => c.body.startsWith(`${open}\n`))).toBe(true);
+    expect(chunks.every(c => c.body.endsWith(`\n${FENCE}`))).toBe(true);
+  });
+
+  it('should still split an oversize table that fits the fence ceiling', () => {
+    const header = '| name | detail |';
+    const delimiter = '|---|---|';
+    const rows = Array.from({ length: 50 }, (_, i) => `| r${i} | ${'d'.repeat(90)} |`);
+    const chunks = chunkMarkdown(`# A\n${[header, delimiter, ...rows].join('\n')}\n`);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(c => c.body.length <= ATOM_MAX_CHARS)).toBe(true);
+    expect(chunks.every(c => c.body.startsWith(`${header}\n${delimiter}\n`))).toBe(true);
   });
 
   it('splits an oversize paragraph block on line boundaries', () => {
@@ -201,6 +229,28 @@ describe('chunkMarkdown — oversize sub-splitting', () => {
     expect(chunks.map(c => c.body).join('')).toBe('q'.repeat(9000));
   });
 
+  it('should split an oversize block into fewer parts by spending the full cap', () => {
+    const lines = Array.from({ length: 70 }, (_, i) => `line ${i} ${'w'.repeat(100 - `line ${i} `.length)}`);
+    const chunks = chunkMarkdown(`# A\n${lines.join('\n')}\n`);
+    // The 3200-char target budget cut this same block into 3 parts; the 4000-char
+    // cap less the '# A' heading reserve fits it in 2.
+    expect(chunks).toHaveLength(2);
+    expect(chunks.every(c => c.body.length + headingLine(c.headingChain).length + 3 <= ATOM_MAX_CHARS)).toBe(
+      true
+    );
+  });
+
+  it('should keep every part under the cap once a very long heading chain is prepended', () => {
+    const deep = Array.from({ length: 8 }, (_, i) => `Level ${i} ${'n'.repeat(50)}`);
+    const heading = deep.map((title, i) => `${'#'.repeat(i + 1)} ${title}`).join('\n');
+    const lines = Array.from({ length: 120 }, (_, i) => `line ${i} ${'w'.repeat(90)}`);
+    const chunks = chunkMarkdown(`${heading}\n${lines.join('\n')}\n`);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(c => c.body.length + headingLine(c.headingChain).length + 3 <= ATOM_MAX_CHARS)).toBe(
+      true
+    );
+  });
+
   it('does not sub-split a section that fits under the cap', () => {
     const chunks = chunkMarkdown(`# A\n${'z'.repeat(ATOM_MAX_CHARS - 10)}\n`);
     expect(chunks).toHaveLength(1);
@@ -214,6 +264,9 @@ describe('chunkMarkdown — oversize sub-splitting', () => {
     expect(lines.every((n, i) => i === 0 || n > (lines[i - 1] ?? 0))).toBe(true);
   });
 });
+
+/** A single-line section that splits into two full parts plus a tail under the floor. */
+const OVERSIZE_WITH_TINY_TAIL = ATOM_MAX_CHARS * 2 - 11;
 
 describe('chunkMarkdown — minimum atom size', () => {
   const long = (label: string): string => `${label} ${'x'.repeat(ATOM_MIN_CHARS)}`;
@@ -244,7 +297,20 @@ describe('chunkMarkdown — minimum atom size', () => {
     expect(chunks).toHaveLength(1);
     expect(chunks[0]?.title).toBe('A');
     expect(chunks[0]?.startLine).toBe(1);
-    expect(chunks[0]?.body).toBe(`${long('a')}\n\nbye`);
+    expect(chunks[0]?.body).toBe(`${long('a')}\n\n## Tail\n\nbye`);
+  });
+
+  it('should keep the absorbed tail heading inside the merged body', () => {
+    const chunks = chunkMarkdown(`## Alpha\n${long('alpha')}\n### Sub\ntiny tail\n`);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.title).toBe('Alpha');
+    expect(chunks[0]?.body).toContain('Sub');
+    expect(chunks[0]?.body).toBe(`${long('alpha')}\n\n## Sub\n\ntiny tail`);
+  });
+
+  it('should not restate a tail heading its target chain already ends with', () => {
+    const chunks = chunkMarkdown(`# Big\n${'y'.repeat(OVERSIZE_WITH_TINY_TAIL)}\n`);
+    expect(chunks.every(c => !c.body.includes('# Big'))).toBe(true);
   });
 
   it('keeps a lone under-floor chunk as the only atom', () => {
@@ -294,7 +360,7 @@ describe('chunkMarkdown — minimum atom size', () => {
   });
 
   it('merges an under-floor sub-chunk back into its own oversize section', () => {
-    const chunks = chunkMarkdown(`# Big\n${'y'.repeat(ATOM_CHUNK_TARGET_CHARS * 2 + 10)}\n`);
+    const chunks = chunkMarkdown(`# Big\n${'y'.repeat(OVERSIZE_WITH_TINY_TAIL)}\n`);
     expect(chunks).toHaveLength(2);
     expect(chunks.every(c => c.body.length >= ATOM_MIN_CHARS)).toBe(true);
     chunks.forEach(c => expect(c.headingChain).toEqual(['Big']));
@@ -309,6 +375,28 @@ describe('chunkMarkdown — source front-matter', () => {
     expect(chunks[0]?.body).toBe(PAD);
     expect(chunks.some(c => c.body.includes('title: Doc'))).toBe(false);
     expect(chunks.some(c => c.body.startsWith('---'))).toBe(false);
+  });
+
+  it('should drop front matter that opens after a leading HTML comment', () => {
+    const text = `<!-- source: https://example.com/doc -->\n---\ntitle: Doc\ntags: [a]\n---\n# A\n\n${PAD}\n`;
+    const chunks = chunkMarkdown(text);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.title).toBe('A');
+    expect(chunks[0]?.body).toBe(PAD);
+  });
+
+  it('should keep a --- rule after a leading HTML comment when the block declares no key', () => {
+    const comment = '<!-- source: https://example.com/doc -->';
+    const chunks = chunkMarkdown(`${comment}\n\n---\n\n${PAD}\n\n---\n\n# A\n\n${PAD}\n`);
+    expect(chunks[0]?.title).toBe(PREAMBLE_TITLE);
+    expect(chunks[0]?.body).toBe(`${comment}\n\n---\n\n${PAD}\n\n---`);
+  });
+
+  it('should drop front matter that opens after leading blank lines', () => {
+    const chunks = chunkMarkdown(`\n\n---\ntitle: Doc\n---\n# A\n\n${PAD}\n`);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.body).toBe(PAD);
+    expect(chunks.some(c => c.body.includes('title: Doc'))).toBe(false);
   });
 
   it('leaves the document untouched when the opening --- has no closing ---', () => {

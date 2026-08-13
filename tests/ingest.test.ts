@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { ATOM_MAX_CHARS, CORPUS_ROOTS, CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
+import {
+  ATOM_FENCE_MAX_CHARS,
+  ATOM_MAX_CHARS,
+  CORPUS_ROOTS,
+  CORPUS_ROOTS_ENV_VAR
+} from '../src/config.js';
 import { ingest } from '../src/ingest.js';
 
 interface Fixture {
@@ -343,6 +348,26 @@ describe('ingest', () => {
     expect(body.length).toBeLessThanOrEqual(ATOM_MAX_CHARS);
   });
 
+  it('should keep the heading line on a fenced chunk above the prose cap', async () => {
+    const fixture = await makeFixture();
+    const diagram = Array.from({ length: 62 }, () => 'x'.repeat(80)).join('\n');
+    const doc = `# Diagram Section\n\n\`\`\`text\n${diagram}\n\`\`\`\n`;
+    await writeDoc(fixture.standards, 'DIAGRAM.md', doc);
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.skipped).toEqual([]);
+    expect(summary.written).toBe(1);
+    const body = bodyOf([...(await readAll(fixture.out)).values()][0] ?? '');
+    expect(body.split('\n')[0]).toBe('# Diagram Section');
+    expect(body.length).toBeGreaterThan(ATOM_MAX_CHARS);
+    expect(body.length).toBeLessThanOrEqual(ATOM_FENCE_MAX_CHARS);
+  });
+
   it('skips and reports a refused source while still writing the valid ones', async () => {
     const fixture = await makeFixture();
     await writeDoc(fixture.standards, 'TS-TESTING.md', DOC);
@@ -506,7 +531,7 @@ describe('ingest — document summary and HTML comments', () => {
     expect(bodies.some(body => body.includes('aside'))).toBe(false);
   });
 
-  it('still ships a named body for an atom whose whole body was a comment', async () => {
+  it('should skip and report an atom whose whole body was a comment', async () => {
     const fixture = await makeFixture();
     const onlyComment =
       '<!-- a comment long enough on its own to clear the atom floor, carrying enough characters of raw body that the chunker keeps this section as its own atom before ingest strips the comment away entirely -->';
@@ -518,9 +543,9 @@ describe('ingest — document summary and HTML comments', () => {
       repoRoot: fixture.root,
     });
 
-    expect(summary.skipped).toEqual([]);
-    const note = (await readTexts(fixture.out)).find(text => text.includes('title: Note')) ?? '';
-    expect(bodyOf(note)).toBe('# Doc Head > Note\n');
+    expect((await readTexts(fixture.out)).some(text => text.includes('title: Note'))).toBe(false);
+    expect(summary.skipped.map(skip => skip.title)).toEqual(['Note']);
+    expect(summary.skipped[0]?.reasons.join(' ')).toContain('empty');
   });
 
   it('keeps the document title and the summary in the frontmatter and out of the body', async () => {

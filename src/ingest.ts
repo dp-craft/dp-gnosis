@@ -6,10 +6,10 @@ import { basename, join, relative, sep } from 'node:path';
 import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
-import { chunkMarkdown, frontMatterTitle } from './chunker.js';
+import { chunkMarkdown, frontMatterTitle, headingLine, headingPath } from './chunker.js';
 import type { AtomDomain } from './config.js';
 import {
-  ATOM_MAX_CHARS,
+  bodyMaxChars,
   CORPUS_ROOTS_ENV_VAR,
   domainForSource,
   resolveCorpusRoots,
@@ -57,7 +57,6 @@ const MAX_BASE_CHARS = MAX_ID_CHARS - FINGERPRINT_CHARS - 1;
 const NON_SLUG_RE = /[^a-z0-9]+/g;
 const EDGE_HYPHEN_RE = /^-+|-+$/g;
 const FALLBACK_SLUG = 'atom';
-const TITLE_SEPARATOR = ' > ';
 /** A NUL cannot occur in a heading or a path, so a composite key never splits wrongly. */
 const KEY_SEPARATOR = '\u0000';
 
@@ -320,42 +319,9 @@ const ambiguousTitles = (candidates: readonly Candidate[]): ReadonlySet<string> 
 /** No atom ships an unnamed title: an empty resolution falls back to the document. */
 const resolveTitle = (candidate: Candidate, ambiguous: ReadonlySet<string>): string => {
   const resolved = ambiguous.has(candidate.chunk.title)
-    ? candidate.chunk.headingChain.filter(isNamed).join(TITLE_SEPARATOR)
+    ? headingPath(candidate.chunk.headingChain)
     : candidate.chunk.title;
   return resolved.trim().length > 0 ? resolved : candidate.docTitle;
-};
-
-/**
- * The chunk's OWN heading chain restated INSIDE the body, as one `# a > b`
- * line — and nothing else.
- *
- * Why the body and not only the frontmatter: every index and reranker reads
- * `atom.body` alone, so a body that never names its own section cannot be
- * scored on meaning — measured on the live corpus, 12 254 of 13 858 atoms did
- * not contain their own heading anywhere in the text, and adding the chain
- * measured +0.0876 MRR.
- *
- * Why ONLY the chain: document-level text (the document title, the document
- * summary) is IDENTICAL across every atom of that document, so it adds no
- * discriminative signal within it while lengthening every body — BM25 penalises
- * the length and the reranker loses extraction window. Measured on the best
- * configuration, carrying it in the body cost nDCG@10 −0.0286 and MRR −0.0591,
- * same sign in every cell and both models. It lives in the frontmatter instead.
- *
- * Why ONE line rather than a heading per level: an atom is retrieved
- * standalone, so the chain is its topic sentence, not a document outline. One
- * line reads the same way to a person and to a model, costs the body cap the
- * least, and has exactly one form — no per-depth variation to reproduce.
- *
- * An empty chain (the synthetic preamble, or a heading with no text) yields no
- * line at all: the document is named in the frontmatter, which is where naming
- * it stops costing body length.
- */
-const BODY_HEADING_PREFIX = '# ';
-
-const headingLine = (chain: readonly string[]): string => {
-  const named = chain.filter(isNamed);
-  return named.length > 0 ? `${BODY_HEADING_PREFIX}${named.join(TITLE_SEPARATOR)}` : '';
 };
 
 /** Head lines and body joined by a blank line; an empty side contributes nothing. */
@@ -365,11 +331,16 @@ const composeBody = (head: readonly string[], body: string): string =>
 /**
  * The cap outranks the heading line: a body it cannot fit beside is written
  * unprefixed rather than refused for being oversize.
+ *
+ * Which cap that is comes from `bodyMaxChars` over the PREFIXED body, the exact
+ * string the validator will later measure — a fenced diagram the chunker kept
+ * whole is up to 8000 characters, so measuring it against 4000 would strip the
+ * heading off the one atom shape that most needs its topic sentence.
  */
 const bodyWithHeading = (candidate: Candidate): string => {
   const body = stripComments(candidate.chunk.body);
   const prefixed = composeBody([headingLine(candidate.chunk.headingChain)], body);
-  return prefixed.length <= ATOM_MAX_CHARS ? prefixed : composeBody([], body);
+  return prefixed.length <= bodyMaxChars(prefixed) ? prefixed : composeBody([], body);
 };
 
 const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({
@@ -419,13 +390,30 @@ const writeAtom = async (outputDir: string, planned: PlannedAtom): Promise<void>
   await writeFile(join(outputDir, `${frontmatter.id}${MD_SUFFIX}`), serializeAtom(frontmatter, body), 'utf8');
 };
 
+/**
+ * An atom whose body holds nothing but its own heading line indexes nothing:
+ * every index except the linear scan reads `atom.body`, and the heading line is
+ * stripped before it is read, so the atom can never be retrieved by any query.
+ * Measured on the live corpus, 107 of 43 228 atoms were empty this way —
+ * bare-heading sections and sections whose whole body was an HTML comment.
+ */
+const emptyBodyReasons = (planned: PlannedAtom): readonly string[] =>
+  stripComments(planned.candidate.chunk.body).length > 0
+    ? []
+    : [
+        `section "${planned.atom.frontmatter.title}" has an empty body once its heading line is stripped, so it would index nothing and could never be retrieved — give the section prose of its own, or remove the heading`,
+      ];
+
 const checkAtoms = (
   planned: readonly PlannedAtom[],
   existing: ReadonlySet<string>
 ): readonly CheckedAtom[] => {
   const runIds = new Set(planned.map(entry => entry.atom.frontmatter.id));
   const reserved = foreignIds(existing, runIds);
-  return planned.map(entry => ({ ...entry, reasons: validateAtom(entry.atom, reserved) }));
+  return planned.map(entry => ({
+    ...entry,
+    reasons: [...validateAtom(entry.atom, reserved), ...emptyBodyReasons(entry)],
+  }));
 };
 
 /**

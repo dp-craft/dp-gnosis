@@ -225,15 +225,51 @@ const newestCorpusMs = (atomsDir: string): number =>
         .reduce((max, ms) => Math.max(max, ms), statSync(atomsDir).mtimeMs)
     : 0;
 
-const isStale = (options: Fts5AdapterOptions): boolean =>
-  newestCorpusMs(options.atomsDir) > statSync(options.indexPath).mtimeMs;
+/**
+ * The corpus-newest-mtime sweep, sampled AT MOST ONCE per adapter instance.
+ *
+ * MEASURED over the 43 228-atom corpus: one retrieve cost ~710 ms and ~700 ms of
+ * that was this sweep — it lists every markdown file under `atomsDir` and
+ * `stat`s each one (43 228 stat calls per query) solely to label `indexState`,
+ * which changes neither which atoms come back nor their order. The evidence it
+ * dominates: latency was FLAT IN K (821/799/798 ms for k=1/10/50), FLAT IN MATCH
+ * COUNT (a 0-row query cost the same as a 35 838-row one) and scaled with CORPUS
+ * SIZE (11 522 atoms → 268 ms, 43 228 → 881 ms), while SQLite itself answered
+ * COUNT(*) in 0 ms and the full MATCH+bm25 query in 5.7 ms for 3 869 rows.
+ *
+ * RECORDED DECISION: the corpus is FIXED for the lifetime of a process — ANY
+ * markdown change requires a RESTART — so the sweep runs lazily on the first
+ * retrieve that needs it and every later retrieve on that instance reuses the
+ * verdict. The cell hangs off the INSTANCE, never a module-global cache: two
+ * adapters over different atom dirs in one process MUST NOT share a verdict.
+ *
+ * Only this corpus-wide sweep is cached. Body, title and retrievability are
+ * still read from disk per row on every call, so an edit still lands at once in
+ * what is RETURNED — it just no longer moves the reported `indexState`.
+ */
+interface CorpusCell {
+  newestMs: number | undefined;
+}
+
+const sampleCorpusMs = (cell: CorpusCell, atomsDir: string): number => {
+  const sampled = newestCorpusMs(atomsDir);
+  cell.newestMs = sampled;
+  return sampled;
+};
+
+const acquireCorpusMs = (cell: CorpusCell, atomsDir: string): number =>
+  cell.newestMs ?? sampleCorpusMs(cell, atomsDir);
+
+const isStale = (self: Fts5Instance): boolean =>
+  acquireCorpusMs(self.corpus, self.options.atomsDir) >
+  statSync(self.options.indexPath).mtimeMs;
 
 /**
  * `stale` outranks `empty`: an index that both lags the corpus and holds nothing
  * is lagging, and saying `empty` would claim the corpus is genuinely empty.
  */
-const resolveState = (options: Fts5AdapterOptions, count: number): IndexState =>
-  isStale(options) ? 'stale' : count === 0 ? 'empty' : 'ready';
+const resolveState = (self: Fts5Instance, count: number): IndexState =>
+  isStale(self) ? 'stale' : count === 0 ? 'empty' : 'ready';
 
 /** Score flips sign so larger is better, matching the port's `score DESC` order. */
 const fromAtom = (atom: Atom, row: IndexRow, sourcePath: string): RetrievedAtom | undefined => {
@@ -271,18 +307,64 @@ const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boole
 const matchType = (atom: RetrievedAtom, type: AtomType | undefined): boolean =>
   type === undefined || atom.type === type;
 
+/** One row read from disk, kept only if it survives both filters. */
+const survivorOf = (
+  options: Fts5AdapterOptions,
+  row: IndexRow,
+  opts: RetrieveOptions
+): RetrievedAtom | undefined => {
+  const atom = readRow(options, row);
+  return atom !== undefined && matchDomain(atom, opts.domain) && matchType(atom, opts.type)
+    ? atom
+    : undefined;
+};
+
+/** The rank of the k-th survivor held so far, or `undefined` before k exist. */
+const kthRank = (kept: readonly RetrievedAtom[], k: number): number | undefined => {
+  const kth = kept[k - 1];
+  return kth === undefined ? undefined : -kth.score;
+};
+
+/** Settled: k survivors are held AND this row cannot tie the k-th one. */
+const isSettled = (kept: readonly RetrievedAtom[], k: number, rank: number): boolean =>
+  kept.length >= k && rank !== kthRank(kept, k);
+
+/**
+ * Walk the rows in rank order and stop as soon as the answer is settled.
+ *
+ * MEASURED before this walk existed, over a 43 228-atom corpus: retrieval was
+ * p50 881 ms / p95 2714 ms and FLAT IN k — 821/799/798 ms for k=1/10/50 on one
+ * query, 1431/1447/1498 ms on a stopword query. Every matching row was read
+ * from disk (`readRow` = `readFileSync` + `parseAtom`) BEFORE `.slice(0, k)`,
+ * so a query matching 20 000 atoms performed 20 000 file reads to return 10.
+ *
+ * `SEARCH_SQL` already orders best-match-first, so once k survivors are held
+ * every later row is at least as bad as the k-th. Only a row TIED with the
+ * k-th could still displace it through the `(score DESC, id ASC)` tie-break —
+ * hence the rank comparison, which keeps the returned list byte-identical to
+ * the full scan. A `for` loop with an early `break` is the shape here because
+ * short-circuiting the I/O is the entire point.
+ */
+const readUntilSettled = (
+  options: Fts5AdapterOptions,
+  rows: readonly IndexRow[],
+  opts: RetrieveOptions
+): readonly RetrievedAtom[] => {
+  const kept: RetrievedAtom[] = [];
+  for (const row of rows) {
+    if (isSettled(kept, opts.k, row.rank)) break;
+    const atom = survivorOf(options, row, opts);
+    if (atom !== undefined) kept.push(atom);
+  }
+  return kept;
+};
+
 const selectAtoms = (
   options: Fts5AdapterOptions,
   rows: readonly IndexRow[],
   opts: RetrieveOptions
 ): readonly RetrievedAtom[] =>
-  rows
-    .map(row => readRow(options, row))
-    .filter(isDefined)
-    .filter(atom => matchDomain(atom, opts.domain))
-    .filter(atom => matchType(atom, opts.type))
-    .sort(byScoreThenId)
-    .slice(0, opts.k);
+  [...readUntilSettled(options, rows, opts)].sort(byScoreThenId).slice(0, opts.k);
 
 interface IndexSnapshot {
   readonly count: number;
@@ -377,6 +459,7 @@ const createIndexHandle = (): IndexHandle => {
 interface Fts5Instance {
   readonly options: Fts5AdapterOptions;
   readonly handle: IndexHandle;
+  readonly corpus: CorpusCell;
 }
 
 const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): RetrievalResult => {
@@ -384,7 +467,7 @@ const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): Retri
   return {
     atoms: selectAtoms(self.options, snapshot.rows, opts),
     mode: FTS5_MODE,
-    indexState: resolveState(self.options, snapshot.count),
+    indexState: resolveState(self, snapshot.count),
   };
 };
 
@@ -410,7 +493,11 @@ const retrieveFrom = (
  * `unavailable` never becomes a sticky verdict. Call `close()` when done.
  */
 export const createFts5Adapter = (options: Fts5AdapterOptions): KnowledgePort => {
-  const self: Fts5Instance = { options, handle: createIndexHandle() };
+  const self: Fts5Instance = {
+    options,
+    handle: createIndexHandle(),
+    corpus: { newestMs: undefined },
+  };
   return {
     name: FTS5_MODE,
     retrieve: (query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>

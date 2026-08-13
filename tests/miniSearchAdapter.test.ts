@@ -61,6 +61,22 @@ const build = (): Promise<boolean> => buildMiniSearchIndex({ atomsDir, indexPath
 
 const port = (): KnowledgePort => createMiniSearchAdapter({ atomsDir, indexPath, now: NOW });
 
+/** A SECOND corpus + index in the same root, deliberately left stale. */
+const staleSiblingPort = async (): Promise<KnowledgePort> => {
+  const otherAtoms = resolve(root, 'atoms-two');
+  const otherIndex = resolve(root, 'index-two', 'atoms-minisearch.json');
+  mkdirSync(otherAtoms, { recursive: true });
+  writeFileSync(
+    resolve(otherAtoms, 'a.md'),
+    atomText({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' }),
+    'utf8'
+  );
+  await buildMiniSearchIndex({ atomsDir: otherAtoms, indexPath: otherIndex });
+  const ahead = new Date(statSync(otherIndex).mtimeMs + 60_000);
+  utimesSync(resolve(otherAtoms, 'a.md'), ahead, ahead);
+  return createMiniSearchAdapter({ atomsDir: otherAtoms, indexPath: otherIndex, now: NOW });
+};
+
 const ids = (atoms: readonly { readonly id: string }[]): readonly string[] =>
   atoms.map(atom => atom.id);
 
@@ -365,6 +381,43 @@ describe('createMiniSearchAdapter', () => {
     expect(result.indexState).toBe('ready');
     expect(ids(result.atoms)).toEqual(['atom-a']);
     instance.close?.();
+  });
+
+  /**
+   * The corpus is FIXED for the lifetime of a process — a markdown change needs a
+   * RESTART — so the staleness sweep (measured at ~700 ms of a ~710 ms retrieve
+   * over 43 228 atoms) is sampled once per instance. Moving the corpus ahead of
+   * the index under a LIVE instance is observable only if a second retrieve
+   * re-scanned; a fresh instance ("restart") does see stale.
+   */
+  it('samples the staleness sweep once and holds that verdict for the instance', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+    await build();
+    settleCorpusBehindIndex(['a.md']);
+    const instance = port();
+    expect((await instance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+
+    touchAhead('a.md');
+
+    expect((await instance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+    expect((await port().retrieve('zustand', { k: 5 })).indexState).toBe('stale');
+    instance.close?.();
+  });
+
+  /** The sweep is memoized on the INSTANCE, so two atom dirs never share a verdict. */
+  it('gives each instance over a different atoms dir its own staleness verdict', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+    await build();
+    settleCorpusBehindIndex(['a.md']);
+    const readyInstance = port();
+    const staleInstance = await staleSiblingPort();
+
+    expect((await readyInstance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+    expect((await staleInstance.retrieve('zustand', { k: 5 })).indexState).toBe('stale');
+    expect((await readyInstance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+    expect((await staleInstance.retrieve('zustand', { k: 5 })).indexState).toBe('stale');
+    readyInstance.close?.();
+    staleInstance.close?.();
   });
 
   it('serves a rebuilt index to a live instance instead of the one it already loaded', async () => {

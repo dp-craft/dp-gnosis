@@ -57,6 +57,22 @@ const touchAhead = (file: string): void => {
 
 const build = (): void => buildFts5Index({ atomsDir, indexPath });
 
+/** A SECOND corpus + index in the same root, deliberately left stale. */
+const staleSiblingPort = (): KnowledgePort => {
+  const otherAtoms = resolve(root, 'atoms-two');
+  const otherIndex = resolve(root, 'index-two', 'atoms.db');
+  mkdirSync(otherAtoms, { recursive: true });
+  writeFileSync(
+    resolve(otherAtoms, 'a.md'),
+    atomText({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' }),
+    'utf8'
+  );
+  buildFts5Index({ atomsDir: otherAtoms, indexPath: otherIndex });
+  const ahead = new Date(statSync(otherIndex).mtimeMs + 60_000);
+  utimesSync(resolve(otherAtoms, 'a.md'), ahead, ahead);
+  return createFts5Adapter({ atomsDir: otherAtoms, indexPath: otherIndex, now: NOW });
+};
+
 const port = (): KnowledgePort => createFts5Adapter({ atomsDir, indexPath, now: NOW });
 
 beforeEach(() => {
@@ -352,7 +368,15 @@ describe('createFts5Adapter', () => {
     instance.close?.();
   });
 
-  it('still reports stale per call when the corpus moves under a live instance', async () => {
+  /**
+   * AC DELTA — the corpus is FIXED for the lifetime of a process and a markdown
+   * change requires a RESTART, so the staleness sweep is sampled once per
+   * instance instead of per call. Measured before: ~700 ms of a ~710 ms retrieve
+   * over 43 228 atoms was this sweep. Moving the corpus ahead of the index under
+   * a LIVE instance is observable only if a second retrieve re-scanned — so the
+   * held verdict is the assertion, and a fresh instance ("restart") sees stale.
+   */
+  it('samples the staleness sweep once and holds that verdict for the instance', async () => {
     writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
     build();
     settleCorpusBehindIndex(['a.md']);
@@ -361,8 +385,25 @@ describe('createFts5Adapter', () => {
 
     touchAhead('a.md');
 
-    expect((await instance.retrieve('zustand', { k: 5 })).indexState).toBe('stale');
+    expect((await instance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+    expect((await port().retrieve('zustand', { k: 5 })).indexState).toBe('stale');
     instance.close?.();
+  });
+
+  /** The sweep is memoized on the INSTANCE, so two atom dirs never share a verdict. */
+  it('gives each instance over a different atoms dir its own staleness verdict', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+    build();
+    settleCorpusBehindIndex(['a.md']);
+    const readyInstance = port();
+    const staleInstance = staleSiblingPort();
+
+    expect((await readyInstance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+    expect((await staleInstance.retrieve('zustand', { k: 5 })).indexState).toBe('stale');
+    expect((await readyInstance.retrieve('zustand', { k: 5 })).indexState).toBe('ready');
+    expect((await staleInstance.retrieve('zustand', { k: 5 })).indexState).toBe('stale');
+    readyInstance.close?.();
+    staleInstance.close?.();
   });
 
   it('re-reads the body from disk on every call of one long-lived instance', async () => {
@@ -395,5 +436,99 @@ describe('createFts5Adapter', () => {
     build();
 
     expect((await port().retrieve('zustand', { k: 1 })).mode).toBe('fts5');
+  });
+
+  /**
+   * The row walk must stop once the answer is settled. `b.md` is replaced by a
+   * DIRECTORY after the index is built, so any read of it throws EISDIR: only a
+   * scan that runs past the settled point can touch it.
+   */
+  it('stops reading rows once the answer is settled', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand zustand zustand' });
+    writeAtom({ file: 'b.md', id: 'atom-b', body: `zustand ${'filler '.repeat(40)}` });
+    build();
+    rmSync(resolve(atomsDir, 'b.md'));
+    mkdirSync(resolve(atomsDir, 'b.md'));
+
+    const result = await port().retrieve('zustand', { k: 1 });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-a']);
+  });
+
+  it('returns the same k atoms an unbounded full scan would when far more rows match', async () => {
+    const count = 40;
+    Array.from({ length: count }, (_unused, i) => i).forEach(i => {
+      const tag = String(i).padStart(2, '0');
+      writeAtom({ file: `m${tag}.md`, id: `atom-${tag}`, body: `zustand ${'filler '.repeat(i)}selector` });
+    });
+    build();
+
+    const bounded = await port().retrieve('zustand selector', { k: 5 });
+    const fullScan = await port().retrieve('zustand selector', { k: count });
+
+    expect(bounded.atoms).toEqual(fullScan.atoms.slice(0, 5));
+  });
+
+  it('reads every row tied at the k-th score so the id tie-break stays stable', async () => {
+    ['e', 'd', 'c', 'b', 'a'].forEach(letter =>
+      writeAtom({ file: `${letter}.md`, id: `atom-${letter}`, body: 'identical tie body text' })
+    );
+    build();
+
+    const bounded = await port().retrieve('identical tie', { k: 2 });
+    const fullScan = await port().retrieve('identical tie', { k: 5 });
+
+    expect(bounded.atoms.map(atom => atom.id)).toEqual(['atom-a', 'atom-b']);
+    expect(bounded.atoms).toEqual(fullScan.atoms.slice(0, 2));
+  });
+
+  it('scans past missing and non-retrievable atoms to still return k', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand zustand zustand' });
+    writeAtom({ file: 'b.md', id: 'atom-b', body: 'zustand zustand zustand' });
+    writeAtom({ file: 'c.md', id: 'atom-c', body: 'zustand zustand' });
+    writeAtom({ file: 'd.md', id: 'atom-d', body: 'zustand' });
+    build();
+    rmSync(resolve(atomsDir, 'a.md'));
+    writeAtom({ file: 'b.md', id: 'atom-b', status: 'deprecated', body: 'zustand zustand zustand' });
+
+    const result = await port().retrieve('zustand', { k: 2 });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-c', 'atom-d']);
+  });
+
+  it('returns k when a domain filter matches only low-ranked rows', async () => {
+    ['r1', 'r2', 'r3'].forEach(name =>
+      writeAtom({ file: `${name}.md`, id: `atom-${name}`, domain: 'runner', body: 'zustand zustand zustand' })
+    );
+    writeAtom({ file: 's1.md', id: 'atom-s1', domain: 'standards', body: 'zustand filler filler filler' });
+    writeAtom({
+      file: 's2.md',
+      id: 'atom-s2',
+      domain: 'standards',
+      body: 'zustand filler filler filler filler filler',
+    });
+    build();
+
+    const result = await port().retrieve('zustand', { k: 2, domain: 'standards' });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-s1', 'atom-s2']);
+  });
+
+  it('returns k when a type filter matches only low-ranked rows', async () => {
+    ['k1', 'k2', 'k3'].forEach(name =>
+      writeAtom({ file: `${name}.md`, id: `atom-${name}`, type: 'knowledge', body: 'zustand zustand zustand' })
+    );
+    writeAtom({ file: 'x1.md', id: 'atom-x1', type: 'adr', body: 'zustand filler filler filler' });
+    writeAtom({
+      file: 'x2.md',
+      id: 'atom-x2',
+      type: 'adr',
+      body: 'zustand filler filler filler filler filler',
+    });
+    build();
+
+    const result = await port().retrieve('zustand', { k: 2, type: 'adr' });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-x1', 'atom-x2']);
   });
 });

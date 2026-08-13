@@ -305,15 +305,49 @@ const newestCorpusMs = (atomsDir: string): number =>
     .map(rel => statSync(resolve(atomsDir, rel)).mtimeMs)
     .reduce((max, ms) => Math.max(max, ms), statSync(atomsDir).mtimeMs);
 
-const isStale = (options: MiniSearchAdapterOptions): boolean =>
-  newestCorpusMs(options.atomsDir) > statSync(options.indexPath).mtimeMs;
+/**
+ * The corpus-newest-mtime sweep, sampled AT MOST ONCE per adapter instance.
+ *
+ * MEASURED on the fts5 adapter, which carries the identical sweep, over the
+ * 43 228-atom corpus: one retrieve cost ~710 ms and ~700 ms of that was the
+ * sweep — every markdown file is listed and `stat`ed (43 228 stat calls per
+ * query) solely to label `indexState`, which changes neither which atoms come
+ * back nor their order. Latency was flat in k (821/799/798 ms for k=1/10/50) and
+ * flat in match count, while scaling with corpus size (11 522 atoms → 268 ms,
+ * 43 228 → 881 ms).
+ *
+ * RECORDED DECISION: the corpus is FIXED for the lifetime of a process — ANY
+ * markdown change requires a RESTART — so the sweep runs lazily on the first
+ * retrieve that needs it and every later retrieve on that instance reuses the
+ * verdict. The cell hangs off the INSTANCE, never a module-global cache: two
+ * adapters over different atom dirs in one process MUST NOT share a verdict.
+ *
+ * Only this corpus-wide sweep is cached; body, title and retrievability are
+ * still read from disk per hit on every call.
+ */
+interface CorpusCell {
+  newestMs: number | undefined;
+}
+
+const sampleCorpusMs = (cell: CorpusCell, atomsDir: string): number => {
+  const sampled = newestCorpusMs(atomsDir);
+  cell.newestMs = sampled;
+  return sampled;
+};
+
+const acquireCorpusMs = (cell: CorpusCell, atomsDir: string): number =>
+  cell.newestMs ?? sampleCorpusMs(cell, atomsDir);
+
+const isStale = (self: MiniSearchInstance): boolean =>
+  acquireCorpusMs(self.corpus, self.options.atomsDir) >
+  statSync(self.options.indexPath).mtimeMs;
 
 /**
  * `stale` outranks `empty`: an index that both lags the corpus and holds nothing
  * is lagging, and saying `empty` would claim the corpus is genuinely empty.
  */
-const resolveState = (options: MiniSearchAdapterOptions, count: number): IndexState =>
-  isStale(options) ? 'stale' : count === 0 ? 'empty' : 'ready';
+const resolveState = (self: MiniSearchInstance, count: number): IndexState =>
+  isStale(self) ? 'stale' : count === 0 ? 'empty' : 'ready';
 
 /**
  * Which FILE the cached index was deserialized from — inode, mtime and size
@@ -367,6 +401,7 @@ const acquire = (
 interface MiniSearchInstance {
   readonly options: MiniSearchAdapterOptions;
   readonly cell: HandleCell;
+  readonly corpus: CorpusCell;
 }
 
 /** One retrieval call's inputs, kept together so no helper takes four arguments. */
@@ -384,7 +419,7 @@ const search = (
   return {
     atoms: selectAtoms(self.options, index.search(request.query), request.opts),
     mode: MINISEARCH_MODE,
-    indexState: resolveState(self.options, index.documentCount),
+    indexState: resolveState(self, index.documentCount),
   };
 };
 
@@ -424,7 +459,11 @@ const retrieveFrom = async (
  * harmless.
  */
 export const createMiniSearchAdapter = (options: MiniSearchAdapterOptions): KnowledgePort => {
-  const self: MiniSearchInstance = { options, cell: { loaded: undefined } };
+  const self: MiniSearchInstance = {
+    options,
+    cell: { loaded: undefined },
+    corpus: { newestMs: undefined },
+  };
   return {
     name: MINISEARCH_MODE,
     retrieve: (query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>

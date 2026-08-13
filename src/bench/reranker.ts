@@ -61,8 +61,74 @@ export const ndcgAtK = (
   return idcg === 0 ? 0 : dcg / idcg;
 };
 
+/** Document extraction strategy for context management. */
+export type ExtractStrategy = 'head' | 'tail' | 'headtail' | 'maxfit' | 'full';
+
+/** Strip lone UTF-16 surrogates that break JSON serialization — removes both halves of broken pairs. */
+const sanitizeText = (text: string): string => text.replace(/[\uD800-\uDFFF]/g, '');
+
+/**
+ * Extract text from a document snippet according to a strategy.
+ * - head: first N characters
+ * - tail: last N characters
+ * - headtail: first N/2 + last N/2 with ellipsis separator
+ * - maxfit: first N characters (same as head, semantically means "max that fits")
+ * - full: no truncation
+ */
+export function extractDoc(
+  snippet: string,
+  strategy: ExtractStrategy,
+  maxChars: number
+): string {
+  if (strategy === 'full') return sanitizeText(snippet);
+  if (snippet.length <= maxChars) return sanitizeText(snippet);
+  switch (strategy) {
+    case 'head':
+    case 'maxfit':
+      return sanitizeText(snippet.slice(0, maxChars));
+    case 'tail':
+      return sanitizeText(snippet.slice(-maxChars));
+    case 'headtail': {
+      const half = Math.floor(maxChars / 2);
+      return sanitizeText(snippet.slice(0, half) + '\n...\n' + snippet.slice(-half));
+    }
+    default:
+      return sanitizeText(snippet);
+  }
+}
+
 /** Estimate tokens in a text string (~4 chars/token convention). */
 const estimateTokens = (text: string): number => Math.max(1, Math.ceil(text.length / 4));
+
+/**
+ * A document cannot fit the reranker context even alone (query + doc > limit).
+ *
+ * Thrown rather than skipped: a dropped document never reaches the reranker,
+ * so the benchmark would silently score fewer atoms than it was handed.
+ */
+export class RerankOversizeError extends Error {
+  readonly documentIndex: number;
+  readonly estimatedTokens: number;
+  readonly limitTokens: number;
+
+  constructor(documentIndex: number, estimatedTokens: number, limitTokens: number) {
+    super(
+      `Rerank document ${documentIndex} needs ~${estimatedTokens} tokens with the query, ` +
+        `over the ${limitTokens}-token context limit`
+    );
+    this.name = 'RerankOversizeError';
+    this.documentIndex = documentIndex;
+    this.estimatedTokens = estimatedTokens;
+    this.limitTokens = limitTokens;
+  }
+}
+
+/** Guard: a document that cannot fit alone MUST fail the run, never be dropped. */
+const assertDocumentFits = (index: number, requiredTokens: number, maxTokens: number): void => {
+  if (requiredTokens > maxTokens) {
+    throw new RerankOversizeError(index, requiredTokens, maxTokens);
+  }
+};
 
 /**
  * Chunk documents so each batch fits within the reranker's context window.
@@ -90,6 +156,8 @@ const chunkDocuments = (
       currentChunk = [];
       currentTokens = queryTokens;
     }
+    // Docs too large to fit even alone (query + doc > maxTokens) are a hard error
+    assertDocumentFits(offset + currentChunk.length, queryTokens + docTokens, maxTokens);
     currentChunk.push(doc);
     currentTokens += docTokens;
   }
@@ -132,6 +200,19 @@ export const createRerankerClient = (
 
       const responseText = await response.text();
       if (!response.ok) {
+        // On context overflow, retry with half the docs — a single doc is a hard error
+        if (response.status === 400 && responseText.includes('exceed_context_size')) {
+          clearTimeout(timeout);
+          if (documents.length <= 1) {
+            throw new Error(
+              `Rerank context overflow on a single document (index ${baseIndex}): ${responseText.slice(0, 300)}`
+            );
+          }
+          const mid = Math.floor(documents.length / 2);
+          const left = await singleRerank(query, documents.slice(0, mid), baseIndex);
+          const right = await singleRerank(query, documents.slice(mid), baseIndex + mid);
+          return [...left, ...right];
+        }
         throw new Error(`Rerank HTTP ${response.status}: ${responseText.slice(0, 300)}`);
       }
 
@@ -150,8 +231,9 @@ export const createRerankerClient = (
 
     const chunks = chunkDocuments(query, documents, maxContextTokens, maxDocsPerChunk);
 
-    if (chunks.length === 1) {
-      return singleRerank(query, documents, 0);
+    const [firstChunk] = chunks;
+    if (chunks.length === 1 && firstChunk !== undefined) {
+      return singleRerank(query, firstChunk.chunk, firstChunk.offset);
     }
 
     // Multiple chunks: rerank each, merge all results
@@ -168,8 +250,9 @@ export const createRerankerClient = (
 
 /** The reranker models available for benchmarking. */
 export const DEFAULT_RERANKERS: readonly RerankerModelConfig[] = [
-  { name: 'bge-reranker-v2-m3', baseUrl: 'http://127.0.0.1:11001', modelId: 'bge-reranker-v2-m3', maxBatchTokens: 2000 },
+  { name: 'bge-reranker-v2-m3', baseUrl: 'http://127.0.0.1:11001', modelId: 'bge-reranker-v2-m3', maxBatchTokens: 8000 },
   { name: 'bge-reranker-large', baseUrl: 'http://127.0.0.1:11002', modelId: 'bge-reranker-large', maxBatchTokens: 400, maxDocsPerChunk: 2 },
   { name: 'bge-reranker-base', baseUrl: 'http://127.0.0.1:11003', modelId: 'bge-reranker-base', maxBatchTokens: 400, maxDocsPerChunk: 2 },
-  { name: 'jina-reranker-v2-base-multilingual', baseUrl: 'http://127.0.0.1:11004', modelId: 'jina-reranker-v2-base-multilingual', maxBatchTokens: 1000 },
+  { name: 'jina-reranker-v2-base-multilingual', baseUrl: 'http://127.0.0.1:11004', modelId: 'jina-reranker-v2-base-multilingual', maxBatchTokens: 800 },
+  { name: 'zerank-2', baseUrl: 'http://127.0.0.1:11005', modelId: 'zerank-2', maxBatchTokens: 8000, maxDocsPerChunk: 10 },
 ];

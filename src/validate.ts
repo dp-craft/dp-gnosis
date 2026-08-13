@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises';
 
 import type { Atom } from './atom.js';
-import { ATOM_DOMAINS, ATOM_MAX_CHARS, ATOM_TYPES } from './config.js';
+import { ATOM_DOMAINS, ATOM_FENCE_MAX_CHARS, ATOM_TYPES, bodyMaxChars } from './config.js';
 import { ATOMS_DIR } from './paths.js';
 
 /**
@@ -46,13 +46,25 @@ const idUniquenessError = (id: string, existingIds: ReadonlySet<string>): string
 
 /**
  * Retrieval injects top-k 3–5 atoms into a 2–3k token budget, so one oversized
- * atom would consume the entire budget on its own. The cap itself is owned by
- * `config.ts` and MUST NOT be restated here.
+ * atom would consume the entire budget on its own. Which cap applies — the
+ * standard one or the fenced-block ceiling — is decided by `bodyMaxChars` in
+ * `config.ts`, and neither number is restated here.
+ *
+ * The message names the applied cap AND why it applied: the two limits differ
+ * by a factor of two, so "over the cap" alone leaves the author unable to tell
+ * a body that is too long from one that lost its escape hatch.
  */
-const sizeError = (body: string): string | undefined =>
-  body.length <= ATOM_MAX_CHARS
+const capBasis = (limit: number): string =>
+  limit === ATOM_FENCE_MAX_CHARS
+    ? 'its body opens a markdown fence, so the fenced-block ceiling applies'
+    : 'its body opens no markdown fence, so the standard cap applies';
+
+const sizeError = (body: string): string | undefined => {
+  const limit = bodyMaxChars(body);
+  return body.length <= limit
     ? undefined
-    : `atom body is ${body.length} characters, over the ${ATOM_MAX_CHARS}-character cap — split it into several smaller atoms, each within the cap`;
+    : `atom body is ${body.length} characters, over the ${limit}-character cap (${capBasis(limit)}) — split it into several smaller atoms, each within the cap`;
+};
 
 /**
  * A free-form domain fragments on typos and makes the atom silently invisible

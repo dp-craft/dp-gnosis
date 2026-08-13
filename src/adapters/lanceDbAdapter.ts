@@ -380,15 +380,49 @@ const newestCorpusMs = (atomsDir: string): number =>
         .reduce((max, ms) => Math.max(max, ms), statSync(atomsDir).mtimeMs)
     : 0;
 
-const isStale = (options: LanceDbAdapterOptions): boolean =>
-  newestCorpusMs(options.atomsDir) > newestTreeMs(options.indexDir);
+/**
+ * The corpus-newest-mtime sweep, sampled AT MOST ONCE per adapter instance.
+ *
+ * MEASURED on the fts5 adapter, which carries the identical sweep, over the
+ * 43 228-atom corpus: one retrieve cost ~710 ms and ~700 ms of that was the
+ * sweep — every markdown file is listed and `stat`ed (43 228 stat calls per
+ * query) solely to label `indexState`, which changes neither which atoms come
+ * back nor their order. Latency was flat in k (821/799/798 ms for k=1/10/50) and
+ * flat in match count, while scaling with corpus size (11 522 atoms → 268 ms,
+ * 43 228 → 881 ms).
+ *
+ * RECORDED DECISION: the corpus is FIXED for the lifetime of a process — ANY
+ * markdown change requires a RESTART — so the sweep runs lazily on the first
+ * retrieve that needs it and every later retrieve on that instance reuses the
+ * verdict. The cell hangs off the INSTANCE, never a module-global cache: two
+ * adapters over different atom dirs in one process MUST NOT share a verdict.
+ *
+ * Only the CORPUS side is cached; `newestTreeMs(indexDir)` is still read per
+ * call, so a rebuilt index still flips the verdict, and body, title and
+ * retrievability are still read from disk per row on every call.
+ */
+interface CorpusCell {
+  newestMs: number | undefined;
+}
+
+const sampleCorpusMs = (cell: CorpusCell, atomsDir: string): number => {
+  const sampled = newestCorpusMs(atomsDir);
+  cell.newestMs = sampled;
+  return sampled;
+};
+
+const acquireCorpusMs = (cell: CorpusCell, atomsDir: string): number =>
+  cell.newestMs ?? sampleCorpusMs(cell, atomsDir);
+
+const isStale = (self: LanceDbInstance): boolean =>
+  acquireCorpusMs(self.corpus, self.options.atomsDir) > newestTreeMs(self.options.indexDir);
 
 /**
  * `stale` outranks `empty`: an index that both lags the corpus and holds nothing
  * is lagging, and saying `empty` would claim the corpus is genuinely empty.
  */
-const resolveState = (options: LanceDbAdapterOptions, count: number): IndexState =>
-  isStale(options) ? 'stale' : count === 0 ? 'empty' : 'ready';
+const resolveState = (self: LanceDbInstance, count: number): IndexState =>
+  isStale(self) ? 'stale' : count === 0 ? 'empty' : 'ready';
 
 /** One open dataset: the connection, the table, and which tree they came from. */
 interface OpenIndex {
@@ -507,6 +541,7 @@ const UNAVAILABLE: RetrievalResult = {
 interface LanceDbInstance {
   readonly options: LanceDbAdapterOptions;
   readonly cell: HandleCell;
+  readonly corpus: CorpusCell;
 }
 
 const describeResult = (
@@ -516,7 +551,7 @@ const describeResult = (
 ): RetrievalResult => ({
   atoms: selectAtoms(self.options, snapshot.rows, opts),
   mode: LANCEDB_MODE,
-  indexState: resolveState(self.options, snapshot.count),
+  indexState: resolveState(self, snapshot.count),
 });
 
 const search = async (
@@ -554,7 +589,11 @@ const retrieveFrom = async (
  * harmless.
  */
 export const createLanceDbAdapter = (options: LanceDbAdapterOptions): KnowledgePort => {
-  const self: LanceDbInstance = { options, cell: { open: undefined } };
+  const self: LanceDbInstance = {
+    options,
+    cell: { open: undefined },
+    corpus: { newestMs: undefined },
+  };
   return {
     name: LANCEDB_MODE,
     retrieve: (query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>
