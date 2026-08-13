@@ -27,7 +27,7 @@ import { runIndexCommand } from './indexCommand.js';
 import { runIngestCommand } from './ingestCommand.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
-import { runRetrieveCommand, TYPE_FLAG } from './retrieveCommand.js';
+import { MAX_TOKENS_FLAG, runRetrieveCommand, TYPE_FLAG } from './retrieveCommand.js';
 
 /** What one invocation produced. The caller owns writing it to a real process. */
 export interface CliResult {
@@ -78,14 +78,14 @@ const wantsHelp = (args: ParsedArgs): boolean =>
   args.command === undefined || args.flags['--help'] === true || args.flags['-h'] === true;
 
 /**
- * `--format` and `--type` belong to `retrieve` alone. Elsewhere they are refused
+ * `--format`, `--type` and `--max-tokens` belong to `retrieve` alone. Elsewhere they are refused
  * through the SAME message an unknown flag gets: a flag no command can honour
  * MUST NOT look accepted, and one wording keeps the correction identical either
  * way.
  */
 const RETRIEVE_COMMAND = 'retrieve';
 
-const RETRIEVE_ONLY_FLAGS: readonly string[] = [FORMAT_FLAG, TYPE_FLAG];
+const RETRIEVE_ONLY_FLAGS: readonly string[] = [FORMAT_FLAG, TYPE_FLAG, MAX_TOKENS_FLAG];
 
 const misplacedFlag = (args: ParsedArgs): string | undefined =>
   args.command === RETRIEVE_COMMAND

@@ -7,6 +7,7 @@
  * that then rejected them mid-run.
  */
 
+import { RETRIEVE_TOKEN_BUDGET } from './config.js';
 import type { RetrievedAtom } from './port.js';
 
 /**
@@ -32,37 +33,69 @@ import type { RetrievedAtom } from './port.js';
  */
 export const estimateTokens = (text: string): number => Buffer.byteLength(text, 'utf8');
 
+/**
+ * One atom the budget could not admit. It carries the SIZE as well as the
+ * identity because a warning without the size states a problem the caller
+ * cannot act on — whether to raise the budget or fetch the file directly is a
+ * decision about magnitude.
+ */
+export interface SkippedAtom {
+  readonly id: string;
+  readonly sourcePath: string;
+  /** What {@link estimateTokens} charged for the body that did not fit. */
+  readonly estimatedTokens: number;
+}
+
+/** What survived the budget, and what it cost to leave the rest out. */
+export interface BudgetFit {
+  readonly kept: readonly RetrievedAtom[];
+  readonly skipped: readonly SkippedAtom[];
+}
+
 /** Running fit state: the atoms kept so far and the tokens they consume. */
 interface FitState {
   readonly kept: readonly RetrievedAtom[];
+  readonly skipped: readonly SkippedAtom[];
   readonly used: number;
-  readonly stopped: boolean;
 }
 
-const EMPTY_FIT: FitState = { kept: [], used: 0, stopped: false };
+const EMPTY_FIT: FitState = { kept: [], skipped: [], used: 0 };
 
-const addIfFits =
+const skippedOf = (atom: RetrievedAtom, estimatedTokens: number): SkippedAtom => ({
+  id: atom.id,
+  sourcePath: atom.sourcePath,
+  estimatedTokens,
+});
+
+const admitIfFits =
   (maxTokens: number) =>
     (state: FitState, atom: RetrievedAtom): FitState => {
-      if (state.stopped) return state;
-      const next = state.used + estimateTokens(atom.body);
-      if (next > maxTokens) return { ...state, stopped: true };
-      return { kept: [...state.kept, atom], used: next, stopped: false };
+      const cost = estimateTokens(atom.body);
+      return state.used + cost > maxTokens
+        ? { ...state, skipped: [...state.skipped, skippedOf(atom, cost)] }
+        : { ...state, kept: [...state.kept, atom], used: state.used + cost };
     };
 
 /**
- * Take the longest rank-ordered prefix of `atoms` whose bodies fit `maxTokens`.
+ * Admit as many rank-ordered atoms as `maxTokens` holds, SKIPPING each one that
+ * does not fit and continuing with the rest.
  *
- * Order is preserved and truncation is a PREFIX: the walk stops at the first
- * atom that would exceed the budget rather than skipping it to fit a smaller
- * lower-ranked one, so the caller never receives a set that silently reorders
- * relevance. Returns empty when even the first atom does not fit.
+ * Skip-and-continue rather than prefix truncation (decided 2026-08-13): a single
+ * oversize atom used to discard every lower-ranked atom behind it, so one long
+ * document could empty a whole result. Order among the kept atoms is unchanged —
+ * skipping never promotes a lower-ranked atom above a higher-ranked one — and
+ * every skipped atom stays REPORTED, so the caller can load it by path instead
+ * of never learning it existed.
  *
  * @param atoms - Atoms in rank order.
- * @param maxTokens - Budget, measured with {@link estimateTokens}.
- * @returns The kept prefix.
+ * @param maxTokens - Budget, measured with {@link estimateTokens}. Defaults to
+ *   {@link RETRIEVE_TOKEN_BUDGET}.
+ * @returns The kept atoms and the skipped ones with their sizes.
  */
 export const fitToTokenBudget = (
   atoms: readonly RetrievedAtom[],
-  maxTokens: number
-): readonly RetrievedAtom[] => atoms.reduce(addIfFits(maxTokens), EMPTY_FIT).kept;
+  maxTokens: number = RETRIEVE_TOKEN_BUDGET
+): BudgetFit => {
+  const { kept, skipped } = atoms.reduce(admitIfFits(maxTokens), EMPTY_FIT);
+  return { kept, skipped };
+};

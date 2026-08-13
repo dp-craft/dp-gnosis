@@ -284,6 +284,66 @@ describe('runCli', () => {
       expect(parseJson(result.stdout)['count']).toBeGreaterThan(0);
     });
 
+    /**
+     * The budget SKIPS an atom it cannot fit and keeps going, and the skip is
+     * reported — id, source path and estimated size — so the LLM reading the
+     * output can load the file itself. A silent drop is the failure mode this
+     * wiring exists to prevent.
+     */
+    it('skips an atom over --max-tokens and reports it with its source and size', async () => {
+      const fixture = await makeFixture();
+      await runCli(ingestArgv(fixture));
+
+      const result = await runCli([...retrieveArgv(fixture, 'linear'), '--max-tokens', '1']);
+      const data = parseJson(result.stdout);
+      const skipped = data['skipped'] as readonly Record<string, unknown>[];
+
+      expect(data['count']).toBe(0);
+      expect(data['atoms']).toEqual([]);
+      expect(skipped.length).toBeGreaterThan(0);
+      expect(String(skipped[0]?.['sourcePath'])).toContain('atoms/');
+      expect(skipped[0]?.['estimatedTokens']).toBeGreaterThan(1);
+      expect(String(data['note'])).toContain('--max-tokens');
+    });
+
+    it('names the skipped atoms in the text and xml renderings too', async () => {
+      const fixture = await makeFixture();
+      await runCli(ingestArgv(fixture));
+      const budgeted = ['--max-tokens', '1', '--repo-root', fixture.repoRoot];
+
+      const text = await runCli(['retrieve', 'retrieval', '--atoms-dir', fixture.atomsDir, ...budgeted]);
+      const xml = await runCli([
+        'retrieve',
+        'retrieval',
+        '--atoms-dir',
+        fixture.atomsDir,
+        '--format',
+        'xml',
+        ...budgeted,
+      ]);
+
+      expect(text.stdout).toContain('skipped');
+      expect(text.stdout).toContain('ts-testing-layered-test-model');
+      expect(xml.stdout).toContain('<skipped ');
+      expect(xml.stdout).toContain('estimatedTokens=');
+    });
+
+    it('exits 2 naming the correction for a non-numeric --max-tokens', async () => {
+      const fixture = await makeFixture();
+
+      const result = await runCli([
+        'retrieve',
+        'retrieval',
+        '--max-tokens',
+        'lots',
+        '--atoms-dir',
+        fixture.atomsDir,
+      ]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--max-tokens');
+    });
+
     it('reports indexState unavailable rather than an empty result when no index exists', async () => {
       const fixture = await makeFixture();
       await runCli(ingestArgv(fixture));

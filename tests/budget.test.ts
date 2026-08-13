@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { estimateTokens, fitToTokenBudget } from '../src/budget.js';
+import { RETRIEVE_TOKEN_BUDGET } from '../src/config.js';
 import type { RetrievedAtom } from '../src/port.js';
 
 const atom = (id: string, body: string): RetrievedAtom => ({
@@ -46,37 +47,69 @@ describe('estimateTokens', () => {
   });
 });
 
+/**
+ * Skip-and-continue, decided 2026-08-13 (§9.7 of the hu-en measurement report):
+ * an atom that does not fit is SKIPPED, not a stop sign, and it stays REPORTED
+ * with its id, its `sourcePath` and its estimated size — a warning naming
+ * neither the file nor the size tells the caller nothing it can act on.
+ */
 describe('fitToTokenBudget', () => {
   const atoms: readonly RetrievedAtom[] = [atom('a', 'x'.repeat(10)), atom('b', 'y'.repeat(10)), atom('c', 'z'.repeat(10))];
 
-  it('should keep rank order and stop at the first atom that would exceed the budget', () => {
-    const kept = fitToTokenBudget(atoms, 25);
+  it('should keep rank order for the atoms that fit', () => {
+    const fit = fitToTokenBudget(atoms, 25);
 
-    expect(kept.map(a => a.id)).toEqual(['a', 'b']);
+    expect(fit.kept.map(a => a.id)).toEqual(['a', 'b']);
+    expect(fit.skipped.map(s => s.id)).toEqual(['c']);
   });
 
-  it('should stop at the first non-fitting atom rather than skipping ahead to a smaller one', () => {
-    const mixed: readonly RetrievedAtom[] = [atom('big', 'x'.repeat(30)), atom('small', 'y')];
+  it('should skip an oversize atom in the middle and still admit the ones behind it', () => {
+    const mixed: readonly RetrievedAtom[] = [
+      atom('head', 'x'.repeat(5)),
+      atom('big', 'y'.repeat(30)),
+      atom('tail', 'z'.repeat(5)),
+    ];
 
-    expect(fitToTokenBudget(mixed, 20)).toEqual([]);
+    const fit = fitToTokenBudget(mixed, 20);
+
+    expect(fit.kept.map(a => a.id)).toEqual(['head', 'tail']);
+    expect(fit.skipped).toEqual([{ id: 'big', sourcePath: 'vault/big.md', estimatedTokens: 30 }]);
   });
 
-  it('should keep every atom when the budget covers all of them', () => {
-    expect(fitToTokenBudget(atoms, 30).map(a => a.id)).toEqual(['a', 'b', 'c']);
+  it('should keep every atom and skip nothing when the budget covers all of them', () => {
+    const fit = fitToTokenBudget(atoms, 30);
+
+    expect(fit.kept.map(a => a.id)).toEqual(['a', 'b', 'c']);
+    expect(fit.skipped).toEqual([]);
   });
 
-  it('should return empty for a zero budget', () => {
-    expect(fitToTokenBudget(atoms, 0)).toEqual([]);
+  it('should keep nothing and report everything for a zero budget', () => {
+    const fit = fitToTokenBudget(atoms, 0);
+
+    expect(fit.kept).toEqual([]);
+    expect(fit.skipped.map(s => s.id)).toEqual(['a', 'b', 'c']);
+    expect(fit.skipped.map(s => s.sourcePath)).toEqual(['vault/a.md', 'vault/b.md', 'vault/c.md']);
+    expect(fit.skipped.every(s => s.estimatedTokens === 10)).toBe(true);
   });
 
   it('should return empty for an empty input', () => {
-    expect(fitToTokenBudget([], 1000)).toEqual([]);
+    expect(fitToTokenBudget([], 1000)).toEqual({ kept: [], skipped: [] });
+  });
+
+  it('should apply the configured default budget when none is passed', () => {
+    const fits = atom('fits', 'x'.repeat(RETRIEVE_TOKEN_BUDGET));
+    const over = atom('over', 'y'.repeat(RETRIEVE_TOKEN_BUDGET + 1));
+
+    expect(fitToTokenBudget([over, fits]).kept.map(a => a.id)).toEqual(['fits']);
+    expect(fitToTokenBudget([over, fits]).skipped.map(s => s.estimatedTokens)).toEqual([
+      RETRIEVE_TOKEN_BUDGET + 1,
+    ]);
   });
 
   it('should budget multi-byte bodies by bytes, not characters', () => {
     const cjkAtoms: readonly RetrievedAtom[] = [atom('a', '日'.repeat(4)), atom('b', '本')];
 
-    expect(fitToTokenBudget(cjkAtoms, 12).map(a => a.id)).toEqual(['a']);
-    expect(fitToTokenBudget(cjkAtoms, 15).map(a => a.id)).toEqual(['a', 'b']);
+    expect(fitToTokenBudget(cjkAtoms, 12).kept.map(a => a.id)).toEqual(['a']);
+    expect(fitToTokenBudget(cjkAtoms, 15).kept.map(a => a.id)).toEqual(['a', 'b']);
   });
 });

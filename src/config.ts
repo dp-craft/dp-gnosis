@@ -100,6 +100,23 @@ export const bodyMaxChars = (body: string): number =>
 export const ATOM_MIN_CHARS = 200;
 
 /**
+ * Default injection budget for one `retrieve` call, in the unit
+ * `estimateTokens` returns — UTF-8 BYTES, not tokenizer tokens.
+ *
+ * It is a byte bound because no tokenizer is a dependency here, and the byte
+ * count is a PROVEN upper bound on the real token count (see `estimateTokens`).
+ * The price is measured: on the repo top-5 median the bound reads 6 190 where
+ * Qwen counts 1 520 tokens — 4.1x reserve — and 5 272 vs 1 959 in Hungarian,
+ * 2.7x. So 8000 here admits roughly what a 2–3k-token consumer window holds,
+ * and a caller who knows its own window passes `--max-tokens`.
+ *
+ * Unrelated to `ATOM_FENCE_MAX_CHARS` despite the shared value: that one caps a
+ * single atom's CHARACTERS at write time, this one caps a whole result's BYTES
+ * at read time. They move independently.
+ */
+export const RETRIEVE_TOKEN_BUDGET = 8000;
+
+/**
  * Hard cap on how many terms a constructed retrieval query may carry.
  *
  * A task's targets, test contract and spec excerpts together run to thousands

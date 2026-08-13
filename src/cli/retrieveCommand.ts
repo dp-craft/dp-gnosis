@@ -9,8 +9,10 @@
  */
 import { relative } from 'node:path';
 
+import type { SkippedAtom } from '../budget.js';
+import { fitToTokenBudget } from '../budget.js';
 import type { AtomType } from '../config.js';
-import { ATOM_TYPES } from '../config.js';
+import { ATOM_TYPES, RETRIEVE_TOKEN_BUDGET } from '../config.js';
 import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
 import { createPort } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -41,6 +43,26 @@ const resolveK = (flags: FlagValues): number | undefined => {
 
 /** The type filter belongs to `retrieve` alone; `cli.ts` refuses it elsewhere. */
 export const TYPE_FLAG = '--type';
+
+/** The budget override, `retrieve` only; `cli.ts` refuses it elsewhere. */
+export const MAX_TOKENS_FLAG = '--max-tokens';
+
+const maxTokensError = (raw: string): string =>
+  `${MAX_TOKENS_FLAG} must be a non-negative integer — got "${raw}"; pass e.g. \`${MAX_TOKENS_FLAG} ${RETRIEVE_TOKEN_BUDGET}\``;
+
+/** Zero is legal: it asks for the skip report alone, and is not a mistake. */
+const parseMaxTokens = (raw: string): number | undefined => {
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : undefined;
+};
+
+const resolveMaxTokens = (flags: FlagValues): number | undefined => {
+  const raw = stringFlag(flags, MAX_TOKENS_FLAG);
+  return raw === undefined ? RETRIEVE_TOKEN_BUDGET : parseMaxTokens(raw);
+};
+
+/** The offending token as the caller typed it, for a message that quotes it. */
+const rawFlag = (flags: FlagValues, name: string): string => stringFlag(flags, name) ?? '';
 
 /**
  * A value outside the closed vocabulary is a REFUSAL, never a silently dropped
@@ -90,47 +112,99 @@ const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
 const atomLine = (atom: RetrievedAtom): string =>
   `  ${formatScore(atom.score)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
 
-const retrieveText = (result: RetrievalResult): string =>
-  [
+/**
+ * The budget outcome as the renderings see it: `result.atoms` is already the
+ * KEPT set, and `skipped` is what the caller must still be told about.
+ */
+interface BudgetedResult {
+  readonly result: RetrievalResult;
+  readonly skipped: readonly SkippedAtom[];
+  readonly maxTokens: number;
+}
+
+/**
+ * The warning that goes back to the LLM. An atom over budget is SKIPPED, never
+ * truncated and never silently dropped, so the message states both remedies:
+ * raise the budget, or read the named source file directly.
+ */
+const budgetWarning = (budgeted: BudgetedResult): string =>
+  `retrieve: ${budgeted.skipped.length} atom(s) did not fit the ${budgeted.maxTokens}-token budget and were skipped — raise it with \`${MAX_TOKENS_FLAG} <n>\` or read the source files named below`;
+
+const hasSkips = (budgeted: BudgetedResult): boolean => budgeted.skipped.length > 0;
+
+const skippedLine = (skipped: SkippedAtom): string =>
+  `  skipped  ${skipped.id}  ~${skipped.estimatedTokens} tokens  ${skipped.sourcePath}`;
+
+const skipText = (budgeted: BudgetedResult): readonly string[] =>
+  hasSkips(budgeted) ? [budgetWarning(budgeted), ...budgeted.skipped.map(skippedLine)] : [];
+
+const retrieveText = (budgeted: BudgetedResult): string => {
+  const { result } = budgeted;
+  return [
     `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
     ...(isUnavailable(result) ? [NO_CORPUS] : []),
     ...result.atoms.map(atomLine),
+    ...skipText(budgeted),
   ].join('\n');
+};
 
 type ArgsResult =
-  | { readonly ok: true; readonly k: number; readonly types: readonly AtomType[] | undefined }
+  | {
+    readonly ok: true;
+    readonly k: number;
+    readonly maxTokens: number;
+    readonly types: readonly AtomType[] | undefined;
+  }
   | { readonly ok: false; readonly error: string };
 
-/** Both value flags, resolved together so the command states one refusal path. */
+/** Every value flag, resolved together so the command states one refusal path. */
 const resolveArgs = (flags: FlagValues): ArgsResult => {
   const k = resolveK(flags);
+  const maxTokens = resolveMaxTokens(flags);
   const types = resolveTypes(flags);
-  if (k === undefined) return { ok: false, error: kError(stringFlag(flags, '-k') ?? '') };
-  return types.ok ? { ok: true, k, types: types.types } : { ok: false, error: types.error };
+  if (k === undefined) return { ok: false, error: kError(rawFlag(flags, '-k')) };
+  if (maxTokens === undefined) {
+    return { ok: false, error: maxTokensError(rawFlag(flags, MAX_TOKENS_FLAG)) };
+  }
+  return types.ok
+    ? { ok: true, k, maxTokens, types: types.types }
+    : { ok: false, error: types.error };
 };
 
 interface RetrieveRequest {
   readonly context: CommandContext;
   readonly query: string;
   readonly k: number;
+  readonly maxTokens: number;
   /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
   readonly types: readonly AtomType[] | undefined;
 }
 
+/**
+ * One `note` key carries whichever refusal happened, so a caller reads a single
+ * field instead of two. A skip and an absent corpus cannot co-occur: nothing was
+ * retrieved to budget in the second case.
+ */
+const noteField = (budgeted: BudgetedResult): Readonly<Record<string, string>> => {
+  if (hasSkips(budgeted)) return { note: budgetWarning(budgeted) };
+  return isUnavailable(budgeted.result) ? { note: NO_CORPUS } : {};
+};
+
 /** The `--json` payload. Its key set is adapter-independent by construction. */
 const payload = (
   request: RetrieveRequest,
-  result: RetrievalResult
+  budgeted: BudgetedResult
 ): Readonly<Record<string, unknown>> => ({
   command: 'retrieve',
   adapter: request.context.adapter,
   query: request.query,
   k: request.k,
-  mode: result.mode,
-  indexState: result.indexState,
-  count: result.atoms.length,
-  atoms: result.atoms,
-  ...(isUnavailable(result) ? { note: NO_CORPUS } : {}),
+  mode: budgeted.result.mode,
+  indexState: budgeted.result.indexState,
+  count: budgeted.result.atoms.length,
+  atoms: budgeted.result.atoms,
+  skipped: budgeted.skipped,
+  ...noteField(budgeted),
 });
 
 /**
@@ -170,27 +244,55 @@ const rootAttributes = (request: RetrieveRequest, result: RetrievalResult): stri
  * separates "searched, found nothing" (`count="0"`, no note) from "no search
  * happened" (`indexState="unavailable"` + note) without parsing prose.
  */
-const retrieveXml = (request: RetrieveRequest, result: RetrievalResult): string =>
+/**
+ * A skipped atom is an EMPTY element beside the documents: it has no content to
+ * carry, only the identity, the source to load it from and the size that made it
+ * not fit. The `<note>` states what to do about it in prose.
+ */
+const skippedXml = (skipped: SkippedAtom, repoRoot: string): string =>
+  `  <skipped ${xmlAttribute('id', skipped.id)} ${xmlAttribute('source', relative(repoRoot, skipped.sourcePath))} ${xmlAttribute('estimatedTokens', String(skipped.estimatedTokens))}/>`;
+
+const skipXml = (budgeted: BudgetedResult, repoRoot: string): readonly string[] =>
+  hasSkips(budgeted)
+    ? [
+        `  <note>${escapeXml(budgetWarning(budgeted))}</note>`,
+        ...budgeted.skipped.map(skipped => skippedXml(skipped, repoRoot)),
+      ]
+    : [];
+
+const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
   [
-    `<retrieved_context ${rootAttributes(request, result)}>`,
-    ...(isUnavailable(result) ? [`  <note>${escapeXml(NO_CORPUS)}</note>`] : []),
-    ...result.atoms.map(atom => documentXml(atom, request.context.repoRoot)),
+    `<retrieved_context ${rootAttributes(request, budgeted.result)}>`,
+    ...(isUnavailable(budgeted.result) ? [`  <note>${escapeXml(NO_CORPUS)}</note>`] : []),
+    ...skipXml(budgeted, request.context.repoRoot),
+    ...budgeted.result.atoms.map(atom => documentXml(atom, request.context.repoRoot)),
     '</retrieved_context>',
   ].join('\n');
 
 const retrieveOptions = (request: RetrieveRequest): RetrieveOptions =>
   request.types === undefined ? { k: request.k } : { k: request.k, types: request.types };
 
+/**
+ * The budget is applied HERE, between the port and the renderings: the adapters
+ * rank, the CLI decides what fits the caller's window, and both halves of that
+ * decision — kept and skipped — reach every rendering.
+ */
+const applyBudget = (result: RetrievalResult, maxTokens: number): BudgetedResult => {
+  const fit = fitToTokenBudget(result.atoms, maxTokens);
+  return { result: { ...result, atoms: fit.kept }, skipped: fit.skipped, maxTokens };
+};
+
 const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   const { context, query } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
   const result = await port.retrieve(query, retrieveOptions(request));
   port.close?.();
+  const budgeted = applyBudget(result, request.maxTokens);
   return {
     exitCode: exitCodeFor(result),
-    data: payload(request, result),
-    text: retrieveText(result),
-    xml: retrieveXml(request, result),
+    data: payload(request, budgeted),
+    text: retrieveText(budgeted),
+    xml: retrieveXml(request, budgeted),
   };
 };
 
@@ -199,5 +301,5 @@ export const runRetrieveCommand = async (context: CommandContext): Promise<Comma
   const args = resolveArgs(context.flags);
   if (query.length === 0) return usageError(NO_QUERY);
   if (!args.ok) return usageError(args.error);
-  return await search({ context, query, k: args.k, types: args.types });
+  return await search({ context, query, k: args.k, maxTokens: args.maxTokens, types: args.types });
 };

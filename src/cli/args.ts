@@ -29,6 +29,8 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--format': { kind: 'value', placeholder: '<text|json|xml>' },
   // `retrieve` only, refused elsewhere through the same unknown-flag path.
   '--type': { kind: 'value', placeholder: '<type[,type]>' },
+  // `retrieve` only: the injection budget in estimated tokens (UTF-8 bytes).
+  '--max-tokens': { kind: 'value', placeholder: '<n>' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },

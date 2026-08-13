@@ -3,7 +3,7 @@
  * an agent through a bash tool, and the exit code is the only signal that
  * survives without parsing output.
  */
-import { ATOM_TYPES } from '../config.js';
+import { ATOM_TYPES, RETRIEVE_TOKEN_BUDGET } from '../config.js';
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
 import { OUTPUT_FORMATS } from './format.js';
@@ -25,6 +25,8 @@ export const HELP_TEXT: string = [
   '  passing --json together with --format xml is a usage error; another command with --format is too',
   `Types: --type <type[,type]> on \`retrieve\` only — an atom passes when its type is in the list; omit it to search every type`,
   `  vocabulary: ${ATOM_TYPES.join(' | ')}`,
+  `Budget: --max-tokens <n> on \`retrieve\` only (default ${RETRIEVE_TOKEN_BUDGET}), counted as UTF-8 bytes — a proven upper bound on the real token count`,
+  '  an atom over the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size',
   `Adapters: ${ADAPTER_NAMES.join(' | ')} (default ${DEFAULT_ADAPTER}); the adapter changes ranking and speed only`,
   '  minisearch and lancedb are optional dependencies — an absent one is reported, never hidden',
   '',
@@ -38,7 +40,8 @@ export const HELP_TEXT: string = [
   'JSON keys with --json (plus exitCode on every object):',
   '  ingest    command, written, skipped[{source,title,reasons}]',
   '  index     command, adapter, built, indexPath, note',
-  '  retrieve  command, adapter, query, k, mode, indexState, count, atoms[{id,title,domain,body,score,sourcePath}]',
+  '  retrieve  command, adapter, query, k, mode, indexState, count, atoms[{id,title,domain,body,score,sourcePath}],',
+  '            skipped[{id,sourcePath,estimatedTokens}], note',
   '  bench     command, markdownPath, jsonPath, adapters[], skippedAdapters[{name,reason}], corpora[], goldenSet',
   '  failure   error',
 ].join('\n');
