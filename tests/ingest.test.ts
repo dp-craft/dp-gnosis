@@ -610,3 +610,27 @@ describe('ingest — part index for a split section', () => {
     expect(splitNames.every(name => /^split-split-section-[0-9a-f]{8}\.md$/.test(name))).toBe(true);
   });
 });
+
+describe('ingest — orphan atoms from a previous run', () => {
+  it('deletes every atom file the run did not write and reports the count', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'TS-TESTING.md', DOC);
+    await mkdir(fixture.out, { recursive: true });
+    await writeFile(join(fixture.out, 'ts-testing-old-chunker-section.md'), 'stale atom\n', 'utf8');
+    await writeFile(join(fixture.out, 'index.json'), '{}\n', 'utf8');
+
+    const summary = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    expect(summary.written).toBe(2);
+    expect(summary.pruned).toBe(1);
+    expect([...(await readAll(fixture.out)).keys()]).toEqual([
+      'index.json',
+      'ts-testing-layered-test-model-unit-tier.md',
+      'ts-testing-layered-test-model.md',
+    ]);
+  });
+});

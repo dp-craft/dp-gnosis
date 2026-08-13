@@ -56,10 +56,11 @@ describe('reranker oversize handling', () => {
     expect(error).toBeInstanceOf(RerankOversizeError);
     const oversize = error as RerankOversizeError;
     expect(oversize.documentIndex).toBe(1);
-    expect(oversize.estimatedTokens).toBe(111);
+    // 400 UTF-8 bytes of doc + 10 special tokens + the 1-byte query.
+    expect(oversize.estimatedTokens).toBe(411);
     expect(oversize.limitTokens).toBe(50);
     expect(oversize.message).toContain('1');
-    expect(oversize.message).toContain('111');
+    expect(oversize.message).toContain('411');
     expect(oversize.message).toContain('50');
   });
 

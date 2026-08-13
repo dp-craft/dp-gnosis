@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { globSync } from 'node:fs';
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
 
 import type { Atom } from './atom.js';
@@ -84,10 +84,12 @@ export interface IngestSkip {
   readonly reasons: readonly string[];
 }
 
-/** What a run wrote and what it refused — the caller's corpus-report input. */
+/** What a run wrote, what it refused and what it removed — the caller's corpus-report input. */
 export interface IngestSummary {
   readonly written: number;
   readonly skipped: readonly IngestSkip[];
+  /** Atom files left by an earlier run that this one no longer produces. */
+  readonly pruned: number;
 }
 
 interface LoadedSource {
@@ -391,6 +393,28 @@ const writeAtom = async (outputDir: string, planned: PlannedAtom): Promise<void>
 };
 
 /**
+ * An atom the current corpus no longer produces stays retrievable forever
+ * otherwise: measured on a re-ingest, 11 345 atoms were written while 11 692
+ * files sat in the tree, so 347 atoms from a superseded chunker kept answering
+ * queries and polluting every retrieval measurement. The output tree is
+ * therefore made to hold EXACTLY this run's write set — nothing outside
+ * `outputDir` and nothing that is not a top-level `.md` file is considered.
+ */
+const isOrphan = (written: ReadonlySet<string>, name: string): boolean =>
+  name.endsWith(MD_SUFFIX) && !written.has(name.slice(0, -MD_SUFFIX.length));
+
+const pruneOrphans = async (
+  outputDir: string,
+  writable: readonly CheckedAtom[]
+): Promise<number> => {
+  const written = new Set(writable.map(entry => entry.atom.frontmatter.id));
+  const names = await readdir(outputDir);
+  const orphans = names.filter(name => isOrphan(written, name));
+  await Promise.all(orphans.map(name => rm(join(outputDir, name))));
+  return orphans.length;
+};
+
+/**
  * An atom whose body holds nothing but its own heading line indexes nothing:
  * every index except the linear scan reads `atom.body`, and the heading line is
  * stripped before it is read, so the atom can never be retrieved by any query.
@@ -431,6 +455,7 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
   const writable = checked.filter(entry => entry.reasons.length === 0);
   await mkdir(outputDir, { recursive: true });
   await Promise.all(writable.map(entry => writeAtom(outputDir, entry)));
+  const pruned = await pruneOrphans(outputDir, writable);
   const refused = checked.filter(entry => entry.reasons.length > 0).map(toSkip);
-  return { written: writable.length, skipped: [...unmapped, ...refused] };
+  return { written: writable.length, skipped: [...unmapped, ...refused], pruned };
 };

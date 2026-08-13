@@ -10,6 +10,8 @@
  * reranker model runs on its own port; the client is parameterized by base URL.
  */
 
+import { estimateTokens } from '../budget.js';
+
 /** One reranker result: original document index and its relevance score. */
 export interface RerankResult {
   readonly index: number;
@@ -96,9 +98,6 @@ export function extractDoc(
       return sanitizeText(snippet);
   }
 }
-
-/** Estimate tokens in a text string (~4 chars/token convention). */
-const estimateTokens = (text: string): number => Math.max(1, Math.ceil(text.length / 4));
 
 /**
  * A document cannot fit the reranker context even alone (query + doc > limit).

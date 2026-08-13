@@ -1,1383 +1,1425 @@
 {
-  "version": 4,
-  "frozenAt": "2026-08-12",
-  "corpusAtomCount": 43228,
-  "minimumMeaningfulDifference": {
-    "queries": 88,
-    "recallResolution": 0.011363636363636364,
-    "statement": "Recall is averaged over 88 queries, so one query flipping moves mean recall by at most 1/88 = 0.0114. Only a gap of 3 or more queries (>=3.4 pts) is interpretable. This artefact resolves against the MDN corpus only (43 228 atoms); q-079..q-088 name atoms absent from every earlier corpus, so v4 numbers are NOT comparable with v1/v2/v3 runs.",
-    "notes": "q-079..q-088 are MDN queries over the css/javascript/html/accessibility/http subset. q-084 and q-086 are sibling-disambiguation tests: String.prototype.at / TypedArray.prototype.at and the aspect-ratio media features are present in the corpus and are scored as misses. q-082 additionally competes with this project's own ARIA guidance, which the retriever may prefer. Relevance was decided by source document plus section heading after reading atom bodies, never by running a retriever."
+ "version": 4,
+ "frozenAt": "2026-08-12",
+ "corpusAtomCount": 50504,
+ "minimumMeaningfulDifference": {
+  "queries": 88,
+  "recallResolution": 0.011363636363636364,
+  "statement": "Recall is averaged over 88 queries, so one query flipping moves mean recall by at most 1/88 = 0.0114. Only a gap of 3 or more queries (>=3.4 pts) is interpretable. This artefact resolves against the MDN corpus only (43 228 atoms); q-079..q-088 name atoms absent from every earlier corpus, so v4 numbers are NOT comparable with v1/v2/v3 runs.",
+  "notes": "q-079..q-088 are MDN queries over the css/javascript/html/accessibility/http subset. q-084 and q-086 are sibling-disambiguation tests: String.prototype.at / TypedArray.prototype.at and the aspect-ratio media features are present in the corpus and are scored as misses. q-082 additionally competes with this project's own ARIA guidance, which the retriever may prefer. Relevance was decided by source document plus section heading after reading atom bodies, never by running a retriever."
+ },
+ "queries": [
+  {
+   "id": "q-001",
+   "axis": "exact-keyword",
+   "query": "backslides",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-4-oscillation-check-model-the",
+    "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
+    "runner-investigate-runner-investigate-root-cause-a-run-3-paste-able-investigation-prompt",
+    "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "The plural token 'backslides' appears verbatim in each: the oscillating_runs SELECT column, the cookbook row, the reading-the-signal bullet ('backslides>0'), and the oscillation check's 'check oscillating_runs.backslides before and after'."
   },
-  "queries": [
-    {
-      "id": "q-001",
-      "axis": "exact-keyword",
-      "query": "backslides",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-change-runner-change-design-rules-read-before-any-edit-4-oscillation-check-model-the",
-        "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
-        "runner-investigate-runner-investigate-root-cause-a-run-3-paste-able-investigation-prompt",
-        "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
-        "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
-      ],
-      "rationale": "The plural token 'backslides' appears verbatim in each: the oscillating_runs SELECT column, the cookbook row, the reading-the-signal bullet ('backslides>0'), and the oscillation check's 'check oscillating_runs.backslides before and after'."
-    },
-    {
-      "id": "q-002",
-      "axis": "exact-keyword",
-      "query": "gate-no-verdict",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-change-runner-change-design-rules-read-before-any-edit-2-gate-tool-contract-no-tool",
-        "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-a3cab9f3",
-        "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis"
-      ],
-      "rationale": "The hyphenated failure-class literal 'gate-no-verdict' is written out in the gate-tool contract, in the routing row 'Was this run a measurement at all?', and in the telemetry gate_no_verdict column description."
-    },
-    {
-      "id": "q-003",
-      "axis": "exact-keyword",
-      "query": "dirty-tree",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-operate-runner-operate-launch-a-run-canonical-invocation",
-        "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis",
-        "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
-      ],
-      "rationale": "'dirty-tree' appears as failureClass in the canonical invocation note, as a failure_class value in the columns table, and as the 'Dirty target tree' bullet."
-    },
-    {
-      "id": "q-004",
-      "axis": "exact-keyword",
-      "query": "forEachLocale",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-e2e-testing-e2e-testing-with-playwright",
-        "ts-e2e-testing-e2e-testing-with-playwright-flow-style-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-i18n-driven-text-rule-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-locale-parametrization-mandatory-for-any-spec",
-        "ts-e2e-testing-e2e-testing-with-playwright-test-independence"
-      ],
-      "rationale": "The camelCase fixture name forEachLocale occurs verbatim in the locale-parametrization rule, the flow-style code block, the i18n text rule ('t() provided by forEachLocale'), the independence rule, and the E2E overview's fixture-source list."
-    },
-    {
-      "id": "q-005",
-      "axis": "exact-keyword",
-      "query": "ariaTree",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
-        "ts-testing-common-testing-standards-snapshot-format-policy-adr-018"
-      ],
-      "rationale": "The L3 rule says assert `ariaTree(container)` against an inline snapshot; the snapshot-format policy has an `ariaTree()` output row and names src/test/serializers/aria-tree.ts."
-    },
-    {
-      "id": "q-006",
-      "axis": "exact-keyword",
-      "query": "guardRejections",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-8488f65d",
-        "runner-investigate-runner-investigate-root-cause-a-run-10-context-window-method-what-grew-1c98fae0",
-        "runner-investigate-runner-investigate-root-cause-a-run-9-drive-scope-vs-gate-scope-method",
-        "runner-investigate-runner-investigate-root-cause-a-run-triage-symptom-method"
-      ],
-      "rationale": "guardRejections is the policy-wall-vs-role-wall discriminator in method 9, and the '0 with many reads' signal repeated in the eviction atom, the triage table and the master routing table."
-    },
-    {
-      "id": "q-007",
-      "axis": "exact-keyword",
-      "query": "Xenova/distilgpt2",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-40ac4dd7",
-        "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-48d8eb61",
-        "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-b08d5b9b"
-      ],
-      "rationale": "The model id `Xenova/distilgpt2` is written verbatim in the ADR-024 risk bullet, the chosen-option bullet ('q4 quantized') and the Decision paragraph."
-    },
-    {
-      "id": "q-008",
-      "axis": "exact-keyword",
-      "query": "globIgnores",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-dependency-governance-dependency-governance-heavy-binary-wasm-asset-gate"
-      ],
-      "rationale": "`workbox.globIgnores` appears only in the heavy binary/WASM asset gate, as the named fix path for an oversized precached asset."
-    },
-    {
-      "id": "q-009",
-      "axis": "exact-keyword",
-      "query": "passWithNoTests",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-c3b7685b"
-      ],
-      "rationale": "The suite-routing false-green note is the only atom spelling `passWithNoTests: true` — the reason a bare path against the app config prints 'No test files found' and exits 0."
-    },
-    {
-      "id": "q-010",
-      "axis": "inflected-form",
-      "query": "backsliding runs",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
-        "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
-        "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
-      ],
-      "rationale": "The corpus writes 'backslide' and 'backslides'; 'backsliding' occurs nowhere. EXPECTED TO FAIL for every v1 adapter — no stemmer is approved, so the query token cannot match. That failure is the evidence for the pending stemming dependency round."
-    },
-    {
-      "id": "q-011",
-      "axis": "inflected-form",
-      "query": "evicting tool results the model still needs",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-8488f65d",
-        "runner-investigate-runner-investigate-root-cause-a-run-10-context-window-method-what-grew-1c98fae0",
-        "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
-      ],
-      "rationale": "The atoms say 'evicted' and 'Eviction'; 'evicting' does not occur. Partial rescue is possible from the other query words ('tool', 'results', 'model'), so this measures how much a lexical adapter loses on the discriminating token alone. EXPECTED TO FAIL in v1."
-    },
-    {
-      "id": "q-012",
-      "axis": "inflected-form",
-      "query": "reindexing frs from behavior",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-034-project-source-of-truth-adr-034-project-source-of-truth-authoring",
-        "adr-034-project-source-of-truth-adr-034-project-source-of-truth-drift-gate",
-        "adr-034-project-source-of-truth-adr-034-project-source-of-truth-structure"
-      ],
-      "rationale": "The atoms write 'reindexed', 'auto-reindexes' and 'reindex'; 'reindexing' occurs nowhere. EXPECTED TO FAIL in v1 for the discriminating token."
-    },
-    {
-      "id": "q-013",
-      "axis": "inflected-form",
-      "query": "stubbing llm endpoints in e2e",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory-l4-contract-lane-gated",
-        "ts-e2e-testing-e2e-testing-with-playwright-reload-offline-patterns"
-      ],
-      "rationale": "The corpus uses 'stub', 'stubs' and 'installLlmStubs'; 'stubbing' does not occur. EXPECTED TO FAIL on that token in v1."
-    },
-    {
-      "id": "q-014",
-      "axis": "inflected-form",
-      "query": "memoizing a component to fix a rendering bug",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-debugging-rules-debugging-rules-anti-patterns",
-        "ts-debugging-rules-debugging-rules-red-flags-checklist",
-        "ts-debugging-rules-debugging-rules-rule-5-question-memoization-fixes-react-browser-only"
-      ],
-      "rationale": "The atoms write 'memoization', 'useMemo' and 'memoized'; 'memoizing' occurs nowhere. EXPECTED TO FAIL on the discriminating token in v1."
-    },
-    {
-      "id": "q-015",
-      "axis": "inflected-form",
-      "query": "governing new npm packages",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
-        "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives"
-      ],
-      "rationale": "The corpus writes 'governance' and 'governed'; 'governing' does not occur. EXPECTED TO FAIL on that token in v1."
-    },
-    {
-      "id": "q-016",
-      "axis": "multi-word-phrase",
-      "query": "atomic multi-field updates",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-08075418",
-        "ts-testing-common-testing-standards-multi-action-ordering-tests"
-      ],
-      "rationale": "ADR-031 titles the section 'Atomic multi-field updates' (read-modify-write is not concurrency-safe); the multi-action ordering test rule cites 'Atomic Multi-Field Updates' as its trigger."
-    },
-    {
-      "id": "q-017",
-      "axis": "multi-word-phrase",
-      "query": "dead-handler walk",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six",
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3"
-      ],
-      "rationale": "The L3 rule names step 5 'Dead-handler walk' (click every button, assert state or mock calls changed); the layer table names L3's bug class as 'dead handlers'."
-    },
-    {
-      "id": "q-018",
-      "axis": "multi-word-phrase",
-      "query": "80-line container ceiling",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
-        "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-82c213b1",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748"
-      ],
-      "rationale": "The exact phrase '80-line container ceiling' appears in the ADR-030 enforcement table and the ADR-029 bespoke-checker list; ADR-031 states the same limit as 'A container over 80 lines fails lint:containers' and 'Max 80 lines'."
-    },
-    {
-      "id": "q-019",
-      "axis": "multi-word-phrase",
-      "query": "escalation ladder position",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-change-runner-change-design-rules-read-before-any-edit-1-ownership-boundaries-task-35862746",
-        "runner-map-runner-map-what-is-where-key-files",
-        "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis"
-      ],
-      "rationale": "final_rung is documented as 'escalation-ladder position'; the key-files map points at ladder.ts / the escalation-loop entry; the ownership table assigns the escalation ladder to the runner."
-    },
-    {
-      "id": "q-020",
-      "axis": "multi-word-phrase",
-      "query": "red green refactor cycle written before implementation",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-032-testing-strategy-adr-032-testing-strategy-decision",
-        "ts-testing-common-testing-standards-tdd-cycle-mandatory"
-      ],
-      "rationale": "The TDD atom is literally 'Red (failing test) -> Green (minimal code to pass) -> Refactor. Tests MUST be written BEFORE implementation'; ADR-032's Decision repeats 'a test is written first and must fail before implementation'."
-    },
-    {
-      "id": "q-021",
-      "axis": "multi-word-phrase",
-      "query": "cross-feature imports go through the barrel",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
-        "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules",
-        "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-cross-feature",
-        "ts-module-dependency-rules-ts-module-dependency-rules-import-rules"
-      ],
-      "rationale": "ADR-030 rules state 'Cross-feature goes through the barrel (@/features/{name})'; its enforcement row bans deep @/features/*/{stores,...} imports; the module-dependency cross-feature and import-rules atoms carry the same constraint per directory."
-    },
-    {
-      "id": "q-022",
-      "axis": "multi-word-phrase",
-      "query": "three tier locator policy for playwright specs",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-e2e-testing-e2e-testing-with-playwright-constraints-summary",
-        "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-data-testid",
-        "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-testid-coverage"
-      ],
-      "rationale": "The 3-tier policy atom defines find / find-and-assert-a11y / assert-content; the data-testid naming, testid coverage contract and constraints summary restate its rules."
-    },
-    {
-      "id": "q-023",
-      "axis": "multi-word-phrase",
-      "query": "fix the mechanism not the symptom",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-change-runner-change-design-rules-read-before-any-edit",
-        "runner-change-runner-change-design-rules-read-before-any-edit-3-roi-gate-answer-these",
-        "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-23b0841f"
-      ],
-      "rationale": "'fix the mechanism, not the symptom' is the core rule of the How-to-think atom, is repeated verbatim in the RUNNER-CHANGE preamble, and is the ROI gate's 'Root cause or symptom?' row."
-    },
-    {
-      "id": "q-024",
-      "axis": "rare-technical-token",
-      "query": "tsc -b",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-649e649b"
-      ],
-      "rationale": "The working-commands table is the only read atom spelling `tsc -b`, in the MUST NOT column: it covers src/electron only, never tools/**. A tokenizer that drops the bare flag '-b' collapses this query to 'tsc'."
-    },
-    {
-      "id": "q-025",
-      "axis": "rare-technical-token",
-      "query": "@/features",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
-        "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules"
-      ],
-      "rationale": "The alias path '@/features/{name}' and the restricted pattern '@/features/*/{stores,components,containers,hooks}/*' are written in these two atoms. The leading '@' and the '/' are the tokenizer hazard."
-    },
-    {
-      "id": "q-026",
-      "axis": "rare-technical-token",
-      "query": "useEffect",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-policy",
-        "react-composition-patterns-react-composition-patterns-useeffect-is-restricted-red-flag",
-        "ts-debugging-rules-debugging-rules-red-flags-checklist",
-        "ts-debugging-rules-debugging-rules-rule-4-dependency-array-audit-react-browser-only"
-      ],
-      "rationale": "The camelCase identifier useEffect names the ADR-031 four-tag policy, the composition-patterns restriction, the dependency-array audit rule, the red-flags checklist item, and the ADR-029 'useEffect policy' plugin row."
-    },
-    {
-      "id": "q-027",
-      "axis": "rare-technical-token",
-      "query": "lint:test-shape",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l2",
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
-        "ts-testing-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06-16"
-      ],
-      "rationale": "The colon-bearing npm script name lint:test-shape appears as the L2 shape gate, the L3 store-mock rejection, the S2/S3 stage gate, and an ADR-029 bespoke checker. A tokenizer that splits on ':' turns this into two common words."
-    },
-    {
-      "id": "q-028",
-      "axis": "rare-technical-token",
-      "query": ".agentic-runner/telemetry.sqlite",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
-        "runner-investigate-runner-investigate-root-cause-a-run-3-paste-able-investigation-prompt",
-        "runner-map-runner-map-what-is-where-artifacts-where-output-lands",
-        "runner-telemetry-runner-telemetry-investigation-optimization"
-      ],
-      "rationale": "The dotted, slashed sink path is written verbatim as the sqlite3 argument in both investigation atoms, as the Sink bullet in the telemetry overview, and as an artifacts-table row."
-    },
-    {
-      "id": "q-029",
-      "axis": "rare-technical-token",
-      "query": "data-testid",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-data-testid",
-        "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-testid-coverage",
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l2"
-      ],
-      "rationale": "The hyphenated attribute data-testid names the naming-format atom, the tier-(a) default locator, the coverage contract, and the L2 forbidden-assertion row ('class-strip preserves data-*')."
-    },
-    {
-      "id": "q-030",
-      "axis": "rare-technical-token",
-      "query": "onnxruntime-web",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-64a1d58c",
-        "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-b08d5b9b",
-        "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-d7e704c0"
-      ],
-      "rationale": "onnxruntime-web is named in the ADR-024 option list, the chosen-option bullet, and the research-tools note ('Hugging Face model card and onnxruntime-web documentation review')."
-    },
-    {
-      "id": "q-031",
-      "axis": "rare-technical-token",
-      "query": "RUNNER_EVAL_CAPTURE",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-map-runner-map-what-is-where-artifacts-where-output-lands",
-        "runner-operate-runner-operate-launch-a-run-0-run-with-debug-capture-on-mandatory",
-        "runner-operate-runner-operate-launch-a-run-canonical-invocation",
-        "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
-      ],
-      "rationale": "The SCREAMING_SNAKE env var is spelled out in the mandatory-knobs table, the env-var table, the artifacts row ('unless RUNNER_EVAL_CAPTURE=0'), and the /dp-test-llm note in the canonical invocation."
-    },
-    {
-      "id": "q-032",
-      "axis": "rare-technical-token",
-      "query": "@impacts",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-e2e-testing-e2e-testing-with-playwright-scoped-e2e-s2-phase-end",
-        "ts-testing-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06-16"
-      ],
-      "rationale": "The at-prefixed spec annotation @impacts appears only in the scoped-E2E rule and the S2 stage row. A tokenizer that strips '@' collapses it to the common word 'impacts'."
-    },
-    {
-      "id": "q-033",
-      "axis": "synonym",
-      "query": "loop thrashing back and forth between checks with no net progress",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-change-runner-change-design-rules-read-before-any-edit-4-oscillation-check-model-the",
-        "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-cdfa3035",
-        "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
-      ],
-      "rationale": "The corpus word is 'oscillation' / 'flip-flop' / 'backslide'; 'thrashing' is the user's synonym. EXPECTED TO FAIL in v1 — lexical BM25 cannot bridge vocabulary. This failure is the evidence for adding a dense/vector leg."
-    },
-    {
-      "id": "q-034",
-      "axis": "synonym",
-      "query": "snackbar notification library choice",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-current-ui"
-      ],
-      "rationale": "The corpus says 'toast notifications' and names sonner; 'snackbar' never occurs. EXPECTED TO FAIL in v1 (vocabulary gap)."
-    },
-    {
-      "id": "q-035",
-      "axis": "synonym",
-      "query": "combo box list renders blank inside a narrow side panel",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-82c213b1"
-      ],
-      "rationale": "The atom describes Radix SelectContent/PopoverContent/DropdownMenuContent rendering an 'empty portal' in containers narrower than 400px; 'combo box', 'blank' and 'side panel' are the user's synonyms for Select, empty and sidebar. EXPECTED TO FAIL in v1."
-    },
-    {
-      "id": "q-036",
-      "axis": "synonym",
-      "query": "screen reader tree assertions for a container test",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
-        "ts-testing-common-testing-standards-snapshot-format-policy-adr-018"
-      ],
-      "rationale": "The corpus says 'ARIA snapshot' / 'a11y-tree' / 'ariaTree'; 'screen reader tree' is the synonym. Only 'container' and 'test' overlap lexically. EXPECTED TO FAIL in v1."
-    },
-    {
-      "id": "q-037",
-      "axis": "synonym",
-      "query": "rules for pulling in a third-party library",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
-        "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives"
-      ],
-      "rationale": "The corpus says 'dependency' / 'package' / 'install'; 'library' and 'pulling in' are the synonyms. EXPECTED TO FAIL in v1."
-    },
-    {
-      "id": "q-038",
-      "axis": "synonym",
-      "query": "word valence dictionary for scoring the tone of generated text",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-165",
-        "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-83bc419d",
-        "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-bc3cec48"
-      ],
-      "rationale": "The corpus says 'lexicon' and 'sentiment'; 'dictionary' and 'tone' are the synonyms. 'valence' and 'scoring' do overlap, so this measures partial bridging. EXPECTED TO FAIL on the discriminating terms in v1."
-    },
-    {
-      "id": "q-039",
-      "axis": "domain-filtered",
-      "query": "which telemetry column names the reason a run failed",
-      "domain": "runner",
-      "relevantAtomIds": [
-        "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis",
-        "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
-        "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
-      ],
-      "rationale": "failure_class is documented as 'WHY it failed ... First column to check on a bad run', with the reading-the-signal bullets and the 'Why runs failed' cookbook query. All three carry x_domain: runner; a same-domain filter must not admit any standards or adr atom."
-    },
-    {
-      "id": "q-040",
-      "axis": "domain-filtered",
-      "query": "environment variable that turns off the functional style gate",
-      "domain": "runner",
-      "relevantAtomIds": [
-        "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
-      ],
-      "rationale": "RUNNER_FP_GATE ('0 disables', 'Functional-style gate (for/while/class in generated source)') is documented only in the env-var table, x_domain: runner."
-    },
-    {
-      "id": "q-041",
-      "axis": "domain-filtered",
-      "query": "where container smoke tests live and what they must assert",
-      "domain": "standards",
-      "relevantAtomIds": [
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six",
-        "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
-        "ts-testing-common-testing-standards-test-organization"
-      ],
-      "rationale": "The L3 rule gives the five required steps, the test-organization table gives the path features/{name}/containers/__tests__/*.smoke.test.tsx, and the layer table gives the coverage floor. All three are x_domain: standards; ADR-032's layer model covers the same ground but is x_domain: adr and MUST NOT be admitted under this filter."
-    },
-    {
-      "id": "q-042",
-      "axis": "domain-filtered",
-      "query": "feature flag registration fields and default value",
-      "domain": "standards",
-      "relevantAtomIds": [
-        "feature-flag-governance-feature-flag-governance",
-        "feature-flag-governance-feature-flag-governance-flag-lifecycle",
-        "feature-flag-governance-feature-flag-governance-flag-registration"
-      ],
-      "rationale": "The registration table gives key/default/i18n fields, the governance atom states flags MUST default to false, and the lifecycle table gives creation-to-graduation. All x_domain: standards."
-    },
-    {
-      "id": "q-043",
-      "axis": "domain-filtered",
-      "query": "which decision record chose the state manager and the container pattern",
-      "domain": "adr",
-      "relevantAtomIds": [
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-decision",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-fd3f62e2"
-      ],
-      "rationale": "ADR-031's Decision names 'Zustand + immer as the single state manager' and three component roles; the state-management and roles atoms carry the selector rules and the role table. All x_domain: adr — the standards-domain react-composition and UI atoms cover related material and MUST NOT be admitted here."
-    },
-    {
-      "id": "q-044",
-      "axis": "domain-filtered",
-      "query": "lint and formatting toolchain decision, no prettier no biome",
-      "domain": "adr",
-      "relevantAtomIds": [
-        "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-consequences",
-        "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
-        "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-decision"
-      ],
-      "rationale": "ADR-029's Decision states ESLint 9 flat config is the sole lint and format toolchain with 'no Prettier, no Biome'; the current-state table lists the plugin versions and the consequences discuss replacing the formatter. All x_domain: adr."
-    },
-    {
-      "id": "q-045",
-      "axis": "production-shaped-long-form",
-      "query": "I need to change the agentic code runner because a task keeps failing at the tsc stage. Before I touch anything I want to know where the change belongs: the task DAG builder, the speckit orchestrator, or the runner harness itself. The symptom is that the model does not seem to have enough information about the collaborator modules it must call, and separately the test gate reported a failure when the test tool itself crashed and produced no summary line at all. I want to understand the rule about which component owns which defect, the rule about not encoding tool-specific flags or output grammar into harness code, and what questions I am supposed to answer before editing at all - what this buys, by which measured metric, whether I am fixing the root cause or a symptom, whether the change is visible to the model, and whether something could be removed instead of added. I also want the statement of the overall goal the harness serves, so I can check that a change that improves a benchmark is not in fact violating the vision. Please give me the ownership boundaries, the gate-tool contract, the pre-edit checklist, the minimalism rule about new knobs and config fields, and the goal statement about quality, proven, minimal.",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-change-runner-change-design-rules-read-before-any-edit-1-ownership-boundaries-task-35862746",
-        "runner-change-runner-change-design-rules-read-before-any-edit-2-gate-tool-contract-no-tool",
-        "runner-change-runner-change-design-rules-read-before-any-edit-3-roi-gate-answer-these",
-        "runner-change-runner-change-design-rules-read-before-any-edit-5-minimalism",
-        "runner-guide-runner-guide-the-single-entry-point-goals-expectations-the-vision-to-preserve"
-      ],
-      "rationale": "Production shape: several hundred words assembled from a task target plus symptom detail. Each named sub-question maps to exactly one atom - ownership boundaries table, gate-tool contract (no tool burn-in, fail fast), ROI gate questions, minimalism (a new knob is a last resort), and the goals/vision statement."
-    },
-    {
-      "id": "q-046",
-      "axis": "production-shaped-long-form",
-      "query": "Task: refactor an oversized container in a React feature so it passes the project gates. The container currently sits at about 140 lines, keeps a boolean for whether a confirm dialog is open, keeps a submitting flag while an async save runs, holds a per-row editing flag for a list, and computes a filtered and sorted array inline inside the JSX return. It also has two useEffect calls: one that calls a store load action on mount and one that reacts to a prop change by calling setState. I need to know the hard line limit for a container and what to do when it is exceeded, which pieces of local useState are permitted and which must move into the store, how the store selectors must be written so a Zustand v5 subscription does not re-render forever, which useEffect cases survive and what tag comment each one requires on the line immediately above it, and the rule that forbids logic and anonymous functions inside the JSX template. Give me the role table for renderer, container and page as well, because part of the fix is pushing the JSX down into a renderer that receives everything through props.",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-policy",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-9a31465a",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-fd3f62e2",
-        "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-ui",
-        "react-composition-patterns-react-composition-patterns-1-component-architecture-1-3"
-      ],
-      "rationale": "Production shape: a task statement plus concrete code facts. Sub-questions map to the roles table (80-line ceiling, props-only renderers), the four-tag useEffect policy, the Zustand v5 selector-stability table, the local-UI-state allowlist (dialog flags, loading flags, editingId belong in the store), and the two logicless-template atoms."
-    },
-    {
-      "id": "q-047",
-      "axis": "production-shaped-long-form",
-      "query": "I am writing a new Playwright end-to-end spec for a settings flow that configures a provider, sends a message and verifies the reply persists across a page reload. I must not call a live model. I need the fixture that parametrizes the spec per locale and provides the translation function and the regex bag, the rule that forbids hardcoded user-facing text literals in assertions, the stub installer for the LLM endpoints and the requirement to re-install those route handlers after a reload, the locator policy that says which of testid, role-with-accessible-name and text assertion to use where, and the total spec budget for the repository, because if the suite is already at the ceiling I have to merge or remove a spec rather than add one. Also tell me the expected shape of a spec: how many steps, how the step names are written, and whether a spec may depend on another spec having run first.",
-      "domain": null,
-      "relevantAtomIds": [
-        "ts-e2e-testing-e2e-testing-with-playwright-budget-cap-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-flow-style-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-i18n-driven-text-rule-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-locale-parametrization-mandatory-for-any-spec",
-        "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
-        "ts-e2e-testing-e2e-testing-with-playwright-reload-offline-patterns",
-        "ts-e2e-testing-e2e-testing-with-playwright-test-independence"
-      ],
-      "rationale": "Production shape: a spec-authoring brief. Each clause maps to one E2E standards atom - forEachLocale, the t(key) rule, installLlmStubs, the reload re-install pattern, the 3-tier locator policy, the 40-spec cap, the 5-20 step flow style, and the independence rule."
-    },
-    {
-      "id": "q-048",
-      "axis": "production-shaped-long-form",
-      "query": "A phase needs a new npm package that ships a multi-megabyte WASM asset and bundled model weights. Before I install anything I have to follow the project protocol. I need the sequence: exhaust native and existing alternatives first, then the research step and who performs it, then the architecture decision record that must be written and where it goes, then the explicit user approval wording, then the install step and what else must be updated. On top of that, because this dependency ships heavy binary assets, there is an extra gate that must run at the end of the phase that installs it rather than being deferred to pre-merge: a build plus a precache size assertion, with a documented per-asset limit and a named fix in the vite config when an asset exceeds it. I also want the precedent for how such a dependency was admitted before, including the constraints that it must be loaded through a lazy dynamic import inside a flag-gated path only, that model weights go to cache storage on demand, and that a one-time download consent prompt is persisted.",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-40ac4dd7",
-        "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
-        "ts-dependency-governance-dependency-governance-heavy-binary-wasm-asset-gate",
-        "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives",
-        "ts-dependency-governance-dependency-governance-step-2-technical-research",
-        "ts-dependency-governance-dependency-governance-step-3-write-adr",
-        "ts-dependency-governance-dependency-governance-step-4-user-approval",
-        "ts-dependency-governance-dependency-governance-step-5-install-and-continue"
-      ],
-      "rationale": "Production shape: a governance brief. The five numbered steps map one-to-one to the five step atoms; the heavy-asset paragraph maps to the WASM gate atom; the precedent paragraph maps to the ADR-024 Decision (lazy import, cache storage, consent, flag gate) and the ADR-033 five-step Decision."
-    },
-    {
-      "id": "q-049",
-      "axis": "production-shaped-long-form",
-      "query": "A runner run reports status completed and the summary says the red-then-green transition was observed, but when I look at the final working tree the implementation is there and I cannot find any test that verifies it. The run also recorded a nonzero reset count. Separately, two earlier attempts in the same run failed at the same stage with byte-identical gate output while the model was clearly editing files, and there were no guard rejections at all. I want the diagnosis method for a reported success whose evidence no longer exists - the status fields that must be read together rather than status alone, how to count the feature identifiers across the per-attempt snapshots, and which pipeline shape makes greenObserved degrade into merely nothing failed. I also want the method that distinguishes a walled-off model from a weak one by intersecting the files the gate errored on with the files the drive actually wrote, and the method for work that regresses between attempts through the replan and reset layer. Finally give me the known false positives that have burned prior sessions on exactly these signals.",
-      "domain": null,
-      "relevantAtomIds": [
-        "runner-investigate-runner-investigate-root-cause-a-run-7-state-continuity-method-work-that",
-        "runner-investigate-runner-investigate-root-cause-a-run-8-status-provenance-method-a-success",
-        "runner-investigate-runner-investigate-root-cause-a-run-9-drive-scope-vs-gate-scope-method",
-        "runner-investigate-runner-investigate-root-cause-a-run-known-traps-false-positives-that-ea24b076",
-        "runner-investigate-runner-investigate-root-cause-a-run-triage-symptom-method"
-      ],
-      "rationale": "Production shape: a diagnosis brief with three interleaved symptoms. They map to method 8 (status provenance / false green), method 9 (drive-scope vs gate-scope), method 7 (state continuity / reset poisoning), the known-traps atom that covers greenObserved on gate-only pipelines and collapsed co-located test snapshots, and the triage symptom table that routes all three."
-    },
-    {
-      "id": "q-050",
-      "axis": "production-shaped-long-form",
-      "query": "I am planning where a new concept belongs in the codebase. It persists a new kind of record, it has its own page in the UI, and two existing features will both need its value-object type. I do not want to guess. I need the mechanical decision tree that is followed from the top - does it persist data, is it a new entity type, does it have its own significant surface, does it pass the removal test, does it wrap an external protocol, is it shared across two or more features, is it stateless types and constants, is it pure logic - together with the rule that the tree is run once per concern rather than once per feature, because this concept clearly decomposes into a persistence file, a feature module and a shared type. I also need the thresholds that say when a feature directory, a domain module, a service file, a service module and a utility file are each justified, the per-directory import table saying what each layer may and may not import, the statement that imports flow downward and that cross-feature access goes through the barrel, and the removal test itself.",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules",
-        "responsibility-rules-responsibility-rules-rules-rule-2-the-removal-test",
-        "ts-layer-boundaries-ts-layer-boundaries-module-creation-thresholds-generic-all-targets",
-        "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-direction",
-        "ts-module-dependency-rules-ts-module-dependency-rules-import-rules",
-        "ts-placement-decision-tree-ts-placement-decision-tree-decomposition-rule",
-        "ts-placement-decision-tree-ts-placement-decision-tree-how-to-use",
-        "ts-placement-decision-tree-ts-placement-decision-tree-the-tree-1c9c1b9a"
-      ],
-      "rationale": "Production shape: a placement brief spanning three source documents. The Q1..Q9 tree, the decomposition rule and the how-to-use steps come from the placement tree; the create-when thresholds from layer boundaries; the per-directory table and the downward-direction diagram from module dependency rules; the barrel rule from ADR-030; and the removal test from the responsibility rules."
-    },
-    {
-      "id": "q-051",
-      "axis": "multi-word-phrase",
-      "query": "reward function design for reinforcement learning on code quality",
-      "domain": null,
-      "relevantAtomIds": [
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-504f5def",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-530eadb6",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-62e7860b",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-705142d3",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-87179d9f",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-8a3c2b82",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-920e788d",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-98879f2e",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-9bfebe91",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-b0edd400",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-b0f09e91",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-ba078b03",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-c21ab580",
-        "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-dde37776"
-      ],
-      "rationale": "A korpuszban legalabb 6 paper foglalkozik az LLM-kodminoseg javitasaval. Csak az egyik hasznal RL/GRPO reward-designt; a tobbi (statikus analizis feedback, smell-cleaning, prompt-specificitas) rossz talalat."
-    },
-    {
-      "id": "q-052",
-      "axis": "multi-word-phrase",
-      "query": "translating C code to idiomatic Rust with verification",
-      "domain": null,
-      "relevantAtomIds": [
-        "2503-12511-sactor-llm-driven-correct-and-idiomatic-c-to-rust-translation-with-sta-sactor-c-5328a07e",
-        "2503-12511-sactor-llm-driven-correct-and-idiomatic-c-to-rust-translation-with-sta-sactor-c-6861df82",
-        "2503-12511-sactor-llm-driven-correct-and-idiomatic-c-to-rust-translation-with-sta-sactor-c-c99d85fc"
-      ],
-      "rationale": "Egyetlen paper foglalkozik C->Rust forditassal. A tobbi kodgeneralo paper temaja hasonlo (helyesseg, verifikacio), de a nyelvpar mas."
-    },
-    {
-      "id": "q-053",
-      "axis": "multi-word-phrase",
-      "query": "which programming language do code models default to when the prompt does not specify one",
-      "domain": null,
-      "relevantAtomIds": [
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-0eaad30b",
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-104e08d6",
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-25ccbd67",
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-4cfe474b",
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-625bada4",
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-6840fd33",
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-9449e2bd",
-        "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-f69faa07"
-      ],
-      "rationale": "A legnehezebb kevereses-parositas: a q-054 celpapirja SZINTEN a Python-elfogultsagrol szol. A ket paper temaja atfed, de a kerdes a nyelvvalasztasi hibara (language confusion) vonatkozik, nem a konyvtar-preferenciara."
-    },
-    {
-      "id": "q-054",
-      "axis": "multi-word-phrase",
-      "query": "which libraries do language models prefer when initialising a new project",
-      "domain": null,
-      "relevantAtomIds": [
-        "2503-17181-llms-love-python-a-study-of-llms-bias-for-programming-languages-and-li-llms-love-38ead668",
-        "2503-17181-llms-love-python-a-study-of-llms-bias-for-programming-languages-and-li-llms-love-5915f352"
-      ],
-      "rationale": "A q-053 parja. Mindketto Python-elfogultsagot vizsgal; itt a KONYVTAR-valasztas a kerdes, nem a nyelvi konfuzio."
-    },
-    {
-      "id": "q-055",
-      "axis": "multi-word-phrase",
-      "query": "effect of removing code smells from the training dataset on completion accuracy",
-      "domain": null,
-      "relevantAtomIds": [
-        "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-3c65cfc1",
-        "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-4fc7b8b4",
-        "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-6aad0b85",
-        "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-6f5c4e23",
-        "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-8dba5242",
-        "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-c766e1d8"
-      ],
-      "rationale": "Csapda: egy masik paper (2510.03029) a GENERALT kod smelljeit vizsgalja, nem a TANITOADAT tisztitasat. Nagyon hasonlo szokincs, ellentetes iranyu vizsgalat."
-    },
-    {
-      "id": "q-056",
-      "axis": "production-shaped-long-form",
-      "query": "Compare the HOC and the hook state-connection pattern across every evaluation criterion the documentation uses: debuggability, testability, logic colocation, side-effect profile, performance, LLM readability and Zustand compatibility. I need the verdict for each criterion, not just the overall recommendation.",
-      "domain": null,
-      "relevantAtomIds": [
-        "36-hoc-vs-hooks-hoc-vs-hooks-hoc-vs-hooks-first-principles-analysis-llm-readability",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-102cf86d",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-140ffdf9",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-314d6c94",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-51924967",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-a0a6b13a",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-14a0b4ee",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-299a44b8",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-4804bb84",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-66da40e8",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-c6f4fb08",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-1a10f460",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-8c72c9ee",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-c29c1144",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-ce6c9504",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-efe6746b",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-268d00cc",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-35d4e7e9",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-85886a47",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-acfc6a9b",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-e0947e9d",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-3f3d478b",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-61603cee",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-84882b11",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-a8496b70",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-e748ee2a",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-18ab6244",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-20bd6856",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-33f48a4d",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-50b4be72",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-b4c801a1",
-        "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-the-debate-56b13b9f"
-      ],
-      "rationale": "Osszegyujto feladat: a valasz szempontonkent kulon atomokban van, egyetlen atom sem elegendo. Ez a tipus a mert fo gyengeseg (recall 0.688 a valosaghu hosszu kerdeseken)."
-    },
-    {
-      "id": "q-057",
-      "axis": "production-shaped-long-form",
-      "query": "Collect every debugging rule and procedure the standards define: the numbered rules, the red-flag checklist, the anti-patterns and the escalation protocol.",
-      "domain": null,
-      "relevantAtomIds": [
-        "60-debugging-debugging",
-        "60-debugging-debugging-debugging-rules",
-        "60-debugging-debugging-debugging-rules-anti-patterns",
-        "60-debugging-debugging-debugging-rules-debugging-by-component-type",
-        "60-debugging-debugging-debugging-rules-red-flags-checklist",
-        "60-debugging-debugging-debugging-rules-rule-0-stateful-vs-stateless-identification-react",
-        "60-debugging-debugging-debugging-rules-rule-1-component-type-triage",
-        "60-debugging-debugging-debugging-rules-rule-2-data-flow-first",
-        "60-debugging-debugging-debugging-rules-rule-3-unit-test-hypotheses",
-        "60-debugging-debugging-debugging-rules-rule-4-dependency-array-audit-react-browser-only",
-        "60-debugging-debugging-debugging-rules-rule-5-question-memoization-fixes-react-browser-only",
-        "60-debugging-debugging-debugging-rules-rule-7-avoid-e2e-for-logic-bugs",
-        "60-debugging-debugging-debugging-rules-rule-8-user-challenge-protocol",
-        "60-debugging-debugging-debugging-rules-when-to-escalate",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-030d2454",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-526f6662",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-5ee52d52",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-648ac801",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-0b29fe1a",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-3402a34f",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-b12f2c9e",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-e70f6848",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-1bb85955",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-8fdc77ae",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-c77511df",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-e64fbb6c",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-1",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-2",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-3",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-s",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-1a6897c9",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-26409007",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-644c610a",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-94c204ad",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-aaed40ed",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-drop",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-for",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-v8",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-vs",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6cef788b",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-06c221b2",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-37f542b4",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-4611cfdf",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-caf590a5",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-8-the",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-83e59383",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-539e0a16",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-7700de35",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-98d4e08e",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-f84d81d1",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-defb4857",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-e0f8a4af",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-key-70768b87",
-        "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-key-a11f2cb8"
-      ],
-      "rationale": "Osszegyujto feladat egyetlen forrasdokumentum teljes tartalmara (56 atom). A recall itt akkor 1.0, ha a rendszer a dokumentum minden erdemi szakaszat visszaadja."
-    },
-    {
-      "id": "q-058",
-      "axis": "production-shaped-long-form",
-      "query": "What test layers does the strategy define, what does each layer cover, and what are the per-layer coverage thresholds?",
-      "domain": null,
-      "relevantAtomIds": [
-        "10-layered-model-common-testing-standards-boundary-mocking",
-        "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-53f4bffa",
-        "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-6da9e65b",
-        "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-bdfd3229",
-        "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-e4295227",
-        "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-ee55d5e8",
-        "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-ff1fad75",
-        "10-layered-model-common-testing-standards-multi-action-ordering-tests",
-        "10-layered-model-common-testing-standards-naming-structure",
-        "10-layered-model-common-testing-standards-snapshot-format-policy-adr-018",
-        "10-layered-model-common-testing-standards-tdd-cycle-mandatory",
-        "10-layered-model-common-testing-standards-test-code-rules",
-        "10-layered-model-common-testing-standards-test-data-builders",
-        "10-layered-model-common-testing-standards-test-organization",
-        "10-layered-model-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06",
-        "10-layered-model-common-testing-standards-tools-framework",
-        "10-layered-model-the-layered-test-model-operative-standard",
-        "15-adr-018-decision-adr-018-layered-test-strategy-considered-options-coverage-gate",
-        "15-adr-018-decision-adr-018-layered-test-strategy-context",
-        "15-adr-018-decision-adr-018-layered-test-strategy-decision-per-layer-rules-l1-pure-logic",
-        "15-adr-018-decision-adr-018-layered-test-strategy-decision-per-layer-rules-l3-container",
-        "30-rollout-part-3-the-rebalance-plan-2026-06-16-test-pyramid-rebalance-plan-adr-018-3-anti",
-        "30-rollout-part-3-the-rebalance-plan-2026-06-16-test-pyramid-rebalance-plan-adr-018-4",
-        "30-rollout-part-3-the-rebalance-plan-2026-06-16-test-pyramid-rebalance-plan-adr-018-5-test"
-      ],
-      "rationale": "Osszegyujto feladat TOBB testverdokumentumra. A jeloles a dokumentumok KOZTI HIVATKOZASOKBOL szarmazik (10-layered-model.md maga nevezi meg a 15-adr-018-decision.md, 20-e2e-policy.md es 30-rollout.md fajlokat), nem keresesi talalatbol. Az elso, egy-forrasra korlatozott jeloles recall@20=0.000-t adott, ami MERESI HIBA volt: a kereso a testverdokumentumokat hozta, amik legitim valaszok."
-    },
-    {
-      "id": "q-059",
-      "axis": "production-shaped-long-form",
-      "query": "LSP operations for code navigation: which operation answers which question, and when to use grep instead",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-016-lsp-code-navigation",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-0cc44aee",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-144acdab",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-547d6352",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-616fff66",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-a",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-b",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-c",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-cd6a5989",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f0cf0974",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f5d280bf",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-21958ee5",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-52496c9d",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-70988e8f",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-0d62bffa",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-8d3a8147",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-14de4a65",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-e1fde889",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-is",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-enable",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-03",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-9",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-to",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-3f7d284c",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-ae855826",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-bab032b8",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-c3be50a5",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-d5f6409b",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-1",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-2",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-3",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-4",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-risks",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-server",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-the"
-      ],
-      "rationale": "KONTROLL PAR a q-060-nal: azonos query, azonos relevans halmaz, az EGYETLEN kulonbseg a type-szuro. Ez a szuretlen ag."
-    },
-    {
-      "id": "q-060",
-      "axis": "production-shaped-long-form",
-      "query": "LSP operations for code navigation: which operation answers which question, and when to use grep instead",
-      "domain": null,
-      "relevantAtomIds": [
-        "adr-016-lsp-code-navigation",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-0cc44aee",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-144acdab",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-547d6352",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-616fff66",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-a",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-b",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-c",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-cd6a5989",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f0cf0974",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f5d280bf",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-21958ee5",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-52496c9d",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-70988e8f",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-0d62bffa",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-8d3a8147",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-14de4a65",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-e1fde889",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-is",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-enable",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-03",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-9",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-to",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-3f7d284c",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-ae855826",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-bab032b8",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-c3be50a5",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-d5f6409b",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-1",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-2",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-3",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-4",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-risks",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-server",
-        "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-the"
-      ],
-      "rationale": "A q-059 szurt parja (type=adr). A cel-dokumentum (adr-016-lsp-code-navigation.md) valoban adr tipusu, tehat a szuro NEM zarja ki. A ket ag kulonbsege tisztan a szures hatasa. FIGYELEM: a type konyvtarbol szarmazik (typeForSource), nem tartalombol — a 15-adr-018-decision.md peldaul standard tipust kapott, holott dontesi rekord. Egy type-szuro ezert kizarhatja a keresett dokumentumot."
-    },
-    {
-      "id": "q-061",
-      "axis": "multi-word-phrase",
-      "query": "SQLite UPSERT: ON CONFLICT DO UPDATE syntax, parsing ambiguity and limitations",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "25-upsert-1-syntax",
-        "25-upsert-2-description",
-        "25-upsert-2-description-2-1-examples",
-        "25-upsert-2-description-2-2-parsing-ambiguity",
-        "25-upsert-3-limitations",
-        "25-upsert-4-history"
-      ],
-      "rationale": "Whole SQLite UPSERT reference page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. PostgreSQL ON CONFLICT is near-identical prose and MySQL ON DUPLICATE KEY UPDATE solves the same problem with incompatible syntax; both are in the corpus as distractors."
-    },
-    {
-      "id": "q-062",
-      "axis": "rare-technical-token",
-      "query": "PostgreSQL DISTINCT ON: keep only the first row of each group",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "01-select-select-compatibility-nonstandard-clauses",
-        "01-select-select-parameters-distinct-clause"
-      ],
-      "rationale": "DISTINCT ON exists only in PostgreSQL. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. SQLite and MySQL SELECT pages document plain DISTINCT, which does NOT answer this query."
-    },
-    {
-      "id": "q-063",
-      "axis": "multi-word-phrase",
-      "query": "MySQL LOAD DATA FIELDS TERMINATED BY and LINES clauses for importing a CSV text file",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "15-load-data-15-2-9-load-data-statement",
-        "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-0be305d5",
-        "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-41f71751",
-        "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-a3720bec",
-        "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-c0a46721",
-        "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-f7eb141d"
-      ],
-      "rationale": "FIELDS/LINES handling sections of the MySQL LOAD DATA page plus the statement synopsis. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. PostgreSQL COPY is the equivalent capability with incompatible syntax."
-    },
-    {
-      "id": "q-064",
-      "axis": "multi-word-phrase",
-      "query": "PostgreSQL COPY CSV format: HEADER, QUOTE and FORCE_QUOTE options",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "15-copy-copy-examples",
-        "15-copy-copy-file-formats-csv-format",
-        "15-copy-copy-parameters",
-        "15-copy-copy-synopsis"
-      ],
-      "rationale": "COPY page sections that define the CSV format and its options. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. MySQL LOAD DATA is the sibling capability and must not satisfy this query."
-    },
-    {
-      "id": "q-065",
-      "axis": "multi-word-phrase",
-      "query": "Sass @mixin optional arguments, keyword arguments and taking arbitrary arguments",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "mixin",
-        "mixin-arguments",
-        "mixin-arguments-optional-arguments",
-        "mixin-arguments-optional-arguments-keyword-arguments",
-        "mixin-arguments-optional-arguments-taking-arbitrary-arguments",
-        "mixin-arguments-optional-arguments-taking-arbitrary-arguments-passing-arbitrary-arguments",
-        "mixin-arguments-optional-arguments-taking-arbitrary-arguments-taking-arbitrary-keyword"
-      ],
-      "rationale": "Argument-related sections of the Sass @mixin page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Less parametric mixins and Stylus mixins solve the same problem with incompatible syntax."
-    },
-    {
-      "id": "q-066",
-      "axis": "multi-word-phrase",
-      "query": "Less parametric mixins: pattern matching, named parameters and the @arguments variable",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "mixins-parametric",
-        "mixins-parametric-parameter-separators",
-        "mixins-parametric-parameter-separators-overloading-mixins",
-        "mixins-parametric-parameter-separators-overloading-mixins-named-parameters",
-        "mixins-parametric-parameter-separators-overloading-mixins-named-parameters-advanced-and-the",
-        "mixins-parametric-parameter-separators-overloading-mixins-named-parameters-the-arguments",
-        "mixins-parametric-parameter-separators-pattern-matching"
-      ],
-      "rationale": "Whole Less parametric-mixin page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Sass @mixin/@include is the sibling answer and is wrong for Less."
-    },
-    {
-      "id": "q-067",
-      "axis": "exact-keyword",
-      "query": "Less darken lighten saturate desaturate colour functions and their amount parameter",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "color-operations",
-        "color-operations-saturate",
-        "color-operations-saturate-desaturate",
-        "color-operations-saturate-desaturate-darken",
-        "color-operations-saturate-desaturate-lighten"
-      ],
-      "rationale": "The four named operations on the Less color-operations page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Stylus exposes darken/lighten/saturate/desaturate under the same names with a different call convention -- the sharpest mixing trap in the set."
-    },
-    {
-      "id": "q-068",
-      "axis": "exact-keyword",
-      "query": "Stylus built-in colour functions desaturate, lightness, hue and mix",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "bifs-built-in-functions-color-functions-desaturate-color-amount",
-        "bifs-built-in-functions-color-functions-hue-color-value",
-        "bifs-built-in-functions-color-functions-lightness-color-value",
-        "bifs-built-in-functions-color-functions-mix-color1-color2-amount"
-      ],
-      "rationale": "The four named Stylus built-in colour functions. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Less and Sass expose same-named colour helpers; only the Stylus BIF page answers this."
-    },
-    {
-      "id": "q-069",
-      "axis": "production-shaped-long-form",
-      "query": "zustand persist middleware: partialize, versioning with migrate, and a custom storage engine",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "reference-middlewares-persist-md-persist",
-        "reference-middlewares-persist-md-persist-reference-persist-statecreatorfn-persistoptions-c511ad7a",
-        "reference-middlewares-persist-md-persist-reference-persist-statecreatorfn-persistoptions-e57508df",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-and-hydrate-it-manually",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-partially",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-through-versioning-and",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-custom-storage-26b88f4c",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-custom-storage-7bd1ed72",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-custom-storage-90aa8343",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-nested-objects-0a60179d",
-        "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-nested-objects-d6286125"
-      ],
-      "rationale": "Usage sections of the zustand persist middleware reference. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. jotai atomWithStorage and valtio persist-with-localStorage answer the same user need with incompatible APIs."
-    },
-    {
-      "id": "q-070",
-      "axis": "multi-word-phrase",
-      "query": "valtio proxy and useSnapshot: how snapshots keep components from re-rendering",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "api-basic-proxy-proxy",
-        "api-basic-proxy-proxy-gotchas",
-        "api-basic-proxy-proxy-mutate-from-anywhere",
-        "api-basic-proxy-proxy-nested-proxies",
-        "api-basic-proxy-proxy-optimizations-noop-and-batching",
-        "api-basic-proxy-proxy-promises-in-proxies",
-        "api-basic-usesnapshot",
-        "api-basic-usesnapshot-usesnapshot",
-        "api-basic-usesnapshot-usesnapshot-codesandbox-demo",
-        "api-basic-usesnapshot-usesnapshot-dev-mode-debug-values",
-        "api-basic-usesnapshot-usesnapshot-gotchas",
-        "api-basic-usesnapshot-usesnapshot-usage-child-components-making-mutations",
-        "api-basic-usesnapshot-usesnapshot-usage-parent-child-components",
-        "api-basic-usesnapshot-usesnapshot-usage-read-from-snapshots-in-render-use-the-proxy-in",
-        "api-basic-usesnapshot-usesnapshot-usage-read-only-what-you-need"
-      ],
-      "rationale": "The valtio proxy and useSnapshot API pages. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. zustand useShallow and jotai selectAtom target the same re-render problem in a different library."
-    },
-    {
-      "id": "q-071",
-      "axis": "rare-technical-token",
-      "query": "jotai atomWithStorage: createJSONStorage, deleting an item and validating stored values",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "utilities-storage-atomwithstorage",
-        "utilities-storage-atomwithstorage-parameters",
-        "utilities-storage-atomwithstorage-parameters-createjsonstorage-util",
-        "utilities-storage-atomwithstorage-parameters-deleting-an-item-from-storage",
-        "utilities-storage-atomwithstorage-parameters-react-native-implementation",
-        "utilities-storage-atomwithstorage-parameters-react-native-implementation-notes-with-since-2",
-        "utilities-storage-atomwithstorage-parameters-server-side-rendering",
-        "utilities-storage-atomwithstorage-parameters-validating-stored-values"
-      ],
-      "rationale": "The jotai atomWithStorage utility page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. zustand persist middleware is the sibling answer and is wrong for jotai."
-    },
-    {
-      "id": "q-072",
-      "axis": "rare-technical-token",
-      "query": "zustand useShallow to avoid re-renders when a selector returns several values",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "00-readme-recipes-selecting-multiple-state-slices",
-        "learn-guides-beginner-typescript-md-creating-a-store-with-state-actions-using-the-store-in-9875521f",
-        "learn-guides-prevent-rerenders-with-use-shallow-md",
-        "learn-guides-prevent-rerenders-with-use-shallow-md-example",
-        "reference-hooks-use-shallow-md",
-        "reference-hooks-use-shallow-md-types-reference-useshallow-selectorfn-parameters",
-        "reference-hooks-use-shallow-md-types-reference-useshallow-selectorfn-returns",
-        "reference-hooks-use-shallow-md-types-signature",
-        "reference-hooks-use-shallow-md-types-troubleshooting-i-get-maximum-update-depth-exceeded",
-        "reference-hooks-use-shallow-md-types-usage-writing-a-memoized-selector-0a6bf3bc",
-        "reference-hooks-use-shallow-md-types-usage-writing-a-memoized-selector-3f5bedbe"
-      ],
-      "rationale": "The zustand useShallow reference, its guide page, and the two further zustand pages that answer the same question (README \"Selecting multiple state slices\", beginner-TypeScript \"Multiple Selectors\"). selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. NOTE: this project OWN rule docs also prescribe useShallow and are retrieved for this query; they are scored as misses by construction, so this query nDCG is a LOWER bound."
-    },
-    {
-      "id": "q-073",
-      "axis": "multi-word-phrase",
-      "query": "Mi a különbség az AAM alanyi adómentes és a TAM tárgyi adómentes okkód között?",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-0f427067",
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-3a859f9e"
-      ],
-      "rationale": "A NAV okkód-referencia 4.1 (AAM) és 4.2 (TAM) szakasza. Szakaszcím alapján választva, sosem retriever kimenetből. Magyar nyelvű lekérdezés angol szakaszcímekkel tagolt, magyar törzsű dokumentum fölött."
-    },
-    {
-      "id": "q-074",
-      "axis": "production-shaped-long-form",
-      "query": "Belföldi fordított adózás FAD: mely ügyletekre vonatkozik és hogyan kell jelölni a számlán?",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-6-layer-7b159646"
-      ],
-      "rationale": "A NAV okkód-referencia 6.1 FAD szakasza. Szakaszcím alapján választva. Az EUFADE és EUFAD37 szakaszok szándékosan kimaradnak: azok EU-s fordított adózásról szólnak, nem belföldiről."
-    },
-    {
-      "id": "q-075",
-      "axis": "synonym",
-      "query": "Mit jelent a PPE rövidítés a NAV áfa okkódoknál és mit jelent az Odoo tax-name akronimák között?",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "analizis-2026-08-05-2234-alapadatok-telepites-migracio-06-odoo-rendszerbeallitasok-es-06-ll-9f43196b",
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-6-layer-941ac1c6",
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-7-layer-02752e0a",
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-7-layer-abf88f8d"
-      ],
-      "rationale": "Szándékos homonima-lekérdezés: a PPE a 6.2 szakaszban pénzforgalmi elszámolás, a 7.1 szakaszban tárgyi eszköz. A NAV-referencia két szakasza plusz a 7. réteg fejléce, valamint az Odoo-oldali rendszerbeállítás dokumentum 1.4 \"Csapda\" szakasza, amely szó szerint ugyanezt a kettősséget rögzíti (`models/vat_tax_code.py:33-38`). Szakaszcím + törzsolvasás alapján választva."
-    },
-    {
-      "id": "q-076",
-      "axis": "multi-word-phrase",
-      "query": "2665A nyomtatvány oszlopelrendezése és a 105, 106, 108 sorok kitöltése",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "domain-references-2665-form-filling-reference-nav-2665-vat-declaration-llm-form-filling-2-2-ae5f0366",
-        "domain-references-2665-form-filling-reference-nav-2665-vat-declaration-llm-form-filling-2-2-b4c4db5f",
-        "domain-references-2665-form-filling-reference-nav-2665-vat-declaration-llm-form-filling-2-2-e5048038"
-      ],
-      "rationale": "A 2665 kitöltési referencia 2.1 (Page Structure), 2.2 (Column Layout) és a széles oszlopelrendezésű 01-05 szakasza. Szakaszcím alapján választva."
-    },
-    {
-      "id": "q-077",
-      "axis": "production-shaped-long-form",
-      "query": "Odoo pénzforgalmi áfa (cash basis tax): hogyan kell beállítani és mikor keletkezik az adófizetési kötelezettség?",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-1db254a5",
-        "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-40b91172",
-        "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-75a825ec",
-        "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-8a0e8461",
-        "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1",
-        "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1-1",
-        "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1-2",
-        "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1-3"
-      ],
-      "rationale": "A cash-basis áfa kutatási dokumentum 1. szakasza (Cash Basis Taxes -- Overview + Configuration). A korpuszban a teljes dokumentum KÉT, karakterre azonos példányban szerepel (plans-CABA-aranyositas és domain-references-hungarian-vat-analytics útvonalon); mindkét másolat atomjai relevánsnak vannak jelölve, különben a duplikátum találata igazságtalanul rontaná a precíziót."
-    },
-    {
-      "id": "q-078",
-      "axis": "multi-word-phrase",
-      "query": "Közösségen belüli adómentes értékesítés KBAET és az új közlekedési eszköz KBAUK okkód",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-2936d255",
-        "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-3518fdc4"
-      ],
-      "rationale": "A NAV okkód-referencia 4.3 (KBAET) és 4.4 (KBAUK) szakasza. Szakaszcím alapján választva."
-    },
-    {
-      "id": "q-079",
-      "axis": "exact-keyword",
-      "query": "prefers-color-scheme media feature: detecting whether the user asked for a dark or light theme",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-90ff2b39",
-        "index-embedded-elements",
-        "index-embedded-elements-examples-detecting-a-dark-or-light-theme",
-        "index-embedded-elements-examples-inherited-color-scheme-in-embedded-elements",
-        "index-embedded-elements-syntax"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-080",
-      "axis": "rare-technical-token",
-      "query": ":has() pseudo-class as a parent selector, its logical operations and specificity",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-aa092478",
-        "index-syntax-a54081e5",
-        "index-syntax-examples-logical-operations",
-        "index-syntax-examples-selecting-a-parent-element",
-        "index-syntax-performance-considerations",
-        "index-syntax-performance-considerations-avoid-broad-anchoring",
-        "index-syntax-performance-considerations-minimize-subtree-traversals"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-081",
-      "axis": "multi-word-phrase",
-      "query": "Cache-Control no-store versus no-cache: which directive prevents the response being stored at all",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-syntax-directives-request-directives-no-cache",
-        "index-syntax-directives-request-directives-no-store",
-        "index-syntax-directives-response-directives-no-cache",
-        "index-syntax-directives-response-directives-no-store",
-        "index-syntax-use-cases-preventing-storing",
-        "index-syntax-use-cases-up-to-date-contents-always",
-        "index-types-of-caches-don-t-cache-what-s-lost-by-no-store"
-      ],
-      "rationale": "Sections whose heading names no-store or no-cache, plus the two guide sections that contrast them. The other 18 directives on the same page are excluded — they do not answer which directive prevents storage."
-    },
-    {
-      "id": "q-082",
-      "axis": "production-shaped-long-form",
-      "query": "aria-activedescendant: keeping DOM focus on the container while moving the active option in a listbox",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-67c70ada",
-        "index-description-5e9a4e09",
-        "index-description-associated-interfaces-8448f39a",
-        "index-description-associated-roles-ce28c6fe",
-        "index-description-values-6ae673a6"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-083",
-      "axis": "multi-word-phrase",
-      "query": "optional chaining with function calls, short-circuiting, and combining it with nullish coalescing",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-929bb161",
-        "index-syntax-description-b1b60302",
-        "index-syntax-description-invalid-optional-chaining",
-        "index-syntax-description-optional-chaining-with-expressions",
-        "index-syntax-description-optional-chaining-with-function-calls",
-        "index-syntax-description-short-circuiting",
-        "index-syntax-examples-basic-example-a549d1b1",
-        "index-syntax-examples-combining-with-the-nullish-coalescing-operator",
-        "index-syntax-examples-dealing-with-optional-callbacks-or-event-handlers",
-        "index-syntax-examples-stacking-the-optional-chaining-operator"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-084",
-      "axis": "rare-technical-token",
-      "query": "Array.prototype.at() and negative indexing to read the last element of an array",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-ac309e58",
-        "index-syntax-description-54b29ecb",
-        "index-syntax-examples-calling-at-on-non-array-objects",
-        "index-syntax-examples-comparing-methods-cbfd73d1",
-        "index-syntax-examples-return-the-last-value-of-an-array",
-        "index-syntax-parameters-cc958811",
-        "index-syntax-parameters-return-value-8f3e0ccd"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-085",
-      "axis": "multi-word-phrase",
-      "query": "grid-template-areas: naming grid areas and placing items into the named template",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-c03dcbbb",
-        "index-syntax-c5ce02b4",
-        "index-syntax-values-540645e3"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-086",
-      "axis": "exact-keyword",
-      "query": "aspect-ratio CSS property: the auto keyword, ratio values and fallback to the natural ratio",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-92da7432",
-        "index-syntax-6eaa42a2",
-        "index-syntax-description-01b25371",
-        "index-syntax-examples-exploring-aspect-ratio-effects-with-fixed-width",
-        "index-syntax-examples-fallback-to-natural-aspect-ratio",
-        "index-syntax-values-a33c4e41"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-087",
-      "axis": "synonym",
-      "query": "showing a focus ring only for keyboard users instead of every click",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-1abe4775",
-        "index-syntax-accessibility-cognition",
-        "index-syntax-accessibility-low-vision",
-        "index-syntax-examples-comparing-focus-and-focus-visible",
-        "index-syntax-examples-providing-a-focus-fallback",
-        "index-syntax-focus-vs-focus-visible"
-      ],
-      "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
-    },
-    {
-      "id": "q-088",
-      "axis": "multi-word-phrase",
-      "query": "SameSite cookie attribute: Lax, Strict and None, and what None requires",
-      "domain": null,
-      "type": null,
-      "relevantAtomIds": [
-        "index-syntax-321f588d",
-        "index-syntax-attributes-37a2d483",
-        "index-syntax-attributes-678aef9a",
-        "index-syntax-examples-partitioned-cookie",
-        "index-what-cookies-are-used-for-security-controlling-third-party-cookies-with-samesite"
-      ],
-      "rationale": "Sections of the MDN cookie material whose heading names SameSite or third-party cookies. The surrounding cookie lifecycle material is excluded. The Set-Cookie attribute chunks are included on the strength of their bodies defining the three SameSite values, not their headings."
-    }
-  ]
+  {
+   "id": "q-002",
+   "axis": "exact-keyword",
+   "query": "gate-no-verdict",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-2-gate-tool-contract-no-tool",
+    "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-a3cab9f3",
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis"
+   ],
+   "rationale": "The hyphenated failure-class literal 'gate-no-verdict' is written out in the gate-tool contract, in the routing row 'Was this run a measurement at all?', and in the telemetry gate_no_verdict column description."
+  },
+  {
+   "id": "q-003",
+   "axis": "exact-keyword",
+   "query": "dirty-tree",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-operate-runner-operate-launch-a-run-canonical-invocation",
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "'dirty-tree' appears as failureClass in the canonical invocation note, as a failure_class value in the columns table, and as the 'Dirty target tree' bullet."
+  },
+  {
+   "id": "q-004",
+   "axis": "exact-keyword",
+   "query": "forEachLocale",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright",
+    "ts-e2e-testing-e2e-testing-with-playwright-flow-style-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-i18n-driven-text-rule-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locale-parametrization-mandatory-for-any-spec",
+    "ts-e2e-testing-e2e-testing-with-playwright-test-independence"
+   ],
+   "rationale": "The camelCase fixture name forEachLocale occurs verbatim in the locale-parametrization rule, the flow-style code block, the i18n text rule ('t() provided by forEachLocale'), the independence rule, and the E2E overview's fixture-source list."
+  },
+  {
+   "id": "q-005",
+   "axis": "exact-keyword",
+   "query": "ariaTree",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-snapshot-format-policy-adr-018"
+   ],
+   "rationale": "The L3 rule says assert `ariaTree(container)` against an inline snapshot; the snapshot-format policy has an `ariaTree()` output row and names src/test/serializers/aria-tree.ts."
+  },
+  {
+   "id": "q-006",
+   "axis": "exact-keyword",
+   "query": "guardRejections",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-8488f65d",
+    "runner-investigate-runner-investigate-root-cause-a-run-10-context-window-method-what-grew-1c98fae0",
+    "runner-investigate-runner-investigate-root-cause-a-run-9-drive-scope-vs-gate-scope-method",
+    "runner-investigate-runner-investigate-root-cause-a-run-triage-symptom-method"
+   ],
+   "rationale": "guardRejections is the policy-wall-vs-role-wall discriminator in method 9, and the '0 with many reads' signal repeated in the eviction atom, the triage table and the master routing table."
+  },
+  {
+   "id": "q-007",
+   "axis": "exact-keyword",
+   "query": "Xenova/distilgpt2",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-40ac4dd7",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-48d8eb61",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-b08d5b9b"
+   ],
+   "rationale": "The model id `Xenova/distilgpt2` is written verbatim in the ADR-024 risk bullet, the chosen-option bullet ('q4 quantized') and the Decision paragraph."
+  },
+  {
+   "id": "q-008",
+   "axis": "exact-keyword",
+   "query": "globIgnores",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-dependency-governance-dependency-governance-heavy-binary-wasm-asset-gate"
+   ],
+   "rationale": "`workbox.globIgnores` appears only in the heavy binary/WASM asset gate, as the named fix path for an oversized precached asset."
+  },
+  {
+   "id": "q-009",
+   "axis": "exact-keyword",
+   "query": "passWithNoTests",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-c3b7685b"
+   ],
+   "rationale": "The suite-routing false-green note is the only atom spelling `passWithNoTests: true` — the reason a bare path against the app config prints 'No test files found' and exits 0."
+  },
+  {
+   "id": "q-010",
+   "axis": "inflected-form",
+   "query": "backsliding runs",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
+    "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "The corpus writes 'backslide' and 'backslides'; 'backsliding' occurs nowhere. EXPECTED TO FAIL for every v1 adapter — no stemmer is approved, so the query token cannot match. That failure is the evidence for the pending stemming dependency round."
+  },
+  {
+   "id": "q-011",
+   "axis": "inflected-form",
+   "query": "evicting tool results the model still needs",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-8488f65d",
+    "runner-investigate-runner-investigate-root-cause-a-run-10-context-window-method-what-grew-1c98fae0",
+    "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
+   ],
+   "rationale": "The atoms say 'evicted' and 'Eviction'; 'evicting' does not occur. Partial rescue is possible from the other query words ('tool', 'results', 'model'), so this measures how much a lexical adapter loses on the discriminating token alone. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-012",
+   "axis": "inflected-form",
+   "query": "reindexing frs from behavior",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-034-project-source-of-truth-adr-034-project-source-of-truth-authoring",
+    "adr-034-project-source-of-truth-adr-034-project-source-of-truth-drift-gate",
+    "adr-034-project-source-of-truth-adr-034-project-source-of-truth-structure"
+   ],
+   "rationale": "The atoms write 'reindexed', 'auto-reindexes' and 'reindex'; 'reindexing' occurs nowhere. EXPECTED TO FAIL in v1 for the discriminating token."
+  },
+  {
+   "id": "q-013",
+   "axis": "inflected-form",
+   "query": "stubbing llm endpoints in e2e",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory-l4-contract-lane-gated",
+    "ts-e2e-testing-e2e-testing-with-playwright-reload-offline-patterns"
+   ],
+   "rationale": "The corpus uses 'stub', 'stubs' and 'installLlmStubs'; 'stubbing' does not occur. EXPECTED TO FAIL on that token in v1."
+  },
+  {
+   "id": "q-014",
+   "axis": "inflected-form",
+   "query": "memoizing a component to fix a rendering bug",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-debugging-rules-debugging-rules-anti-patterns",
+    "ts-debugging-rules-debugging-rules-red-flags-checklist",
+    "ts-debugging-rules-debugging-rules-rule-5-question-memoization-fixes-react-browser-only"
+   ],
+   "rationale": "The atoms write 'memoization', 'useMemo' and 'memoized'; 'memoizing' occurs nowhere. EXPECTED TO FAIL on the discriminating token in v1."
+  },
+  {
+   "id": "q-015",
+   "axis": "inflected-form",
+   "query": "governing new npm packages",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
+    "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives"
+   ],
+   "rationale": "The corpus writes 'governance' and 'governed'; 'governing' does not occur. EXPECTED TO FAIL on that token in v1."
+  },
+  {
+   "id": "q-016",
+   "axis": "multi-word-phrase",
+   "query": "atomic multi-field updates",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-08075418",
+    "ts-testing-common-testing-standards-multi-action-ordering-tests"
+   ],
+   "rationale": "ADR-031 titles the section 'Atomic multi-field updates' (read-modify-write is not concurrency-safe); the multi-action ordering test rule cites 'Atomic Multi-Field Updates' as its trigger."
+  },
+  {
+   "id": "q-017",
+   "axis": "multi-word-phrase",
+   "query": "dead-handler walk",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3"
+   ],
+   "rationale": "The L3 rule names step 5 'Dead-handler walk' (click every button, assert state or mock calls changed); the layer table names L3's bug class as 'dead handlers'."
+  },
+  {
+   "id": "q-018",
+   "axis": "multi-word-phrase",
+   "query": "80-line container ceiling",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-82c213b1",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748"
+   ],
+   "rationale": "The exact phrase '80-line container ceiling' appears in the ADR-030 enforcement table and the ADR-029 bespoke-checker list; ADR-031 states the same limit as 'A container over 80 lines fails lint:containers' and 'Max 80 lines'."
+  },
+  {
+   "id": "q-019",
+   "axis": "multi-word-phrase",
+   "query": "escalation ladder position",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-1-ownership-boundaries-task-35862746",
+    "runner-map-runner-map-what-is-where-key-files",
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis"
+   ],
+   "rationale": "final_rung is documented as 'escalation-ladder position'; the key-files map points at ladder.ts / the escalation-loop entry; the ownership table assigns the escalation ladder to the runner."
+  },
+  {
+   "id": "q-020",
+   "axis": "multi-word-phrase",
+   "query": "red green refactor cycle written before implementation",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-032-testing-strategy-adr-032-testing-strategy-decision",
+    "ts-testing-common-testing-standards-tdd-cycle-mandatory"
+   ],
+   "rationale": "The TDD atom is literally 'Red (failing test) -> Green (minimal code to pass) -> Refactor. Tests MUST be written BEFORE implementation'; ADR-032's Decision repeats 'a test is written first and must fail before implementation'."
+  },
+  {
+   "id": "q-021",
+   "axis": "multi-word-phrase",
+   "query": "cross-feature imports go through the barrel",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules",
+    "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-cross-feature",
+    "ts-module-dependency-rules-ts-module-dependency-rules-import-rules"
+   ],
+   "rationale": "ADR-030 rules state 'Cross-feature goes through the barrel (@/features/{name})'; its enforcement row bans deep @/features/*/{stores,...} imports; the module-dependency cross-feature and import-rules atoms carry the same constraint per directory."
+  },
+  {
+   "id": "q-022",
+   "axis": "multi-word-phrase",
+   "query": "three tier locator policy for playwright specs",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-constraints-summary",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-data-testid",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-testid-coverage"
+   ],
+   "rationale": "The 3-tier policy atom defines find / find-and-assert-a11y / assert-content; the data-testid naming, testid coverage contract and constraints summary restate its rules."
+  },
+  {
+   "id": "q-023",
+   "axis": "multi-word-phrase",
+   "query": "fix the mechanism not the symptom",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit",
+    "runner-change-runner-change-design-rules-read-before-any-edit-3-roi-gate-answer-these",
+    "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-23b0841f"
+   ],
+   "rationale": "'fix the mechanism, not the symptom' is the core rule of the How-to-think atom, is repeated verbatim in the RUNNER-CHANGE preamble, and is the ROI gate's 'Root cause or symptom?' row."
+  },
+  {
+   "id": "q-024",
+   "axis": "rare-technical-token",
+   "query": "tsc -b",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-649e649b"
+   ],
+   "rationale": "The working-commands table is the only read atom spelling `tsc -b`, in the MUST NOT column: it covers src/electron only, never tools/**. A tokenizer that drops the bare flag '-b' collapses this query to 'tsc'."
+  },
+  {
+   "id": "q-025",
+   "axis": "rare-technical-token",
+   "query": "@/features",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules"
+   ],
+   "rationale": "The alias path '@/features/{name}' and the restricted pattern '@/features/*/{stores,components,containers,hooks}/*' are written in these two atoms. The leading '@' and the '/' are the tokenizer hazard."
+  },
+  {
+   "id": "q-026",
+   "axis": "rare-technical-token",
+   "query": "useEffect",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-policy",
+    "react-composition-patterns-react-composition-patterns-useeffect-is-restricted-red-flag",
+    "ts-debugging-rules-debugging-rules-red-flags-checklist",
+    "ts-debugging-rules-debugging-rules-rule-4-dependency-array-audit-react-browser-only"
+   ],
+   "rationale": "The camelCase identifier useEffect names the ADR-031 four-tag policy, the composition-patterns restriction, the dependency-array audit rule, the red-flags checklist item, and the ADR-029 'useEffect policy' plugin row."
+  },
+  {
+   "id": "q-027",
+   "axis": "rare-technical-token",
+   "query": "lint:test-shape",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l2",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06-16"
+   ],
+   "rationale": "The colon-bearing npm script name lint:test-shape appears as the L2 shape gate, the L3 store-mock rejection, the S2/S3 stage gate, and an ADR-029 bespoke checker. A tokenizer that splits on ':' turns this into two common words."
+  },
+  {
+   "id": "q-028",
+   "axis": "rare-technical-token",
+   "query": ".agentic-runner/telemetry.sqlite",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
+    "runner-investigate-runner-investigate-root-cause-a-run-3-paste-able-investigation-prompt",
+    "runner-map-runner-map-what-is-where-artifacts-where-output-lands",
+    "runner-telemetry-runner-telemetry-investigation-optimization"
+   ],
+   "rationale": "The dotted, slashed sink path is written verbatim as the sqlite3 argument in both investigation atoms, as the Sink bullet in the telemetry overview, and as an artifacts-table row."
+  },
+  {
+   "id": "q-029",
+   "axis": "rare-technical-token",
+   "query": "data-testid",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-data-testid",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-testid-coverage",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l2"
+   ],
+   "rationale": "The hyphenated attribute data-testid names the naming-format atom, the tier-(a) default locator, the coverage contract, and the L2 forbidden-assertion row ('class-strip preserves data-*')."
+  },
+  {
+   "id": "q-030",
+   "axis": "rare-technical-token",
+   "query": "onnxruntime-web",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-64a1d58c",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-b08d5b9b",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-d7e704c0"
+   ],
+   "rationale": "onnxruntime-web is named in the ADR-024 option list, the chosen-option bullet, and the research-tools note ('Hugging Face model card and onnxruntime-web documentation review')."
+  },
+  {
+   "id": "q-031",
+   "axis": "rare-technical-token",
+   "query": "RUNNER_EVAL_CAPTURE",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-map-runner-map-what-is-where-artifacts-where-output-lands",
+    "runner-operate-runner-operate-launch-a-run-0-run-with-debug-capture-on-mandatory",
+    "runner-operate-runner-operate-launch-a-run-canonical-invocation",
+    "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
+   ],
+   "rationale": "The SCREAMING_SNAKE env var is spelled out in the mandatory-knobs table, the env-var table, the artifacts row ('unless RUNNER_EVAL_CAPTURE=0'), and the /dp-test-llm note in the canonical invocation."
+  },
+  {
+   "id": "q-032",
+   "axis": "rare-technical-token",
+   "query": "@impacts",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-scoped-e2e-s2-phase-end",
+    "ts-testing-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06-16"
+   ],
+   "rationale": "The at-prefixed spec annotation @impacts appears only in the scoped-E2E rule and the S2 stage row. A tokenizer that strips '@' collapses it to the common word 'impacts'."
+  },
+  {
+   "id": "q-033",
+   "axis": "synonym",
+   "query": "loop thrashing back and forth between checks with no net progress",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-4-oscillation-check-model-the",
+    "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-cdfa3035",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "The corpus word is 'oscillation' / 'flip-flop' / 'backslide'; 'thrashing' is the user's synonym. EXPECTED TO FAIL in v1 — lexical BM25 cannot bridge vocabulary. This failure is the evidence for adding a dense/vector leg."
+  },
+  {
+   "id": "q-034",
+   "axis": "synonym",
+   "query": "snackbar notification library choice",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-current-ui"
+   ],
+   "rationale": "The corpus says 'toast notifications' and names sonner; 'snackbar' never occurs. EXPECTED TO FAIL in v1 (vocabulary gap)."
+  },
+  {
+   "id": "q-035",
+   "axis": "synonym",
+   "query": "combo box list renders blank inside a narrow side panel",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-82c213b1"
+   ],
+   "rationale": "The atom describes Radix SelectContent/PopoverContent/DropdownMenuContent rendering an 'empty portal' in containers narrower than 400px; 'combo box', 'blank' and 'side panel' are the user's synonyms for Select, empty and sidebar. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-036",
+   "axis": "synonym",
+   "query": "screen reader tree assertions for a container test",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-snapshot-format-policy-adr-018"
+   ],
+   "rationale": "The corpus says 'ARIA snapshot' / 'a11y-tree' / 'ariaTree'; 'screen reader tree' is the synonym. Only 'container' and 'test' overlap lexically. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-037",
+   "axis": "synonym",
+   "query": "rules for pulling in a third-party library",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
+    "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives"
+   ],
+   "rationale": "The corpus says 'dependency' / 'package' / 'install'; 'library' and 'pulling in' are the synonyms. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-038",
+   "axis": "synonym",
+   "query": "word valence dictionary for scoring the tone of generated text",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-165",
+    "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-83bc419d",
+    "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-bc3cec48"
+   ],
+   "rationale": "The corpus says 'lexicon' and 'sentiment'; 'dictionary' and 'tone' are the synonyms. 'valence' and 'scoring' do overlap, so this measures partial bridging. EXPECTED TO FAIL on the discriminating terms in v1."
+  },
+  {
+   "id": "q-039",
+   "axis": "domain-filtered",
+   "query": "which telemetry column names the reason a run failed",
+   "domain": "runner",
+   "relevantAtomIds": [
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis",
+    "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "failure_class is documented as 'WHY it failed ... First column to check on a bad run', with the reading-the-signal bullets and the 'Why runs failed' cookbook query. All three carry x_domain: runner; a same-domain filter must not admit any standards or adr atom."
+  },
+  {
+   "id": "q-040",
+   "axis": "domain-filtered",
+   "query": "environment variable that turns off the functional style gate",
+   "domain": "runner",
+   "relevantAtomIds": [
+    "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
+   ],
+   "rationale": "RUNNER_FP_GATE ('0 disables', 'Functional-style gate (for/while/class in generated source)') is documented only in the env-var table, x_domain: runner."
+  },
+  {
+   "id": "q-041",
+   "axis": "domain-filtered",
+   "query": "where container smoke tests live and what they must assert",
+   "domain": "standards",
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-test-organization"
+   ],
+   "rationale": "The L3 rule gives the five required steps, the test-organization table gives the path features/{name}/containers/__tests__/*.smoke.test.tsx, and the layer table gives the coverage floor. All three are x_domain: standards; ADR-032's layer model covers the same ground but is x_domain: adr and MUST NOT be admitted under this filter."
+  },
+  {
+   "id": "q-042",
+   "axis": "domain-filtered",
+   "query": "feature flag registration fields and default value",
+   "domain": "standards",
+   "relevantAtomIds": [
+    "feature-flag-governance-feature-flag-governance",
+    "feature-flag-governance-feature-flag-governance-flag-lifecycle",
+    "feature-flag-governance-feature-flag-governance-flag-registration"
+   ],
+   "rationale": "The registration table gives key/default/i18n fields, the governance atom states flags MUST default to false, and the lifecycle table gives creation-to-graduation. All x_domain: standards."
+  },
+  {
+   "id": "q-043",
+   "axis": "domain-filtered",
+   "query": "which decision record chose the state manager and the container pattern",
+   "domain": "adr",
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-decision",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-fd3f62e2"
+   ],
+   "rationale": "ADR-031's Decision names 'Zustand + immer as the single state manager' and three component roles; the state-management and roles atoms carry the selector rules and the role table. All x_domain: adr — the standards-domain react-composition and UI atoms cover related material and MUST NOT be admitted here."
+  },
+  {
+   "id": "q-044",
+   "axis": "domain-filtered",
+   "query": "lint and formatting toolchain decision, no prettier no biome",
+   "domain": "adr",
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-consequences",
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-decision"
+   ],
+   "rationale": "ADR-029's Decision states ESLint 9 flat config is the sole lint and format toolchain with 'no Prettier, no Biome'; the current-state table lists the plugin versions and the consequences discuss replacing the formatter. All x_domain: adr."
+  },
+  {
+   "id": "q-045",
+   "axis": "production-shaped-long-form",
+   "query": "I need to change the agentic code runner because a task keeps failing at the tsc stage. Before I touch anything I want to know where the change belongs: the task DAG builder, the speckit orchestrator, or the runner harness itself. The symptom is that the model does not seem to have enough information about the collaborator modules it must call, and separately the test gate reported a failure when the test tool itself crashed and produced no summary line at all. I want to understand the rule about which component owns which defect, the rule about not encoding tool-specific flags or output grammar into harness code, and what questions I am supposed to answer before editing at all - what this buys, by which measured metric, whether I am fixing the root cause or a symptom, whether the change is visible to the model, and whether something could be removed instead of added. I also want the statement of the overall goal the harness serves, so I can check that a change that improves a benchmark is not in fact violating the vision. Please give me the ownership boundaries, the gate-tool contract, the pre-edit checklist, the minimalism rule about new knobs and config fields, and the goal statement about quality, proven, minimal.",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-1-ownership-boundaries-task-35862746",
+    "runner-change-runner-change-design-rules-read-before-any-edit-2-gate-tool-contract-no-tool",
+    "runner-change-runner-change-design-rules-read-before-any-edit-3-roi-gate-answer-these",
+    "runner-change-runner-change-design-rules-read-before-any-edit-5-minimalism",
+    "runner-guide-runner-guide-the-single-entry-point-goals-expectations-the-vision-to-preserve"
+   ],
+   "rationale": "Production shape: several hundred words assembled from a task target plus symptom detail. Each named sub-question maps to exactly one atom - ownership boundaries table, gate-tool contract (no tool burn-in, fail fast), ROI gate questions, minimalism (a new knob is a last resort), and the goals/vision statement."
+  },
+  {
+   "id": "q-046",
+   "axis": "production-shaped-long-form",
+   "query": "Task: refactor an oversized container in a React feature so it passes the project gates. The container currently sits at about 140 lines, keeps a boolean for whether a confirm dialog is open, keeps a submitting flag while an async save runs, holds a per-row editing flag for a list, and computes a filtered and sorted array inline inside the JSX return. It also has two useEffect calls: one that calls a store load action on mount and one that reacts to a prop change by calling setState. I need to know the hard line limit for a container and what to do when it is exceeded, which pieces of local useState are permitted and which must move into the store, how the store selectors must be written so a Zustand v5 subscription does not re-render forever, which useEffect cases survive and what tag comment each one requires on the line immediately above it, and the rule that forbids logic and anonymous functions inside the JSX template. Give me the role table for renderer, container and page as well, because part of the fix is pushing the JSX down into a renderer that receives everything through props.",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-policy",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-9a31465a",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-fd3f62e2",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-ui",
+    "react-composition-patterns-react-composition-patterns-1-component-architecture-1-3"
+   ],
+   "rationale": "Production shape: a task statement plus concrete code facts. Sub-questions map to the roles table (80-line ceiling, props-only renderers), the four-tag useEffect policy, the Zustand v5 selector-stability table, the local-UI-state allowlist (dialog flags, loading flags, editingId belong in the store), and the two logicless-template atoms."
+  },
+  {
+   "id": "q-047",
+   "axis": "production-shaped-long-form",
+   "query": "I am writing a new Playwright end-to-end spec for a settings flow that configures a provider, sends a message and verifies the reply persists across a page reload. I must not call a live model. I need the fixture that parametrizes the spec per locale and provides the translation function and the regex bag, the rule that forbids hardcoded user-facing text literals in assertions, the stub installer for the LLM endpoints and the requirement to re-install those route handlers after a reload, the locator policy that says which of testid, role-with-accessible-name and text assertion to use where, and the total spec budget for the repository, because if the suite is already at the ceiling I have to merge or remove a spec rather than add one. Also tell me the expected shape of a spec: how many steps, how the step names are written, and whether a spec may depend on another spec having run first.",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-budget-cap-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-flow-style-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-i18n-driven-text-rule-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locale-parametrization-mandatory-for-any-spec",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-reload-offline-patterns",
+    "ts-e2e-testing-e2e-testing-with-playwright-test-independence"
+   ],
+   "rationale": "Production shape: a spec-authoring brief. Each clause maps to one E2E standards atom - forEachLocale, the t(key) rule, installLlmStubs, the reload re-install pattern, the 3-tier locator policy, the 40-spec cap, the 5-20 step flow style, and the independence rule."
+  },
+  {
+   "id": "q-048",
+   "axis": "production-shaped-long-form",
+   "query": "A phase needs a new npm package that ships a multi-megabyte WASM asset and bundled model weights. Before I install anything I have to follow the project protocol. I need the sequence: exhaust native and existing alternatives first, then the research step and who performs it, then the architecture decision record that must be written and where it goes, then the explicit user approval wording, then the install step and what else must be updated. On top of that, because this dependency ships heavy binary assets, there is an extra gate that must run at the end of the phase that installs it rather than being deferred to pre-merge: a build plus a precache size assertion, with a documented per-asset limit and a named fix in the vite config when an asset exceeds it. I also want the precedent for how such a dependency was admitted before, including the constraints that it must be loaded through a lazy dynamic import inside a flag-gated path only, that model weights go to cache storage on demand, and that a one-time download consent prompt is persisted.",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-40ac4dd7",
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
+    "ts-dependency-governance-dependency-governance-heavy-binary-wasm-asset-gate",
+    "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives",
+    "ts-dependency-governance-dependency-governance-step-2-technical-research",
+    "ts-dependency-governance-dependency-governance-step-3-write-adr",
+    "ts-dependency-governance-dependency-governance-step-4-user-approval",
+    "ts-dependency-governance-dependency-governance-step-5-install-and-continue"
+   ],
+   "rationale": "Production shape: a governance brief. The five numbered steps map one-to-one to the five step atoms; the heavy-asset paragraph maps to the WASM gate atom; the precedent paragraph maps to the ADR-024 Decision (lazy import, cache storage, consent, flag gate) and the ADR-033 five-step Decision."
+  },
+  {
+   "id": "q-049",
+   "axis": "production-shaped-long-form",
+   "query": "A runner run reports status completed and the summary says the red-then-green transition was observed, but when I look at the final working tree the implementation is there and I cannot find any test that verifies it. The run also recorded a nonzero reset count. Separately, two earlier attempts in the same run failed at the same stage with byte-identical gate output while the model was clearly editing files, and there were no guard rejections at all. I want the diagnosis method for a reported success whose evidence no longer exists - the status fields that must be read together rather than status alone, how to count the feature identifiers across the per-attempt snapshots, and which pipeline shape makes greenObserved degrade into merely nothing failed. I also want the method that distinguishes a walled-off model from a weak one by intersecting the files the gate errored on with the files the drive actually wrote, and the method for work that regresses between attempts through the replan and reset layer. Finally give me the known false positives that have burned prior sessions on exactly these signals.",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-investigate-runner-investigate-root-cause-a-run-7-state-continuity-method-work-that",
+    "runner-investigate-runner-investigate-root-cause-a-run-8-status-provenance-method-a-success",
+    "runner-investigate-runner-investigate-root-cause-a-run-9-drive-scope-vs-gate-scope-method",
+    "runner-investigate-runner-investigate-root-cause-a-run-known-traps-false-positives-that-ea24b076",
+    "runner-investigate-runner-investigate-root-cause-a-run-triage-symptom-method"
+   ],
+   "rationale": "Production shape: a diagnosis brief with three interleaved symptoms. They map to method 8 (status provenance / false green), method 9 (drive-scope vs gate-scope), method 7 (state continuity / reset poisoning), the known-traps atom that covers greenObserved on gate-only pipelines and collapsed co-located test snapshots, and the triage symptom table that routes all three."
+  },
+  {
+   "id": "q-050",
+   "axis": "production-shaped-long-form",
+   "query": "I am planning where a new concept belongs in the codebase. It persists a new kind of record, it has its own page in the UI, and two existing features will both need its value-object type. I do not want to guess. I need the mechanical decision tree that is followed from the top - does it persist data, is it a new entity type, does it have its own significant surface, does it pass the removal test, does it wrap an external protocol, is it shared across two or more features, is it stateless types and constants, is it pure logic - together with the rule that the tree is run once per concern rather than once per feature, because this concept clearly decomposes into a persistence file, a feature module and a shared type. I also need the thresholds that say when a feature directory, a domain module, a service file, a service module and a utility file are each justified, the per-directory import table saying what each layer may and may not import, the statement that imports flow downward and that cross-feature access goes through the barrel, and the removal test itself.",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules",
+    "responsibility-rules-responsibility-rules-rules-rule-2-the-removal-test",
+    "ts-layer-boundaries-ts-layer-boundaries-module-creation-thresholds-generic-all-targets",
+    "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-direction",
+    "ts-module-dependency-rules-ts-module-dependency-rules-import-rules",
+    "ts-placement-decision-tree-ts-placement-decision-tree-decomposition-rule",
+    "ts-placement-decision-tree-ts-placement-decision-tree-how-to-use",
+    "ts-placement-decision-tree-ts-placement-decision-tree-the-tree-1c9c1b9a"
+   ],
+   "rationale": "Production shape: a placement brief spanning three source documents. The Q1..Q9 tree, the decomposition rule and the how-to-use steps come from the placement tree; the create-when thresholds from layer boundaries; the per-directory table and the downward-direction diagram from module dependency rules; the barrel rule from ADR-030; and the removal test from the responsibility rules."
+  },
+  {
+   "id": "q-051",
+   "axis": "multi-word-phrase",
+   "query": "reward function design for reinforcement learning on code quality",
+   "domain": null,
+   "relevantAtomIds": [
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-504f5def",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-530eadb6",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-62e7860b",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-705142d3",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-87179d9f",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-8a3c2b82",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-920e788d",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-98879f2e",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-9bfebe91",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-b0edd400",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-b0f09e91",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-ba078b03",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-c21ab580",
+    "2506-02211-improving-llm-generated-code-quality-with-grpo-improving-llm-generated-code-with-dde37776"
+   ],
+   "rationale": "A korpuszban legalabb 6 paper foglalkozik az LLM-kodminoseg javitasaval. Csak az egyik hasznal RL/GRPO reward-designt; a tobbi (statikus analizis feedback, smell-cleaning, prompt-specificitas) rossz talalat."
+  },
+  {
+   "id": "q-052",
+   "axis": "multi-word-phrase",
+   "query": "translating C code to idiomatic Rust with verification",
+   "domain": null,
+   "relevantAtomIds": [
+    "2503-12511-sactor-llm-driven-correct-and-idiomatic-c-to-rust-translation-with-sta-sactor-c-5328a07e",
+    "2503-12511-sactor-llm-driven-correct-and-idiomatic-c-to-rust-translation-with-sta-sactor-c-6861df82",
+    "2503-12511-sactor-llm-driven-correct-and-idiomatic-c-to-rust-translation-with-sta-sactor-c-c99d85fc"
+   ],
+   "rationale": "Egyetlen paper foglalkozik C->Rust forditassal. A tobbi kodgeneralo paper temaja hasonlo (helyesseg, verifikacio), de a nyelvpar mas."
+  },
+  {
+   "id": "q-053",
+   "axis": "multi-word-phrase",
+   "query": "which programming language do code models default to when the prompt does not specify one",
+   "domain": null,
+   "relevantAtomIds": [
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-0eaad30b",
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-104e08d6",
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-25ccbd67",
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-4cfe474b",
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-625bada4",
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-6840fd33",
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-9449e2bd",
+    "2503-13620-programming-language-confusion-when-code-llms-can-t-keep-their-languag-language-f69faa07"
+   ],
+   "rationale": "A legnehezebb kevereses-parositas: a q-054 celpapirja SZINTEN a Python-elfogultsagrol szol. A ket paper temaja atfed, de a kerdes a nyelvvalasztasi hibara (language confusion) vonatkozik, nem a konyvtar-preferenciara."
+  },
+  {
+   "id": "q-054",
+   "axis": "multi-word-phrase",
+   "query": "which libraries do language models prefer when initialising a new project",
+   "domain": null,
+   "relevantAtomIds": [
+    "2503-17181-llms-love-python-a-study-of-llms-bias-for-programming-languages-and-li-llms-love-38ead668",
+    "2503-17181-llms-love-python-a-study-of-llms-bias-for-programming-languages-and-li-llms-love-5915f352"
+   ],
+   "rationale": "A q-053 parja. Mindketto Python-elfogultsagot vizsgal; itt a KONYVTAR-valasztas a kerdes, nem a nyelvi konfuzio."
+  },
+  {
+   "id": "q-055",
+   "axis": "multi-word-phrase",
+   "query": "effect of removing code smells from the training dataset on completion accuracy",
+   "domain": null,
+   "relevantAtomIds": [
+    "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-3c65cfc1",
+    "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-4fc7b8b4",
+    "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-6aad0b85",
+    "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-6f5c4e23",
+    "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-8dba5242",
+    "2508-11958-clean-code-better-models-enhancing-llm-performance-with-smell-cleaned-clean-code-c766e1d8"
+   ],
+   "rationale": "Csapda: egy masik paper (2510.03029) a GENERALT kod smelljeit vizsgalja, nem a TANITOADAT tisztitasat. Nagyon hasonlo szokincs, ellentetes iranyu vizsgalat."
+  },
+  {
+   "id": "q-056",
+   "axis": "production-shaped-long-form",
+   "query": "Compare the HOC and the hook state-connection pattern across every evaluation criterion the documentation uses: debuggability, testability, logic colocation, side-effect profile, performance, LLM readability and Zustand compatibility. I need the verdict for each criterion, not just the overall recommendation.",
+   "domain": null,
+   "relevantAtomIds": [
+    "36-hoc-vs-hooks-hoc-vs-hooks-hoc-vs-hooks-first-principles-analysis-llm-readability",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-102cf86d",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-140ffdf9",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-314d6c94",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-51924967",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-1-a0a6b13a",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-14a0b4ee",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-299a44b8",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-4804bb84",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-66da40e8",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-2-c6f4fb08",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-1a10f460",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-8c72c9ee",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-c29c1144",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-ce6c9504",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-3-efe6746b",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-268d00cc",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-35d4e7e9",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-85886a47",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-acfc6a9b",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-4-e0947e9d",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-3f3d478b",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-61603cee",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-84882b11",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-a8496b70",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-5-e748ee2a",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-18ab6244",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-20bd6856",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-33f48a4d",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-50b4be72",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-pattern-6-b4c801a1",
+    "36-hoc-vs-hooks-hoc-vs-hooks-react-state-connection-patterns-technical-deep-dive-the-debate-56b13b9f"
+   ],
+   "rationale": "Osszegyujto feladat: a valasz szempontonkent kulon atomokban van, egyetlen atom sem elegendo. Ez a tipus a mert fo gyengeseg (recall 0.688 a valosaghu hosszu kerdeseken)."
+  },
+  {
+   "id": "q-057",
+   "axis": "production-shaped-long-form",
+   "query": "Collect every debugging rule and procedure the standards define: the numbered rules, the red-flag checklist, the anti-patterns and the escalation protocol.",
+   "domain": null,
+   "relevantAtomIds": [
+    "60-debugging-debugging",
+    "60-debugging-debugging-debugging-rules",
+    "60-debugging-debugging-debugging-rules-anti-patterns",
+    "60-debugging-debugging-debugging-rules-debugging-by-component-type",
+    "60-debugging-debugging-debugging-rules-red-flags-checklist",
+    "60-debugging-debugging-debugging-rules-rule-0-stateful-vs-stateless-identification-react",
+    "60-debugging-debugging-debugging-rules-rule-1-component-type-triage",
+    "60-debugging-debugging-debugging-rules-rule-2-data-flow-first",
+    "60-debugging-debugging-debugging-rules-rule-3-unit-test-hypotheses",
+    "60-debugging-debugging-debugging-rules-rule-4-dependency-array-audit-react-browser-only",
+    "60-debugging-debugging-debugging-rules-rule-5-question-memoization-fixes-react-browser-only",
+    "60-debugging-debugging-debugging-rules-rule-7-avoid-e2e-for-logic-bugs",
+    "60-debugging-debugging-debugging-rules-rule-8-user-challenge-protocol",
+    "60-debugging-debugging-debugging-rules-when-to-escalate",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-030d2454",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-526f6662",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-5ee52d52",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-1-how-648ac801",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-0b29fe1a",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-3402a34f",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-b12f2c9e",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-2-the-e70f6848",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-1bb85955",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-8fdc77ae",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-c77511df",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-3-maps-e64fbb6c",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-1",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-2",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-3",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-4-vs-s",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-1a6897c9",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-26409007",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-644c610a",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-94c204ad",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-5-what-aaed40ed",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-drop",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-for",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-v8",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6-vs",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-6cef788b",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-06c221b2",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-37f542b4",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-4611cfdf",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-7-llm-caf590a5",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-8-the",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-83e59383",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-539e0a16",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-7700de35",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-98d4e08e",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-9-for-f84d81d1",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-defb4857",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-e0f8a4af",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-key-70768b87",
+    "60-debugging-debugging-deep-dive-stack-frame-filtering-removing-noise-without-losing-key-a11f2cb8"
+   ],
+   "rationale": "Osszegyujto feladat egyetlen forrasdokumentum teljes tartalmara (56 atom). A recall itt akkor 1.0, ha a rendszer a dokumentum minden erdemi szakaszat visszaadja."
+  },
+  {
+   "id": "q-058",
+   "axis": "production-shaped-long-form",
+   "query": "What test layers does the strategy define, what does each layer cover, and what are the per-layer coverage thresholds?",
+   "domain": null,
+   "relevantAtomIds": [
+    "10-layered-model-common-testing-standards-boundary-mocking",
+    "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-53f4bffa",
+    "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-6da9e65b",
+    "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-bdfd3229",
+    "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-e4295227",
+    "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-ee55d5e8",
+    "10-layered-model-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-ff1fad75",
+    "10-layered-model-common-testing-standards-multi-action-ordering-tests",
+    "10-layered-model-common-testing-standards-naming-structure",
+    "10-layered-model-common-testing-standards-snapshot-format-policy-adr-018",
+    "10-layered-model-common-testing-standards-tdd-cycle-mandatory",
+    "10-layered-model-common-testing-standards-test-code-rules",
+    "10-layered-model-common-testing-standards-test-data-builders",
+    "10-layered-model-common-testing-standards-test-organization",
+    "10-layered-model-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06",
+    "10-layered-model-common-testing-standards-tools-framework",
+    "10-layered-model-the-layered-test-model-operative-standard",
+    "15-adr-018-decision-adr-018-layered-test-strategy-considered-options-coverage-gate",
+    "15-adr-018-decision-adr-018-layered-test-strategy-context",
+    "15-adr-018-decision-adr-018-layered-test-strategy-decision-per-layer-rules-l1-pure-logic",
+    "15-adr-018-decision-adr-018-layered-test-strategy-decision-per-layer-rules-l3-container",
+    "30-rollout-part-3-the-rebalance-plan-2026-06-16-test-pyramid-rebalance-plan-adr-018-3-anti",
+    "30-rollout-part-3-the-rebalance-plan-2026-06-16-test-pyramid-rebalance-plan-adr-018-4",
+    "30-rollout-part-3-the-rebalance-plan-2026-06-16-test-pyramid-rebalance-plan-adr-018-5-test"
+   ],
+   "rationale": "Osszegyujto feladat TOBB testverdokumentumra. A jeloles a dokumentumok KOZTI HIVATKOZASOKBOL szarmazik (10-layered-model.md maga nevezi meg a 15-adr-018-decision.md, 20-e2e-policy.md es 30-rollout.md fajlokat), nem keresesi talalatbol. Az elso, egy-forrasra korlatozott jeloles recall@20=0.000-t adott, ami MERESI HIBA volt: a kereso a testverdokumentumokat hozta, amik legitim valaszok."
+  },
+  {
+   "id": "q-059",
+   "axis": "production-shaped-long-form",
+   "query": "LSP operations for code navigation: which operation answers which question, and when to use grep instead",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-016-lsp-code-navigation",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-0cc44aee",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-144acdab",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-547d6352",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-616fff66",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-a",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-b",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-c",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-cd6a5989",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f0cf0974",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f5d280bf",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-21958ee5",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-52496c9d",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-70988e8f",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-0d62bffa",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-8d3a8147",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-14de4a65",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-e1fde889",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-is",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-enable",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-03",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-9",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-to",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-3f7d284c",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-ae855826",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-bab032b8",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-c3be50a5",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-d5f6409b",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-1",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-2",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-3",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-4",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-risks",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-server",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-the"
+   ],
+   "rationale": "KONTROLL PAR a q-060-nal: azonos query, azonos relevans halmaz, az EGYETLEN kulonbseg a type-szuro. Ez a szuretlen ag."
+  },
+  {
+   "id": "q-060",
+   "axis": "production-shaped-long-form",
+   "query": "LSP operations for code navigation: which operation answers which question, and when to use grep instead",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-016-lsp-code-navigation",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-0cc44aee",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-144acdab",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-547d6352",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-616fff66",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-a",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-b",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-c",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-cd6a5989",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f0cf0974",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-2026-f5d280bf",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-21958ee5",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-52496c9d",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-70988e8f",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-0d62bffa",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-access-8d3a8147",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-14de4a65",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-e1fde889",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-ast-is",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-enable",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-03",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-9",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-lsp-to",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-3f7d284c",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-ae855826",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-bab032b8",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-c3be50a5",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-option-d5f6409b",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-1",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-2",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-3",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-plan-4",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-risks",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-server",
+    "adr-016-lsp-code-navigation-adr-016-language-server-protocol-lsp-for-code-navigation-the"
+   ],
+   "rationale": "A q-059 szurt parja (type=adr). A cel-dokumentum (adr-016-lsp-code-navigation.md) valoban adr tipusu, tehat a szuro NEM zarja ki. A ket ag kulonbsege tisztan a szures hatasa. FIGYELEM: a type konyvtarbol szarmazik (typeForSource), nem tartalombol — a 15-adr-018-decision.md peldaul standard tipust kapott, holott dontesi rekord. Egy type-szuro ezert kizarhatja a keresett dokumentumot."
+  },
+  {
+   "id": "q-061",
+   "axis": "multi-word-phrase",
+   "query": "SQLite UPSERT: ON CONFLICT DO UPDATE syntax, parsing ambiguity and limitations",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "25-upsert-1-syntax",
+    "25-upsert-2-description",
+    "25-upsert-2-description-2-1-examples",
+    "25-upsert-2-description-2-2-parsing-ambiguity",
+    "25-upsert-3-limitations",
+    "25-upsert-4-history"
+   ],
+   "rationale": "Whole SQLite UPSERT reference page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. PostgreSQL ON CONFLICT is near-identical prose and MySQL ON DUPLICATE KEY UPDATE solves the same problem with incompatible syntax; both are in the corpus as distractors."
+  },
+  {
+   "id": "q-062",
+   "axis": "rare-technical-token",
+   "query": "PostgreSQL DISTINCT ON: keep only the first row of each group",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "01-select-select-compatibility-nonstandard-clauses",
+    "01-select-select-parameters-distinct-clause"
+   ],
+   "rationale": "DISTINCT ON exists only in PostgreSQL. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. SQLite and MySQL SELECT pages document plain DISTINCT, which does NOT answer this query."
+  },
+  {
+   "id": "q-063",
+   "axis": "multi-word-phrase",
+   "query": "MySQL LOAD DATA FIELDS TERMINATED BY and LINES clauses for importing a CSV text file",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "15-load-data-15-2-9-load-data-statement",
+    "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-0be305d5",
+    "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-41f71751",
+    "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-a3720bec",
+    "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-c0a46721",
+    "15-load-data-15-2-9-load-data-statement-non-local-versus-local-operation-input-file-set-and-f7eb141d"
+   ],
+   "rationale": "FIELDS/LINES handling sections of the MySQL LOAD DATA page plus the statement synopsis. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. PostgreSQL COPY is the equivalent capability with incompatible syntax."
+  },
+  {
+   "id": "q-064",
+   "axis": "multi-word-phrase",
+   "query": "PostgreSQL COPY CSV format: HEADER, QUOTE and FORCE_QUOTE options",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "15-copy-copy-examples",
+    "15-copy-copy-file-formats-csv-format",
+    "15-copy-copy-parameters",
+    "15-copy-copy-synopsis"
+   ],
+   "rationale": "COPY page sections that define the CSV format and its options. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. MySQL LOAD DATA is the sibling capability and must not satisfy this query."
+  },
+  {
+   "id": "q-065",
+   "axis": "multi-word-phrase",
+   "query": "Sass @mixin optional arguments, keyword arguments and taking arbitrary arguments",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "mixin",
+    "mixin-arguments",
+    "mixin-arguments-optional-arguments",
+    "mixin-arguments-optional-arguments-keyword-arguments",
+    "mixin-arguments-optional-arguments-taking-arbitrary-arguments",
+    "mixin-arguments-optional-arguments-taking-arbitrary-arguments-passing-arbitrary-arguments",
+    "mixin-arguments-optional-arguments-taking-arbitrary-arguments-taking-arbitrary-keyword"
+   ],
+   "rationale": "Argument-related sections of the Sass @mixin page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Less parametric mixins and Stylus mixins solve the same problem with incompatible syntax."
+  },
+  {
+   "id": "q-066",
+   "axis": "multi-word-phrase",
+   "query": "Less parametric mixins: pattern matching, named parameters and the @arguments variable",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "mixins-parametric",
+    "mixins-parametric-parameter-separators",
+    "mixins-parametric-parameter-separators-overloading-mixins",
+    "mixins-parametric-parameter-separators-overloading-mixins-named-parameters",
+    "mixins-parametric-parameter-separators-overloading-mixins-named-parameters-advanced-and-the",
+    "mixins-parametric-parameter-separators-overloading-mixins-named-parameters-the-arguments",
+    "mixins-parametric-parameter-separators-pattern-matching"
+   ],
+   "rationale": "Whole Less parametric-mixin page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Sass @mixin/@include is the sibling answer and is wrong for Less."
+  },
+  {
+   "id": "q-067",
+   "axis": "exact-keyword",
+   "query": "Less darken lighten saturate desaturate colour functions and their amount parameter",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "color-operations",
+    "color-operations-saturate",
+    "color-operations-saturate-desaturate",
+    "color-operations-saturate-desaturate-darken",
+    "color-operations-saturate-desaturate-lighten"
+   ],
+   "rationale": "The four named operations on the Less color-operations page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Stylus exposes darken/lighten/saturate/desaturate under the same names with a different call convention -- the sharpest mixing trap in the set."
+  },
+  {
+   "id": "q-068",
+   "axis": "exact-keyword",
+   "query": "Stylus built-in colour functions desaturate, lightness, hue and mix",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "bifs-built-in-functions-color-functions-desaturate-color-amount",
+    "bifs-built-in-functions-color-functions-hue-color-value",
+    "bifs-built-in-functions-color-functions-lightness-color-value",
+    "bifs-built-in-functions-color-functions-mix-color1-color2-amount"
+   ],
+   "rationale": "The four named Stylus built-in colour functions. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. Less and Sass expose same-named colour helpers; only the Stylus BIF page answers this."
+  },
+  {
+   "id": "q-069",
+   "axis": "production-shaped-long-form",
+   "query": "zustand persist middleware: partialize, versioning with migrate, and a custom storage engine",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "reference-middlewares-persist-md-persist",
+    "reference-middlewares-persist-md-persist-reference-persist-statecreatorfn-persistoptions-c511ad7a",
+    "reference-middlewares-persist-md-persist-reference-persist-statecreatorfn-persistoptions-e57508df",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-and-hydrate-it-manually",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-partially",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-through-versioning-and",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-custom-storage-26b88f4c",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-custom-storage-7bd1ed72",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-custom-storage-90aa8343",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-nested-objects-0a60179d",
+    "reference-middlewares-persist-md-persist-usage-persisting-a-state-with-nested-objects-d6286125"
+   ],
+   "rationale": "Usage sections of the zustand persist middleware reference. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. jotai atomWithStorage and valtio persist-with-localStorage answer the same user need with incompatible APIs."
+  },
+  {
+   "id": "q-070",
+   "axis": "multi-word-phrase",
+   "query": "valtio proxy and useSnapshot: how snapshots keep components from re-rendering",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "api-basic-proxy-proxy",
+    "api-basic-proxy-proxy-gotchas",
+    "api-basic-proxy-proxy-mutate-from-anywhere",
+    "api-basic-proxy-proxy-nested-proxies",
+    "api-basic-proxy-proxy-optimizations-noop-and-batching",
+    "api-basic-proxy-proxy-promises-in-proxies",
+    "api-basic-usesnapshot-usesnapshot",
+    "api-basic-usesnapshot-usesnapshot-codesandbox-demo",
+    "api-basic-usesnapshot-usesnapshot-dev-mode-debug-values",
+    "api-basic-usesnapshot-usesnapshot-gotchas",
+    "api-basic-usesnapshot-usesnapshot-usage-child-components-making-mutations",
+    "api-basic-usesnapshot-usesnapshot-usage-parent-child-components",
+    "api-basic-usesnapshot-usesnapshot-usage-read-from-snapshots-in-render-use-the-proxy-in",
+    "api-basic-usesnapshot-usesnapshot-usage-read-only-what-you-need"
+   ],
+   "rationale": "The valtio proxy and useSnapshot API pages. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. zustand useShallow and jotai selectAtom target the same re-render problem in a different library."
+  },
+  {
+   "id": "q-071",
+   "axis": "rare-technical-token",
+   "query": "jotai atomWithStorage: createJSONStorage, deleting an item and validating stored values",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "utilities-storage-atomwithstorage",
+    "utilities-storage-atomwithstorage-parameters",
+    "utilities-storage-atomwithstorage-parameters-createjsonstorage-util",
+    "utilities-storage-atomwithstorage-parameters-deleting-an-item-from-storage",
+    "utilities-storage-atomwithstorage-parameters-react-native-implementation",
+    "utilities-storage-atomwithstorage-parameters-react-native-implementation-notes-with-since-2",
+    "utilities-storage-atomwithstorage-parameters-server-side-rendering",
+    "utilities-storage-atomwithstorage-parameters-validating-stored-values"
+   ],
+   "rationale": "The jotai atomWithStorage utility page. selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. zustand persist middleware is the sibling answer and is wrong for jotai."
+  },
+  {
+   "id": "q-072",
+   "axis": "rare-technical-token",
+   "query": "zustand useShallow to avoid re-renders when a selector returns several values",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "00-readme-recipes-selecting-multiple-state-slices",
+    "learn-guides-beginner-typescript-md-creating-a-store-with-state-actions-using-the-store-in-9875521f",
+    "learn-guides-prevent-rerenders-with-use-shallow-md",
+    "learn-guides-prevent-rerenders-with-use-shallow-md-example",
+    "reference-hooks-use-shallow-md",
+    "reference-hooks-use-shallow-md-types-reference-useshallow-selectorfn-parameters",
+    "reference-hooks-use-shallow-md-types-reference-useshallow-selectorfn-returns",
+    "reference-hooks-use-shallow-md-types-signature",
+    "reference-hooks-use-shallow-md-types-troubleshooting-i-get-maximum-update-depth-exceeded",
+    "reference-hooks-use-shallow-md-types-usage-writing-a-memoized-selector-0a6bf3bc",
+    "reference-hooks-use-shallow-md-types-usage-writing-a-memoized-selector-3f5bedbe"
+   ],
+   "rationale": "The zustand useShallow reference, its guide page, and the two further zustand pages that answer the same question (README \"Selecting multiple state slices\", beginner-TypeScript \"Multiple Selectors\"). selected by source directory + section heading in the vendor doc of the NAMED library only; sibling-library atoms covering the same topic are deliberately excluded so a hit on the wrong dialect is scored as a miss. NOTE: this project OWN rule docs also prescribe useShallow and are retrieved for this query; they are scored as misses by construction, so this query nDCG is a LOWER bound."
+  },
+  {
+   "id": "q-073",
+   "axis": "multi-word-phrase",
+   "query": "Mi a különbség az AAM alanyi adómentes és a TAM tárgyi adómentes okkód között?",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-0f427067",
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-3a859f9e"
+   ],
+   "rationale": "A NAV okkód-referencia 4.1 (AAM) és 4.2 (TAM) szakasza. Szakaszcím alapján választva, sosem retriever kimenetből. Magyar nyelvű lekérdezés angol szakaszcímekkel tagolt, magyar törzsű dokumentum fölött."
+  },
+  {
+   "id": "q-074",
+   "axis": "production-shaped-long-form",
+   "query": "Belföldi fordított adózás FAD: mely ügyletekre vonatkozik és hogyan kell jelölni a számlán?",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-6-layer-7b159646"
+   ],
+   "rationale": "A NAV okkód-referencia 6.1 FAD szakasza. Szakaszcím alapján választva. Az EUFADE és EUFAD37 szakaszok szándékosan kimaradnak: azok EU-s fordított adózásról szólnak, nem belföldiről."
+  },
+  {
+   "id": "q-075",
+   "axis": "synonym",
+   "query": "Mit jelent a PPE rövidítés a NAV áfa okkódoknál és mit jelent az Odoo tax-name akronimák között?",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "analizis-2026-08-05-2234-alapadatok-telepites-migracio-06-odoo-rendszerbeallitasok-es-06-ll-9f43196b",
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-6-layer-941ac1c6",
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-7-layer-02752e0a",
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-7-layer-abf88f8d"
+   ],
+   "rationale": "Szándékos homonima-lekérdezés: a PPE a 6.2 szakaszban pénzforgalmi elszámolás, a 7.1 szakaszban tárgyi eszköz. A NAV-referencia két szakasza plusz a 7. réteg fejléce, valamint az Odoo-oldali rendszerbeállítás dokumentum 1.4 \"Csapda\" szakasza, amely szó szerint ugyanezt a kettősséget rögzíti (`models/vat_tax_code.py:33-38`). Szakaszcím + törzsolvasás alapján választva."
+  },
+  {
+   "id": "q-076",
+   "axis": "multi-word-phrase",
+   "query": "2665A nyomtatvány oszlopelrendezése és a 105, 106, 108 sorok kitöltése",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "domain-references-2665-form-filling-reference-nav-2665-vat-declaration-llm-form-filling-2-2-ae5f0366",
+    "domain-references-2665-form-filling-reference-nav-2665-vat-declaration-llm-form-filling-2-2-b4c4db5f",
+    "domain-references-2665-form-filling-reference-nav-2665-vat-declaration-llm-form-filling-2-2-e5048038"
+   ],
+   "rationale": "A 2665 kitöltési referencia 2.1 (Page Structure), 2.2 (Column Layout) és a széles oszlopelrendezésű 01-05 szakasza. Szakaszcím alapján választva."
+  },
+  {
+   "id": "q-077",
+   "axis": "production-shaped-long-form",
+   "query": "Odoo pénzforgalmi áfa (cash basis tax): hogyan kell beállítani és mikor keletkezik az adófizetési kötelezettség?",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-1db254a5",
+    "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-40b91172",
+    "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-75a825ec",
+    "domain-references-hungarian-vat-analytics-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-8a0e8461",
+    "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1",
+    "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1-1",
+    "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1-2",
+    "plans-caba-aranyositas-odoo-cash-basis-vat-odoo-cash-basis-vat-tax-point-date-research-1-3"
+   ],
+   "rationale": "A cash-basis áfa kutatási dokumentum 1. szakasza (Cash Basis Taxes -- Overview + Configuration). A korpuszban a teljes dokumentum KÉT, karakterre azonos példányban szerepel (plans-CABA-aranyositas és domain-references-hungarian-vat-analytics útvonalon); mindkét másolat atomjai relevánsnak vannak jelölve, különben a duplikátum találata igazságtalanul rontaná a precíziót."
+  },
+  {
+   "id": "q-078",
+   "axis": "multi-word-phrase",
+   "query": "Közösségen belüli adómentes értékesítés KBAET és az új közlekedési eszköz KBAUK okkód",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-2936d255",
+    "domain-references-nav-reason-codes-nav-vat-reason-codes-canonical-domain-reference-4-layer-3518fdc4"
+   ],
+   "rationale": "A NAV okkód-referencia 4.3 (KBAET) és 4.4 (KBAUK) szakasza. Szakaszcím alapján választva."
+  },
+  {
+   "id": "q-079",
+   "axis": "exact-keyword",
+   "query": "prefers-color-scheme media feature: detecting whether the user asked for a dark or light theme",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-90ff2b39",
+    "index-embedded-elements",
+    "index-embedded-elements-examples-detecting-a-dark-or-light-theme",
+    "index-embedded-elements-examples-inherited-color-scheme-in-embedded-elements",
+    "index-embedded-elements-syntax"
+   ],
+   "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
+  },
+  {
+   "id": "q-080",
+   "axis": "rare-technical-token",
+   "query": ":has() pseudo-class as a parent selector, its logical operations and specificity",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-aa092478",
+    "index-syntax-a54081e5",
+    "index-syntax-examples-logical-operations",
+    "index-syntax-examples-selecting-a-parent-element",
+    "index-syntax-performance-considerations",
+    "index-syntax-performance-considerations-avoid-broad-anchoring",
+    "index-syntax-performance-considerations-minimize-subtree-traversals"
+   ],
+   "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
+  },
+  {
+   "id": "q-081",
+   "axis": "multi-word-phrase",
+   "query": "Cache-Control no-store versus no-cache: which directive prevents the response being stored at all",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-syntax-directives-request-directives-no-cache",
+    "index-syntax-directives-request-directives-no-store",
+    "index-syntax-directives-response-directives-no-cache",
+    "index-syntax-directives-response-directives-no-store",
+    "index-syntax-use-cases-preventing-storing",
+    "index-syntax-use-cases-up-to-date-contents-always",
+    "index-types-of-caches-don-t-cache-what-s-lost-by-no-store"
+   ],
+   "rationale": "Sections whose heading names no-store or no-cache, plus the two guide sections that contrast them. The other 18 directives on the same page are excluded — they do not answer which directive prevents storage."
+  },
+  {
+   "id": "q-082",
+   "axis": "production-shaped-long-form",
+   "query": "aria-activedescendant: keeping DOM focus on the container while moving the active option in a listbox",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-67c70ada",
+    "index-description-5e9a4e09",
+    "index-description-associated-interfaces-8448f39a",
+    "index-description-associated-roles-ce28c6fe",
+    "index-description-values-6ae673a6"
+   ],
+   "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
+  },
+  {
+   "id": "q-083",
+   "axis": "multi-word-phrase",
+   "query": "optional chaining with function calls, short-circuiting, and combining it with nullish coalescing",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-929bb161",
+    "index-syntax-description-b1b60302",
+    "index-syntax-description-invalid-optional-chaining",
+    "index-syntax-description-optional-chaining-with-expressions",
+    "index-syntax-description-optional-chaining-with-function-calls",
+    "index-syntax-description-short-circuiting",
+    "index-syntax-examples-basic-example-a549d1b1",
+    "index-syntax-examples-combining-with-the-nullish-coalescing-operator",
+    "index-syntax-examples-dealing-with-optional-callbacks-or-event-handlers",
+    "index-syntax-examples-stacking-the-optional-chaining-operator"
+   ],
+   "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
+  },
+  {
+   "id": "q-084",
+   "axis": "rare-technical-token",
+   "query": "Array.prototype.at() and negative indexing to read the last element of an array",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-ac309e58",
+    "index-syntax-description-54b29ecb",
+    "index-syntax-examples-calling-at-on-non-array-objects",
+    "index-syntax-examples-comparing-methods-cbfd73d1",
+    "index-syntax-examples-return-the-last-value-of-an-array",
+    "index-syntax-parameters-cc958811",
+    "index-syntax-parameters-return-value-8f3e0ccd"
+   ],
+   "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
+  },
+  {
+   "id": "q-085",
+   "axis": "multi-word-phrase",
+   "query": "grid-template-areas: naming grid areas and placing items into the named template",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-c03dcbbb",
+    "index-syntax-c5ce02b4",
+    "index-syntax-examples-specifying-named-grid-areas-css",
+    "index-syntax-values-540645e3"
+   ],
+   "rationale": "The prose sections that define named areas (property description, Syntax, Values) plus the CSS example, which is the ONLY atom showing the second half of the query - placing an item into a named area via grid-area - and which also carries prose explaining the null token. Formal syntax, Formal definition, Specifications, Browser compatibility and See also are excluded: they carry a macro placeholder, a table or links rather than an answer. The HTML and Result example fragments are excluded because they carry no grid-template-areas content."
+  },
+  {
+   "id": "q-086",
+   "axis": "exact-keyword",
+   "query": "aspect-ratio CSS property: the auto keyword, ratio values and fallback to the natural ratio",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-92da7432",
+    "index-syntax-6eaa42a2",
+    "index-syntax-description-01b25371",
+    "index-syntax-examples-exploring-aspect-ratio-effects-with-fixed-width",
+    "index-syntax-examples-fallback-to-natural-aspect-ratio",
+    "index-syntax-values-a33c4e41"
+   ],
+   "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
+  },
+  {
+   "id": "q-087",
+   "axis": "synonym",
+   "query": "showing a focus ring only for keyboard users instead of every click",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-1abe4775",
+    "index-syntax-accessibility-cognition",
+    "index-syntax-accessibility-low-vision",
+    "index-syntax-examples-comparing-focus-and-focus-visible",
+    "index-syntax-examples-providing-a-focus-fallback",
+    "index-syntax-focus-vs-focus-visible"
+   ],
+   "rationale": "Every non-navigational section of the named MDN reference document. Example-only fragments and See-also sections are excluded because they carry code or links rather than the answer."
+  },
+  {
+   "id": "q-088",
+   "axis": "multi-word-phrase",
+   "query": "SameSite cookie attribute: Lax, Strict and None, and what None requires",
+   "domain": null,
+   "type": null,
+   "relevantAtomIds": [
+    "index-syntax-321f588d",
+    "index-syntax-attributes-37a2d483",
+    "index-syntax-attributes-678aef9a",
+    "index-syntax-examples-partitioned-cookie",
+    "index-what-cookies-are-used-for-security-controlling-third-party-cookies-with-samesite"
+   ],
+   "rationale": "Sections of the MDN cookie material whose heading names SameSite or third-party cookies. The surrounding cookie lifecycle material is excluded. The Set-Cookie attribute chunks are included on the strength of their bodies defining the three SameSite values, not their headings."
+  }
+ ],
+ "corrections": [
+  {
+   "date": "2026-08-13",
+   "query": "q-085",
+   "change": "added index-syntax-examples-specifying-named-grid-areas-css to relevantAtomIds and rewrote the rationale",
+   "reason": "The query has two clauses. 'Placing items into the named template' was covered by no labelled atom; the grid-area assignments appear only in the CSS example, which also carries prose about the null token. The old rationale claimed 'every non-navigational section' while in fact excluding Formal syntax, Formal definition, Specifications and Browser compatibility.",
+   "before": [
+    "index-c03dcbbb",
+    "index-syntax-c5ce02b4",
+    "index-syntax-values-540645e3"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "query": "q-070",
+   "change": "removed api-basic-usesnapshot from relevantAtomIds",
+   "reason": "That atom no longer exists and MUST NOT: it was frontmatter leakage. The source file api-basic-useSnapshot.md opens with an HTML comment before its YAML frontmatter, which the pre-2026-08-13 chunker failed to recognise, emitting the frontmatter block itself as a lead-in atom. The afterLeadingNoise fix removed it. The remaining 8 atoms of that document stay labelled.",
+   "before": [
+    "api-basic-proxy-proxy",
+    "api-basic-proxy-proxy-gotchas",
+    "api-basic-proxy-proxy-mutate-from-anywhere",
+    "api-basic-proxy-proxy-nested-proxies",
+    "api-basic-proxy-proxy-optimizations-noop-and-batching",
+    "api-basic-proxy-proxy-promises-in-proxies",
+    "api-basic-usesnapshot",
+    "api-basic-usesnapshot-usesnapshot",
+    "api-basic-usesnapshot-usesnapshot-codesandbox-demo",
+    "api-basic-usesnapshot-usesnapshot-dev-mode-debug-values",
+    "api-basic-usesnapshot-usesnapshot-gotchas",
+    "api-basic-usesnapshot-usesnapshot-usage-child-components-making-mutations",
+    "api-basic-usesnapshot-usesnapshot-usage-parent-child-components",
+    "api-basic-usesnapshot-usesnapshot-usage-read-from-snapshots-in-render-use-the-proxy-in",
+    "api-basic-usesnapshot-usesnapshot-usage-read-only-what-you-need"
+   ]
+  },
+  {
+   "date": "2026-08-13",
+   "field": "corpusAtomCount",
+   "change": "43228 -> 50504",
+   "reason": "The stated count matched no vault reconstructible today. The set spans BOTH corpus roots: 283 of its ids resolve in the repo vault (11345 atoms) and 167 in the extended vault (39159), so the corpus it addresses is the union, measured at 50504 atoms on 2026-08-13. All 450 remaining ids resolve there."
+  }
+ ]
 }
