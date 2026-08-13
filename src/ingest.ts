@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
 import { globSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 
 import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
 import { chunkMarkdown, frontMatterTitle, headingLine, headingPath } from './chunker.js';
 import { bodyMaxChars, CORPUS_ROOTS_ENV_VAR, DEFAULT_INGEST_PROFILE, resolveCorpusRoots } from './config.js';
+import type { CorpusManifestInput, ManifestAtom } from './corpusManifest.js';
+import { buildCorpusManifest, CORPUS_MANIFEST_FILE, serializeCorpusManifest } from './corpusManifest.js';
 import type { IngestProfile } from './ingestProfile.js';
 import { domainForPath, typeForPath } from './ingestProfile.js';
 import { ATOMS_DIR, REPO_ROOT } from './paths.js';
@@ -396,9 +398,34 @@ const toSkip = (checked: CheckedAtom): IngestSkip => ({
   reasons: checked.reasons,
 });
 
+const atomText = (planned: PlannedAtom): string =>
+  serializeAtom(planned.atom.frontmatter, planned.atom.body);
+
 const writeAtom = async (outputDir: string, planned: PlannedAtom): Promise<void> => {
-  const { frontmatter, body } = planned.atom;
-  await writeFile(join(outputDir, `${frontmatter.id}${MD_SUFFIX}`), serializeAtom(frontmatter, body), 'utf8');
+  await writeFile(join(outputDir, `${planned.atom.frontmatter.id}${MD_SUFFIX}`), atomText(planned), 'utf8');
+};
+
+const manifestAtom = (planned: PlannedAtom): ManifestAtom => ({
+  id: planned.atom.frontmatter.id,
+  type: planned.atom.frontmatter.type,
+  domain: planned.atom.frontmatter.x_domain,
+  content: atomText(planned),
+});
+
+/**
+ * The manifest sits BESIDE the atoms directory, not inside it: the vault's
+ * `atoms/` is gitignored precisely because it is regenerable, so a manifest
+ * written into it could never be committed — and an uncommittable manifest
+ * re-anchors nothing. One directory up (`dp-gnosis/vault/corpus-manifest.json`
+ * for the real vault) is tracked, is where a reader already looks for the
+ * vault, and follows any profile that points `atomsDir` elsewhere.
+ */
+const writeManifest = async (outputDir: string, input: CorpusManifestInput): Promise<void> => {
+  await writeFile(
+    join(dirname(outputDir), CORPUS_MANIFEST_FILE),
+    serializeCorpusManifest(buildCorpusManifest(input)),
+    'utf8'
+  );
 };
 
 /**
@@ -496,6 +523,27 @@ const checkAtoms = (
  */
 const profileOf = (options: IngestOptions): IngestProfile => options.profile ?? DEFAULT_INGEST_PROFILE;
 
+/** Everything the run puts on disk: the atoms, the owner marker, the manifest. */
+interface WritePhase {
+  readonly outputDir: string;
+  readonly profile: IngestProfile;
+  readonly writable: readonly CheckedAtom[];
+  readonly skipped: number;
+}
+
+const persist = async (phase: WritePhase): Promise<number> => {
+  await mkdir(phase.outputDir, { recursive: true });
+  await claimOutputDir(phase.outputDir, phase.profile);
+  await Promise.all(phase.writable.map(entry => writeAtom(phase.outputDir, entry)));
+  const pruned = await pruneOrphans(phase.outputDir, phase.writable);
+  await writeManifest(phase.outputDir, {
+    profile: phase.profile.name,
+    atoms: phase.writable.map(manifestAtom),
+    skipped: phase.skipped,
+  });
+  return pruned;
+};
+
 export const ingest = async (options: IngestOptions): Promise<IngestSummary> => {
   const outputDir = options.outputDir ?? ATOMS_DIR;
   const repoRoot = options.repoRoot ?? REPO_ROOT;
@@ -508,10 +556,8 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
   const candidates = [...loaded.flatMap(source => toCandidates(source, profile))].sort(byOrder);
   const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), profile);
   const writable = checked.filter(entry => entry.reasons.length === 0);
-  await mkdir(outputDir, { recursive: true });
-  await claimOutputDir(outputDir, profile);
-  await Promise.all(writable.map(entry => writeAtom(outputDir, entry)));
-  const pruned = await pruneOrphans(outputDir, writable);
   const refused = checked.filter(entry => entry.reasons.length > 0).map(toSkip);
-  return { written: writable.length, skipped: [...unmapped, ...refused], pruned };
+  const skipped = [...unmapped, ...refused];
+  const pruned = await persist({ outputDir, profile, writable, skipped: skipped.length });
+  return { written: writable.length, skipped, pruned };
 };

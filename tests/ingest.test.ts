@@ -8,6 +8,7 @@ import {
   CORPUS_ROOTS,
   CORPUS_ROOTS_ENV_VAR
 } from '../src/config.js';
+import { CORPUS_MANIFEST_FILE } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 
 interface Fixture {
@@ -634,5 +635,86 @@ describe('ingest — orphan atoms from a previous run', () => {
       'ts-testing-layered-test-model-unit-tier.md',
       'ts-testing-layered-test-model.md',
     ]);
+  });
+});
+
+/**
+ * The vault is gitignored, so the corpus itself can never anchor a measurement.
+ * The manifest is the committable stand-in: an aggregate identity plus the
+ * buckets a drift is localised to. Its whole value rests on being a pure
+ * function of the corpus, so every assertion here is about determinism.
+ */
+describe('ingest — corpus manifest', () => {
+  const manifestOf = async (fixture: Fixture): Promise<string> =>
+    readFile(join(fixture.root, CORPUS_MANIFEST_FILE), 'utf8');
+
+  const A_DOC = `# Alpha Doc\n\n${INTRO_BODY}\n`;
+  const B_DOC = `# Beta Doc\n\n${UNIT_BODY}\n`;
+
+  it('writes a manifest naming the profile, the atom count and the bucket counts', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'ALPHA.md', A_DOC);
+    await writeDoc(join(fixture.root, 'doc', '90-history', '10-feature-log'), 'F.md', B_DOC);
+
+    await ingest({
+      corpusRoots: [STANDARDS_ROOT, 'doc/90-history/10-feature-log'],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    const manifest: unknown = JSON.parse(await manifestOf(fixture));
+    expect(manifest).toEqual({
+      profile: 'default',
+      atomCount: 2,
+      digest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      byType: { 'feature-log': 1, standard: 1 },
+      byDomain: { docs: 1, standards: 1 },
+      skipped: 0,
+    });
+  });
+
+  it('produces a byte-identical manifest when re-run over unchanged input', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'ALPHA.md', A_DOC);
+    const options = { corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root };
+
+    await ingest(options);
+    const first = await manifestOf(fixture);
+    await ingest(options);
+
+    expect(await manifestOf(fixture)).toBe(first);
+  });
+
+  it('changes the digest but no bucket count when one atom body changes', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'ALPHA.md', A_DOC);
+    const options = { corpusRoots: [STANDARDS_ROOT], outputDir: fixture.out, repoRoot: fixture.root };
+
+    await ingest(options);
+    const before = JSON.parse(await manifestOf(fixture)) as Record<string, unknown>;
+    await writeDoc(fixture.standards, 'ALPHA.md', `# Alpha Doc\n\n${UNIT_BODY}\n`);
+    await ingest(options);
+    const after = JSON.parse(await manifestOf(fixture)) as Record<string, unknown>;
+
+    expect(after['digest']).not.toBe(before['digest']);
+    expect(after['atomCount']).toEqual(before['atomCount']);
+    expect(after['byType']).toEqual(before['byType']);
+    expect(after['byDomain']).toEqual(before['byDomain']);
+  });
+
+  it('counts a refused source in the manifest instead of dropping it silently', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'ALPHA.md', A_DOC);
+    await writeDoc(join(fixture.root, 'unmapped'), 'OUT.md', B_DOC);
+
+    await ingest({
+      corpusRoots: [STANDARDS_ROOT, 'unmapped'],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+    });
+
+    const manifest = JSON.parse(await manifestOf(fixture)) as Record<string, unknown>;
+    expect(manifest['skipped']).toBe(1);
+    expect(manifest['atomCount']).toBe(1);
   });
 });
