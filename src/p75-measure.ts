@@ -13,26 +13,47 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { fts5Candidate } from './bench/candidates.js';
-import { materializeRealCorpus, type BenchCorpus } from './bench/corpora.js';
-import { recallAtK, reciprocalRank, mean } from './bench/metrics.js';
-import { mapSequential } from './bench/sequential.js';
+import { type BenchCorpus, materializeRealCorpus } from './bench/corpora.js';
+import { mean, recallAtK, reciprocalRank } from './bench/metrics.js';
 import {
   createRerankerClient,
   DEFAULT_RERANKERS,
+  extractDoc,
+  type ExtractStrategy,
   ndcgAtK,
   type RerankerModelConfig,
-  type RerankResult,
+  type RerankResult
 } from './bench/reranker.js';
-import { loadVerifiedGoldenSet, type GoldenSet, type GoldenQuery } from './goldenSet.js';
+import { mapSequential } from './bench/sequential.js';
+import { ATOM_DOMAINS, type AtomDomain } from './config.js';
+import { type GoldenQuery, type GoldenSet, loadVerifiedGoldenSet } from './goldenSet.js';
 import { ATOMS_DIR, BENCH_WORK_DIR, REPO_ROOT } from './paths.js';
 import type { KnowledgePort, RetrievalResult } from './port.js';
-import { ATOM_DOMAINS, type AtomDomain } from './config.js';
 
 /** First-pass retrieval depth — the candidate pool a reranker reorders. */
 const K_INIT = 200;
 
-/** Max chars per document sent to the reranker. BGE tokenizers are ~1:1 char:token, so 200 chars ≈ 200 tokens. Allows 2 docs + query in a 512-token context. */
-const DOC_MAX_CHARS = 200;
+/** Default max chars per document sent to the reranker. BGE tokenizers are ~1:1 char:token, so 200 chars ≈ 200 tokens. Allows 2 docs + query in a 512-token context. */
+const DEFAULT_DOC_MAX_CHARS = 200;
+
+/** Models excluded by D-01: hard n_ctx_train=512 limit makes them unsuitable for extended benchmark. */
+const EXCLUDED_MODEL_NAMES = new Set(['bge-reranker-large', 'bge-reranker-base']);
+
+/** Filtered reranker list for extended benchmark (D-01). */
+const EXTENDED_RERANKERS = DEFAULT_RERANKERS.filter(m => !EXCLUDED_MODEL_NAMES.has(m.name));
+
+/** Parse CLI arguments. */
+function parseArgs(): { strategy: ExtractStrategy; docMaxChars: number; allModels: boolean; maxBatchTokens: number | undefined; outputPrefix: string } {
+  const args = process.argv.slice(2);
+  const strategy = (args.find(a => a.startsWith('--strategy='))?.split('=')[1] as ExtractStrategy) ?? 'head';
+  const docMaxChars = parseInt(args.find(a => a.startsWith('--doc-max-chars='))?.split('=')[1] ?? String(DEFAULT_DOC_MAX_CHARS), 10);
+  const allModels = args.includes('--all-models');
+  const maxBatchTokens = args.find(a => a.startsWith('--max-batch-tokens='))?.split('=')[1]
+    ? parseInt(args.find(a => a.startsWith('--max-batch-tokens='))!.split('=')[1], 10)
+    : undefined;
+  const outputPrefix = (args.find(a => a.startsWith('--output-prefix='))?.split('=')[1]) ?? `P7-5-${strategy}`;
+  return { strategy, docMaxChars, allModels, maxBatchTokens, outputPrefix };
+}
 
 /** The closed set of k-values for recall. */
 const K_VALUES = [10, 20] as const;
@@ -74,6 +95,8 @@ interface P75Report {
   readonly queryCount: number;
   readonly kInit: number;
   readonly kValues: readonly KValue[];
+  readonly extractionStrategy: string;
+  readonly docMaxChars: number;
   readonly rerankerModels: readonly string[];
   readonly skippedModels: readonly { name: string; reason: string }[];
   readonly corpus: string;
@@ -131,7 +154,10 @@ const measureReranker = async (
   modelConfig: RerankerModelConfig,
   corpus: BenchCorpus,
   goldenSet: GoldenSet,
-  workDir: string
+  workDir: string,
+  strategy: ExtractStrategy,
+  docMaxChars: number,
+  maxBatchTokens: number | undefined
 ): Promise<RerankerModelResult> => {
   // Build fts5 index for first-pass retrieval
   const fts5 = await fts5Candidate();
@@ -144,12 +170,12 @@ const measureReranker = async (
   // Open fts5 port for first-pass
   const fts5Port: KnowledgePort = fts5.open(fts5Location);
 
-  // Create reranker HTTP client with per-model batch limit
+  // Create reranker HTTP client with per-model batch limit (CLI override for MaxFit)
   const rerankerClient = createRerankerClient(
     modelConfig.baseUrl,
     modelConfig.modelId,
     60000,
-    modelConfig.maxBatchTokens ?? 4000,
+    maxBatchTokens ?? modelConfig.maxBatchTokens ?? 4000,
     modelConfig.maxDocsPerChunk
   );
 
@@ -162,10 +188,8 @@ const measureReranker = async (
       domain === undefined ? { k: K_INIT } : { k: K_INIT, domain }
     );
 
-    // Extract atom bodies for reranker input, truncated to fit context windows
-    const documents: string[] = retrieval.atoms.map(atom =>
-      atom.body.length > DOC_MAX_CHARS ? atom.body.slice(0, DOC_MAX_CHARS) : atom.body
-    );
+    // Extract atom bodies for reranker input, truncated per strategy
+    const documents: string[] = retrieval.atoms.map(atom => extractDoc(atom.body, strategy, docMaxChars));
     // Map index → atom id for reordering
     const indexToId: string[] = retrieval.atoms.map(atom => atom.id);
 
@@ -230,6 +254,8 @@ const renderMarkdown = (report: P75Report): string => {
     `- first-pass adapter: fts5`,
     `- k_init (candidate pool): ${report.kInit}`,
     `- k values measured: ${report.kValues.join(', ')}`,
+    `- extraction strategy: ${report.extractionStrategy}`,
+    `- doc max chars: ${report.docMaxChars}`,
     `- reranker models: ${report.rerankerModels.join(', ')}`,
     '',
   ];
@@ -317,12 +343,15 @@ const renderMarkdown = (report: P75Report): string => {
 const ratio = (v: number | undefined): string => v === undefined ? 'n/a' : v.toFixed(4);
 
 async function main() {
+  const { strategy, docMaxChars, allModels, maxBatchTokens: cliMaxBatchTokens, outputPrefix } = parseArgs();
+  const models = allModels ? DEFAULT_RERANKERS : EXTENDED_RERANKERS;
   const outputDir = resolve(REPO_ROOT, 'docs', 'benchmarking', '2026-08-09-gnosis-reranker');
   await mkdir(outputDir, { recursive: true });
 
   // Load golden set
   const goldenSet = loadVerifiedGoldenSet();
   console.log(`Golden set: ${goldenSet.queries.length} queries, frozen ${goldenSet.frozenAt}`);
+  console.log(`Strategy: ${strategy}, docMaxChars: ${docMaxChars}`);
 
   // Materialize the real corpus
   const corpus = await materializeRealCorpus(ATOMS_DIR, BENCH_WORK_DIR, 'seed');
@@ -332,7 +361,7 @@ async function main() {
   const rerankers: RerankerModelConfig[] = [];
   const skipped: { name: string; reason: string }[] = [];
 
-  for (const model of DEFAULT_RERANKERS) {
+  for (const model of models) {
     try {
       const resp = await fetch(`${model.baseUrl}/v1/rerank`, {
         method: 'POST',
@@ -358,17 +387,15 @@ async function main() {
   console.log(`Rerankers: ${rerankers.length} available, ${skipped.length} skipped`);
 
   // Measure each reranker
-  const results = await mapSequential(rerankers, async (modelConfig) => {
+  const results = await mapSequential(rerankers, async modelConfig => {
     console.log(`Measuring: ${modelConfig.name}`);
-    return measureReranker(modelConfig, corpus, goldenSet, BENCH_WORK_DIR);
+    return measureReranker(modelConfig, corpus, goldenSet, BENCH_WORK_DIR, strategy, docMaxChars, cliMaxBatchTokens);
   });
 
   if (rerankers.length === 0) {
     console.error('No reranker models available. Ensure llama-server instances are running.');
     process.exit(1);
   }
-
-
 
   // Build report
   const report: P75Report = {
@@ -378,6 +405,8 @@ async function main() {
     queryCount: goldenSet.queries.length,
     kInit: K_INIT,
     kValues: K_VALUES,
+    extractionStrategy: strategy,
+    docMaxChars,
     rerankerModels: rerankers.map(m => m.name),
     skippedModels: skipped,
     corpus: corpus.label,
@@ -386,12 +415,12 @@ async function main() {
   };
 
   // Write markdown
-  const mdPath = join(outputDir, 'P7-5-reranker-benchmark.md');
+  const mdPath = join(outputDir, `${outputPrefix}.md`);
   await writeFile(mdPath, renderMarkdown(report), 'utf8');
   console.log(`Report: ${mdPath}`);
 
   // Write JSON sidecar
-  const jsonPath = join(outputDir, 'P7-5-reranker-benchmark.json');
+  const jsonPath = join(outputDir, `${outputPrefix}.json`);
   await writeFile(jsonPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
   console.log(`JSON: ${jsonPath}`);
 
