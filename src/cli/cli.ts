@@ -27,7 +27,7 @@ import { runIndexCommand } from './indexCommand.js';
 import { runIngestCommand } from './ingestCommand.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
-import { runRetrieveCommand } from './retrieveCommand.js';
+import { runRetrieveCommand, TYPE_FLAG } from './retrieveCommand.js';
 
 /** What one invocation produced. The caller owns writing it to a real process. */
 export interface CliResult {
@@ -78,14 +78,19 @@ const wantsHelp = (args: ParsedArgs): boolean =>
   args.command === undefined || args.flags['--help'] === true || args.flags['-h'] === true;
 
 /**
- * `--format` belongs to `retrieve` alone. Elsewhere it is refused through the
- * SAME message an unknown flag gets: a format no command can honour MUST NOT
- * look accepted, and one wording keeps the correction identical either way.
+ * `--format` and `--type` belong to `retrieve` alone. Elsewhere they are refused
+ * through the SAME message an unknown flag gets: a flag no command can honour
+ * MUST NOT look accepted, and one wording keeps the correction identical either
+ * way.
  */
-const FORMAT_COMMAND = 'retrieve';
+const RETRIEVE_COMMAND = 'retrieve';
 
-const misplacedFormat = (args: ParsedArgs): boolean =>
-  args.flags[FORMAT_FLAG] !== undefined && args.command !== FORMAT_COMMAND;
+const RETRIEVE_ONLY_FLAGS: readonly string[] = [FORMAT_FLAG, TYPE_FLAG];
+
+const misplacedFlag = (args: ParsedArgs): string | undefined =>
+  args.command === RETRIEVE_COMMAND
+    ? undefined
+    : RETRIEVE_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
 const handlerFor = (command: string | undefined): CommandHandler | undefined =>
   command === undefined ? undefined : COMMANDS[command];
@@ -100,7 +105,8 @@ const withContext = async (
 
 const outcomeFor = async (args: ParsedArgs): Promise<CommandOutcome> => {
   if (wantsHelp(args)) return helpOutcome();
-  if (misplacedFormat(args)) return usageError(unknownFlagMessage(FORMAT_FLAG));
+  const misplaced = misplacedFlag(args);
+  if (misplaced !== undefined) return usageError(unknownFlagMessage(misplaced));
   const handler = handlerFor(args.command);
   if (handler === undefined) return usageError(commandError(args.command));
   return await withContext(args, handler);

@@ -263,6 +263,27 @@ describe('runCli', () => {
       expect(result.stderr).toContain('positive integer');
     });
 
+    it('filters to the comma-separated --type list', async () => {
+      const fixture = await makeFixture();
+      await runCli(ingestArgv(fixture));
+
+      const kept = await runCli([...retrieveArgv(fixture, 'linear'), '--type', 'adr,knowledge']);
+      const dropped = await runCli([...retrieveArgv(fixture, 'linear'), '--type', 'adr']);
+
+      expect(parseJson(kept.stdout)['count']).toBeGreaterThan(0);
+      expect(parseJson(dropped.stdout)['count']).toBe(0);
+    });
+
+    it('treats a single --type value as a one-element list', async () => {
+      const fixture = await makeFixture();
+      await runCli(ingestArgv(fixture));
+
+      const result = await runCli([...retrieveArgv(fixture, 'linear'), '--type', 'knowledge']);
+
+      expect(result.exitCode).toBe(0);
+      expect(parseJson(result.stdout)['count']).toBeGreaterThan(0);
+    });
+
     it('reports indexState unavailable rather than an empty result when no index exists', async () => {
       const fixture = await makeFixture();
       await runCli(ingestArgv(fixture));
@@ -302,6 +323,29 @@ describe('runCli', () => {
   });
 
   describe('usage errors', () => {
+    it('rejects a --type value outside the closed vocabulary, naming it and the vocabulary', async () => {
+      const result = await runCli(['retrieve', 'x', '--type', 'adr,nonsense']);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('nonsense');
+      expect(result.stderr).toContain('adr');
+      expect(result.stdout).toBe('');
+    });
+
+    it('rejects an empty --type value rather than searching nothing', async () => {
+      const result = await runCli(['retrieve', 'x', '--type', '']);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--type');
+    });
+
+    it('refuses --type outside retrieve the way an unknown flag is refused', async () => {
+      const result = await runCli(['index', '--type', 'adr']);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--type');
+    });
+
     it('rejects an unknown flag with exit 2 and names the valid flags', async () => {
       const result = await runCli(['retrieve', 'x', '--jsn']);
 

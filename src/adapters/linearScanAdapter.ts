@@ -31,6 +31,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
+import { assertTypeFilter } from '../port.js';
 import type { TermProcessor } from '../query.js';
 import { stemTerm, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
@@ -234,8 +235,8 @@ const byScoreThenId = (a: ScoredDoc, b: ScoredDoc): number =>
 const inDomain = (doc: ScannedDoc, domain: AtomDomain | undefined): boolean =>
   domain === undefined || doc.domain === domain;
 
-const matchType = (doc: ScannedDoc, type: AtomType | undefined): boolean =>
-  type === undefined || doc.type === type;
+const matchType = (doc: ScannedDoc, types: readonly AtomType[] | undefined): boolean =>
+  types === undefined || types.includes(doc.type);
 
 const toRetrieved = (scored: ScoredDoc): RetrievedAtom => ({
   id: scored.doc.id,
@@ -250,7 +251,7 @@ const toRetrieved = (scored: ScoredDoc): RetrievedAtom => ({
 const rank = (corpus: Corpus, terms: readonly string[], opts: RetrieveOptions): readonly ScoredDoc[] =>
   corpus.docs
     .filter(doc => inDomain(doc, opts.domain))
-    .filter(doc => matchType(doc, opts.type))
+    .filter(doc => matchType(doc, opts.types))
     .map(doc => ({ doc, score: scoreDoc(doc, terms, corpus) }))
     .filter(scored => scored.score > 0)
     .sort(byScoreThenId)
@@ -307,5 +308,8 @@ export const createLinearScanAdapter = (
   options: LinearScanOptions = {}
 ): KnowledgePort => ({
   name: ADAPTER_NAME,
-  retrieve: (query, opts) => retrieve(contextFor(atomsDir, options), query, opts),
+  retrieve: async (query, opts): Promise<RetrievalResult> => {
+    assertTypeFilter(opts.types);
+    return await retrieve(contextFor(atomsDir, options), query, opts);
+  },
 });

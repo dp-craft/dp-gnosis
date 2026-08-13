@@ -9,7 +9,9 @@
  */
 import { relative } from 'node:path';
 
-import type { RetrievalResult, RetrievedAtom } from '../port.js';
+import type { AtomType } from '../config.js';
+import { ATOM_TYPES } from '../config.js';
+import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
 import { createPort } from './adapter.js';
 import type { FlagValues } from './args.js';
 import { stringFlag } from './args.js';
@@ -35,6 +37,37 @@ const parseK = (raw: string): number | undefined => {
 const resolveK = (flags: FlagValues): number | undefined => {
   const raw = stringFlag(flags, '-k');
   return raw === undefined ? DEFAULT_K : parseK(raw);
+};
+
+/** The type filter belongs to `retrieve` alone; `cli.ts` refuses it elsewhere. */
+export const TYPE_FLAG = '--type';
+
+/**
+ * A value outside the closed vocabulary is a REFUSAL, never a silently dropped
+ * filter: a caller who mistyped `--type adrs` would otherwise read an unfiltered
+ * ranking as a filtered one. The message names the offending value AND the whole
+ * vocabulary, so the correction needs no second call.
+ */
+const typeError = (offender: string): string =>
+  `${TYPE_FLAG} value "${offender}" is outside the closed vocabulary — replace it with one of ${ATOM_TYPES.join(' | ')}; pass several as \`${TYPE_FLAG} adr,review\``;
+
+const splitTypes = (raw: string): readonly string[] => raw.split(',').map(part => part.trim());
+
+const asType = (value: string): AtomType | undefined => ATOM_TYPES.find(type => type === value);
+
+type TypesResult =
+  | { readonly ok: true; readonly types: readonly AtomType[] | undefined }
+  | { readonly ok: false; readonly error: string };
+
+/** Absent flag reads as "unfiltered"; every named value must be in the vocabulary. */
+const resolveTypes = (flags: FlagValues): TypesResult => {
+  const raw = stringFlag(flags, TYPE_FLAG);
+  if (raw === undefined) return { ok: true, types: undefined };
+  const requested = splitTypes(raw);
+  const offender = requested.find(value => asType(value) === undefined);
+  return offender === undefined
+    ? { ok: true, types: requested.flatMap(value => asType(value) ?? []) }
+    : { ok: false, error: typeError(offender) };
 };
 
 /**
@@ -64,10 +97,24 @@ const retrieveText = (result: RetrievalResult): string =>
     ...result.atoms.map(atomLine),
   ].join('\n');
 
+type ArgsResult =
+  | { readonly ok: true; readonly k: number; readonly types: readonly AtomType[] | undefined }
+  | { readonly ok: false; readonly error: string };
+
+/** Both value flags, resolved together so the command states one refusal path. */
+const resolveArgs = (flags: FlagValues): ArgsResult => {
+  const k = resolveK(flags);
+  const types = resolveTypes(flags);
+  if (k === undefined) return { ok: false, error: kError(stringFlag(flags, '-k') ?? '') };
+  return types.ok ? { ok: true, k, types: types.types } : { ok: false, error: types.error };
+};
+
 interface RetrieveRequest {
   readonly context: CommandContext;
   readonly query: string;
   readonly k: number;
+  /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
+  readonly types: readonly AtomType[] | undefined;
 }
 
 /** The `--json` payload. Its key set is adapter-independent by construction. */
@@ -131,10 +178,13 @@ const retrieveXml = (request: RetrieveRequest, result: RetrievalResult): string 
     '</retrieved_context>',
   ].join('\n');
 
+const retrieveOptions = (request: RetrieveRequest): RetrieveOptions =>
+  request.types === undefined ? { k: request.k } : { k: request.k, types: request.types };
+
 const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
-  const { context, query, k } = request;
+  const { context, query } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
-  const result = await port.retrieve(query, { k });
+  const result = await port.retrieve(query, retrieveOptions(request));
   port.close?.();
   return {
     exitCode: exitCodeFor(result),
@@ -146,8 +196,8 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
 
 export const runRetrieveCommand = async (context: CommandContext): Promise<CommandOutcome> => {
   const query = context.positionals.join(' ');
-  const k = resolveK(context.flags);
+  const args = resolveArgs(context.flags);
   if (query.length === 0) return usageError(NO_QUERY);
-  if (k === undefined) return usageError(kError(stringFlag(context.flags, '-k') ?? ''));
-  return await search({ context, query, k });
+  if (!args.ok) return usageError(args.error);
+  return await search({ context, query, k: args.k, types: args.types });
 };

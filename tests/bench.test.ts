@@ -390,21 +390,21 @@ describe('golden-query filters reach the port', () => {
     const calls = await optionsSeen([filtered('q-type', null, 'adr')]);
 
     expect(calls.length).toBeGreaterThan(0);
-    expect(calls).toContainEqual({ k: 3, type: 'adr' });
+    expect(calls).toContainEqual({ k: 3, types: ['adr'] });
   });
 
   it('leaves a null-type query unfiltered', async () => {
     const calls = await optionsSeen([filtered('q-none', null, null)]);
 
     expect(calls.length).toBeGreaterThan(0);
-    expect(calls.every(opts => opts.type === undefined)).toBe(true);
+    expect(calls.every(opts => opts.types === undefined)).toBe(true);
     expect(calls).toContainEqual({ k: 3 });
   });
 
   it('combines domain and type independently', async () => {
     const calls = await optionsSeen([filtered('q-both', 'runner', 'adr')]);
 
-    expect(calls).toContainEqual({ k: 3, domain: 'runner', type: 'adr' });
+    expect(calls).toContainEqual({ k: 3, domain: 'runner', types: ['adr'] });
   });
 
   it('keeps a domain-only query free of a type filter', async () => {

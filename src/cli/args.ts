@@ -27,6 +27,8 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // `retrieve` only — every other command refuses it through the same
   // unknown-flag path, because a format it cannot honour MUST NOT look accepted.
   '--format': { kind: 'value', placeholder: '<text|json|xml>' },
+  // `retrieve` only, refused elsewhere through the same unknown-flag path.
+  '--type': { kind: 'value', placeholder: '<type[,type]>' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },

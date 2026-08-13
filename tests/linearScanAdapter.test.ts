@@ -212,11 +212,58 @@ describe('createLinearScanAdapter', () => {
 
     const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
       k: 10,
-      type: 'adr',
+      types: ['adr'],
     });
 
     expect(ids(result)).toEqual(['adr-atom']);
     expect(result.atoms[0]?.type).toBe('adr');
+  });
+
+  /**
+   * The single-element regression gate: `types: ['adr']` MUST return exactly
+   * what the pre-list `type: 'adr'` returned, so widening the filter to a list
+   * cannot have moved the one-type case.
+   */
+  it('returns the same atoms for a one-element list as the single-type filter returned', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'a.md', id: 'knowledge-atom', body: 'gate pipeline escalation', overrides: { type: 'knowledge' } },
+      { file: 'b.md', id: 'adr-atom', body: 'gate pipeline escalation', overrides: { type: 'adr' } },
+      { file: 'c.md', id: 'review-atom', body: 'gate pipeline escalation', overrides: { type: 'review' } },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
+      k: 10,
+      types: ['adr'],
+    });
+
+    expect(ids(result)).toEqual(['adr-atom']);
+  });
+
+  it('keeps every atom whose type is a member of a multi-type filter', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      { file: 'a.md', id: 'knowledge-atom', body: 'gate pipeline escalation', overrides: { type: 'knowledge' } },
+      { file: 'b.md', id: 'adr-atom', body: 'gate pipeline escalation', overrides: { type: 'adr' } },
+      { file: 'c.md', id: 'review-atom', body: 'gate pipeline escalation', overrides: { type: 'review' } },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
+      k: 10,
+      types: ['adr', 'review'],
+    });
+
+    expect([...ids(result)].sort()).toEqual(['adr-atom', 'review-atom']);
+  });
+
+  it('refuses an empty type list instead of matching nothing', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [{ file: 'a.md', id: 'adr-atom', body: 'gate pipeline escalation' }]);
+
+    const attempt = async (): Promise<RetrievalResult> =>
+      await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', { k: 10, types: [] });
+
+    await expect(attempt()).rejects.toThrow(/"types" MUST name at least one type/);
   });
 
   it('keeps an atom whose type is outside the closed vocabulary under the default type', async () => {
@@ -225,7 +272,7 @@ describe('createLinearScanAdapter', () => {
 
     const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
       k: 10,
-      type: 'knowledge',
+      types: ['knowledge'],
     });
 
     expect(ids(result)).toEqual(['odd-atom']);

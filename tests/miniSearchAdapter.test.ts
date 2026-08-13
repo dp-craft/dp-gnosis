@@ -256,16 +256,37 @@ describe('createMiniSearchAdapter', () => {
     writeAtom({ file: 'b.md', id: 'atom-b', type: 'adr', body: 'shared token here' });
     await build();
 
-    const result = await port().retrieve('shared token', { k: 5, type: 'adr' });
+    const result = await port().retrieve('shared token', { k: 5, types: ['adr'] });
 
     expect(ids(result.atoms)).toEqual(['atom-b']);
+  });
+
+  it('keeps every atom whose type is a member of a multi-type filter', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', type: 'knowledge', body: 'shared token here' });
+    writeAtom({ file: 'b.md', id: 'atom-b', type: 'adr', body: 'shared token here' });
+    writeAtom({ file: 'c.md', id: 'atom-c', type: 'review', body: 'shared token here' });
+    await build();
+
+    const result = await port().retrieve('shared token', { k: 5, types: ['adr', 'review'] });
+
+    expect([...ids(result.atoms)].sort()).toEqual(['atom-b', 'atom-c']);
+  });
+
+  it('refuses an empty type list instead of matching nothing', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', type: 'adr', body: 'shared token here' });
+    await build();
+
+    const attempt = async (): Promise<unknown> =>
+      await port().retrieve('shared token', { k: 5, types: [] });
+
+    await expect(attempt()).rejects.toThrow(/"types" MUST name at least one type/);
   });
 
   it('keeps an atom whose type is outside the closed vocabulary under the default type', async () => {
     writeAtom({ file: 'a.md', id: 'atom-a', type: 'invented_type', body: 'shared token here' });
     await build();
 
-    const result = await port().retrieve('shared token', { k: 5, type: 'knowledge' });
+    const result = await port().retrieve('shared token', { k: 5, types: ['knowledge'] });
 
     expect(ids(result.atoms)).toEqual(['atom-a']);
     expect(result.atoms[0]?.type).toBe('knowledge');

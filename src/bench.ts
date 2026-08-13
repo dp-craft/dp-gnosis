@@ -151,7 +151,7 @@ const retrieveOptions = (query: GoldenQuery, k: number): RetrieveOptions => {
   return {
     k,
     ...(domain === undefined ? {} : { domain }),
-    ...(type === undefined ? {} : { type }),
+    ...(type === undefined ? {} : { types: [type] }),
   };
 };
 

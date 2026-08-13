@@ -66,6 +66,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
+import { assertTypeFilter } from '../port.js';
 import { stemText } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
@@ -304,8 +305,8 @@ const byScoreThenId = (a: RetrievedAtom, b: RetrievedAtom): number =>
 const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boolean =>
   domain === undefined || atom.domain === domain;
 
-const matchType = (atom: RetrievedAtom, type: AtomType | undefined): boolean =>
-  type === undefined || atom.type === type;
+const matchType = (atom: RetrievedAtom, types: readonly AtomType[] | undefined): boolean =>
+  types === undefined || types.includes(atom.type);
 
 /** One row read from disk, kept only if it survives both filters. */
 const survivorOf = (
@@ -314,7 +315,7 @@ const survivorOf = (
   opts: RetrieveOptions
 ): RetrievedAtom | undefined => {
   const atom = readRow(options, row);
-  return atom !== undefined && matchDomain(atom, opts.domain) && matchType(atom, opts.type)
+  return atom !== undefined && matchDomain(atom, opts.domain) && matchType(atom, opts.types)
     ? atom
     : undefined;
 };
@@ -500,8 +501,10 @@ export const createFts5Adapter = (options: Fts5AdapterOptions): KnowledgePort =>
   };
   return {
     name: FTS5_MODE,
-    retrieve: (query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>
-      Promise.resolve(retrieveFrom(self, query, opts)),
+    retrieve: async (query: string, opts: RetrieveOptions): Promise<RetrievalResult> => {
+      assertTypeFilter(opts.types);
+      return retrieveFrom(self, query, opts);
+    },
     close: self.handle.close,
   };
 };

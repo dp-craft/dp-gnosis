@@ -67,6 +67,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
+import { assertTypeFilter } from '../port.js';
 import { stemText } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
@@ -344,8 +345,8 @@ const byScoreThenId = (a: RetrievedAtom, b: RetrievedAtom): number =>
 const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boolean =>
   domain === undefined || atom.domain === domain;
 
-const matchType = (atom: RetrievedAtom, type: AtomType | undefined): boolean =>
-  type === undefined || atom.type === type;
+const matchType = (atom: RetrievedAtom, types: readonly AtomType[] | undefined): boolean =>
+  types === undefined || types.includes(atom.type);
 
 const selectAtoms = (
   options: LanceDbAdapterOptions,
@@ -358,7 +359,7 @@ const selectAtoms = (
     .map(hit => readHit(options, hit))
     .filter(isDefined)
     .filter(atom => matchDomain(atom, opts.domain))
-    .filter(atom => matchType(atom, opts.type))
+    .filter(atom => matchType(atom, opts.types))
     .sort(byScoreThenId)
     .slice(0, opts.k);
 
@@ -596,8 +597,10 @@ export const createLanceDbAdapter = (options: LanceDbAdapterOptions): KnowledgeP
   };
   return {
     name: LANCEDB_MODE,
-    retrieve: (query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>
-      retrieveFrom(self, { query, opts }),
+    retrieve: async (query: string, opts: RetrieveOptions): Promise<RetrievalResult> => {
+      assertTypeFilter(opts.types);
+      return await retrieveFrom(self, { query, opts });
+    },
     close: (): void => release(self.cell),
   };
 };

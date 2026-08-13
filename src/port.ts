@@ -1,4 +1,5 @@
 import type { AtomDomain, AtomType } from './config.js';
+import { ATOM_TYPES } from './config.js';
 
 /**
  * Whether a retrieval leg actually ran, and against what.
@@ -36,8 +37,24 @@ export interface RetrievedAtom {
 export interface RetrieveOptions {
   readonly k: number;
   readonly domain?: AtomDomain;
-  readonly type?: AtomType;
+  /**
+   * A candidate passes when its type is a MEMBER of this list. Absent means
+   * unfiltered — every type passes. An EMPTY list is refused rather than read as
+   * "match nothing": a caller that computed an empty filter asked for a result
+   * no query can produce, and silently returning zero atoms would present that
+   * bug as an empty corpus.
+   */
+  readonly types?: readonly AtomType[];
 }
+
+/** The single wording for "an empty type filter is a caller bug". */
+export const EMPTY_TYPES_MESSAGE =
+  `retrieve: "types" MUST name at least one type — omit it to search every type, or pass one of: ${ATOM_TYPES.join(' | ')}`;
+
+/** Refuse an empty `types` at the port boundary, before any candidate is read. */
+export const assertTypeFilter = (types: readonly AtomType[] | undefined): void => {
+  if (types !== undefined && types.length === 0) throw new Error(EMPTY_TYPES_MESSAGE);
+};
 
 /** The outcome of one retrieval call. */
 export interface RetrievalResult {
