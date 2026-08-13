@@ -114,14 +114,22 @@ export const ATOM_MIN_CHARS = 200;
  * count is a PROVEN upper bound on the real token count (see `estimateTokens`).
  * The price is measured: on the repo top-5 median the bound reads 6 190 where
  * Qwen counts 1 520 tokens — 4.1x reserve — and 5 272 vs 1 959 in Hungarian,
- * 2.7x. So 8000 here admits roughly what a 2–3k-token consumer window holds,
- * and a caller who knows its own window passes `--max-tokens`.
+ * 2.7x. A caller who knows its own window passes `--max-tokens`.
  *
- * Unrelated to `ATOM_FENCE_MAX_CHARS` despite the shared value: that one caps a
- * single atom's CHARACTERS at write time, this one caps a whole result's BYTES
- * at read time. They move independently.
+ * 16000 is measured (2026-08-13, full curve in
+ * `docs/benchmarks/2026-08-13-dp-gnosis-evolution-and-maturity-analysis.md`
+ * §5.3): raising the budget from 8000 lifts delivered recall@10 from 0.4373 to
+ * 0.5330 against an unlimited-budget ceiling of 0.5420, and the median count of
+ * top-10 atoms actually admitted from 6.5 to 10.0. So 16000 bytes recovers 91%
+ * of the recall the 8000 default was discarding, and ~3900 real tokens
+ * (16000 ÷ 4.1) still sits inside the 2000–4000 token band published for
+ * retrieved knowledge in a pipeline that filters.
+ *
+ * Unrelated to `ATOM_FENCE_MAX_CHARS`: that one caps a single atom's CHARACTERS
+ * at write time, this one caps a whole result's BYTES at read time. They move
+ * independently.
  */
-export const RETRIEVE_TOKEN_BUDGET = 8000;
+export const RETRIEVE_TOKEN_BUDGET = 16000;
 
 /**
  * Hard cap on how many terms a constructed retrieval query may carry.
