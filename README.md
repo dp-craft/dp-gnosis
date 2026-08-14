@@ -36,7 +36,7 @@ frozen in `tools/dp-gnosis/src/config.ts`.
 |---|---|---|
 | `beir-zip` | `source` (archive URL), `qrels` (split name) | downloaded to `data/<id>.zip`, unzipped into `data/<id>/` |
 | `beir-local` | `source` (path relative to this directory), `qrels` | read in place, nothing fetched |
-| `bright` | `split` (BRIGHT domain name) | both HuggingFace configs pulled through the datasets-server rows API and written into `data/<id>/` in BEIR layout |
+| `bright` | `split` (BRIGHT domain name) | both HuggingFace configs downloaded as parquet shards (cached under `data/_parquet/<config>/<split>/`) and written into `data/<id>/` in BEIR layout |
 
 `beir-local` is also how you measure YOUR OWN material: point `source` at a
 directory holding a hand-labelled corpus in BEIR layout — `corpus.jsonl`
@@ -49,6 +49,33 @@ fetcher, which records the mapping in `data/<id>/id-map.json`.
 
 Optional per-entry `atomMaxChars` overrides the engine's chunk cap; the BRIGHT
 entries set 4000 because their documents are whole web pages.
+
+### Two BRIGHT granularities: what the gap measures
+
+BRIGHT publishes the SAME 103 queries per domain against two document sizes,
+and a `bright` entry picks one with `granularity` (absent means `long`):
+
+| Entry | `granularity` | Corpus config | Gold field | A document is |
+|---|---|---|---|---|
+| `bright-<domain>` | `long` | `long_documents` | `gold_ids_long` | a whole web page |
+| `bright-<domain>-passages` | `passage` | `documents` | `gold_ids` | one gold passage, ~387 chars |
+
+A passage is about one atom long, so at `passage` granularity a document IS a
+block and the document-level rollup scores block-level ranking — no second
+scoring path, no anchors, no LLM. Both variants run through the same harness
+unchanged.
+
+Read the pair together: `bright-biology` and `bright-biology-passages` ask the
+same questions of the same material, and the only difference is that the long
+variant must first CHUNK a page and then roll its atoms back up. **The score gap
+between them is the chunker's cost** — it is what retrieval loses to splitting
+and reassembly, isolated from the ranking itself.
+
+Only `bright-biology-passages` ships. The full `documents` config is 1.33M rows
+across the eight domains, and one domain is enough to size the gap; a second
+domain is one more manifest entry when it is wanted. Each variant caches under
+its own `data/<id>/`, so neither overwrites the other, and `documents/biology`
+is 57,359 rows (~574 requests) — the fetcher logs progress every 50 pages.
 
 ## Read the results
 

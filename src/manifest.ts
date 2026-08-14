@@ -35,16 +35,30 @@ export interface BeirDataset extends DatasetBase {
   readonly qrels: string;
 }
 
+/**
+ * Which of BRIGHT's two granularities of the SAME queries to score: `long` is
+ * the whole web page (config `long_documents` + `gold_ids_long`), `passage` is
+ * the gold passage inside it (config `documents` + `gold_ids`). A passage is
+ * about one atom long, so `passage` measures block-level ranking with no
+ * separate scoring path — and the gap to `long` is what chunking costs.
+ */
+export type BrightGranularity = 'long' | 'passage';
+
 /** A BRIGHT domain split, materialised into BEIR layout by its fetcher. */
 export interface BrightDataset extends DatasetBase {
   readonly format: 'bright';
   readonly split: string;
+  /** Absent in the manifest means `long`, the granularity that shipped first. */
+  readonly granularity: BrightGranularity;
 }
 
 export type DatasetEntry = BeirDataset | BrightDataset;
 
 const BEIR_FORMATS: readonly string[] = ['beir-zip', 'beir-local'];
 const FORMATS_TEXT = '"beir-zip", "beir-local" or "bright"';
+const GRANULARITIES: readonly string[] = ['long', 'passage'];
+const GRANULARITIES_TEXT = '"long" (whole pages) or "passage" (the gold passages inside them)';
+const DEFAULT_GRANULARITY: BrightGranularity = 'long';
 
 const fail = (problem: string, fix: string): never => {
   throw new Error(`datasets.json: ${problem} — ${fix}`);
@@ -119,6 +133,24 @@ const beirOf = (
   qrels: requireString(record, 'qrels', where),
 });
 
+const isGranularity = (value: unknown): value is BrightGranularity =>
+  typeof value === 'string' && GRANULARITIES.includes(value);
+
+/** Absent means `long`: the eight page-level entries predate this field. */
+const granularityOf = (
+  record: Readonly<Record<string, unknown>>,
+  where: string
+): BrightGranularity => {
+  const value = record['granularity'];
+  if (value === undefined) return DEFAULT_GRANULARITY;
+  return isGranularity(value)
+    ? value
+    : fail(
+        `${where} has an invalid "granularity" ${JSON.stringify(value)}`,
+        `use ${GRANULARITIES_TEXT}, or drop "granularity" for "${DEFAULT_GRANULARITY}"`
+      );
+};
+
 const brightOf = (
   record: Readonly<Record<string, unknown>>,
   where: string
@@ -126,6 +158,7 @@ const brightOf = (
   ...baseOf(record, where),
   format: 'bright',
   split: requireString(record, 'split', where),
+  granularity: granularityOf(record, where),
 });
 
 const isBeirFormat = (format: string): format is BeirDataset['format'] =>

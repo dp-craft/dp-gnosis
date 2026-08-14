@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import type { BrightDataset } from './manifest.js';
 import { enabledDatasets, loadManifest, parseManifest } from './manifest.js';
 
 const MANIFEST = resolve(fileURLToPath(import.meta.url), '../../datasets.json');
@@ -52,6 +53,24 @@ describe('parseManifest', () => {
     expect(parsed[0]).toMatchObject({ format: 'bright', split: 'pony', enabled: false });
   });
 
+  it('defaults a bright entry to "long" granularity, so older entries keep working', () => {
+    const parsed = parseManifest(wrap(entry({ format: 'bright', split: 'pony' })));
+    expect(parsed[0]).toMatchObject({ granularity: 'long' });
+  });
+
+  it('reads granularity: "passage" — the same queries against the gold passages', () => {
+    const parsed = parseManifest(
+      wrap(entry({ format: 'bright', split: 'biology', granularity: 'passage' }))
+    );
+    expect(parsed[0]).toMatchObject({ granularity: 'passage' });
+  });
+
+  it('names the fix when a bright entry has an unknown granularity', () => {
+    expect(() =>
+      parseManifest(wrap(entry({ format: 'bright', split: 'pony', granularity: 'chunk' })))
+    ).toThrow(/invalid "granularity" "chunk".*"long".*"passage"/s);
+  });
+
   it('names the fix when the format is unknown', () => {
     expect(() => parseManifest(wrap(entry({ format: 'csv' })))).toThrow(
       /unknown format "csv".*"beir-zip", "beir-local" or "bright"/s
@@ -97,21 +116,31 @@ describe('parseManifest', () => {
 describe('the shipped datasets.json', () => {
   const entries = loadManifest(MANIFEST);
 
-  it('carries the three BEIR entries plus eight BRIGHT splits', () => {
-    expect(entries).toHaveLength(11);
-    expect(entries.filter(e => e.format === 'bright')).toHaveLength(8);
+  // AC delta: the eight long-document BRIGHT splits gain ONE passage-granularity
+  // twin (bright-biology-passages), so the counts move 11 → 12 and 8 → 9.
+  it('carries the three BEIR entries plus nine BRIGHT entries', () => {
+    expect(entries).toHaveLength(12);
+    expect(entries.filter(e => e.format === 'bright')).toHaveLength(9);
   });
 
   // AC delta: every entry is enabled now that both fetchers exist. Before them,
   // only the three datasets already on disk or hand-fetchable could run.
-  it('enables every entry, each of the eleven having a fetcher', () => {
-    expect(enabledDatasets(entries)).toHaveLength(11);
+  it('enables every entry, each of the twelve having a fetcher', () => {
+    expect(enabledDatasets(entries)).toHaveLength(12);
   });
 
   it('caps BRIGHT atoms at 4000 chars — its documents are whole web pages', () => {
     expect(entries.filter(e => e.format === 'bright').map(e => e.atomMaxChars)).toEqual(
-      Array.from({ length: 8 }, () => 4000)
+      Array.from({ length: 9 }, () => 4000)
     );
+  });
+
+  it('states granularity on every BRIGHT entry, exactly one of them passage-level', () => {
+    const bright = entries.filter((e): e is BrightDataset => e.format === 'bright');
+    expect(bright.filter(e => e.granularity === 'long')).toHaveLength(8);
+    expect(bright.filter(e => e.granularity === 'passage').map(e => e.id)).toEqual([
+      'bright-biology-passages',
+    ]);
   });
 
   it('has unique ids', () => {

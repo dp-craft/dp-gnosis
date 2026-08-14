@@ -5,5 +5,8 @@
   "scripts": {
     "start": "tsx src/run.ts",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "hyparquet": "1.28.2"
   }
 }
