@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -374,5 +374,153 @@ describe('createLinearScanAdapter', () => {
     const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('indexing', { k: 5 });
 
     expect(ids(result)).toEqual(['a']);
+  });
+
+  describe('BM25 parameters', () => {
+    // `long` has twice the term frequency but ~6x the length; `b` decides which wins.
+    const lengthSpecs: readonly AtomSpec[] = [
+      { file: 'a.md', id: 'short', body: 'bm25 tuning' },
+      {
+        file: 'b.md',
+        id: 'long',
+        body: `bm25 bm25 ${'filler words about unrelated topics '.repeat(12)}`,
+      },
+    ];
+
+    it('defaults to k1 1.2 and b 0.75 when neither is passed', async () => {
+      const dir = await atomsDir();
+      await writeAll(dir, lengthSpecs);
+
+      const implicit = await createLinearScanAdapter(dir, { now: NOW }).retrieve('bm25', { k: 5 });
+      const explicit = await createLinearScanAdapter(dir, {
+        now: NOW,
+        k1: 1.2,
+        b: 0.75,
+      }).retrieve('bm25', { k: 5 });
+
+      expect(explicit.atoms.map(atom => atom.score)).toEqual(implicit.atoms.map(atom => atom.score));
+    });
+
+    it('drops the length penalty at b 0, flipping the ranking', async () => {
+      const dir = await atomsDir();
+      await writeAll(dir, lengthSpecs);
+
+      const normalized = await createLinearScanAdapter(dir, { now: NOW, b: 0.75 }).retrieve('bm25', {
+        k: 5,
+      });
+      const flat = await createLinearScanAdapter(dir, { now: NOW, b: 0 }).retrieve('bm25', { k: 5 });
+
+      expect(ids(normalized)).toEqual(['short', 'long']);
+      expect(ids(flat)).toEqual(['long', 'short']);
+    });
+
+    it('saturates term frequency harder as k1 falls', async () => {
+      const dir = await atomsDir();
+      await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'bm25 bm25 bm25 bm25 tuning' }]);
+
+      const wide = await createLinearScanAdapter(dir, { now: NOW, k1: 1.2 }).retrieve('bm25', {
+        k: 5,
+      });
+      const tight = await createLinearScanAdapter(dir, { now: NOW, k1: 0.8 }).retrieve('bm25', {
+        k: 5,
+      });
+
+      expect(tight.atoms[0]!.score).toBeLessThan(wide.atoms[0]!.score);
+    });
+  });
+
+  describe('cacheCorpusScan', () => {
+    const specs: readonly AtomSpec[] = [
+      { file: 'a.md', id: 'short', body: 'bm25 tuning' },
+      {
+        file: 'b.md',
+        id: 'long',
+        body: `bm25 bm25 ${'filler words about unrelated topics '.repeat(12)}`,
+      },
+    ];
+
+    it('is off by default, so an on-disk edit is visible to the very next call', async () => {
+      const dir = await atomsDir();
+      await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'bm25 tuning' }]);
+      const port = createLinearScanAdapter(dir, { now: NOW });
+
+      const before = await port.retrieve('zustand', { k: 5 });
+      await writeAtom(dir, { file: 'b.md', id: 'b', body: 'zustand selector stability' });
+      const after = await port.retrieve('zustand', { k: 5 });
+
+      expect(ids(before)).toEqual([]);
+      expect(ids(after)).toEqual(['b']);
+    });
+
+    it('ranks identically whether the scan is cached or not', async () => {
+      const plain = await atomsDir('plain');
+      const cached = await atomsDir('cached');
+      await writeAll(plain, specs);
+      await writeAll(cached, specs);
+
+      const uncached = await createLinearScanAdapter(plain, { now: NOW }).retrieve('bm25', { k: 5 });
+      const hot = createLinearScanAdapter(cached, { now: NOW, cacheCorpusScan: true });
+      await hot.retrieve('bm25', { k: 5 });
+      const second = await hot.retrieve('bm25', { k: 5 });
+
+      expect(ids(second)).toEqual(ids(uncached));
+      expect(second.atoms.map(atom => atom.score)).toEqual(uncached.atoms.map(atom => atom.score));
+    });
+
+    it('still re-scores when k1 or b changes, proving only the scan is cached', async () => {
+      const dir = await atomsDir();
+      await writeAll(dir, specs);
+      const cache = { now: NOW, cacheCorpusScan: true } as const;
+
+      const normalized = await createLinearScanAdapter(dir, { ...cache, b: 0.75 }).retrieve('bm25', {
+        k: 5,
+      });
+      const flat = await createLinearScanAdapter(dir, { ...cache, b: 0 }).retrieve('bm25', { k: 5 });
+
+      expect(ids(normalized)).toEqual(['short', 'long']);
+      expect(ids(flat)).toEqual(['long', 'short']);
+    });
+
+    it('reuses the scan when the signature is unchanged, so an mtime-preserving edit is not seen', async () => {
+      const dir = await atomsDir();
+      const stamp = new Date(2026, 0, 1);
+      await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'bm25 tuning' }]);
+      await utimes(join(dir, 'a.md'), stamp, stamp);
+      const port = createLinearScanAdapter(dir, { now: NOW, cacheCorpusScan: true });
+      await port.retrieve('bm25', { k: 5 });
+
+      await writeAtom(dir, { file: 'a.md', id: 'a', body: 'zustand selector stability' });
+      await utimes(join(dir, 'a.md'), stamp, stamp);
+
+      expect(ids(await port.retrieve('zustand', { k: 5 }))).toEqual([]);
+    });
+
+    it('invalidates the cache when the corpus file count changes', async () => {
+      const dir = await atomsDir();
+      await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'bm25 tuning' }]);
+      const port = createLinearScanAdapter(dir, { now: NOW, cacheCorpusScan: true });
+
+      const before = await port.retrieve('zustand', { k: 5 });
+      await writeAtom(dir, { file: 'b.md', id: 'b', body: 'zustand selector stability' });
+      const after = await port.retrieve('zustand', { k: 5 });
+
+      expect(ids(before)).toEqual([]);
+      expect(ids(after)).toEqual(['b']);
+    });
+
+    it('invalidates the cache when an atom is rewritten with a newer mtime', async () => {
+      const dir = await atomsDir();
+      await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'bm25 tuning' }]);
+      const port = createLinearScanAdapter(dir, { now: NOW, cacheCorpusScan: true });
+
+      const before = await port.retrieve('zustand', { k: 5 });
+      await writeAtom(dir, { file: 'a.md', id: 'a', body: 'zustand selector stability' });
+      const later = new Date(Date.now() + 60_000);
+      await utimes(join(dir, 'a.md'), later, later);
+      const after = await port.retrieve('zustand', { k: 5 });
+
+      expect(ids(before)).toEqual([]);
+      expect(ids(after)).toEqual(['a']);
+    });
   });
 });

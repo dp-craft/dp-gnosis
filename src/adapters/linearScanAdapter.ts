@@ -16,7 +16,7 @@
  *    unreachable — it is never opened, not filtered out after the fact.
  */
 import type { Dirent } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { Atom } from '../atom.js';
@@ -52,6 +52,14 @@ const MARKDOWN_EXT = '.md';
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 
+/** The two BM25 knobs, carried together so scoring reads one operating point. */
+interface Bm25Params {
+  readonly k1: number;
+  readonly b: number;
+}
+
+const DEFAULT_BM25: Bm25Params = { k1: BM25_K1, b: BM25_B };
+
 export interface LinearScanOptions {
   /**
    * Injected for the same reason `isRetrievable` takes it: a time-dependent
@@ -69,12 +77,41 @@ export interface LinearScanOptions {
    * not a production knob.
    */
   readonly processTerm?: TermProcessor;
+  /**
+   * BM25 term-frequency saturation. Defaults to `BM25_K1`, so omitting it scores
+   * exactly as before. It exists so a parameter sweep can drive THIS adapter
+   * rather than re-implementing BM25 beside it; SQLite FTS5 hardcodes its own
+   * pair, so a value found here is not transferable to the `fts5` adapter.
+   */
+  readonly k1?: number;
+  /** BM25 length normalization. Defaults to `BM25_B`; see `k1`. */
+  readonly b?: number;
+  /**
+   * Keep the PARAMETER-INDEPENDENT part of the scan — parsed atoms, terms, term
+   * frequencies, lengths and document frequencies — in memory between calls,
+   * keyed by `atomsDir`. `k1` and `b` enter only in the final BM25 combination,
+   * so one cached scan serves every cell of a parameter sweep; scores and
+   * rankings are NOT cached and are recomputed per call.
+   *
+   * Defaults to `false`, and off it changes nothing: the scan runs per call, so
+   * the port's read-at-call-time body rule holds as documented on
+   * `createLinearScanAdapter`. Turning it ON trades exactly that rule for speed,
+   * which makes it a BENCHMARK affordance (`dp-gnosis-bench` `sweep.ts`, where
+   * the corpus is fixed across a grid), not a production knob. Two consequences
+   * a caller accepts with it: an on-disk edit that leaves the corpus signature
+   * — file count plus newest mtime under `atomsDir` — untouched is not seen,
+   * and the `stale_after`/`deprecated` retrievability cutoff is frozen at the
+   * `now` of the call that filled the cache rather than re-evaluated per call.
+   */
+  readonly cacheCorpusScan?: boolean;
 }
 
 interface ScanContext {
   readonly dir: string;
   readonly now: Date;
   readonly processTerm: TermProcessor;
+  readonly bm25: Bm25Params;
+  readonly cacheCorpusScan: boolean;
 }
 
 interface ScannedDoc {
@@ -89,10 +126,20 @@ interface ScannedDoc {
   readonly freq: ReadonlyMap<string, number>;
 }
 
-interface Corpus {
+/**
+ * Everything the scan produces that `k1` and `b` cannot influence. Kept SEPARATE
+ * from `Corpus` so a cached scan is provably parameter-independent: nothing a
+ * sweep varies can reach this shape.
+ */
+interface CorpusScan {
   readonly docs: readonly ScannedDoc[];
   readonly avgLength: number;
   readonly docFreq: ReadonlyMap<string, number>;
+}
+
+interface Corpus extends CorpusScan {
+  /** The operating point this corpus is scored at — read by `scoreTerm`. */
+  readonly bm25: Bm25Params;
 }
 
 interface ScoredDoc {
@@ -190,7 +237,7 @@ const documentFrequencies = (docs: readonly ScannedDoc[]): ReadonlyMap<string, n
 const meanLength = (docs: readonly ScannedDoc[]): number =>
   docs.length === 0 ? 0 : docs.reduce((sum, doc) => sum + doc.terms.length, 0) / docs.length;
 
-const buildCorpus = (docs: readonly ScannedDoc[]): Corpus => ({
+const buildScan = (docs: readonly ScannedDoc[]): CorpusScan => ({
   docs,
   avgLength: meanLength(docs),
   docFreq: documentFrequencies(docs),
@@ -199,14 +246,70 @@ const buildCorpus = (docs: readonly ScannedDoc[]): Corpus => ({
 /**
  * `Promise.all` preserves ARGUMENT order, so the corpus order is the sorted
  * file order regardless of which read settles first.
- *
- * `undefined` means the corpus root itself could not be read, so NO scan ran.
  */
-const scanCorpus = async (context: ScanContext): Promise<Corpus | undefined> => {
+const readScan = async (context: ScanContext, files: readonly string[]): Promise<CorpusScan> => {
+  const docs = await Promise.all(files.map(file => readDoc(context, file)));
+  return buildScan(docs.filter(isDefined));
+};
+
+/**
+ * The cheap corpus fingerprint: how many atom files there are, and the newest
+ * mtime among them. One `stat` pass, no bodies read — it must stay far cheaper
+ * than the scan it guards, or caching buys nothing.
+ */
+interface CorpusSignature {
+  readonly count: number;
+  readonly newestMtimeMs: number;
+}
+
+const NO_MTIME = 0;
+
+/** An unstattable file contributes `NO_MTIME`; `count` still moves if it vanishes. */
+const mtimeOf = async (path: string): Promise<number> =>
+  await stat(path).then(stats => stats.mtimeMs, () => NO_MTIME);
+
+const signatureOf = async (
+  dir: string,
+  files: readonly string[]
+): Promise<CorpusSignature> => {
+  const times = await Promise.all(files.map(file => mtimeOf(join(dir, file))));
+  return { count: files.length, newestMtimeMs: times.reduce((max, ms) => Math.max(max, ms), NO_MTIME) };
+};
+
+/**
+ * Keyed by directory, so two adapters over the same corpus at different `k1`/`b`
+ * share one scan — which is the entire point, since a sweep builds a fresh
+ * adapter per cell. `processTerm` is part of the validity check rather than the
+ * key: a different tokenizer produces different terms, and serving those would
+ * be silently wrong rather than merely stale.
+ */
+interface CacheEntry {
+  readonly signature: CorpusSignature;
+  readonly processTerm: TermProcessor;
+  readonly scan: CorpusScan;
+}
+
+const scanCache = new Map<string, CacheEntry>();
+
+const isFresh = (entry: CacheEntry, context: ScanContext, signature: CorpusSignature): boolean =>
+  entry.processTerm === context.processTerm &&
+  entry.signature.count === signature.count &&
+  entry.signature.newestMtimeMs === signature.newestMtimeMs;
+
+const cachedScan = async (context: ScanContext, files: readonly string[]): Promise<CorpusScan> => {
+  const signature = await signatureOf(context.dir, files);
+  const entry = scanCache.get(context.dir);
+  if (entry !== undefined && isFresh(entry, context, signature)) return entry.scan;
+  const scan = await readScan(context, files);
+  scanCache.set(context.dir, { signature, processTerm: context.processTerm, scan });
+  return scan;
+};
+
+/** `undefined` means the corpus root itself could not be read, so NO scan ran. */
+const scanCorpus = async (context: ScanContext): Promise<CorpusScan | undefined> => {
   const files = await listAtomFiles(context.dir);
   if (files === undefined) return undefined;
-  const docs = await Promise.all(files.map(file => readDoc(context, file)));
-  return buildCorpus(docs.filter(isDefined));
+  return context.cacheCorpusScan ? await cachedScan(context, files) : await readScan(context, files);
 };
 
 /** BM25 IDF with the +1 smoothing that keeps the weight non-negative. */
@@ -214,17 +317,27 @@ const idf = (docFreq: number, totalDocs: number): number =>
   Math.log(1 + (totalDocs - docFreq + BM25_IDF_SMOOTHING) / (docFreq + BM25_IDF_SMOOTHING));
 
 /** The length-normalization factor: `1 - b + b * dl / avgdl`. */
-const lengthNorm = (length: number, avgLength: number): number =>
-  1 - BM25_B + (BM25_B * length) / avgLength;
+const lengthNorm = (length: number, avgLength: number, b: number): number =>
+  1 - b + (b * length) / avgLength;
 
-const termScore = (freq: number, weight: number, norm: number): number =>
-  freq === 0 ? 0 : (weight * freq * (BM25_K1 + 1)) / (freq + BM25_K1 * norm);
+/** One term's contribution before saturation is applied — grouped to keep the arity at two. */
+interface TermStats {
+  readonly freq: number;
+  readonly weight: number;
+  readonly norm: number;
+}
+
+const termScore = (stats: TermStats, k1: number): number =>
+  stats.freq === 0 ? 0 : (stats.weight * stats.freq * (k1 + 1)) / (stats.freq + k1 * stats.norm);
 
 const scoreTerm = (doc: ScannedDoc, term: string, corpus: Corpus): number =>
   termScore(
-    doc.freq.get(term) ?? 0,
-    idf(corpus.docFreq.get(term) ?? 0, corpus.docs.length),
-    lengthNorm(doc.terms.length, corpus.avgLength)
+    {
+      freq: doc.freq.get(term) ?? 0,
+      weight: idf(corpus.docFreq.get(term) ?? 0, corpus.docs.length),
+      norm: lengthNorm(doc.terms.length, corpus.avgLength, corpus.bm25.b),
+    },
+    corpus.bm25.k1
   );
 
 const scoreDoc = (doc: ScannedDoc, terms: readonly string[], corpus: Corpus): number =>
@@ -285,16 +398,25 @@ const retrieve = async (
   query: string,
   opts: RetrieveOptions
 ): Promise<RetrievalResult> => {
-  const corpus = await scanCorpus(context);
-  if (corpus === undefined) return UNAVAILABLE_RESULT;
+  const scan = await scanCorpus(context);
+  if (scan === undefined) return UNAVAILABLE_RESULT;
+  const corpus: Corpus = { ...scan, bm25: context.bm25 };
   const scored = rank(corpus, queryTerms(query, context.processTerm), opts);
   return { atoms: scored.map(toRetrieved), mode: RETRIEVAL_MODE, indexState: indexStateOf(corpus) };
 };
+
+/** Either knob may be omitted independently; each falls back on its own. */
+const bm25For = (options: LinearScanOptions): Bm25Params => ({
+  k1: options.k1 ?? DEFAULT_BM25.k1,
+  b: options.b ?? DEFAULT_BM25.b,
+});
 
 const contextFor = (dir: string, options: LinearScanOptions): ScanContext => ({
   dir,
   now: options.now ?? new Date(),
   processTerm: options.processTerm ?? stemTerm,
+  bm25: bm25For(options),
+  cacheCorpusScan: options.cacheCorpusScan ?? false,
 });
 
 /**
@@ -304,7 +426,9 @@ const contextFor = (dir: string, options: LinearScanOptions): ScanContext => ({
  *
  * The corpus is re-read on EVERY `retrieve`, which is what satisfies the port's
  * read-at-call-time body rule: an edit on disk is visible to the very next call
- * with no reindex step.
+ * with no reindex step. `options.cacheCorpusScan` — off unless a caller asks for
+ * it — is the one documented way to give that rule up, and it is there for the
+ * benchmark sweep; see its own comment for what it costs.
  */
 export const createLinearScanAdapter = (
   atomsDir: string = ATOMS_DIR,
