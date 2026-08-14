@@ -313,8 +313,13 @@ const tsvRow = (topic: TopicScore): string =>
     metric(topic.metrics.mrr10),
   ].join('\t');
 
-const renderPerTopicTsv = (result: DatasetResult): string =>
-  [TSV_HEADER, ...result.perTopic.map(tsvRow), ''].join('\n');
+/**
+ * The per-topic TSV body — the ONE serializer for this format. The BM25 sweep
+ * writes its cells through it too, so `significance.readPerTopic` parses a run
+ * and a sweep cell with the same parser and neither can drift from the other.
+ */
+export const renderPerTopicTsv = (perTopic: readonly TopicScore[]): string =>
+  [TSV_HEADER, ...perTopic.map(tsvRow), ''].join('\n');
 
 const writePerTopic = (
   resultsDir: string,
@@ -322,7 +327,7 @@ const writePerTopic = (
   result: DatasetResult
 ): string => {
   const path = resolve(resultsDir, PER_TOPIC_DIR, `${stem}-${result.dataset}.tsv`);
-  writeFileSync(path, renderPerTopicTsv(result), 'utf8');
+  writeFileSync(path, renderPerTopicTsv(result.perTopic), 'utf8');
   return path;
 };
 

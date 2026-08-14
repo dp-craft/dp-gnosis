@@ -33,7 +33,7 @@ import { readQrels, readQueries } from './beir.js';
 import { openPort } from './engine.js';
 import { readExcluded } from './fetch/bright.js';
 import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
-import { currentGitSha } from './report.js';
+import { currentGitSha, reportStem } from './report.js';
 import {
   ensureDataset,
   MANIFEST_PATH,
@@ -52,6 +52,7 @@ import {
   datasetsOf,
   type SweepCell,
   type SweepProvenance,
+  writeSweepPerTopic,
   writeSweepReport,
   type WrittenSweep } from './sweepReport.js';
 
@@ -182,10 +183,26 @@ const contextFor = async (entry: DatasetEntry): Promise<DatasetContext> => {
   };
 };
 
-const measureCell = async (
+/** What a cell needs beyond its dataset: where its artefacts go, and how deep to rank. */
+export interface CellRun {
+  readonly resultsDir: string;
+  readonly depth: number;
+  /** The sweep's report stem, fixed once, so every cell's file groups with the run. */
+  readonly stem: string;
+}
+
+/**
+ * Measure one cell — and PERSIST its per-topic vector, not only the mean.
+ *
+ * `scoreDataset` computes both; keeping the mean alone would leave the four
+ * headline results of a sweep impossible to significance-test without paying for
+ * the whole grid again. The vector goes out in `report.ts`'s TSV format, so
+ * `significance.readPerTopic` reads a cell exactly as it reads a recorded run.
+ */
+export const measureCell = async (
   context: DatasetContext,
   point: GridPoint,
-  depth: number
+  run: CellRun
 ): Promise<SweepCell> => {
   const port = openPort(context.prepared, {
     adapter: ADAPTER,
@@ -195,21 +212,26 @@ const measureCell = async (
   });
   const rankContext = {
     port,
-    options: { only: [], depth, rerank: false, compare: false },
+    options: { only: [], depth: run.depth, rerank: false, compare: false },
     excluded: context.excluded,
   };
   const queried = await queryDataset(rankContext, context.topics).finally(() => port.close?.());
+  const scored = scoreDataset(queried.rankings, context.qrels);
+  const identity = { dataset: context.entry.id, adapter: ADAPTER, k1: point.k1, b: point.b };
   return {
-    dataset: context.entry.id,
-    adapter: ADAPTER,
-    k1: point.k1,
-    b: point.b,
+    ...identity,
     baseline: point.baseline,
     topics: context.topics.length,
     docCount: context.prepared.docCount,
     atomCount: context.prepared.atomCount,
     queryMs: queried.queryMs,
-    metrics: scoreDataset(queried.rankings, context.qrels).mean,
+    metrics: scored.mean,
+    perTopicPath: writeSweepPerTopic({
+      resultsDir: run.resultsDir,
+      stem: run.stem,
+      cell: identity,
+      perTopic: scored.perTopic,
+    }),
   };
 };
 
@@ -227,9 +249,8 @@ const cellLine = (cell: SweepCell, index: number, total: number): string =>
  * after EVERY cell with everything measured so far: a sweep that loses its
  * results to a crash on the last cell is worse than a slow one.
  */
-interface SweepRun {
+interface SweepRun extends CellRun {
   readonly grid: readonly GridPoint[];
-  readonly depth: number;
   readonly write: (cells: readonly SweepCell[]) => void;
 }
 
@@ -241,7 +262,7 @@ const measureAll = async (
 ): Promise<readonly SweepCell[]> =>
   run.grid.reduce<Promise<readonly SweepCell[]>>(async (pending, point, index) => {
     const done = await pending;
-    const cell = await measureCell(context, point, run.depth);
+    const cell = await measureCell(context, point, run);
     process.stdout.write(`${cellLine(cell, index, run.grid.length)}\n`);
     const next = [...done, cell];
     run.write([...before, ...next]);
@@ -328,13 +349,19 @@ const winnerLine = (cells: readonly SweepCell[], dataset: string): string => {
  * ONCE, before the first cell: a stem derived per call would scatter a long
  * run's checkpoints across a new set of files every minute.
  */
-const writerFor = (
-  options: SweepOptions,
-  sha: string
-): ((cells: readonly SweepCell[]) => WrittenSweep) => {
+interface SweepWriter {
+  /** Shared by the checkpoint artefacts and by every cell's per-topic TSV. */
+  readonly stem: string;
+  readonly write: (cells: readonly SweepCell[]) => WrittenSweep;
+}
+
+const writerFor = (options: SweepOptions, sha: string): SweepWriter => {
   const provenance = provenanceOf(options, sha);
-  return cells =>
-    writeSweepReport({ resultsDir: RESULTS_DIR, repoRoot: REPO_ROOT, provenance, cells });
+  return {
+    stem: reportStem(provenance.ts),
+    write: cells =>
+      writeSweepReport({ resultsDir: RESULTS_DIR, repoRoot: REPO_ROOT, provenance, cells }),
+  };
 };
 
 const announce = (cells: readonly SweepCell[], written: WrittenSweep): void => {
@@ -346,13 +373,15 @@ const announce = (cells: readonly SweepCell[], written: WrittenSweep): void => {
 export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
   const options = parseSweepArgs(argv);
   const entries = selected(options);
-  const write = writerFor(options, gitSha);
+  const writer = writerFor(options, gitSha);
   const cells = await sweepAll(entries, {
     grid: buildGrid(options.k1s, options.bs),
     depth: options.depth,
-    write,
+    resultsDir: RESULTS_DIR,
+    stem: writer.stem,
+    write: writer.write,
   });
-  if (cells.length > 0) announce(cells, write(cells));
+  if (cells.length > 0) announce(cells, writer.write(cells));
   return datasetsOf(cells).length === entries.length && entries.length > 0 ? 0 : FAILURE_EXIT_CODE;
 };
 

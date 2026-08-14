@@ -11,7 +11,9 @@ import {
   renderHeatmapSvg,
   renderSweepMarkdown,
   SWEEP_DIR,
+  SWEEP_PER_TOPIC_DIR,
   type SweepCell,
+  sweepPerTopicName,
   type SweepProvenance,
   writeSweepReport
 } from './sweepReport.js';
@@ -46,6 +48,12 @@ const cell = (spec: CellSpec): SweepCell => ({
   atomCount: 30,
   queryMs: 1234,
   metrics: metrics(spec.ndcg10),
+  perTopicPath: `${SWEEP_DIR}/${SWEEP_PER_TOPIC_DIR}/${sweepPerTopicName('2026-08-14-0930', {
+    dataset: spec.dataset,
+    adapter: 'linear',
+    k1: spec.k1,
+    b: spec.b,
+  })}`,
 });
 
 const cells: readonly SweepCell[] = [

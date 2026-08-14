@@ -21,7 +21,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { Metrics } from './metrics.js';
-import { reportStem } from './report.js';
+import { renderPerTopicTsv, reportStem } from './report.js';
+import type { TopicScore } from './score.js';
 
 const METRIC_DIGITS = 4;
 const CELL_DIGITS = 3;
@@ -53,6 +54,12 @@ export interface SweepCell {
   readonly atomCount: number;
   readonly queryMs: number;
   readonly metrics: Metrics;
+  /**
+   * This cell's per-topic TSV, RELATIVE to the suite's `results/` directory, so
+   * a consumer pairs two cells by reading the recorded path instead of
+   * rebuilding the filename — and a moved checkout still resolves.
+   */
+  readonly perTopicPath: string;
 }
 
 /** Facts true of the whole sweep. */
@@ -104,6 +111,58 @@ export const bestCell = (cells: readonly SweepCell[]): SweepCell | undefined =>
 
 export const baselineCell = (cells: readonly SweepCell[]): SweepCell | undefined =>
   cells.find(cell => cell.baseline);
+
+// --------------------------------------------------------------- per-topic
+
+/**
+ * The sweep's per-topic TSVs, under `results/sweep/`. Deliberately NOT the run
+ * report's `results/per-topic/`: a sweep writes one file per CELL, and mixing
+ * dozens of them into the directory a recorded run names by stem alone invites a
+ * collision between a run and a cell measured in the same minute.
+ */
+export const SWEEP_PER_TOPIC_DIR = 'per-topic';
+
+/** Fixed width, so `k1-0.80` sorts before `k1-1.20` as a string as well as a number. */
+const PARAM_DIGITS = 2;
+
+/** The part of a cell that identifies it — the file name has to carry all of it. */
+export type SweepCellIdentity = Pick<SweepCell, 'dataset' | 'adapter' | 'k1' | 'b'>;
+
+/**
+ * `<stem>-<dataset>-<adapter>-k1-<k1>-b-<b>.tsv`, e.g.
+ * `2026-08-14-0930-nfcorpus-linear-k1-1.20-b-0.60.tsv`.
+ *
+ * The stem leads so a sweep's files group and sort by run, exactly as the run
+ * report's `<stem>-<dataset>.tsv` does. The two BM25 parameters are printed to a
+ * FIXED two decimals and trail the name, which makes the tail unambiguous to
+ * read back — a dataset id contains hyphens, the four trailing fields never do.
+ */
+export const sweepPerTopicName = (stem: string, cell: SweepCellIdentity): string =>
+  `${stem}-${cell.dataset}-${cell.adapter}-` +
+  `k1-${cell.k1.toFixed(PARAM_DIGITS)}-b-${cell.b.toFixed(PARAM_DIGITS)}.tsv`;
+
+export interface SweepPerTopicOptions {
+  /** The suite's `results/` directory — the TSV lands in `results/sweep/per-topic/`. */
+  readonly resultsDir: string;
+  /** The run's report stem, fixed once, so every cell of one sweep shares it. */
+  readonly stem: string;
+  readonly cell: SweepCellIdentity;
+  readonly perTopic: readonly TopicScore[];
+}
+
+/**
+ * Persist one cell's per-topic vector and return its path relative to
+ * `resultsDir` — the value the cell records. Written in `report.ts`'s format by
+ * `report.ts`'s own serializer, so `significance.readPerTopic` consumes a sweep
+ * cell with no change at all.
+ */
+export const writeSweepPerTopic = (options: SweepPerTopicOptions): string => {
+  const name = sweepPerTopicName(options.stem, options.cell);
+  const dir = resolve(options.resultsDir, SWEEP_DIR, SWEEP_PER_TOPIC_DIR);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(resolve(dir, name), renderPerTopicTsv(options.perTopic), 'utf8');
+  return `${SWEEP_DIR}/${SWEEP_PER_TOPIC_DIR}/${name}`;
+};
 
 // ---------------------------------------------------------------- markdown
 
