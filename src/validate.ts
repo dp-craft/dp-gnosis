@@ -60,8 +60,8 @@ const capBasis = (limit: number): string =>
     ? 'its body opens a markdown fence, so the fenced-block ceiling applies'
     : 'its body opens no markdown fence, so the standard cap applies';
 
-const sizeError = (body: string): string | undefined => {
-  const limit = bodyMaxChars(body);
+const sizeError = (body: string, maxChars: number | undefined): string | undefined => {
+  const limit = bodyMaxChars(body, maxChars);
   return body.length <= limit
     ? undefined
     : `atom body is ${body.length} characters, over the ${limit}-character cap (${capBasis(limit)}) — split it into several smaller atoms, each within the cap`;
@@ -98,7 +98,7 @@ export const validateAtom = (
   [
     idFormatError(atom.frontmatter.id),
     idUniquenessError(atom.frontmatter.id, existingIds),
-    sizeError(atom.body),
+    sizeError(atom.body, profile.atomMaxChars),
     domainError(atom.frontmatter.x_domain, profile.domains),
     typeError(atom.frontmatter.type, profile.types),
   ].filter(isDefined);

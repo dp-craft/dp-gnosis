@@ -79,9 +79,13 @@ const opensWithFence = (body: string): boolean => {
  * decided, imported by every module that enforces a body length. A second copy
  * of the fence test is how the writer and the validator end up disagreeing
  * about the same atom.
+ *
+ * `maxChars` is the running instance's cap (a profile's `atomMaxChars`, else
+ * the shipped one), and the fence hatch is the LARGER of the two limits: a
+ * fenced block must never be held to a tighter cap than ordinary prose.
  */
-export const bodyMaxChars = (body: string): number =>
-  opensWithFence(body) ? ATOM_FENCE_MAX_CHARS : ATOM_MAX_CHARS;
+export const bodyMaxChars = (body: string, maxChars: number = ATOM_MAX_CHARS): number =>
+  opensWithFence(body) ? Math.max(ATOM_FENCE_MAX_CHARS, maxChars) : maxChars;
 
 /**
  * Body floor below which a chunk is not an atom of its own.

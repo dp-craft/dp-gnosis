@@ -21,7 +21,7 @@ export interface MarkdownChunk {
   readonly headingChain: readonly string[];
   /** This chunk's own heading text, or `PREAMBLE_TITLE` before the first heading. */
   readonly title: string;
-  /** Body text with blank edge lines removed; never longer than `ATOM_MAX_CHARS`. */
+  /** Body text with blank edge lines removed; never longer than the run's cap. */
   readonly body: string;
   /** 1-based line of the chunk's heading (of its first body line, for sub-chunks). */
   readonly startLine: number;
@@ -204,13 +204,36 @@ const toBlocks = (lines: readonly string[]): readonly string[] => {
     .map(block => block.join('\n'));
 };
 
-const fitsTarget = (group: string, block: string): boolean =>
-  group.length + 1 + block.length <= ATOM_CHUNK_TARGET_CHARS;
+/**
+ * The two length limits ONE chunking run is measured against: the hard cap the
+ * caller supplied, and the packing target derived from it.
+ *
+ * The target is derived, never a second knob. It is only ever reached BELOW the
+ * cap — `splitBody` returns an unsplit body whenever it fits `max`, so every
+ * consumer of `target` sits behind that guard — which makes it inert when the
+ * cap is raised. The one case where it is not inert is a cap raised BELOW the
+ * shipped target, and there it must not exceed the cap it feeds: `splitBudget`
+ * floors the budget at the target, so a target above the cap would emit parts
+ * over the cap. `Math.min` is what forbids that; at the shipped cap of 4000 it
+ * returns the shipped 3200 unchanged.
+ */
+interface ChunkCaps {
+  readonly max: number;
+  readonly target: number;
+}
 
-const packGroups = (blocks: readonly string[]): readonly string[] =>
+const capsFor = (maxChars: number): ChunkCaps => ({
+  max: maxChars,
+  target: Math.min(ATOM_CHUNK_TARGET_CHARS, maxChars),
+});
+
+const fitsTarget = (group: string, block: string, caps: ChunkCaps): boolean =>
+  group.length + 1 + block.length <= caps.target;
+
+const packGroups = (blocks: readonly string[], caps: ChunkCaps): readonly string[] =>
   blocks.reduce<readonly string[]>((groups, block) => {
     const last = groups.at(-1);
-    return last !== undefined && fitsTarget(last, block)
+    return last !== undefined && fitsTarget(last, block, caps)
       ? [...groups.slice(0, -1), `${last}\n${block}`]
       : [...groups, block];
   }, []);
@@ -230,7 +253,9 @@ interface SplitFrame {
  * wide enough to crowd the rows out would multiply the corpus instead of
  * making it readable, so such a block is split without one.
  */
-const MIN_FRAMED_CONTENT_CHARS = ATOM_CHUNK_TARGET_CHARS / 2;
+const MIN_FRAMED_CONTENT_RATIO = 2;
+
+const minFramedContent = (caps: ChunkCaps): number => caps.target / MIN_FRAMED_CONTENT_RATIO;
 
 const TABLE_DELIMITER_RE = /^\s*\|[\s:|-]*-[\s:|-]*$/;
 
@@ -263,10 +288,12 @@ const blockFrame = (lines: readonly string[]): SplitFrame => {
 const frameOverhead = (frame: SplitFrame): number =>
   [...frame.prefix, ...frame.suffix].reduce((total, line) => total + line.length + 1, 0);
 
-const affordableFrame = (frame: SplitFrame, lines: readonly string[]): SplitFrame =>
-  ATOM_CHUNK_TARGET_CHARS - frameOverhead(frame) >= MIN_FRAMED_CONTENT_CHARS
-    ? frame
-    : plainFrame(lines);
+const affordableFrame = (
+  frame: SplitFrame,
+  lines: readonly string[],
+  caps: ChunkCaps
+): SplitFrame =>
+  caps.target - frameOverhead(frame) >= minFramedContent(caps) ? frame : plainFrame(lines);
 
 /** Last resort for a single line over the budget: fixed-width character slices. */
 const charSplit = (line: string, budget: number): readonly string[] =>
@@ -312,8 +339,8 @@ const headingReserve = (chain: readonly string[]): number => {
  * budget rather than a starved one — such a line is dropped at write time
  * anyway, and a non-positive budget has no split to describe.
  */
-const splitBudget = (frame: SplitFrame, reserve: number): number =>
-  Math.max(ATOM_MAX_CHARS - reserve, ATOM_CHUNK_TARGET_CHARS) - frameOverhead(frame);
+const splitBudget = (frame: SplitFrame, reserve: number, caps: ChunkCaps): number =>
+  Math.max(caps.max - reserve, caps.target) - frameOverhead(frame);
 
 /**
  * Split one oversize block on LINE boundaries, repeating whatever makes a part
@@ -322,10 +349,10 @@ const splitBudget = (frame: SplitFrame, reserve: number): number =>
  * the budget, so a finished part still lands under `ATOM_MAX_CHARS`, and it is
  * why the parts no longer re-join into the exact input.
  */
-const structureSplit = (block: string, reserve: number): readonly string[] => {
+const structureSplit = (block: string, reserve: number, caps: ChunkCaps): readonly string[] => {
   const lines = block.split('\n');
-  const frame = affordableFrame(blockFrame(lines), lines);
-  const budget = splitBudget(frame, reserve);
+  const frame = affordableFrame(blockFrame(lines), lines, caps);
+  const budget = splitBudget(frame, reserve, caps);
   const content = frame.lines.flatMap(line => charSplit(line, budget));
   return packLines(content, budget).map(part =>
     [...frame.prefix, ...part, ...frame.suffix].join('\n')
@@ -352,29 +379,30 @@ const keepsFenceWhole = (group: string): boolean =>
  * guarantee, so the block is split structurally rather than left whole — unless
  * it is a fenced block small enough for the escape hatch above.
  */
-const capGroup = (group: string, reserve: number): readonly string[] =>
-  group.length <= ATOM_MAX_CHARS || keepsFenceWhole(group)
+const capGroup = (group: string, reserve: number, caps: ChunkCaps): readonly string[] =>
+  group.length <= caps.max || keepsFenceWhole(group)
     ? [group]
-    : structureSplit(group, reserve);
+    : structureSplit(group, reserve, caps);
 
 const splitBody = (
   bodyLines: readonly string[],
-  chain: readonly string[]
+  chain: readonly string[],
+  caps: ChunkCaps
 ): readonly string[] => {
   const body = bodyLines.join('\n');
-  if (body.length <= ATOM_MAX_CHARS) return [body];
+  if (body.length <= caps.max) return [body];
   const reserve = headingReserve(chain);
-  return packGroups(toBlocks(bodyLines)).flatMap(group => capGroup(group, reserve));
+  return packGroups(toBlocks(bodyLines), caps).flatMap(group => capGroup(group, reserve, caps));
 };
 
 /** Line offset of part `index` within the joined body (approximate after a structureSplit). */
 const lineOffset = (parts: readonly string[], index: number): number =>
   parts.slice(0, index).reduce((total, part) => total + part.split('\n').length, 0);
 
-const emitChunks = (raw: OpenChunk): readonly MarkdownChunk[] => {
+const emitChunks = (raw: OpenChunk, caps: ChunkCaps): readonly MarkdownChunk[] => {
   const bodyLines = trimBlankEdges(raw.lines);
   const bodyStart = raw.bodyStart + firstContentIndex(raw.lines);
-  const parts = splitBody(bodyLines, raw.headingChain);
+  const parts = splitBody(bodyLines, raw.headingChain, caps);
   return parts.map((part, index) => ({
     headingChain: raw.headingChain,
     title: raw.title,
@@ -411,11 +439,11 @@ const sameBranch = (left: readonly string[], right: readonly string[]): boolean 
   left.every((title, index) => title === right[index]) ||
   right.every((title, index) => title === left[index]);
 
-/** `ATOM_MAX_CHARS` outranks the floor, so an over-cap join is left unmerged. */
-const canAbsorb = (source: MarkdownChunk, target: MarkdownChunk): boolean =>
+/** The cap outranks the floor, so an over-cap join is left unmerged. */
+const canAbsorb = (source: MarkdownChunk, target: MarkdownChunk, max: number): boolean =>
   source.body.length < ATOM_MIN_CHARS &&
   sameBranch(source.headingChain, target.headingChain) &&
-  joinBodies(source.body, target.body).length <= ATOM_MAX_CHARS;
+  joinBodies(source.body, target.body).length <= max;
 
 /** `source` lands ahead of `target`, whose heading and title own the result. */
 const absorbBefore = (source: MarkdownChunk, target: MarkdownChunk): MarkdownChunk => ({
@@ -429,10 +457,10 @@ const absorbBefore = (source: MarkdownChunk, target: MarkdownChunk): MarkdownChu
  * that follow it, so it merges FORWARD, and a merge that leaves the target
  * still under the floor is itself absorbed by the next step.
  */
-const mergeForward = (chunks: readonly MarkdownChunk[]): readonly MarkdownChunk[] =>
+const mergeForward = (chunks: readonly MarkdownChunk[], max: number): readonly MarkdownChunk[] =>
   chunks.reduceRight<readonly MarkdownChunk[]>((rest, chunk) => {
     const next = rest[0];
-    return next !== undefined && canAbsorb(chunk, next)
+    return next !== undefined && canAbsorb(chunk, next, max)
       ? [absorbBefore(chunk, next), ...rest.slice(1)]
       : [chunk, ...rest];
   }, []);
@@ -459,17 +487,22 @@ const tailBody = (last: MarkdownChunk, prev: MarkdownChunk): string => {
 };
 
 /** The merged chunk, or `undefined` when the restated heading pushes it over the cap. */
-const tailMerged = (prev: MarkdownChunk, last: MarkdownChunk): MarkdownChunk | undefined => {
+const tailMerged = (
+  prev: MarkdownChunk,
+  last: MarkdownChunk,
+  max: number
+): MarkdownChunk | undefined => {
   const body = joinBodies(prev.body, tailBody(last, prev));
-  return canAbsorb(last, prev) && body.length <= ATOM_MAX_CHARS ? { ...prev, body } : undefined;
+  return canAbsorb(last, prev, max) && body.length <= max ? { ...prev, body } : undefined;
 };
 
 /** The last chunk has nothing ahead of it, so an under-floor tail merges back. */
-const mergeTail = (chunks: readonly MarkdownChunk[]): readonly MarkdownChunk[] => {
+const mergeTail = (chunks: readonly MarkdownChunk[], max: number): readonly MarkdownChunk[] => {
   const last = chunks.at(-1);
   const head = chunks.slice(0, -1);
   const prev = head.at(-1);
-  const merged = prev === undefined || last === undefined ? undefined : tailMerged(prev, last);
+  const merged =
+    prev === undefined || last === undefined ? undefined : tailMerged(prev, last, max);
   return merged === undefined ? chunks : [...head.slice(0, -1), merged];
 };
 
@@ -569,12 +602,23 @@ export const frontMatterTitle = (text: string): string | undefined => {
 
 /**
  * Split `text` at heading boundaries, sub-splitting any section whose body
- * exceeds `ATOM_MAX_CHARS` and folding away any body under `ATOM_MIN_CHARS`.
+ * exceeds `maxChars` and folding away any body under `ATOM_MIN_CHARS`.
  * Pure and deterministic: identical input always yields byte-identical output.
+ *
+ * `maxChars` is a PARAMETER, not module state: the cap belongs to the corpus
+ * being ingested, and two ingests with different caps run in one process (the
+ * test suite does exactly that), so a mutable module-level cap would leak one
+ * run's setting into the next and silently rechunk the wrong corpus.
  */
-export const chunkMarkdown = (text: string): readonly MarkdownChunk[] => {
+export const chunkMarkdown = (
+  text: string,
+  maxChars: number = ATOM_MAX_CHARS
+): readonly MarkdownChunk[] => {
+  const caps = capsFor(maxChars);
   const final = stripFrontMatter(text.split('\n'))
     .reduce((state, line, index) => scanLine(state, line, index + 1), initialState);
-  const chunks = [...final.done, final.open].filter(isMeaningful).flatMap(emitChunks);
-  return mergeTail(mergeForward(chunks));
+  const chunks = [...final.done, final.open]
+    .filter(isMeaningful)
+    .flatMap(raw => emitChunks(raw, caps));
+  return mergeTail(mergeForward(chunks, caps.max), caps.max);
 };

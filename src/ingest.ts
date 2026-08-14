@@ -113,6 +113,8 @@ interface Candidate {
   readonly summary: string | undefined;
   /** ` (i/n)` when the section emitted several chunks, else empty. */
   readonly part: string;
+  /** The cap this run chunks and writes against; the profile's, else the shipped one. */
+  readonly maxChars: number | undefined;
 }
 
 interface BasedCandidate {
@@ -262,7 +264,7 @@ const partSuffix = (
 const toCandidates = (source: LoadedSource, profile: IngestProfile): readonly Candidate[] => {
   const domain = source.domain;
   if (domain === undefined) return [];
-  const chunks = chunkMarkdown(source.text);
+  const chunks = chunkMarkdown(source.text, profile.atomMaxChars);
   const docTitle = documentTitle(source, chunks);
   const summary = documentSummary(source.text);
   return chunks.map((chunk, index) => ({
@@ -274,6 +276,7 @@ const toCandidates = (source: LoadedSource, profile: IngestProfile): readonly Ca
     docTitle,
     summary,
     part: partSuffix(chunks, chunk, index),
+    maxChars: profile.atomMaxChars,
   }));
 };
 
@@ -353,7 +356,9 @@ const composeBody = (head: readonly string[], body: string): string =>
 const bodyWithHeading = (candidate: Candidate): string => {
   const body = stripComments(candidate.chunk.body);
   const prefixed = composeBody([headingLine(candidate.chunk.headingChain)], body);
-  return prefixed.length <= bodyMaxChars(prefixed) ? prefixed : composeBody([], body);
+  return prefixed.length <= bodyMaxChars(prefixed, candidate.maxChars)
+    ? prefixed
+    : composeBody([], body);
 };
 
 const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({

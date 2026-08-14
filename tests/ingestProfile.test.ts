@@ -117,6 +117,36 @@ describe('ingest profile parsing', () => {
     expect(() => parseIngestProfile(withoutTypes, 'mini.json')).toThrowError(/"types"/);
   });
 
+  it('carries an optional atomMaxChars override, refusing anything but a positive integer', () => {
+    expect(parseIngestProfile({ ...rawMini(), atomMaxChars: 12000 }, 'mini.json').atomMaxChars).toBe(12000);
+    expect(parseIngestProfile(rawMini(), 'mini.json').atomMaxChars).toBeUndefined();
+    expect(() => parseIngestProfile({ ...rawMini(), atomMaxChars: 0 }, 'mini.json')).toThrowError(
+      /atomMaxChars/
+    );
+    expect(() => parseIngestProfile({ ...rawMini(), atomMaxChars: 3.5 }, 'mini.json')).toThrowError(
+      /mini\.json/
+    );
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), atomMaxChars: '12000' }, 'mini.json')
+    ).toThrowError(/atomMaxChars/);
+  });
+
+  it('writes one atom for a document the shipped cap would split, when the profile raises it', async () => {
+    const tree = await makeTree();
+    const long = `${SECTION_BODY} `.repeat(40).trim();
+    await writeDoc(tree.root, join('handbook', 'long.md'), `# Long Doc\n\n${long}\n`);
+
+    const summary = await ingest({
+      corpusRoots: ['handbook'],
+      outputDir: tree.out,
+      repoRoot: tree.root,
+      profile: { ...MINI_PROFILE, atomMaxChars: long.length * 2 },
+    });
+
+    expect(summary.skipped).toEqual([]);
+    expect(summary.written).toBe(1);
+  });
+
   it('fails on a missing profile file naming the path, never a silent fallback', () => {
     const missing = join(tmpdir(), 'gnosis-absent-profile.json');
 

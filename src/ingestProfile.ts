@@ -62,6 +62,16 @@ export interface IngestProfile {
   readonly atomsDir?: string | undefined;
   /** Where this instance's index is built; a DIRECTORY for lancedb. */
   readonly indexPath?: string | undefined;
+  /**
+   * Hard cap on one atom's body, in characters. Absent means the shipped
+   * `ATOM_MAX_CHARS`, so an existing profile chunks exactly as before.
+   *
+   * It is per-instance because it is a property of the CORPUS, not of the tool:
+   * a BEIR abstract is one indivisible passage of up to ten thousand characters
+   * and splitting it fabricates documents the ground truth does not label,
+   * while the repo vault's long authored sections genuinely need the split.
+   */
+  readonly atomMaxChars?: number | undefined;
 }
 
 /** The location half of a profile — what T-3 added to the vocabulary half. */
@@ -85,6 +95,7 @@ const KNOWN_KEYS: readonly string[] = [
   'corpusRoots',
   'atomsDir',
   'indexPath',
+  'atomMaxChars',
 ];
 
 const fail = (source: string, detail: string): never => {
@@ -154,6 +165,26 @@ const optionalStringList = (
   source: string
 ): readonly string[] | undefined =>
   raw[key] === undefined ? undefined : stringList(raw, key, source);
+
+/**
+ * An optional character count. A zero, a fraction or a string is REFUSED rather
+ * than rounded or ignored: the value is a hard write-time cap, so a silently
+ * corrected one would chunk a whole corpus to a size nobody authored.
+ */
+const isPositiveInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value > 0;
+
+const optionalPositiveInteger = (
+  raw: Readonly<Record<string, unknown>>,
+  key: string,
+  source: string
+): number | undefined => {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  return isPositiveInteger(value)
+    ? value
+    : fail(source, `field "${key}" is "${String(value)}", not a positive whole number of characters`);
+};
 
 const ruleList = (
   raw: Readonly<Record<string, unknown>>,
@@ -260,6 +291,7 @@ export const parseIngestProfile = (raw: unknown, source: string): IngestProfile 
     domainRules: ruleList(raw, 'domainRules', source).map((rule, i) => domainRule(rule, i, domainCtx)),
     typeRules: ruleList(raw, 'typeRules', source).map((rule, i) => typeRule(rule, i, typeCtx)),
     segmentRules: ruleList(raw, 'segmentRules', source).map((rule, i) => segmentRule(rule, i, typeCtx)),
+    atomMaxChars: optionalPositiveInteger(raw, 'atomMaxChars', source),
     ...locationsOf(raw, source),
   };
 };

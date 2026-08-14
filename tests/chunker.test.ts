@@ -130,6 +130,24 @@ describe('chunkMarkdown — determinism', () => {
   });
 });
 
+describe('chunkMarkdown — caller-supplied cap', () => {
+  const body = 'a sentence of invented prose. '.repeat(260).trim();
+  const text = `# A\n\n${body}\n`;
+
+  it('keeps whole under a raised cap a section the shipped cap sub-splits', () => {
+    expect(chunkMarkdown(text).length).toBeGreaterThan(1);
+
+    const whole = chunkMarkdown(text, body.length + 1);
+
+    expect(whole).toHaveLength(1);
+    expect(whole[0]?.body).toBe(body);
+  });
+
+  it('applies the shipped cap when the caller supplies none', () => {
+    expect(chunkMarkdown(text, ATOM_MAX_CHARS)).toEqual(chunkMarkdown(text));
+  });
+});
+
 describe('chunkMarkdown — oversize sub-splitting', () => {
   const paragraphs = Array.from({ length: 40 }, (_, i) => `p${i} ${'x'.repeat(200)}`).join('\n\n');
 
