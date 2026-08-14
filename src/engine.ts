@@ -32,8 +32,9 @@ import { basename, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 
 import { buildFts5Index } from '../../dp-gnosis/src/adapters/fts5Adapter.js';
+import { createLinearScanAdapter } from '../../dp-gnosis/src/adapters/linearScanAdapter.js';
 import { parseAtom } from '../../dp-gnosis/src/atom.js';
-import { createPort } from '../../dp-gnosis/src/cli/adapter.js';
+import { type AdapterName, createPort } from '../../dp-gnosis/src/cli/adapter.js';
 import { ingest } from '../../dp-gnosis/src/ingest.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { rerankAtoms } from '../../dp-gnosis/src/rerank.js';
@@ -189,12 +190,53 @@ export const prepareDataset = async (
 };
 
 /**
+ * Which adapter to open, and — for `linear` only — at which BM25 operating
+ * point. Absent `k1`/`b` mean the adapter's own defaults, so the shipped
+ * configuration is what an unparameterised sweep point measures.
+ */
+export interface PortOptions {
+  readonly adapter: AdapterName;
+  readonly k1?: number | undefined;
+  readonly b?: number | undefined;
+  /**
+   * Let the `linear` adapter keep its corpus scan in memory across calls. Absent
+   * means off, which is the adapter's read-at-call-time default. Only a caller
+   * that holds `atomsDir` FIXED while it varies `k1`/`b` may set it — that is
+   * `sweep.ts`, whose cells differ in nothing else.
+   */
+  readonly cacheCorpusScan?: boolean | undefined;
+}
+
+/** The default: the adapter under measurement in `run.ts`. */
+const DEFAULT_PORT_OPTIONS: PortOptions = { adapter: ADAPTER };
+
+/**
+ * `createPort` takes no tuning arguments — it is the CLI's `--adapter`
+ * resolution, and BM25 parameters are not CLI flags. The `linear` branch below
+ * therefore calls the SAME factory `createPort` would (`cli/adapter.ts`
+ * `PORT_FACTORIES.linear`), only with the parameters attached. It is not a
+ * second implementation: the scan, the tokenizer and the ranking are the
+ * engine's.
+ */
+const openLinearPort = (prepared: PreparedDataset, options: PortOptions): KnowledgePort =>
+  createLinearScanAdapter(prepared.atomsDir, {
+    ...(options.k1 === undefined ? {} : { k1: options.k1 }),
+    ...(options.b === undefined ? {} : { b: options.b }),
+    ...(options.cacheCorpusScan === undefined ? {} : { cacheCorpusScan: options.cacheCorpusScan }),
+  });
+
+/**
  * ONE port per dataset: the first retrieve stats every atom (~700 ms at 43k),
  * so a port per query would pay that cost per topic. The caller closes it
  * (`port.close?.()`) when the dataset is done.
  */
-export const openPort = (prepared: PreparedDataset): KnowledgePort =>
-  createPort(ADAPTER, prepared.atomsDir, prepared.indexPath);
+export const openPort = (
+  prepared: PreparedDataset,
+  options: PortOptions = DEFAULT_PORT_OPTIONS
+): KnowledgePort =>
+  options.adapter === 'linear'
+    ? openLinearPort(prepared, options)
+    : createPort(options.adapter, prepared.atomsDir, prepared.indexPath);
 
 /**
  * The measured call. `rawQueryText` is the dataset's query VERBATIM — the same

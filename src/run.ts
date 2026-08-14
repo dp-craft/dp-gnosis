@@ -51,8 +51,9 @@ import {
 } from './report.js';
 import { type DatasetScore, scoreDataset, toDocumentRanking } from './score.js';
 
-const SUITE_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
-const MANIFEST_PATH = resolve(SUITE_ROOT, 'datasets.json');
+/** The suite directory; every other path here is resolved from it, never from `cwd`. */
+export const SUITE_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
+export const MANIFEST_PATH = resolve(SUITE_ROOT, 'datasets.json');
 const RESULTS_DIR = resolve(SUITE_ROOT, 'results');
 const DATA_DIR = resolve(SUITE_ROOT, 'data');
 const WORK_ROOT = resolve(DATA_DIR, 'work');
@@ -74,7 +75,8 @@ export interface CliOptions {
   readonly compare: boolean;
 }
 
-interface Topic {
+/** A scorable query: judged by the qrels, so it can contribute a non-zero mean. */
+export interface Topic {
   readonly id: string;
   readonly text: string;
 }
@@ -114,7 +116,7 @@ export const datasetDir = (entry: DatasetEntry): string => {
  * the layout. `beir-local` points at a directory the repo already carries, so
  * there is nothing to fetch and a missing one is an error, not a download.
  */
-const ensureDataset = async (entry: DatasetEntry): Promise<string> => {
+export const ensureDataset = async (entry: DatasetEntry): Promise<string> => {
   if (entry.format === 'bright') await ensureBrightDataset(entry, DATA_DIR);
   if (entry.format === 'beir-zip') await ensureBeirDataset(entry, DATA_DIR);
   return datasetDir(entry);
@@ -130,7 +132,7 @@ export const effectiveAtomMaxChars = (entry: DatasetEntry): number =>
   entry.atomMaxChars ?? ATOM_MAX_CHARS;
 
 /** Only queries the dataset actually judged; an unjudged topic is not scorable. */
-const topicsOf = (
+export const topicsOf = (
   queries: ReadonlyMap<string, string>,
   qrels: ReadonlyMap<string, Qrel>
 ): readonly Topic[] =>
@@ -147,7 +149,7 @@ export const firstPassDepth = (depth: number, rerank: boolean): number =>
  * ships per-query exclusions and scoring a document the dataset told us to drop
  * makes the number wrong in both directions (`score.ts`).
  */
-interface RankContext {
+export interface RankContext {
   readonly port: KnowledgePort;
   readonly options: CliOptions;
   readonly excluded: ReadonlyMap<string, readonly string[]>;
@@ -199,14 +201,18 @@ const P50 = 0.5;
 const P95 = 0.95;
 
 /** The query phase: rankings by topic, total wall time, and its distribution. */
-interface QueryOutcome {
+export interface QueryOutcome {
   readonly rankings: ReadonlyMap<string, readonly string[]>;
   readonly queryMs: number;
   readonly queryP50Ms: number;
   readonly queryP95Ms: number;
 }
 
-const queryDataset = async (
+/**
+ * Exported so `sweep.ts` measures its grid points through the SAME query path a
+ * recorded run uses — a second loop there would be a second measurement.
+ */
+export const queryDataset = async (
   context: RankContext,
   topics: readonly Topic[]
 ): Promise<QueryOutcome> => {
@@ -253,7 +259,7 @@ const measurementsOf = (
   perTopic: scored.perTopic,
 });
 
-const prepareOf = (entry: DatasetEntry, dir: string): Promise<PreparedDataset> =>
+export const prepareOf = (entry: DatasetEntry, dir: string): Promise<PreparedDataset> =>
   prepareDataset({
     id: entry.id,
     docs: readCorpus(dir),

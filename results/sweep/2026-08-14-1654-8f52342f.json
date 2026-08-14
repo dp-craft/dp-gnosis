@@ -1,0 +1,905 @@
+{
+  "provenance": {
+    "ts": "2026-08-14T16:54:29.822Z",
+    "gitSha": "8f52342f",
+    "adapter": "linear",
+    "depth": 100,
+    "k1s": [
+      1.2,
+      1,
+      0.8
+    ],
+    "bs": [
+      0.6,
+      0.5,
+      0.4,
+      0.3
+    ]
+  },
+  "cells": [
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 93136,
+      "metrics": {
+        "ndcg10": 0.16241472747337782,
+        "recall10": 0.19441569757103735,
+        "recall100": 0.39054790947994833,
+        "mrr10": 0.23208891971027892
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87084,
+      "metrics": {
+        "ndcg10": 0.1938653265318129,
+        "recall10": 0.22099025569899355,
+        "recall100": 0.4151819054731676,
+        "mrr10": 0.2709238711665896
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87953,
+      "metrics": {
+        "ndcg10": 0.22187817432969575,
+        "recall10": 0.2513570302405254,
+        "recall100": 0.45029517408158176,
+        "mrr10": 0.3141547233780243
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 91234,
+      "metrics": {
+        "ndcg10": 0.24942040357750273,
+        "recall10": 0.26430201405929565,
+        "recall100": 0.49424262361155563,
+        "mrr10": 0.36522191400832177
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 90516,
+      "metrics": {
+        "ndcg10": 0.16954649149683892,
+        "recall10": 0.19839876951527438,
+        "recall100": 0.39831489977121043,
+        "mrr10": 0.24667514254892894
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 90810,
+      "metrics": {
+        "ndcg10": 0.20547781460762066,
+        "recall10": 0.23420492668065487,
+        "recall100": 0.4271560155055301,
+        "mrr10": 0.2895708121436276
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 88843,
+      "metrics": {
+        "ndcg10": 0.22698964660614057,
+        "recall10": 0.2578295221499105,
+        "recall100": 0.4581700392380003,
+        "mrr10": 0.31775312066574196
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 89048,
+      "metrics": {
+        "ndcg10": 0.2504103214174007,
+        "recall10": 0.26187482959327624,
+        "recall100": 0.5047604229643065,
+        "mrr10": 0.3667706888580674
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 89145,
+      "metrics": {
+        "ndcg10": 0.19170979961466994,
+        "recall10": 0.22422650165368613,
+        "recall100": 0.4121074718162097,
+        "mrr10": 0.27696486361534906
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 90150,
+      "metrics": {
+        "ndcg10": 0.2122869285185801,
+        "recall10": 0.24682628590395586,
+        "recall100": 0.43395213201038446,
+        "mrr10": 0.29412081984897515
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 89900,
+      "metrics": {
+        "ndcg10": 0.2417445692135809,
+        "recall10": 0.2686709460981306,
+        "recall100": 0.4640646300840476,
+        "mrr10": 0.3383456618893512
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 90742,
+      "metrics": {
+        "ndcg10": 0.246208979853579,
+        "recall10": 0.25863858363858366,
+        "recall100": 0.5209416527377692,
+        "mrr10": 0.35779010633379565
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 90672,
+      "metrics": {
+        "ndcg10": 0.12354185001560287,
+        "recall10": 0.1469051175361855,
+        "recall100": 0.33692372891402017,
+        "mrr10": 0.18094082293111416
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 19946,
+      "metrics": {
+        "ndcg10": 0.2815086553993265,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5898058252427184,
+        "mrr10": 0.23989443673909688
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16923,
+      "metrics": {
+        "ndcg10": 0.2849589202460224,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5720064724919094,
+        "mrr10": 0.24464093080597932
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16617,
+      "metrics": {
+        "ndcg10": 0.2785861316545311,
+        "recall10": 0.44579288025889974,
+        "recall100": 0.5622977346278317,
+        "mrr10": 0.23735552473416546
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16326,
+      "metrics": {
+        "ndcg10": 0.26151879753629015,
+        "recall10": 0.4215210355987056,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.22252273077515797
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16502,
+      "metrics": {
+        "ndcg10": 0.28045443573003137,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5655339805825242,
+        "mrr10": 0.2360648790260441
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16744,
+      "metrics": {
+        "ndcg10": 0.27849812390845924,
+        "recall10": 0.447411003236246,
+        "recall100": 0.5525889967637541,
+        "mrr10": 0.23579519186315298
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16448,
+      "metrics": {
+        "ndcg10": 0.2685325575457565,
+        "recall10": 0.42799352750809067,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.2277431037139775
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 15959,
+      "metrics": {
+        "ndcg10": 0.2580606937737114,
+        "recall10": 0.406957928802589,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.2210856834643242
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16313,
+      "metrics": {
+        "ndcg10": 0.2670894546526029,
+        "recall10": 0.4263754045307444,
+        "recall100": 0.5639158576051779,
+        "mrr10": 0.22553552165202648
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16003,
+      "metrics": {
+        "ndcg10": 0.2651443634338744,
+        "recall10": 0.4231391585760518,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.22518107566651255
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16114,
+      "metrics": {
+        "ndcg10": 0.26248436713504997,
+        "recall10": 0.41828478964401294,
+        "recall100": 0.5380258899676376,
+        "mrr10": 0.2216905532439513
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16284,
+      "metrics": {
+        "ndcg10": 0.2579581388526022,
+        "recall10": 0.4134304207119741,
+        "recall100": 0.5380258899676376,
+        "mrr10": 0.21799969178609951
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16363,
+      "metrics": {
+        "ndcg10": 0.27461519370695847,
+        "recall10": 0.43365695792880266,
+        "recall100": 0.5930420711974109,
+        "mrr10": 0.23598397287717665
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13827,
+      "metrics": {
+        "ndcg10": 0.3241052913937913,
+        "recall10": 0.15459644864827485,
+        "recall100": 0.24891069413079284,
+        "mrr10": 0.5281451176962012
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12811,
+      "metrics": {
+        "ndcg10": 0.3246340459191567,
+        "recall10": 0.15464619376901076,
+        "recall100": 0.24864250096029314,
+        "mrr10": 0.5307902108211706
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12506,
+      "metrics": {
+        "ndcg10": 0.32521379667907974,
+        "recall10": 0.1545872822316705,
+        "recall100": 0.24805339639577662,
+        "mrr10": 0.5314880338100152
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12440,
+      "metrics": {
+        "ndcg10": 0.32508681044628035,
+        "recall10": 0.1544694993148756,
+        "recall100": 0.24812234836581046,
+        "mrr10": 0.5332903336773306
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13291,
+      "metrics": {
+        "ndcg10": 0.3221338154033799,
+        "recall10": 0.1538558490909098,
+        "recall100": 0.24945806886153551,
+        "mrr10": 0.524186692220748
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12451,
+      "metrics": {
+        "ndcg10": 0.3225983521783133,
+        "recall10": 0.1537532498863872,
+        "recall100": 0.24931294679916813,
+        "mrr10": 0.5283011450194113
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12516,
+      "metrics": {
+        "ndcg10": 0.32310559674091144,
+        "recall10": 0.15405894173925452,
+        "recall100": 0.24897850906775687,
+        "mrr10": 0.5284264583026193
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12417,
+      "metrics": {
+        "ndcg10": 0.32281779730981736,
+        "recall10": 0.15319713768103269,
+        "recall100": 0.24834572818729791,
+        "mrr10": 0.5283097449506119
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12641,
+      "metrics": {
+        "ndcg10": 0.3192927747410857,
+        "recall10": 0.15069652410040307,
+        "recall100": 0.24884013957137693,
+        "mrr10": 0.5190562189788196
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12494,
+      "metrics": {
+        "ndcg10": 0.31947036582739696,
+        "recall10": 0.15066157917041872,
+        "recall100": 0.2481966930282752,
+        "mrr10": 0.5246940881615805
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12513,
+      "metrics": {
+        "ndcg10": 0.3202043052829694,
+        "recall10": 0.15083587598512121,
+        "recall100": 0.24854891577903054,
+        "mrr10": 0.5249140006879945
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12451,
+      "metrics": {
+        "ndcg10": 0.3204784961495533,
+        "recall10": 0.1515283883656073,
+        "recall100": 0.24758388938823836,
+        "mrr10": 0.5246498599439776
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12409,
+      "metrics": {
+        "ndcg10": 0.32499003571727286,
+        "recall10": 0.1544395103598552,
+        "recall100": 0.24914380097011732,
+        "mrr10": 0.5308368961619735
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 20407,
+      "metrics": {
+        "ndcg10": 0.690207502992319,
+        "recall10": 0.8192777777777778,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.654931216931217
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19432,
+      "metrics": {
+        "ndcg10": 0.6889650391993886,
+        "recall10": 0.8092777777777778,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6566666666666668
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 18911,
+      "metrics": {
+        "ndcg10": 0.684878367468254,
+        "recall10": 0.8084444444444444,
+        "recall100": 0.9263333333333332,
+        "mrr10": 0.6516243386243387
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19346,
+      "metrics": {
+        "ndcg10": 0.6809667218378297,
+        "recall10": 0.8017777777777778,
+        "recall100": 0.9263333333333332,
+        "mrr10": 0.6483809523809524
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19484,
+      "metrics": {
+        "ndcg10": 0.6854128821647714,
+        "recall10": 0.8126111111111111,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6510052910052911
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19045,
+      "metrics": {
+        "ndcg10": 0.6842005923865244,
+        "recall10": 0.8084444444444444,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6508809523809524
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19387,
+      "metrics": {
+        "ndcg10": 0.6852154971419556,
+        "recall10": 0.8084444444444444,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6524126984126984
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19037,
+      "metrics": {
+        "ndcg10": 0.6835815642940269,
+        "recall10": 0.8117777777777778,
+        "recall100": 0.9263333333333332,
+        "mrr10": 0.6493571428571429
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 18878,
+      "metrics": {
+        "ndcg10": 0.6880273296069047,
+        "recall10": 0.8123333333333332,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6557050264550265
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 18897,
+      "metrics": {
+        "ndcg10": 0.685144134663385,
+        "recall10": 0.8089999999999999,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6527791005291005
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 20277,
+      "metrics": {
+        "ndcg10": 0.6836955303802659,
+        "recall10": 0.8056666666666666,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6518756613756613
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19309,
+      "metrics": {
+        "ndcg10": 0.6830419614841605,
+        "recall10": 0.8056666666666666,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6501296296296295
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19510,
+      "metrics": {
+        "ndcg10": 0.6882954764934839,
+        "recall10": 0.8199444444444444,
+        "recall100": 0.9313333333333332,
+        "mrr10": 0.6518584656084656
+      }
+    }
+  ]
+}

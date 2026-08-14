@@ -177,3 +177,67 @@ describe('CLI equivalence', () => {
     expect(harness.every(ranking => ranking.length > 0)).toBe(true);
   });
 });
+
+/**
+ * The sweep's seam. `openPort` gains an adapter and a BM25 operating point so
+ * `sweep.ts` can drive the REAL engine at each grid cell; the equivalence case
+ * below is what stops that branch becoming a second BM25 implementation.
+ */
+describe('openPort — linear adapter with BM25 parameters', () => {
+  const scoresAt = async (options: {
+    readonly k1?: number;
+    readonly b?: number;
+  }): Promise<readonly number[]> => {
+    const scoped = openPort(prepared, { adapter: 'linear', ...options });
+    const atoms = await retrieveDocs(scoped, queries[0]!, DEPTH);
+    scoped.close?.();
+    return atoms.map(atom => atom.score);
+  };
+
+  it('builds the linear-scan adapter, not the default fts5 one', () => {
+    const linear = openPort(prepared, { adapter: 'linear' });
+    expect(linear.name).toBe('linear-scan');
+    expect(openPort(prepared).name).not.toBe('linear-scan');
+    linear.close?.();
+  });
+
+  it('defaults to the shipped operating point when k1 and b are omitted', async () => {
+    expect(await scoresAt({})).toEqual(await scoresAt({ k1: 1.2, b: 0.75 }));
+  });
+
+  it('carries k1 and b through to the scorer', async () => {
+    const baseline = await scoresAt({ k1: 1.2, b: 0.75 });
+    expect(await scoresAt({ k1: 1.2, b: 0.3 })).not.toEqual(baseline);
+    expect(await scoresAt({ k1: 0.8, b: 0.75 })).not.toEqual(baseline);
+  });
+
+  /**
+   * The anti-fork guard: at default parameters the sweep's port must rank
+   * exactly as the shipped `--adapter linear` CLI does. A re-implemented BM25
+   * here would pass every case above and fail this one.
+   */
+  it('ranks identically to the dp-gnosis retrieve command at default parameters', async () => {
+    const linear = openPort(prepared, { adapter: 'linear' });
+    const harness = await retrieveDocs(linear, queries[0]!, DEPTH).then(atomIds);
+    linear.close?.();
+    const result = await runCli([
+      'retrieve',
+      queries[0]!,
+      '--adapter',
+      'linear',
+      '--atoms-dir',
+      prepared.atomsDir,
+      '--index-path',
+      prepared.indexPath,
+      '-k',
+      String(DEPTH),
+      '--max-tokens',
+      '10000000',
+      '--json',
+    ]);
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout) as { readonly atoms: readonly RetrievedAtom[] };
+    expect(harness).toEqual(atomIds(payload.atoms));
+    expect(harness.length).toBeGreaterThan(0);
+  });
+});

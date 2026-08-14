@@ -101,6 +101,83 @@ recorded what the scale had been.
 inherited the engine default and a run that set the same number explicitly are
 the same measurement and must read alike.
 
+## Sweep BM25 k1 and b
+
+```
+./sweep.sh                                  # 4 datasets, the 12-point grid + baseline
+./sweep.sh --only nfcorpus                  # one dataset (csv for several)
+./sweep.sh --k1 1.2,1.0 --b 0.5,0.4         # a narrower grid
+./sweep.sh --depth 20                       # retrieval depth; R@100 needs depth 100
+```
+
+`npm run gnosis:sweep -- --only nfcorpus` is the same entry point from the repo
+root. Defaults: `--only bright-biology-passages,bright-biology,nfcorpus,scifact`,
+`--k1 1.2,1.0,0.8`, `--b 0.6,0.5,0.4,0.3`. The shipped operating point
+(k1=1.2, b=0.75) is ALWAYS measured as a 13th reference cell, so the grid is
+readable against the baseline it has to beat.
+
+Datasets run in the order `--only` STATES, not manifest order, and the default
+order is most-informative first rather than cheapest first. A default sweep is
+hours long and is expected to be stopped early; artefacts are rewritten after
+every cell, so the order decides what has been measured when a run is cut
+short. `bright-biology-passages` leads because it carries the BM25 deficit the
+study exists to explain.
+
+Three artefacts per sweep:
+
+| File | For |
+|---|---|
+| `results/sweep/<stem>-<sha>.json` | every cell, machine-readable |
+| `docs/analysis/<stem>-bm25-k1-b-sweep.md` | best cell per dataset, baseline delta, every row |
+| `docs/analysis/<stem>-bm25-k1-b-sweep.svg` | the nDCG@10 surface, one panel per dataset |
+
+Every cell records `adapter`, `k1` and `b` next to its metrics, for the reason
+`history.jsonl` records `adapter`/`depth`/`atomMaxChars`: a number whose
+operating point was not recorded cannot be compared with a later one.
+
+### It sweeps the LINEAR adapter, and that is a real limit
+
+`sweep.ts` injects `k1`/`b` into `createLinearScanAdapter` — the same factory
+`--adapter linear` builds, verified by an equivalence case in `engine.test.ts`.
+SQLite FTS5 computes `bm25()` with k1 and b compiled in and exposes no way to
+set them, so **a winning cell cannot be switched on for the `fts5` path**.
+Adopting one means either running the linear adapter in production or writing a
+custom scoring function over FTS5 term statistics. The sweep is evidence about
+BM25's shape on this material, not a setting.
+
+### It is slow, and ingest is NOT the reason
+
+Ingest+index is hoisted: `contextFor` runs once per dataset, OUTSIDE the grid
+loop, and a cell only constructs a port (the linear adapter scans nothing at
+construction). Measured on a 7-cell nfcorpus run — 1,918 s wall against 1,916 s
+of summed `queryMs`, so 99.9% of wall time is inside the query phase and the
+one-time ingest is ~2 s. There is no per-cell re-ingest to remove.
+
+The cost is the RETRIEVE path: the linear adapter re-reads and re-tokenizes the
+whole corpus on every `retrieve` (its read-at-call-time body rule), so a cell
+costs `topics × atoms` reads — 1.18M for nfcorpus — and the grid multiplies that
+by 13 even though only `k1`/`b` change between cells. The corpus scan is
+identical across all 13 cells; caching it per `atomsDir` inside
+`linearScanAdapter` would collapse the grid to roughly one scan plus 13 cheap
+scorings. That is a dp-gnosis change, deliberately not made here.
+
+Measured, one cell: **269 s** for nfcorpus (3,645 atoms × 323 topics). Scaling
+that model over the default grid:
+
+| Dataset | atoms × topics | per cell | 13 cells |
+|---|---|---|---|
+| nfcorpus | 3,645 × 323 | ~269 s | ~58 min |
+| scifact | 5,202 × 300 | ~357 s | ~77 min |
+| bright-biology | 8,930 × 103 | ~210 s | ~46 min |
+| bright-biology-passages | 55,695 × 103 | ~1,310 s | **~4.7 h** |
+
+A full default sweep is therefore on the order of **8 hours**. That cost is
+accepted — the re-read is a known future optimization and must not shape the
+parameter study — but it means a rerun after a chunk-size change is an
+overnight job, not an interactive one. Narrow with `--only` when only one
+dataset moved. Artefacts are rewritten after EVERY cell, so a crash on the last
+cell costs one cell, not the run.
+
 ## What `--rerank` measures, honestly
 
 It measures the SHIPPED reranker configuration, and only that. The blend weight
