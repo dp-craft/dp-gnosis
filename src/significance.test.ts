@@ -7,11 +7,13 @@ import { describe, expect, it } from 'vitest';
 import { type HistoryRow, PER_TOPIC_DIR, reportStem } from './report.js';
 import {
   CI_LEVEL,
+  pairedScores,
   pairedSignificance,
   PERMUTATION_ITERATIONS,
   perTopicPath,
   readPerTopic,
-  SIGNIFICANCE_SEED
+  SIGNIFICANCE_SEED,
+  type TopicScores
 } from './significance.js';
 
 const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
@@ -251,5 +253,61 @@ describe('pairedSignificance — metric selection', () => {
     expect(result.metric).toBe('recall10');
     expect(result.meanDifference).toBeCloseTo(0, 12);
     expect(result.pValue).toBe(1);
+  });
+});
+
+/** Build a `TopicScores` map directly — the shape a sweep cell holds in memory. */
+const scoresOf = (
+  entries: ReadonlyArray<readonly [string, number]>
+): TopicScores =>
+  new Map(
+    entries.map(([id, value]) => [
+      id,
+      { ndcg10: value, recall10: 0.1, recall100: 0.2, mrr10: 0.3 },
+    ])
+  );
+
+const EFFECT_AFTER = NULL_BEFORE.map(value => value + 0.05);
+
+describe('pairedScores — the loaded-score seam', () => {
+  it('returns a verdict for two already-loaded paired score sets', () => {
+    const result = pairedScores(
+      'sweep-cell',
+      'ndcg10',
+      scoresOf(paired(NULL_BEFORE)),
+      scoresOf(paired(EFFECT_AFTER))
+    );
+    expect(result.kind).toBe('verdict');
+    if (result.kind !== 'verdict') return;
+    expect(result.dataset).toBe('sweep-cell');
+    expect(result.topics).toBe(NULL_BEFORE.length);
+    expect(result.meanDifference).toBeCloseTo(0.05, 12);
+    expect(result.significant).toBe(true);
+  });
+
+  it('refuses rather than inner-joining two differing topic sets', () => {
+    const before = scoresOf(paired(NULL_BEFORE));
+    const after = scoresOf(paired(EFFECT_AFTER).slice(0, 10));
+    const result = pairedScores('sweep-cell', 'ndcg10', before, after);
+    expect(result.kind).toBe('topics-differ');
+    if (result.kind !== 'topics-differ') return;
+    expect(result.onlyInPrevious).toEqual(['q010', 'q011']);
+    expect(result.onlyInLatest).toEqual([]);
+  });
+
+  it('produces the identical verdict pairedSignificance produces', () => {
+    const dir = setup(NULL_BEFORE, EFFECT_AFTER);
+    const viaRuns = pairedSignificance({
+      resultsDir: dir,
+      previous: row({}),
+      latest: later,
+      metric: 'ndcg10',
+    });
+    const before = readPerTopic(perTopicPath(dir, row({})));
+    const after = readPerTopic(perTopicPath(dir, later));
+    expect(before).toBeDefined();
+    expect(after).toBeDefined();
+    if (before === undefined || after === undefined) return;
+    expect(pairedScores('bright-biology', 'ndcg10', before, after)).toEqual(viaRuns);
   });
 });

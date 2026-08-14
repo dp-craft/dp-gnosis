@@ -272,7 +272,17 @@ const verdictOf = (
   };
 };
 
-const pairedVerdict = (
+/**
+ * The paired test over two ALREADY-LOADED per-topic score sets — the one
+ * implementation of the statistic, and the entry point for any caller whose
+ * scores did not come from a `HistoryRow` pair (a sweep cell carries its own
+ * `perTopicPath` and is not a bench run). `pairedSignificance` is this function
+ * plus run resolution and the provenance guard, so the two can never diverge.
+ *
+ * Topic sets MUST match exactly here too: an inner join would drop whichever
+ * topics one arm failed on and bias the estimate toward that arm.
+ */
+export const pairedScores = (
   dataset: string,
   metric: MetricName,
   before: TopicScores,
@@ -317,5 +327,5 @@ export const pairedSignificance = (options: PairedSignificanceOptions): Signific
   const after = loadRun(options.resultsDir, options.latest);
   return before.scores === undefined || after.scores === undefined
     ? unreadable(dataset, [before, after])
-    : pairedVerdict(dataset, options.metric, before.scores, after.scores);
+    : pairedScores(dataset, options.metric, before.scores, after.scores);
 };
