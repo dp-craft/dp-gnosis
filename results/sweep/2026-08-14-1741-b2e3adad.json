@@ -1,0 +1,359 @@
+{
+  "provenance": {
+    "ts": "2026-08-14T17:41:59.340Z",
+    "gitSha": "b2e3adad",
+    "adapter": "linear",
+    "depth": 100,
+    "k1s": [
+      1.4
+    ],
+    "bs": [
+      0.6,
+      0.5,
+      0.4,
+      0.3
+    ]
+  },
+  "cells": [
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 96524,
+      "metrics": {
+        "ndcg10": 0.15607790821450185,
+        "recall10": 0.1822797752409403,
+        "recall100": 0.3834281683796247,
+        "mrr10": 0.21822699953767918
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 91088,
+      "metrics": {
+        "ndcg10": 0.19103557255238465,
+        "recall10": 0.2153268252782816,
+        "recall100": 0.4151819054731676,
+        "mrr10": 0.2713438126059485
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 90287,
+      "metrics": {
+        "ndcg10": 0.2189511061756952,
+        "recall10": 0.24488453833114032,
+        "recall100": 0.44446993136313523,
+        "mrr10": 0.30987055016181225
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87741,
+      "metrics": {
+        "ndcg10": 0.24901553196318843,
+        "recall10": 0.2678618846094575,
+        "recall100": 0.4828464146425311,
+        "mrr10": 0.35400292803205424
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 88023,
+      "metrics": {
+        "ndcg10": 0.12354185001560287,
+        "recall10": 0.1469051175361855,
+        "recall100": 0.33692372891402017,
+        "mrr10": 0.18094082293111416
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 19969,
+      "metrics": {
+        "ndcg10": 0.2791827679852637,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5898058252427184,
+        "mrr10": 0.2370010787486515
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16151,
+      "metrics": {
+        "ndcg10": 0.2778258778468362,
+        "recall10": 0.4433656957928803,
+        "recall100": 0.5865695792880259,
+        "mrr10": 0.2381376175065495
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16170,
+      "metrics": {
+        "ndcg10": 0.2818127720146709,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5622977346278317,
+        "mrr10": 0.2401063337956542
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16240,
+      "metrics": {
+        "ndcg10": 0.267833102168587,
+        "recall10": 0.43122977346278324,
+        "recall100": 0.5671521035598706,
+        "mrr10": 0.227831715210356
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16114,
+      "metrics": {
+        "ndcg10": 0.27461519370695847,
+        "recall10": 0.43365695792880266,
+        "recall100": 0.5930420711974109,
+        "mrr10": 0.23598397287717665
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 14603,
+      "metrics": {
+        "ndcg10": 0.32615663728541006,
+        "recall10": 0.15636797285394527,
+        "recall100": 0.24864378748464006,
+        "mrr10": 0.5307472111651678
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12567,
+      "metrics": {
+        "ndcg10": 0.32672595345466027,
+        "recall10": 0.15650489630951256,
+        "recall100": 0.24830894197250725,
+        "mrr10": 0.5322571133716643
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12503,
+      "metrics": {
+        "ndcg10": 0.3262865238872075,
+        "recall10": 0.15609307684236629,
+        "recall100": 0.24747102540455107,
+        "mrr10": 0.5335987026389502
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12524,
+      "metrics": {
+        "ndcg10": 0.3266479522074423,
+        "recall10": 0.15697562549598942,
+        "recall100": 0.2479970157818771,
+        "mrr10": 0.5338063295493635
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12464,
+      "metrics": {
+        "ndcg10": 0.32499003571727286,
+        "recall10": 0.1544395103598552,
+        "recall100": 0.24914380097011732,
+        "mrr10": 0.5308368961619735
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 21408,
+      "metrics": {
+        "ndcg10": 0.6914009114391154,
+        "recall10": 0.8199444444444444,
+        "recall100": 0.9303333333333335,
+        "mrr10": 0.65614417989418
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 18969,
+      "metrics": {
+        "ndcg10": 0.6892916717579565,
+        "recall10": 0.8121666666666667,
+        "recall100": 0.927,
+        "mrr10": 0.6556851851851853
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19018,
+      "metrics": {
+        "ndcg10": 0.6834155737936297,
+        "recall10": 0.8063333333333333,
+        "recall100": 0.927,
+        "mrr10": 0.6500886243386244
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.4,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19013,
+      "metrics": {
+        "ndcg10": 0.6830903760819446,
+        "recall10": 0.8023333333333333,
+        "recall100": 0.927,
+        "mrr10": 0.6512460317460319
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19001,
+      "metrics": {
+        "ndcg10": 0.6882954764934839,
+        "recall10": 0.8199444444444444,
+        "recall100": 0.9313333333333332,
+        "mrr10": 0.6518584656084656
+      }
+    }
+  ]
+}
