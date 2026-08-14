@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
 import type { DatasetEntry } from './manifest.js';
-import { effectiveAtomMaxChars, firstPassDepth, parseArgs } from './run.js';
+import { effectiveAtomMaxChars, firstPassDepth, parseArgs, percentileMs } from './run.js';
 
 describe('parseArgs', () => {
   it('defaults to every enabled dataset at depth 100 with no rerank', () => {
@@ -11,19 +11,34 @@ describe('parseArgs', () => {
       depth: 100,
       rerank: false,
       compare: false,
-      perTopic: false,
     });
   });
 
   it('reads --only as a csv list and the remaining flags as switches', () => {
-    expect(parseArgs(['--only', 'scifact, nfcorpus', '--depth', '20', '--rerank', '--per-topic']))
+    expect(parseArgs(['--only', 'scifact, nfcorpus', '--depth', '20', '--rerank', '--compare']))
       .toEqual({
         only: ['scifact', 'nfcorpus'],
         depth: 20,
         rerank: true,
-        compare: false,
-        perTopic: true,
+        compare: true,
       });
+  });
+});
+
+describe('percentileMs', () => {
+  const samples = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+  it('takes the nearest rank over the ascending samples', () => {
+    expect(percentileMs(samples, 0.5)).toBe(50);
+    expect(percentileMs(samples, 0.95)).toBe(100);
+  });
+
+  it('sorts before ranking, so arrival order cannot change the answer', () => {
+    expect(percentileMs([90, 10, 50], 0.5)).toBe(50);
+  });
+
+  it('is 0 when no query was timed', () => {
+    expect(percentileMs([], 0.95)).toBe(0);
   });
 });
 

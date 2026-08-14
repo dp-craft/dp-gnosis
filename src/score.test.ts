@@ -50,6 +50,24 @@ describe('scoreDataset', () => {
     expect(result.mean.ndcg10).toBeCloseTo(0.5, 12);
   });
 
+  it('reports the SAMPLE sd of the per-topic values — the sample-size input, not a standard error', () => {
+    const result = scoreDataset(
+      new Map([
+        ['q1', ['a', 'b']],
+        ['q2', ['a', 'b']],
+      ]),
+      qrels
+    );
+    // per-topic nDCG@10 is [1, 0]; sample sd = sqrt(((0.5)^2 + (0.5)^2) / 1).
+    expect(result.sd.ndcg10).toBeCloseTo(Math.SQRT1_2, 12);
+    expect(result.sd.recall10).toBeCloseTo(Math.SQRT1_2, 12);
+    expect(result.sd.mrr10).toBeCloseTo(Math.SQRT1_2, 12);
+  });
+
+  it('reports a zero sd for a single topic, where a sample sd is undefined', () => {
+    expect(scoreDataset(new Map([['q1', ['a']]]), qrels).sd.ndcg10).toBe(0);
+  });
+
   it('treats a topic with no qrels entry as all-zero instead of throwing', () => {
     const result = scoreDataset(new Map([['unknown', ['a']]]), qrels);
     expect(result.mean).toEqual({ ndcg10: 0, recall10: 0, recall100: 0, mrr10: 0 });

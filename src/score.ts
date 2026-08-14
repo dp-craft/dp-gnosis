@@ -24,7 +24,7 @@
  */
 import { basename } from 'node:path';
 
-import { meanMetrics, type Metrics, type Qrel, scoreTopic } from './metrics.js';
+import { meanMetrics, type Metrics, type Qrel, scoreTopic, sdMetrics } from './metrics.js';
 
 const MARKDOWN_EXT = '.md';
 
@@ -45,10 +45,12 @@ export interface TopicScore {
   readonly metrics: Metrics;
 }
 
-/** Every topic's score plus the macro mean over all of them. */
+/** Every topic's score, the macro mean, and the per-topic spread around it. */
 export interface DatasetScore {
   readonly perTopic: readonly TopicScore[];
   readonly mean: Metrics;
+  /** Sample sd (n-1) of the per-topic values — the sample-size input. */
+  readonly sd: Metrics;
 }
 
 /** An atom with no `sources` frontmatter has no document — it is skipped. */
@@ -84,5 +86,6 @@ export const scoreDataset = (
     queryId,
     metrics: scoreTopic(ranking, qrels.get(queryId) ?? EMPTY_QREL),
   }));
-  return { perTopic, mean: meanMetrics(perTopic.map(topic => topic.metrics)) };
+  const metrics = perTopic.map(topic => topic.metrics);
+  return { perTopic, mean: meanMetrics(metrics), sd: sdMetrics(metrics) };
 };

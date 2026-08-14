@@ -76,3 +76,26 @@ export const meanMetrics = (perTopic: readonly Metrics[]): Metrics => ({
   recall100: meanOf(perTopic.map(m => m.recall100)),
   mrr10: meanOf(perTopic.map(m => m.mrr10)),
 });
+
+/**
+ * SAMPLE standard deviation (n-1) of the per-topic values — the spread of the
+ * topics themselves, which is what a required-sample-size formula takes. A
+ * standard error (sd/sqrt(n)) MUST NOT be recorded in its place: it shrinks with
+ * the topic count and would understate the sample size a future run needs.
+ *
+ * A single topic has no sample sd; 0 is recorded rather than `NaN`.
+ */
+const sdOf = (values: readonly number[]): number => {
+  if (values.length < 2) return 0;
+  const mean = meanOf(values);
+  const squares = values.map(value => (value - mean) ** 2);
+  return Math.sqrt(squares.reduce((sum, square) => sum + square, 0) / (values.length - 1));
+};
+
+/** The per-topic spread of each measure, alongside `meanMetrics`. */
+export const sdMetrics = (perTopic: readonly Metrics[]): Metrics => ({
+  ndcg10: sdOf(perTopic.map(m => m.ndcg10)),
+  recall10: sdOf(perTopic.map(m => m.recall10)),
+  recall100: sdOf(perTopic.map(m => m.recall100)),
+  mrr10: sdOf(perTopic.map(m => m.mrr10)),
+});

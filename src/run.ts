@@ -30,7 +30,13 @@ import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
 import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
 import { compareAll, formatComparison } from './compare.js';
-import { openPort, prepareDataset, rerankIfRequested, retrieveDocs } from './engine.js';
+import {
+  openPort,
+  prepareDataset,
+  type PreparedDataset,
+  rerankIfRequested,
+  retrieveDocs
+} from './engine.js';
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
 import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
@@ -43,7 +49,7 @@ import {
   type RunProvenance,
   writeRunReport
 } from './report.js';
-import { scoreDataset, toDocumentRanking } from './score.js';
+import { type DatasetScore, scoreDataset, toDocumentRanking } from './score.js';
 
 const SUITE_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const MANIFEST_PATH = resolve(SUITE_ROOT, 'datasets.json');
@@ -66,7 +72,6 @@ export interface CliOptions {
   readonly depth: number;
   readonly rerank: boolean;
   readonly compare: boolean;
-  readonly perTopic: boolean;
 }
 
 interface Topic {
@@ -87,7 +92,6 @@ export const parseArgs = (argv: readonly string[]): CliOptions => ({
   depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
   rerank: argv.includes('--rerank'),
   compare: argv.includes('--compare'),
-  perTopic: argv.includes('--per-topic'),
 });
 
 /**
@@ -157,51 +161,121 @@ const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly s
   return toDocumentRanking(ordered.slice(0, options.depth), context.excluded.get(topic.id) ?? []);
 };
 
+/** One topic's ranking and the wall time the retrieve+rerank+rollup path took. */
+interface TimedTopic {
+  readonly id: string;
+  readonly ranking: readonly string[];
+  readonly ms: number;
+}
+
+const timeTopic = async (context: RankContext, topic: Topic): Promise<TimedTopic> => {
+  const startedAt = Date.now();
+  const ranking = await rankTopic(context, topic);
+  return { id: topic.id, ranking, ms: Date.now() - startedAt };
+};
+
 /** Sequential by design: one port, one index, one CPU-bound query at a time. */
 const rankAllTopics = async (
   context: RankContext,
   topics: readonly Topic[]
-): Promise<ReadonlyMap<string, readonly string[]>> =>
-  topics.reduce<Promise<ReadonlyMap<string, readonly string[]>>>(
-    async (pending, topic) =>
-      new Map([...(await pending), [topic.id, await rankTopic(context, topic)]]),
-    Promise.resolve(new Map())
+): Promise<readonly TimedTopic[]> =>
+  topics.reduce<Promise<readonly TimedTopic[]>>(
+    async (pending, topic) => [...(await pending), await timeTopic(context, topic)],
+    Promise.resolve([])
   );
+
+/**
+ * Nearest-rank percentile over the timings, sorted ascending. No timing means
+ * no query ran, which is reported as 0 rather than `NaN`.
+ */
+export const percentileMs = (values: readonly number[], fraction: number): number => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const rank = Math.ceil(fraction * sorted.length) - 1;
+  const index = Math.min(Math.max(rank, 0), sorted.length - 1);
+  return sorted[index] ?? 0;
+};
+
+const P50 = 0.5;
+const P95 = 0.95;
+
+/** The query phase: rankings by topic, total wall time, and its distribution. */
+interface QueryOutcome {
+  readonly rankings: ReadonlyMap<string, readonly string[]>;
+  readonly queryMs: number;
+  readonly queryP50Ms: number;
+  readonly queryP95Ms: number;
+}
 
 const queryDataset = async (
   context: RankContext,
   topics: readonly Topic[]
-): Promise<{ readonly rankings: ReadonlyMap<string, readonly string[]>; readonly queryMs: number }> => {
+): Promise<QueryOutcome> => {
   const startedAt = Date.now();
-  const rankings = await rankAllTopics(context, topics);
-  return { rankings, queryMs: Date.now() - startedAt };
+  const timed = await rankAllTopics(context, topics);
+  const perQueryMs = timed.map(entry => entry.ms);
+  return {
+    rankings: new Map(timed.map(entry => [entry.id, entry.ranking])),
+    queryMs: Date.now() - startedAt,
+    queryP50Ms: percentileMs(perQueryMs, P50),
+    queryP95Ms: percentileMs(perQueryMs, P95),
+  };
 };
 
-const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
-  const dir = await ensureDataset(entry);
-  const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
-  const topics = topicsOf(readQueries(dir), qrels);
-  const prepared = await prepareDataset({
+/** Who the dataset is: its manifest descriptors plus the corpus checksum. */
+const descriptorOf = (
+  entry: DatasetEntry,
+  dir: string
+): Pick<
+  DatasetResult,
+  'dataset' | 'domain' | 'docShape' | 'queryShape' | 'corpusBytes' | 'corpusLines' | 'atomMaxChars'
+> => ({
+  dataset: entry.id,
+  domain: entry.domain,
+  docShape: entry.docShape,
+  queryShape: entry.queryShape,
+  ...corpusChecksum(resolve(dir, CORPUS_FILE)),
+  atomMaxChars: effectiveAtomMaxChars(entry),
+});
+
+/** What the run measured. `rankings` stays out: the JSON report is a summary. */
+const measurementsOf = (
+  queried: QueryOutcome,
+  scored: DatasetScore
+): Pick<
+  DatasetResult,
+  'queryMs' | 'queryP50Ms' | 'queryP95Ms' | 'metrics' | 'metricsSd' | 'perTopic'
+> => ({
+  queryMs: queried.queryMs,
+  queryP50Ms: queried.queryP50Ms,
+  queryP95Ms: queried.queryP95Ms,
+  metrics: scored.mean,
+  metricsSd: scored.sd,
+  perTopic: scored.perTopic,
+});
+
+const prepareOf = (entry: DatasetEntry, dir: string): Promise<PreparedDataset> =>
+  prepareDataset({
     id: entry.id,
     docs: readCorpus(dir),
     workRoot: WORK_ROOT,
     atomMaxChars: entry.atomMaxChars,
   });
+
+const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
+  const dir = await ensureDataset(entry);
+  const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
+  const topics = topicsOf(readQueries(dir), qrels);
+  const prepared = await prepareOf(entry, dir);
   const port = openPort(prepared);
   const context = { port, options, excluded: readExcluded(dir) };
   const queried = await queryDataset(context, topics).finally(() => port.close?.());
-  const scored = scoreDataset(queried.rankings, qrels);
   return {
-    dataset: entry.id,
-    ...corpusChecksum(resolve(dir, CORPUS_FILE)),
-    atomMaxChars: effectiveAtomMaxChars(entry),
+    ...descriptorOf(entry, dir),
     topics: topics.length,
     docCount: prepared.docCount,
     atomCount: prepared.atomCount,
     ingestMs: prepared.ingestMs,
-    queryMs: queried.queryMs,
-    metrics: scored.mean,
-    perTopic: scored.perTopic,
+    ...measurementsOf(queried, scoreDataset(queried.rankings, qrels)),
   };
 };
 
@@ -268,7 +342,6 @@ const record = (results: readonly DatasetResult[], options: CliOptions, sha: str
     resultsDir: RESULTS_DIR,
     provenance: provenanceOf(options, sha),
     results,
-    perTopic: options.perTopic,
   });
   process.stdout.write(`\nwrote ${written.markdownPath}\n`);
 };

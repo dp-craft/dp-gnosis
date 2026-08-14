@@ -51,6 +51,11 @@ export interface RunProvenance {
 /** One dataset's outcome plus the provenance that is specific to that dataset. */
 export interface DatasetResult {
   readonly dataset: string;
+  /** Manifest report metadata, carried through so runs can be grouped by it. */
+  readonly domain: string;
+  readonly docShape: string;
+  /** Absent on entries whose manifest does not describe the query form. */
+  readonly queryShape?: string | undefined;
   /** Byte size of the dataset's `corpus.jsonl` — half the cheap checksum. */
   readonly corpusBytes: number;
   /** Non-empty line count of the dataset's `corpus.jsonl` — the other half. */
@@ -66,16 +71,40 @@ export interface DatasetResult {
   readonly docCount: number;
   readonly atomCount: number;
   readonly ingestMs: number;
+  /** Wall time of the whole query phase — kept next to the distribution. */
   readonly queryMs: number;
+  readonly queryP50Ms: number;
+  readonly queryP95Ms: number;
   readonly metrics: Metrics;
+  /** Sample sd (n-1) of the per-topic values behind `metrics`. */
+  readonly metricsSd: Metrics;
   readonly perTopic: readonly TopicScore[];
 }
 
-/** One line of `history.jsonl`: the four metrics, flattened next to provenance. */
+/**
+ * One line of `history.jsonl`: the four metrics, flattened next to provenance.
+ *
+ * Every field added after the first recorded run is OPTIONAL, exactly as
+ * `atomMaxChars` is nullable. `readHistory` drops a row it cannot recognise, so
+ * requiring a late field would erase every earlier run from the progress log —
+ * the one thing this append-only file exists to prevent.
+ */
 export interface HistoryRow extends Metrics {
   readonly ts: string;
   readonly gitSha: string;
   readonly dataset: string;
+  /** Descriptive, not provenance — absent on rows written before it existed. */
+  readonly domain?: string;
+  readonly docShape?: string;
+  readonly queryShape?: string;
+  /** Sample sd (n-1) of the per-topic values; absent on older rows. */
+  readonly ndcg10Sd?: number;
+  readonly recall10Sd?: number;
+  readonly recall100Sd?: number;
+  readonly mrr10Sd?: number;
+  /** Per-query latency distribution; absent on older rows. */
+  readonly queryP50Ms?: number;
+  readonly queryP95Ms?: number;
   readonly corpusBytes: number;
   readonly corpusLines: number;
   readonly adapter: string;
@@ -98,12 +127,11 @@ export interface WrittenReport {
   readonly perTopicPaths: readonly string[];
 }
 
-/** Everything `writeRunReport` needs; `perTopic` gates the TSVs only. */
+/** Everything `writeRunReport` needs. The per-topic TSVs are not optional. */
 export interface RunReportOptions {
   readonly resultsDir: string;
   readonly provenance: RunProvenance;
   readonly results: readonly DatasetResult[];
-  readonly perTopic: boolean;
 }
 
 /** The cheap dataset checksum — byte size and line count of `corpus.jsonl`. */
@@ -147,6 +175,37 @@ export const corpusChecksum = (corpusPath: string): CorpusChecksum => ({
     .filter(line => line.trim().length > 0).length,
 });
 
+type DescriptorFields = Pick<HistoryRow, 'domain' | 'docShape' | 'queryShape'>;
+type SdFields = Pick<HistoryRow, 'ndcg10Sd' | 'recall10Sd' | 'recall100Sd' | 'mrr10Sd'>;
+type CostFields = Pick<
+  HistoryRow,
+  'topics' | 'docCount' | 'atomCount' | 'ingestMs' | 'queryMs' | 'queryP50Ms' | 'queryP95Ms'
+>;
+
+/** `queryShape` is optional on the manifest, so an absent one writes no key. */
+const descriptorFields = (result: DatasetResult): DescriptorFields => ({
+  domain: result.domain,
+  docShape: result.docShape,
+  ...(result.queryShape === undefined ? {} : { queryShape: result.queryShape }),
+});
+
+const sdFields = (sd: Metrics): SdFields => ({
+  ndcg10Sd: sd.ndcg10,
+  recall10Sd: sd.recall10,
+  recall100Sd: sd.recall100,
+  mrr10Sd: sd.mrr10,
+});
+
+const costFields = (result: DatasetResult): CostFields => ({
+  topics: result.topics,
+  docCount: result.docCount,
+  atomCount: result.atomCount,
+  ingestMs: result.ingestMs,
+  queryMs: result.queryMs,
+  queryP50Ms: result.queryP50Ms,
+  queryP95Ms: result.queryP95Ms,
+});
+
 const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): HistoryRow => ({
   ts: provenance.ts,
   gitSha: provenance.gitSha,
@@ -157,12 +216,10 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   atomMaxChars: result.atomMaxChars,
   depth: provenance.depth,
   rerank: provenance.rerank,
-  topics: result.topics,
-  docCount: result.docCount,
-  atomCount: result.atomCount,
-  ingestMs: result.ingestMs,
-  queryMs: result.queryMs,
+  ...descriptorFields(result),
+  ...costFields(result),
   ...result.metrics,
+  ...sdFields(result.metricsSd),
 });
 
 const STRING_FIELDS: readonly string[] = ['ts', 'gitSha', 'dataset', 'adapter'];
@@ -222,9 +279,10 @@ export const appendHistory = (historyPath: string, rows: readonly HistoryRow[]):
 const metric = (value: number): string => value.toFixed(METRIC_DIGITS);
 
 const markdownRow = (result: DatasetResult): string =>
-  `| ${result.dataset} | ${result.topics} | ${metric(result.metrics.ndcg10)} | ` +
+  `| ${result.dataset} | ${result.domain} | ${result.docShape} | ${result.topics} | ` +
+  `${metric(result.metrics.ndcg10)} | ${metric(result.metricsSd.ndcg10)} | ` +
   `${metric(result.metrics.recall10)} | ${metric(result.metrics.recall100)} | ` +
-  `${metric(result.metrics.mrr10)} |`;
+  `${metric(result.metrics.mrr10)} | ${result.queryP50Ms} | ${result.queryP95Ms} |`;
 
 const markdownHeader = (provenance: RunProvenance): readonly string[] => [
   '# dp-gnosis-bench run',
@@ -236,8 +294,9 @@ const markdownHeader = (provenance: RunProvenance): readonly string[] => [
   '> Scores are DOCUMENT-level: atoms are rolled up to their origin document before',
   '> scoring, so they stay comparable across chunker changes.',
   '',
-  '| dataset | topics | nDCG@10 | R@10 | R@100 | MRR@10 |',
-  '|---|---|---|---|---|---|',
+  '| dataset | domain | docShape | topics | nDCG@10 | nDCG@10 sd | R@10 | R@100 | MRR@10 | ' +
+    'q p50 ms | q p95 ms |',
+  '|---|---|---|---|---|---|---|---|---|---|---|',
 ];
 
 const renderMarkdown = (provenance: RunProvenance, results: readonly DatasetResult[]): string =>
@@ -267,8 +326,12 @@ const writePerTopic = (
   return path;
 };
 
+/**
+ * ALWAYS written: without the per-topic scores a recorded run cannot be
+ * re-analysed later (a paired test, a required-sample-size estimate) without
+ * paying for the whole benchmark again.
+ */
 const writePerTopicFiles = (options: RunReportOptions, stem: string): readonly string[] => {
-  if (!options.perTopic) return [];
   mkdirSync(resolve(options.resultsDir, PER_TOPIC_DIR), { recursive: true });
   return options.results.map(result => writePerTopic(options.resultsDir, stem, result));
 };
