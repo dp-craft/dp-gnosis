@@ -1,0 +1,53 @@
+{
+  "provenance": {
+    "ts": "2026-08-14T19:12:11.272Z",
+    "gitSha": "d08753ce",
+    "adapter": "linear",
+    "depth": 100,
+    "k1s": [
+      1.2
+    ],
+    "bs": [
+      0.75,
+      0.6
+    ]
+  },
+  "cells": [
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 20478,
+      "metrics": {
+        "ndcg10": 0.6882954764934839,
+        "recall10": 0.8199444444444444,
+        "recall100": 0.9313333333333332,
+        "mrr10": 0.6518584656084656
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1912-scifact-linear-k1-1.20-b-0.75.tsv"
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 18878,
+      "metrics": {
+        "ndcg10": 0.690207502992319,
+        "recall10": 0.8192777777777778,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.654931216931217
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1912-scifact-linear-k1-1.20-b-0.60.tsv"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "provenance": {
+    "ts": "2026-08-14T19:26:24.473Z",
+    "gitSha": "5e3a9309",
+    "adapter": "linear",
+    "depth": 100,
+    "k1s": [
+      1.2
+    ],
+    "bs": [
+      0.75,
+      0.6
+    ]
+  },
+  "cells": [
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 20675,
+      "metrics": {
+        "ndcg10": 0.6882954764934839,
+        "recall10": 0.8199444444444444,
+        "recall100": 0.9313333333333332,
+        "mrr10": 0.6518584656084656
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1926-scifact-linear-k1-1.20-b-0.75.tsv"
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 18875,
+      "metrics": {
+        "ndcg10": 0.690207502992319,
+        "recall10": 0.8192777777777778,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.654931216931217
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1926-scifact-linear-k1-1.20-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": 0.0019126666666666662,
+        "pValue": 0.45645435456454353,
+        "ciLow": -0.0024173333333333343,
+        "ciHigh": 0.006971,
+        "significant": false
+      }
+    }
+  ]
+}

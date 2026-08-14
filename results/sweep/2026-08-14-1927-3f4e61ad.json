@@ -1,0 +1,1485 @@
+{
+  "provenance": {
+    "ts": "2026-08-14T19:27:41.981Z",
+    "gitSha": "3f4e61ad",
+    "adapter": "linear",
+    "depth": 100,
+    "k1s": [
+      1.2,
+      1,
+      0.8
+    ],
+    "bs": [
+      0.6,
+      0.5,
+      0.4,
+      0.3
+    ]
+  },
+  "cells": [
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 93621,
+      "metrics": {
+        "ndcg10": 0.16241472747337782,
+        "recall10": 0.19441569757103735,
+        "recall100": 0.39054790947994833,
+        "mrr10": 0.23208891971027892
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.20-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.038873786407767,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.023430097087378636,
+        "ciHigh": 0.05643689320388348,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87390,
+      "metrics": {
+        "ndcg10": 0.1938653265318129,
+        "recall10": 0.22099025569899355,
+        "recall100": 0.4151819054731676,
+        "mrr10": 0.2709238711665896
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.20-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.07032524271844659,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.04370194174757282,
+        "ciHigh": 0.10124757281553398,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87137,
+      "metrics": {
+        "ndcg10": 0.22187817432969575,
+        "recall10": 0.2513570302405254,
+        "recall100": 0.45029517408158176,
+        "mrr10": 0.3141547233780243
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.20-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.09833592233009704,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.0631019417475728,
+        "ciHigh": 0.13673398058252426,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87111,
+      "metrics": {
+        "ndcg10": 0.24942040357750273,
+        "recall10": 0.26430201405929565,
+        "recall100": 0.49424262361155563,
+        "mrr10": 0.36522191400832177
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.20-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.1258776699029126,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.0815291262135922,
+        "ciHigh": 0.17161165048543692,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87409,
+      "metrics": {
+        "ndcg10": 0.16954649149683892,
+        "recall10": 0.19839876951527438,
+        "recall100": 0.39831489977121043,
+        "mrr10": 0.24667514254892894
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.00-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.04600485436893204,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.02849029126213592,
+        "ciHigh": 0.06562524271844661,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 88674,
+      "metrics": {
+        "ndcg10": 0.20547781460762066,
+        "recall10": 0.23420492668065487,
+        "recall100": 0.4271560155055301,
+        "mrr10": 0.2895708121436276
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.00-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.08193689320388345,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.05172621359223299,
+        "ciHigh": 0.11546310679611645,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87444,
+      "metrics": {
+        "ndcg10": 0.22698964660614057,
+        "recall10": 0.2578295221499105,
+        "recall100": 0.4581700392380003,
+        "mrr10": 0.31775312066574196
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.00-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.10344660194174751,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.0665912621359223,
+        "ciHigh": 0.14346990291262138,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87322,
+      "metrics": {
+        "ndcg10": 0.2504103214174007,
+        "recall10": 0.26187482959327624,
+        "recall100": 0.5047604229643065,
+        "mrr10": 0.3667706888580674
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.00-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.12686699029126214,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.08103592233009708,
+        "ciHigh": 0.17430970873786406,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 87296,
+      "metrics": {
+        "ndcg10": 0.19170979961466994,
+        "recall10": 0.22422650165368613,
+        "recall100": 0.4121074718162097,
+        "mrr10": 0.27696486361534906
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-0.80-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.06816990291262136,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.04468543689320388,
+        "ciHigh": 0.09448349514563108,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 88951,
+      "metrics": {
+        "ndcg10": 0.2122869285185801,
+        "recall10": 0.24682628590395586,
+        "recall100": 0.43395213201038446,
+        "mrr10": 0.29412081984897515
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-0.80-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.08874563106796114,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.056900000000000006,
+        "ciHigh": 0.1240563106796116,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 88080,
+      "metrics": {
+        "ndcg10": 0.2417445692135809,
+        "recall10": 0.2686709460981306,
+        "recall100": 0.4640646300840476,
+        "mrr10": 0.3383456618893512
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-0.80-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.11819999999999992,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.07623980582524272,
+        "ciHigh": 0.16299999999999998,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 88072,
+      "metrics": {
+        "ndcg10": 0.246208979853579,
+        "recall10": 0.25863858363858366,
+        "recall100": 0.5209416527377692,
+        "mrr10": 0.35779010633379565
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-0.80-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology-passages",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.12266310679611647,
+        "pValue": 0.00009999000099990002,
+        "ciLow": 0.07578737864077668,
+        "ciHigh": 0.17054951456310674,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "bright-biology-passages",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 103,
+      "docCount": 57359,
+      "atomCount": 55695,
+      "queryMs": 88970,
+      "metrics": {
+        "ndcg10": 0.12354185001560287,
+        "recall10": 0.1469051175361855,
+        "recall100": 0.33692372891402017,
+        "mrr10": 0.18094082293111416
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-passages-linear-k1-1.20-b-0.75.tsv"
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 22201,
+      "metrics": {
+        "ndcg10": 0.2815086553993265,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5898058252427184,
+        "mrr10": 0.23989443673909688
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.20-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.00689223300970874,
+        "pValue": 0.24237576242375763,
+        "ciLow": -0.002524271844660193,
+        "ciHigh": 0.018997087378640778,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16206,
+      "metrics": {
+        "ndcg10": 0.2849589202460224,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5720064724919094,
+        "mrr10": 0.24464093080597932
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.20-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.010341747572815533,
+        "pValue": 0.1352864713528647,
+        "ciLow": -0.001723300970873788,
+        "ciHigh": 0.02507378640776699,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16474,
+      "metrics": {
+        "ndcg10": 0.2785861316545311,
+        "recall10": 0.44579288025889974,
+        "recall100": 0.5622977346278317,
+        "mrr10": 0.23735552473416546
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.20-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.003972815533980581,
+        "pValue": 0.6292370762923708,
+        "ciLow": -0.010578640776699028,
+        "ciHigh": 0.02022718446601942,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16507,
+      "metrics": {
+        "ndcg10": 0.26151879753629015,
+        "recall10": 0.4215210355987056,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.22252273077515797
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.20-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": -0.013095145631067959,
+        "pValue": 0.11448855114488551,
+        "ciLow": -0.02919029126213592,
+        "ciHigh": 0.0028300970873786427,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16592,
+      "metrics": {
+        "ndcg10": 0.28045443573003137,
+        "recall10": 0.453074433656958,
+        "recall100": 0.5655339805825242,
+        "mrr10": 0.2360648790260441
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.00-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.005840776699029129,
+        "pValue": 0.37566243375662434,
+        "ciLow": -0.00518932038834951,
+        "ciHigh": 0.019014563106796115,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16624,
+      "metrics": {
+        "ndcg10": 0.27849812390845924,
+        "recall10": 0.447411003236246,
+        "recall100": 0.5525889967637541,
+        "mrr10": 0.23579519186315298
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.00-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": 0.0038844660194174777,
+        "pValue": 0.6306369363063694,
+        "ciLow": -0.01063883495145631,
+        "ciHigh": 0.019945631067961166,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16115,
+      "metrics": {
+        "ndcg10": 0.2685325575457565,
+        "recall10": 0.42799352750809067,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.2277431037139775
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.00-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": -0.006082524271844659,
+        "pValue": 0.5287471252874713,
+        "ciLow": -0.024578640776699027,
+        "ciHigh": 0.012883495145631068,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16337,
+      "metrics": {
+        "ndcg10": 0.2580606937737114,
+        "recall10": 0.406957928802589,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.2210856834643242
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.00-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": -0.016552427184466017,
+        "pValue": 0.054894510548945105,
+        "ciLow": -0.03406601941747574,
+        "ciHigh": -0.0003776699029126202,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16261,
+      "metrics": {
+        "ndcg10": 0.2670894546526029,
+        "recall10": 0.4263754045307444,
+        "recall100": 0.5639158576051779,
+        "mrr10": 0.22553552165202648
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-0.80-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": -0.007523300970873786,
+        "pValue": 0.3615638436156384,
+        "ciLow": -0.0231495145631068,
+        "ciHigh": 0.007979611650485439,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16306,
+      "metrics": {
+        "ndcg10": 0.2651443634338744,
+        "recall10": 0.4231391585760518,
+        "recall100": 0.5477346278317152,
+        "mrr10": 0.22518107566651255
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-0.80-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": -0.00946893203883495,
+        "pValue": 0.30986901309869014,
+        "ciLow": -0.027607766990291275,
+        "ciHigh": 0.008756310679611651,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 16543,
+      "metrics": {
+        "ndcg10": 0.26248436713504997,
+        "recall10": 0.41828478964401294,
+        "recall100": 0.5380258899676376,
+        "mrr10": 0.2216905532439513
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-0.80-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": -0.012129126213592231,
+        "pValue": 0.23787621237876214,
+        "ciLow": -0.032469902912621355,
+        "ciHigh": 0.0073699029126213615,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 17302,
+      "metrics": {
+        "ndcg10": 0.2579581388526022,
+        "recall10": 0.4134304207119741,
+        "recall100": 0.5380258899676376,
+        "mrr10": 0.21799969178609951
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-0.80-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "bright-biology",
+        "metric": "ndcg10",
+        "topics": 103,
+        "meanDifference": -0.01665436893203883,
+        "pValue": 0.0801919808019198,
+        "ciLow": -0.03552621359223301,
+        "ciHigh": 0.0013970873786407802,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "bright-biology",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 103,
+      "docCount": 524,
+      "atomCount": 8930,
+      "queryMs": 17098,
+      "metrics": {
+        "ndcg10": 0.27461519370695847,
+        "recall10": 0.43365695792880266,
+        "recall100": 0.5930420711974109,
+        "mrr10": 0.23598397287717665
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-bright-biology-linear-k1-1.20-b-0.75.tsv"
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 15131,
+      "metrics": {
+        "ndcg10": 0.3241052913937913,
+        "recall10": 0.15459644864827485,
+        "recall100": 0.24891069413079284,
+        "mrr10": 0.5281451176962012
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.20-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.0008848297213622292,
+        "pValue": 0.31386861313868614,
+        "ciLow": -0.002628792569659444,
+        "ciHigh": 0.0007201238390092888,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13703,
+      "metrics": {
+        "ndcg10": 0.3246340459191567,
+        "recall10": 0.15464619376901076,
+        "recall100": 0.24864250096029314,
+        "mrr10": 0.5307902108211706
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.20-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.00035634674922600617,
+        "pValue": 0.738026197380262,
+        "ciLow": -0.002458513931888546,
+        "ciHigh": 0.0016164086687306496,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13377,
+      "metrics": {
+        "ndcg10": 0.32521379667907974,
+        "recall10": 0.1545872822316705,
+        "recall100": 0.24805339639577662,
+        "mrr10": 0.5314880338100152
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.20-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": 0.0002247678018575859,
+        "pValue": 0.8546145385461453,
+        "ciLow": -0.0021591331269349826,
+        "ciHigh": 0.002545510835913312,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12865,
+      "metrics": {
+        "ndcg10": 0.32508681044628035,
+        "recall10": 0.1544694993148756,
+        "recall100": 0.24812234836581046,
+        "mrr10": 0.5332903336773306
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.20-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": 0.00009721362229102326,
+        "pValue": 0.9525047495250475,
+        "ciLow": -0.0030572755417956655,
+        "ciHigh": 0.0031953560371517035,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12868,
+      "metrics": {
+        "ndcg10": 0.3221338154033799,
+        "recall10": 0.1538558490909098,
+        "recall100": 0.24945806886153551,
+        "mrr10": 0.524186692220748
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.00-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.002856656346749226,
+        "pValue": 0.023497650234976502,
+        "ciLow": -0.005414551083591333,
+        "ciHigh": -0.0005455108359133116,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12767,
+      "metrics": {
+        "ndcg10": 0.3225983521783133,
+        "recall10": 0.1537532498863872,
+        "recall100": 0.24931294679916813,
+        "mrr10": 0.5283011450194113
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.00-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.0023916408668730655,
+        "pValue": 0.0675932406759324,
+        "ciLow": -0.0049978328173374605,
+        "ciHigh": 0.00004365325077399308,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12836,
+      "metrics": {
+        "ndcg10": 0.32310559674091144,
+        "recall10": 0.15405894173925452,
+        "recall100": 0.24897850906775687,
+        "mrr10": 0.5284264583026193
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.00-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.0018842105263157899,
+        "pValue": 0.19928007199280073,
+        "ciLow": -0.004823219814241483,
+        "ciHigh": 0.0008306501547987627,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12934,
+      "metrics": {
+        "ndcg10": 0.32281779730981736,
+        "recall10": 0.15319713768103269,
+        "recall100": 0.24834572818729791,
+        "mrr10": 0.5283097449506119
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.00-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.002173065015479875,
+        "pValue": 0.1902809719028097,
+        "ciLow": -0.005494736842105264,
+        "ciHigh": 0.0009092879256965952,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 12738,
+      "metrics": {
+        "ndcg10": 0.3192927747410857,
+        "recall10": 0.15069652410040307,
+        "recall100": 0.24884013957137693,
+        "mrr10": 0.5190562189788196
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-0.80-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.00569752321981424,
+        "pValue": 0.000999900009999,
+        "ciLow": -0.00916842105263158,
+        "ciHigh": -0.0025458204334365317,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13051,
+      "metrics": {
+        "ndcg10": 0.31947036582739696,
+        "recall10": 0.15066157917041872,
+        "recall100": 0.2481966930282752,
+        "mrr10": 0.5246940881615805
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-0.80-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.005520743034055727,
+        "pValue": 0.0016998300169983002,
+        "ciLow": -0.009079876160990707,
+        "ciHigh": -0.002241795665634675,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13196,
+      "metrics": {
+        "ndcg10": 0.3202043052829694,
+        "recall10": 0.15083587598512121,
+        "recall100": 0.24854891577903054,
+        "mrr10": 0.5249140006879945
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-0.80-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.00478606811145511,
+        "pValue": 0.007999200079992,
+        "ciLow": -0.008477708978328174,
+        "ciHigh": -0.0013879256965944266,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13139,
+      "metrics": {
+        "ndcg10": 0.3204784961495533,
+        "recall10": 0.1515283883656073,
+        "recall100": 0.24758388938823836,
+        "mrr10": 0.5246498599439776
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-0.80-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "nfcorpus",
+        "metric": "ndcg10",
+        "topics": 323,
+        "meanDifference": -0.0045126934984520105,
+        "pValue": 0.0173982601739826,
+        "ciLow": -0.008312074303405567,
+        "ciHigh": -0.0009600619195046422,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "nfcorpus",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "queryMs": 13905,
+      "metrics": {
+        "ndcg10": 0.32499003571727286,
+        "recall10": 0.1544395103598552,
+        "recall100": 0.24914380097011732,
+        "mrr10": 0.5308368961619735
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-nfcorpus-linear-k1-1.20-b-0.75.tsv"
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 21309,
+      "metrics": {
+        "ndcg10": 0.690207502992319,
+        "recall10": 0.8192777777777778,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.654931216931217
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.20-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": 0.0019126666666666662,
+        "pValue": 0.45645435456454353,
+        "ciLow": -0.0024173333333333343,
+        "ciHigh": 0.006971,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19168,
+      "metrics": {
+        "ndcg10": 0.6889650391993886,
+        "recall10": 0.8092777777777778,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6566666666666668
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.20-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": 0.0006693333333333321,
+        "pValue": 0.8649135086491351,
+        "ciLow": -0.006274333333333336,
+        "ciHigh": 0.008276666666666667,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19136,
+      "metrics": {
+        "ndcg10": 0.684878367468254,
+        "recall10": 0.8084444444444444,
+        "recall100": 0.9263333333333332,
+        "mrr10": 0.6516243386243387
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.20-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.0034173333333333343,
+        "pValue": 0.4490550944905509,
+        "ciLow": -0.011847666666666664,
+        "ciHigh": 0.005068333333333333,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19009,
+      "metrics": {
+        "ndcg10": 0.6809667218378297,
+        "recall10": 0.8017777777777778,
+        "recall100": 0.9263333333333332,
+        "mrr10": 0.6483809523809524
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.20-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.0073286666666666665,
+        "pValue": 0.13158684131586842,
+        "ciLow": -0.016782000000000005,
+        "ciHigh": 0.0019056666666666655,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19132,
+      "metrics": {
+        "ndcg10": 0.6854128821647714,
+        "recall10": 0.8126111111111111,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6510052910052911
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.00-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.0028819999999999996,
+        "pValue": 0.42645735426457354,
+        "ciLow": -0.009667333333333335,
+        "ciHigh": 0.004082,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19471,
+      "metrics": {
+        "ndcg10": 0.6842005923865244,
+        "recall10": 0.8084444444444444,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6508809523809524
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.00-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.0040943333333333335,
+        "pValue": 0.35026497350264973,
+        "ciLow": -0.012582333333333334,
+        "ciHigh": 0.004323999999999998,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19251,
+      "metrics": {
+        "ndcg10": 0.6852154971419556,
+        "recall10": 0.8084444444444444,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6524126984126984
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.00-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.003079333333333334,
+        "pValue": 0.5077492250774922,
+        "ciLow": -0.011887666666666664,
+        "ciHigh": 0.005667333333333332,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19130,
+      "metrics": {
+        "ndcg10": 0.6835815642940269,
+        "recall10": 0.8117777777777778,
+        "recall100": 0.9263333333333332,
+        "mrr10": 0.6493571428571429
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.00-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.004713333333333335,
+        "pValue": 0.35326467353264673,
+        "ciLow": -0.014418999999999994,
+        "ciHigh": 0.0050413333333333326,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 18964,
+      "metrics": {
+        "ndcg10": 0.6880273296069047,
+        "recall10": 0.8123333333333332,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6557050264550265
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-0.80-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.0002670000000000002,
+        "pValue": 0.950904909509049,
+        "ciLow": -0.008846,
+        "ciHigh": 0.008605333333333333,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.5,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19269,
+      "metrics": {
+        "ndcg10": 0.685144134663385,
+        "recall10": 0.8089999999999999,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6527791005291005
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-0.80-b-0.50.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.0031503333333333335,
+        "pValue": 0.5095490450954905,
+        "ciLow": -0.012329666666666668,
+        "ciHigh": 0.006098666666666666,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.4,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19361,
+      "metrics": {
+        "ndcg10": 0.6836955303802659,
+        "recall10": 0.8056666666666666,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6518756613756613
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-0.80-b-0.40.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.004599333333333334,
+        "pValue": 0.3451654834516548,
+        "ciLow": -0.013955333333333332,
+        "ciHigh": 0.004781999999999999,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 0.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19111,
+      "metrics": {
+        "ndcg10": 0.6830419614841605,
+        "recall10": 0.8056666666666666,
+        "recall100": 0.9296666666666666,
+        "mrr10": 0.6501296296296295
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-0.80-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "scifact",
+        "metric": "ndcg10",
+        "topics": 300,
+        "meanDifference": -0.005253000000000001,
+        "pValue": 0.31716828317168283,
+        "ciLow": -0.015541333333333332,
+        "ciHigh": 0.005129333333333334,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "scifact",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 300,
+      "docCount": 5183,
+      "atomCount": 5202,
+      "queryMs": 19238,
+      "metrics": {
+        "ndcg10": 0.6882954764934839,
+        "recall10": 0.8199444444444444,
+        "recall100": 0.9313333333333332,
+        "mrr10": 0.6518584656084656
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-14-1927-scifact-linear-k1-1.20-b-0.75.tsv"
+    }
+  ]
+}
