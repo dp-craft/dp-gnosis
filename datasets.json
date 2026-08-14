@@ -40,7 +40,7 @@
       "enabled": true
     },
     {
-      "comment": "The same 103 biology queries as bright-biology, scored against the GOLD PASSAGES instead of the whole pages. A passage is ~387 chars, so one passage is one atom and document-level scoring here IS block-level scoring. The gap to bright-biology is what chunking costs.",
+      "comment": "The same 103 biology queries as bright-biology, scored against the GOLD PASSAGES instead of the whole pages. A passage is ~387 chars, so one passage is essentially one atom and document-level scoring here IS block-level scoring — this is the block-ranking measurement. Its score MUST NOT be read as the cost of chunking relative to bright-biology: the candidate set is 57359 passages against 524 pages, so the two numbers measure different-difficulty tasks. To isolate chunking, vary atomMaxChars on ONE entry and compare across runs.",
       "id": "bright-biology-passages",
       "format": "bright",
       "split": "biology",

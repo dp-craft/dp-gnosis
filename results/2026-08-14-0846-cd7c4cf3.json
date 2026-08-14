@@ -1,0 +1,2937 @@
+{
+  "provenance": {
+    "ts": "2026-08-14T08:46:40.888Z",
+    "gitSha": "cd7c4cf3",
+    "adapter": "fts5",
+    "depth": 100,
+    "rerank": false
+  },
+  "results": [
+    {
+      "dataset": "nfcorpus",
+      "corpusBytes": 6219364,
+      "corpusLines": 3633,
+      "atomMaxChars": 4000,
+      "topics": 323,
+      "docCount": 3633,
+      "atomCount": 3645,
+      "ingestMs": 1325,
+      "queryMs": 1140,
+      "metrics": {
+        "ndcg10": 0.31640548886393977,
+        "recall10": 0.14909264161112767,
+        "recall100": 0.2462643664551731,
+        "mrr10": 0.5184652808491818
+      },
+      "perTopic": [
+        {
+          "queryId": "PLAIN-2",
+          "metrics": {
+            "ndcg10": 0.7421100456360404,
+            "recall10": 0.25,
+            "recall100": 0.7083333333333334,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-12",
+          "metrics": {
+            "ndcg10": 0.0870756265625123,
+            "recall10": 0.03333333333333333,
+            "recall100": 0.03333333333333333,
+            "mrr10": 0.16666666666666666
+          }
+        },
+        {
+          "queryId": "PLAIN-23",
+          "metrics": {
+            "ndcg10": 0.5306906444873687,
+            "recall10": 0.06666666666666667,
+            "recall100": 0.1111111111111111,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-33",
+          "metrics": {
+            "ndcg10": 0.07577433351096909,
+            "recall10": 0.03125,
+            "recall100": 0.1875,
+            "mrr10": 0.14285714285714285
+          }
+        },
+        {
+          "queryId": "PLAIN-44",
+          "metrics": {
+            "ndcg10": 0.16078277618017148,
+            "recall10": 0.017241379310344827,
+            "recall100": 0.20689655172413793,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-56",
+          "metrics": {
+            "ndcg10": 0.6791701194514419,
+            "recall10": 0.1,
+            "recall100": 0.12,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-68",
+          "metrics": {
+            "ndcg10": 0.47459215156136747,
+            "recall10": 0.03636363636363636,
+            "recall100": 0.16363636363636364,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-78",
+          "metrics": {
+            "ndcg10": 0.12741733550370724,
+            "recall10": 0.016129032258064516,
+            "recall100": 0.0967741935483871,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-91",
+          "metrics": {
+            "ndcg10": 0.555674495727024,
+            "recall10": 0.09375,
+            "recall100": 0.28125,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-102",
+          "metrics": {
+            "ndcg10": 0.12530682344457728,
+            "recall10": 0.041666666666666664,
+            "recall100": 0.041666666666666664,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "PLAIN-112",
+          "metrics": {
+            "ndcg10": 0.4027144836875453,
+            "recall10": 0.03571428571428571,
+            "recall100": 0.08928571428571429,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-123",
+          "metrics": {
+            "ndcg10": 0.05487565949361938,
+            "recall10": 0.0196078431372549,
+            "recall100": 0.09803921568627451,
+            "mrr10": 0.25
+          }
+        },
+        {
+          "queryId": "PLAIN-133",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.1111111111111111,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-143",
+          "metrics": {
+            "ndcg10": 0.43929373490672136,
+            "recall10": 0.0392156862745098,
+            "recall100": 0.09803921568627451,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-153",
+          "metrics": {
+            "ndcg10": 0.546045120667115,
+            "recall10": 0.10638297872340426,
+            "recall100": 0.3829787234042553,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-165",
+          "metrics": {
+            "ndcg10": 0.3314814032808502,
+            "recall10": 0.1111111111111111,
+            "recall100": 0.3333333333333333,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-175",
+          "metrics": {
+            "ndcg10": 0.3686402433478159,
+            "recall10": 0.08108108108108109,
+            "recall100": 0.08108108108108109,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-186",
+          "metrics": {
+            "ndcg10": 0.11004588314904008,
+            "recall10": 0.041666666666666664,
+            "recall100": 0.041666666666666664,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-196",
+          "metrics": {
+            "ndcg10": 0.605504765619221,
+            "recall10": 0.07246376811594203,
+            "recall100": 0.10144927536231885,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-207",
+          "metrics": {
+            "ndcg10": 0.49246059723271807,
+            "recall10": 0.09090909090909091,
+            "recall100": 0.2909090909090909,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-217",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.1388888888888889,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-227",
+          "metrics": {
+            "ndcg10": 0.22009176629808017,
+            "recall10": 0.025,
+            "recall100": 0.025,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-238",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.07407407407407407,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-248",
+          "metrics": {
+            "ndcg10": 0.31488013066763093,
+            "recall10": 0.06451612903225806,
+            "recall100": 0.3548387096774194,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-259",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.14285714285714285,
+            "recall100": 0.2857142857142857,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-270",
+          "metrics": {
+            "ndcg10": 0.09478836436955078,
+            "recall10": 0.019230769230769232,
+            "recall100": 0.25,
+            "mrr10": 0.25
+          }
+        },
+        {
+          "queryId": "PLAIN-280",
+          "metrics": {
+            "ndcg10": 0.4537425745411855,
+            "recall10": 0.15,
+            "recall100": 0.4,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-291",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.15384615384615385,
+            "recall100": 0.3076923076923077,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-307",
+          "metrics": {
+            "ndcg10": 0.41618115554873086,
+            "recall10": 0.6666666666666666,
+            "recall100": 1,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-320",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.14285714285714285,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-332",
+          "metrics": {
+            "ndcg10": 0.38685280723454163,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-344",
+          "metrics": {
+            "ndcg10": 0.3473109424747868,
+            "recall10": 0.04918032786885246,
+            "recall100": 0.09836065573770492,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-358",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-371",
+          "metrics": {
+            "ndcg10": 0.16369747519436975,
+            "recall10": 0.5,
+            "recall100": 1,
+            "mrr10": 0.25
+          }
+        },
+        {
+          "queryId": "PLAIN-383",
+          "metrics": {
+            "ndcg10": 0.10209739512291163,
+            "recall10": 0.2,
+            "recall100": 0.2,
+            "mrr10": 0.1111111111111111
+          }
+        },
+        {
+          "queryId": "PLAIN-395",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-407",
+          "metrics": {
+            "ndcg10": 0.6387878864795979,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-418",
+          "metrics": {
+            "ndcg10": 0.20567105523212453,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.6666666666666666,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "PLAIN-430",
+          "metrics": {
+            "ndcg10": 0.5974004989549763,
+            "recall10": 0.375,
+            "recall100": 0.625,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-441",
+          "metrics": {
+            "ndcg10": 0.8589643030100376,
+            "recall10": 0.8,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-457",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-468",
+          "metrics": {
+            "ndcg10": 0.25488222053685355,
+            "recall10": 0.2,
+            "recall100": 0.7,
+            "mrr10": 0.25
+          }
+        },
+        {
+          "queryId": "PLAIN-478",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-488",
+          "metrics": {
+            "ndcg10": 0.933745776545611,
+            "recall10": 0.6,
+            "recall100": 0.7333333333333333,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-499",
+          "metrics": {
+            "ndcg10": 0.28997736516021183,
+            "recall10": 0.08823529411764706,
+            "recall100": 0.11764705882352941,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-510",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-520",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-531",
+          "metrics": {
+            "ndcg10": 0.31691619230948354,
+            "recall10": 0.012987012987012988,
+            "recall100": 0.09090909090909091,
+            "mrr10": 0.25
+          }
+        },
+        {
+          "queryId": "PLAIN-541",
+          "metrics": {
+            "ndcg10": 0.10778915452451093,
+            "recall10": 0.16666666666666666,
+            "recall100": 0.5,
+            "mrr10": 0.16666666666666666
+          }
+        },
+        {
+          "queryId": "PLAIN-551",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-561",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.08,
+            "recall100": 0.08,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-571",
+          "metrics": {
+            "ndcg10": 0.2558209594125084,
+            "recall10": 0.2857142857142857,
+            "recall100": 0.2857142857142857,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-583",
+          "metrics": {
+            "ndcg10": 0.22009176629808017,
+            "recall10": 0.022727272727272728,
+            "recall100": 0.022727272727272728,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-593",
+          "metrics": {
+            "ndcg10": 0.46927872602275644,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.3333333333333333,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-603",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-613",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.1,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-623",
+          "metrics": {
+            "ndcg10": 0.32730659600126993,
+            "recall10": 0.07317073170731707,
+            "recall100": 0.14634146341463414,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-634",
+          "metrics": {
+            "ndcg10": 0.3995688713838975,
+            "recall10": 0.14285714285714285,
+            "recall100": 0.14285714285714285,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-645",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-660",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 0.021052631578947368,
+            "recall100": 0.06736842105263158,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-671",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-681",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-691",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.047619047619047616,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-701",
+          "metrics": {
+            "ndcg10": 0.5901779130901621,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-711",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.03508771929824561,
+            "recall100": 0.05263157894736842,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-721",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 0.4,
+            "recall100": 0.72,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-731",
+          "metrics": {
+            "ndcg10": 0.8630152897016883,
+            "recall10": 0.14814814814814814,
+            "recall100": 0.4444444444444444,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-741",
+          "metrics": {
+            "ndcg10": 0.84860265890399,
+            "recall10": 0.42105263157894735,
+            "recall100": 0.42105263157894735,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-751",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-761",
+          "metrics": {
+            "ndcg10": 0.15130120674940672,
+            "recall10": 0.16666666666666666,
+            "recall100": 0.3333333333333333,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-771",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-782",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-792",
+          "metrics": {
+            "ndcg10": 0.644824486427155,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-806",
+          "metrics": {
+            "ndcg10": 0.8512360941594274,
+            "recall10": 0.08333333333333333,
+            "recall100": 0.2708333333333333,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-817",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-827",
+          "metrics": {
+            "ndcg10": 0.6698623505528798,
+            "recall10": 0.03278688524590164,
+            "recall100": 0.19262295081967212,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-838",
+          "metrics": {
+            "ndcg10": 0.8550956239938448,
+            "recall10": 0.7777777777777778,
+            "recall100": 0.7777777777777778,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-850",
+          "metrics": {
+            "ndcg10": 0.6489315753318465,
+            "recall10": 0.08771929824561403,
+            "recall100": 0.08771929824561403,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-872",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-882",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.13333333333333333,
+            "recall100": 0.13333333333333333,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-892",
+          "metrics": {
+            "ndcg10": 0.8701249883466593,
+            "recall10": 0.08695652173913043,
+            "recall100": 0.08695652173913043,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-902",
+          "metrics": {
+            "ndcg10": 0.6366824387328317,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-913",
+          "metrics": {
+            "ndcg10": 0.933745776545611,
+            "recall10": 0.2647058823529412,
+            "recall100": 0.2647058823529412,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-924",
+          "metrics": {
+            "ndcg10": 0.22009176629808017,
+            "recall10": 0.03125,
+            "recall100": 0.03125,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-934",
+          "metrics": {
+            "ndcg10": 0.7975167679274937,
+            "recall10": 0.07920792079207921,
+            "recall100": 0.3564356435643564,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-946",
+          "metrics": {
+            "ndcg10": 0.31488013066763093,
+            "recall10": 0.06451612903225806,
+            "recall100": 0.06451612903225806,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-956",
+          "metrics": {
+            "ndcg10": 0.47684658870035296,
+            "recall10": 0.024271844660194174,
+            "recall100": 0.1796116504854369,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-966",
+          "metrics": {
+            "ndcg10": 0.14126697285982898,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.3333333333333333,
+            "mrr10": 0.1111111111111111
+          }
+        },
+        {
+          "queryId": "PLAIN-977",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.3333333333333333,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-987",
+          "metrics": {
+            "ndcg10": 0.23463936301137822,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.3333333333333333,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-997",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1008",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1018",
+          "metrics": {
+            "ndcg10": 0.4922818839877925,
+            "recall10": 0.1,
+            "recall100": 0.13333333333333333,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-1028",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1039",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1050",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.010638297872340425,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1066",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1088",
+          "metrics": {
+            "ndcg10": 0.5531464700081437,
+            "recall10": 0.4,
+            "recall100": 0.4,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1098",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1109",
+          "metrics": {
+            "ndcg10": 0.4690000933206748,
+            "recall10": 0.030612244897959183,
+            "recall100": 0.12244897959183673,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1119",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1130",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1141",
+          "metrics": {
+            "ndcg10": 0.22009176629808017,
+            "recall10": 0.0625,
+            "recall100": 0.0625,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1151",
+          "metrics": {
+            "ndcg10": 0.5711601909662336,
+            "recall10": 0.0392156862745098,
+            "recall100": 0.1895424836601307,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1161",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1172",
+          "metrics": {
+            "ndcg10": 0.22009176629808017,
+            "recall10": 0.05263157894736842,
+            "recall100": 0.05263157894736842,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1183",
+          "metrics": {
+            "ndcg10": 0.28952298823485745,
+            "recall10": 0.08,
+            "recall100": 0.08,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1193",
+          "metrics": {
+            "ndcg10": 0.06362078819895171,
+            "recall10": 0.05555555555555555,
+            "recall100": 0.4444444444444444,
+            "mrr10": 0.1
+          }
+        },
+        {
+          "queryId": "PLAIN-1203",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.16666666666666666,
+            "recall100": 0.16666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1214",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1225",
+          "metrics": {
+            "ndcg10": 0.5363559634917963,
+            "recall10": 0.2222222222222222,
+            "recall100": 0.37037037037037035,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1236",
+          "metrics": {
+            "ndcg10": 0.3391602052736161,
+            "recall10": 0.2,
+            "recall100": 0.2,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1249",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1262",
+          "metrics": {
+            "ndcg10": 0.2082936658103318,
+            "recall10": 0.2,
+            "recall100": 0.3,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1275",
+          "metrics": {
+            "ndcg10": 0.5423640154200349,
+            "recall10": 0.07272727272727272,
+            "recall100": 0.14545454545454545,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1288",
+          "metrics": {
+            "ndcg10": 0.9052116356304493,
+            "recall10": 0.04591836734693878,
+            "recall100": 0.07653061224489796,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1299",
+          "metrics": {
+            "ndcg10": 0.11004588314904008,
+            "recall10": 0.01639344262295082,
+            "recall100": 0.06557377049180328,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-1309",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1320",
+          "metrics": {
+            "ndcg10": 0.40885093048316934,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1331",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1342",
+          "metrics": {
+            "ndcg10": 0.32730659600126993,
+            "recall10": 0.1875,
+            "recall100": 0.3125,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1353",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1363",
+          "metrics": {
+            "ndcg10": 0.22009176629808017,
+            "recall10": 0.09090909090909091,
+            "recall100": 0.09090909090909091,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1374",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.2692307692307692,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1387",
+          "metrics": {
+            "ndcg10": 0.6987957033953602,
+            "recall10": 0.5,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1398",
+          "metrics": {
+            "ndcg10": 0.800693766409882,
+            "recall10": 0.06796116504854369,
+            "recall100": 0.10679611650485436,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1409",
+          "metrics": {
+            "ndcg10": 0.14201905717762703,
+            "recall10": 0.007905138339920948,
+            "recall100": 0.03162055335968379,
+            "mrr10": 0.16666666666666666
+          }
+        },
+        {
+          "queryId": "PLAIN-1419",
+          "metrics": {
+            "ndcg10": 0.43735247915031,
+            "recall10": 0.046153846153846156,
+            "recall100": 0.046153846153846156,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1429",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1441",
+          "metrics": {
+            "ndcg10": 0.4288398090337664,
+            "recall10": 0.021505376344086023,
+            "recall100": 0.12903225806451613,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1453",
+          "metrics": {
+            "ndcg10": 0.36680070555131283,
+            "recall10": 0.0163265306122449,
+            "recall100": 0.14285714285714285,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1463",
+          "metrics": {
+            "ndcg10": 0.3995688713838975,
+            "recall10": 0.125,
+            "recall100": 0.3333333333333333,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1473",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1485",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1496",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1506",
+          "metrics": {
+            "ndcg10": 0.2984900352767555,
+            "recall10": 0.13333333333333333,
+            "recall100": 0.13333333333333333,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1516",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1527",
+          "metrics": {
+            "ndcg10": 0.7315449642824575,
+            "recall10": 0.034653465346534656,
+            "recall100": 0.17326732673267325,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1537",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.06666666666666667,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1547",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1557",
+          "metrics": {
+            "ndcg10": 0.2781981696179509,
+            "recall10": 0.11538461538461539,
+            "recall100": 0.15384615384615385,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-1568",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1579",
+          "metrics": {
+            "ndcg10": 0.3391602052736161,
+            "recall10": 0.2,
+            "recall100": 0.2,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1590",
+          "metrics": {
+            "ndcg10": 0.13886244387355454,
+            "recall10": 0.05555555555555555,
+            "recall100": 0.16666666666666666,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1601",
+          "metrics": {
+            "ndcg10": 0.5806020001118019,
+            "recall10": 0.08108108108108109,
+            "recall100": 0.22972972972972974,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1611",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1621",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1635",
+          "metrics": {
+            "ndcg10": 0.5017100640839688,
+            "recall10": 0.013921113689095127,
+            "recall100": 0.14617169373549885,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1645",
+          "metrics": {
+            "ndcg10": 0.30260241349881345,
+            "recall10": 0.16666666666666666,
+            "recall100": 0.16666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1656",
+          "metrics": {
+            "ndcg10": 0.13886244387355454,
+            "recall10": 0.03571428571428571,
+            "recall100": 0.03571428571428571,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1667",
+          "metrics": {
+            "ndcg10": 0.7534494445524138,
+            "recall10": 0.0440251572327044,
+            "recall100": 0.2389937106918239,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1679",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1690",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.25,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1700",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1710",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 0.625,
+            "recall100": 0.8125,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1721",
+          "metrics": {
+            "ndcg10": 0.6621137423456802,
+            "recall10": 0.1935483870967742,
+            "recall100": 0.22580645161290322,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1731",
+          "metrics": {
+            "ndcg10": 0.7653606369886217,
+            "recall10": 0.6666666666666666,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1741",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 0.023809523809523808,
+            "recall100": 0.1619047619047619,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1752",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1762",
+          "metrics": {
+            "ndcg10": 0.26852556974265224,
+            "recall10": 0.25,
+            "recall100": 0.625,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1772",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1784",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1794",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1805",
+          "metrics": {
+            "ndcg10": 0.9305687780632227,
+            "recall10": 0.07758620689655173,
+            "recall100": 0.1810344827586207,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1817",
+          "metrics": {
+            "ndcg10": 0.5326208815196265,
+            "recall10": 0.14814814814814814,
+            "recall100": 0.18518518518518517,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1827",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1837",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 0.05102040816326531,
+            "recall100": 0.29591836734693877,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1847",
+          "metrics": {
+            "ndcg10": 0.2489083270225946,
+            "recall10": 0.18181818181818182,
+            "recall100": 0.18181818181818182,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1857",
+          "metrics": {
+            "ndcg10": 0.6274092458891772,
+            "recall10": 0.15151515151515152,
+            "recall100": 0.18181818181818182,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1867",
+          "metrics": {
+            "ndcg10": 0.27487633291429087,
+            "recall10": 0.14285714285714285,
+            "recall100": 0.14285714285714285,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1877",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.08333333333333333,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1887",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1897",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1909",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 0.02159827213822894,
+            "recall100": 0.07127429805615551,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1919",
+          "metrics": {
+            "ndcg10": 0.7909506325094737,
+            "recall10": 0.25925925925925924,
+            "recall100": 0.6296296296296297,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1929",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.1,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1940",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.16666666666666666,
+            "recall100": 0.16666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1950",
+          "metrics": {
+            "ndcg10": 0.2489083270225946,
+            "recall10": 0.15384615384615385,
+            "recall100": 0.15384615384615385,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-1962",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1972",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-1983",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 0.3125,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-1995",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.09090909090909091,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2009",
+          "metrics": {
+            "ndcg10": 0.12647135138382856,
+            "recall10": 0.125,
+            "recall100": 0.125,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-2019",
+          "metrics": {
+            "ndcg10": 0.46927872602275644,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.3333333333333333,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2030",
+          "metrics": {
+            "ndcg10": 0.30260241349881345,
+            "recall10": 0.16666666666666666,
+            "recall100": 0.16666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2040",
+          "metrics": {
+            "ndcg10": 0.7573821447149967,
+            "recall10": 0.05303030303030303,
+            "recall100": 0.06060606060606061,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2051",
+          "metrics": {
+            "ndcg10": 0.5734923014668308,
+            "recall10": 0.016901408450704224,
+            "recall100": 0.1295774647887324,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2061",
+          "metrics": {
+            "ndcg10": 0.933745776545611,
+            "recall10": 0.02195121951219512,
+            "recall100": 0.08048780487804878,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2071",
+          "metrics": {
+            "ndcg10": 0.513528549750033,
+            "recall10": 0.08888888888888889,
+            "recall100": 0.2,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2081",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2092",
+          "metrics": {
+            "ndcg10": 0.6489315753318465,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2102",
+          "metrics": {
+            "ndcg10": 0.7721596254947203,
+            "recall10": 0.0166270783847981,
+            "recall100": 0.12351543942992874,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2113",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2124",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.11764705882352941,
+            "recall100": 0.11764705882352941,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2134",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2145",
+          "metrics": {
+            "ndcg10": 0.1482972305701491,
+            "recall10": 0.1111111111111111,
+            "recall100": 0.1111111111111111,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2156",
+          "metrics": {
+            "ndcg10": 0.644824486427155,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2167",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2177",
+          "metrics": {
+            "ndcg10": 0.29727159644205703,
+            "recall10": 0.125,
+            "recall100": 0.125,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2187",
+          "metrics": {
+            "ndcg10": 0.38334277998463445,
+            "recall10": 0.2222222222222222,
+            "recall100": 0.2222222222222222,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2197",
+          "metrics": {
+            "ndcg10": 0.78180487222265,
+            "recall10": 0.1206896551724138,
+            "recall100": 0.29310344827586204,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2209",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2220",
+          "metrics": {
+            "ndcg10": 0.23504554941448536,
+            "recall10": 0.1111111111111111,
+            "recall100": 0.1111111111111111,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2230",
+          "metrics": {
+            "ndcg10": 0.10633668103022985,
+            "recall10": 0.14285714285714285,
+            "recall100": 0.14285714285714285,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "PLAIN-2240",
+          "metrics": {
+            "ndcg10": 0.5834330535576521,
+            "recall10": 0.45454545454545453,
+            "recall100": 0.45454545454545453,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2250",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2261",
+          "metrics": {
+            "ndcg10": 0.6086182388744239,
+            "recall10": 0.08333333333333333,
+            "recall100": 0.15,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2271",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2281",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2291",
+          "metrics": {
+            "ndcg10": 0.3391602052736161,
+            "recall10": 0.2,
+            "recall100": 0.4,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2301",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2311",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2321",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2332",
+          "metrics": {
+            "ndcg10": 0.42914113378860647,
+            "recall10": 0.041237113402061855,
+            "recall100": 0.24742268041237114,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2343",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2354",
+          "metrics": {
+            "ndcg10": 0.38356636737133565,
+            "recall10": 0.4,
+            "recall100": 0.4,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2364",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2375",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2386",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2396",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2408",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2430",
+          "metrics": {
+            "ndcg10": 0.40634839235641007,
+            "recall10": 0.06521739130434782,
+            "recall100": 0.2608695652173913,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2440",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2450",
+          "metrics": {
+            "ndcg10": 0.20248323207250624,
+            "recall10": 0.05263157894736842,
+            "recall100": 0.18421052631578946,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2460",
+          "metrics": {
+            "ndcg10": 0.28339660873566963,
+            "recall10": 0.06451612903225806,
+            "recall100": 0.25806451612903225,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2470",
+          "metrics": {
+            "ndcg10": 0.4612550693559291,
+            "recall10": 0.0547945205479452,
+            "recall100": 0.3424657534246575,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2480",
+          "metrics": {
+            "ndcg10": 0.17628038654090447,
+            "recall10": 0.1111111111111111,
+            "recall100": 0.3333333333333333,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2490",
+          "metrics": {
+            "ndcg10": 0.482922821804591,
+            "recall10": 0.13043478260869565,
+            "recall100": 0.2608695652173913,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2500",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.42857142857142855,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2510",
+          "metrics": {
+            "ndcg10": 0.7059054020403313,
+            "recall10": 0.13043478260869565,
+            "recall100": 0.5652173913043478,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2520",
+          "metrics": {
+            "ndcg10": 0.2664482726000277,
+            "recall10": 0.0684931506849315,
+            "recall100": 0.1232876712328767,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2530",
+          "metrics": {
+            "ndcg10": 0.9276737537834677,
+            "recall10": 0.1388888888888889,
+            "recall100": 0.3055555555555556,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2540",
+          "metrics": {
+            "ndcg10": 0.24335144930682961,
+            "recall10": 0.14285714285714285,
+            "recall100": 0.38095238095238093,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2550",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.16,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2560",
+          "metrics": {
+            "ndcg10": 0.727329844310522,
+            "recall10": 0.2857142857142857,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2570",
+          "metrics": {
+            "ndcg10": 0.15423215925316425,
+            "recall10": 0.025,
+            "recall100": 0.25,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2580",
+          "metrics": {
+            "ndcg10": 0.35301686087887274,
+            "recall10": 0.08695652173913043,
+            "recall100": 0.13043478260869565,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2590",
+          "metrics": {
+            "ndcg10": 0.04048704329239116,
+            "recall10": 0.015873015873015872,
+            "recall100": 0.07936507936507936,
+            "mrr10": 0.16666666666666666
+          }
+        },
+        {
+          "queryId": "PLAIN-2600",
+          "metrics": {
+            "ndcg10": 0.6467397196642138,
+            "recall10": 0.4,
+            "recall100": 0.4,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2610",
+          "metrics": {
+            "ndcg10": 0.24573132854020638,
+            "recall10": 0.04918032786885246,
+            "recall100": 0.09836065573770492,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2620",
+          "metrics": {
+            "ndcg10": 0.5942322686530155,
+            "recall10": 0.14545454545454545,
+            "recall100": 0.34545454545454546,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2630",
+          "metrics": {
+            "ndcg10": 0.5473983622993502,
+            "recall10": 0.08333333333333333,
+            "recall100": 0.2916666666666667,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2640",
+          "metrics": {
+            "ndcg10": 0.6675861726045336,
+            "recall10": 0.1875,
+            "recall100": 0.5416666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2650",
+          "metrics": {
+            "ndcg10": 0.4658230948382866,
+            "recall10": 0.13793103448275862,
+            "recall100": 0.3793103448275862,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2660",
+          "metrics": {
+            "ndcg10": 0.18340980524840012,
+            "recall10": 0.07407407407407407,
+            "recall100": 0.2222222222222222,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-2670",
+          "metrics": {
+            "ndcg10": 0.2996484034259831,
+            "recall10": 0.02857142857142857,
+            "recall100": 0.14285714285714285,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2680",
+          "metrics": {
+            "ndcg10": 0.4920033254983605,
+            "recall10": 0.21428571428571427,
+            "recall100": 0.42857142857142855,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2690",
+          "metrics": {
+            "ndcg10": 0.3737272390888571,
+            "recall10": 0.09302325581395349,
+            "recall100": 0.13953488372093023,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2700",
+          "metrics": {
+            "ndcg10": 0.14982420171299154,
+            "recall10": 0.1,
+            "recall100": 0.3,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-2710",
+          "metrics": {
+            "ndcg10": 0.4353779326463506,
+            "recall10": 0.09523809523809523,
+            "recall100": 0.19047619047619047,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2720",
+          "metrics": {
+            "ndcg10": 0.17947710508581735,
+            "recall10": 0.05555555555555555,
+            "recall100": 0.19444444444444445,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2730",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.10344827586206896,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2740",
+          "metrics": {
+            "ndcg10": 0.416871987332739,
+            "recall10": 0.06,
+            "recall100": 0.28,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2750",
+          "metrics": {
+            "ndcg10": 0.5610620439458248,
+            "recall10": 0.11864406779661017,
+            "recall100": 0.2711864406779661,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2760",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2770",
+          "metrics": {
+            "ndcg10": 0.4914418724573786,
+            "recall10": 0.14634146341463414,
+            "recall100": 0.5609756097560976,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2780",
+          "metrics": {
+            "ndcg10": 0.39438701734195425,
+            "recall10": 0.18181818181818182,
+            "recall100": 0.4090909090909091,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2790",
+          "metrics": {
+            "ndcg10": 0.642186726668901,
+            "recall10": 0.0847457627118644,
+            "recall100": 0.15254237288135594,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2800",
+          "metrics": {
+            "ndcg10": 0.14498437993401564,
+            "recall10": 0.08333333333333333,
+            "recall100": 0.16666666666666666,
+            "mrr10": 0.14285714285714285
+          }
+        },
+        {
+          "queryId": "PLAIN-2810",
+          "metrics": {
+            "ndcg10": 0.049475754252841286,
+            "recall10": 0.125,
+            "recall100": 0.5,
+            "mrr10": 0.1111111111111111
+          }
+        },
+        {
+          "queryId": "PLAIN-2820",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.25,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2830",
+          "metrics": {
+            "ndcg10": 0.31939394323979897,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.6666666666666666,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-2840",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2850",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2860",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2870",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.2,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2880",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2890",
+          "metrics": {
+            "ndcg10": 0.113813114479808,
+            "recall10": 0.034482758620689655,
+            "recall100": 0.034482758620689655,
+            "mrr10": 0.125
+          }
+        },
+        {
+          "queryId": "PLAIN-2900",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.08333333333333333,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2910",
+          "metrics": {
+            "ndcg10": 0.20436662668128655,
+            "recall10": 0.06666666666666667,
+            "recall100": 0.06666666666666667,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-2920",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.14285714285714285,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2930",
+          "metrics": {
+            "ndcg10": 0.3607790370815594,
+            "recall10": 0.07142857142857142,
+            "recall100": 0.35714285714285715,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2940",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.09090909090909091,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2950",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-2960",
+          "metrics": {
+            "ndcg10": 0.2940806813328203,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "PLAIN-2970",
+          "metrics": {
+            "ndcg10": 0.38062652754129855,
+            "recall10": 0.1111111111111111,
+            "recall100": 0.2222222222222222,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2981",
+          "metrics": {
+            "ndcg10": 0.49923783028254776,
+            "recall10": 0.2857142857142857,
+            "recall100": 0.2857142857142857,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-2991",
+          "metrics": {
+            "ndcg10": 0.3065735963827292,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-3001",
+          "metrics": {
+            "ndcg10": 0.3065735963827292,
+            "recall10": 0.5,
+            "recall100": 0.5,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-3014",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3026",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 1,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3037",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3053",
+          "metrics": {
+            "ndcg10": 0.7653606369886217,
+            "recall10": 0.6666666666666666,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3063",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.25,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3074",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3085",
+          "metrics": {
+            "ndcg10": 0.3889580943680543,
+            "recall10": 1,
+            "recall100": 1,
+            "mrr10": 0.14285714285714285
+          }
+        },
+        {
+          "queryId": "PLAIN-3097",
+          "metrics": {
+            "ndcg10": 0.4770382338730848,
+            "recall10": 0.25,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3116",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3131",
+          "metrics": {
+            "ndcg10": 0.5102854561076756,
+            "recall10": 0.3333333333333333,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3141",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.11764705882352941,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3151",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.5555555555555556,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3161",
+          "metrics": {
+            "ndcg10": 0.3607790370815594,
+            "recall10": 0.023255813953488372,
+            "recall100": 0.3488372093023256,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3171",
+          "metrics": {
+            "ndcg10": 0.20400787375019785,
+            "recall10": 0.058823529411764705,
+            "recall100": 0.23529411764705882,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-3181",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.07407407407407407,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3191",
+          "metrics": {
+            "ndcg10": 0.4864835145332369,
+            "recall10": 0.25,
+            "recall100": 0.5,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3201",
+          "metrics": {
+            "ndcg10": 0.25660478003987325,
+            "recall10": 0.09375,
+            "recall100": 0.125,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "PLAIN-3211",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3221",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.125,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3231",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.25,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3241",
+          "metrics": {
+            "ndcg10": 0.113813114479808,
+            "recall10": 0.034482758620689655,
+            "recall100": 0.06896551724137931,
+            "mrr10": 0.125
+          }
+        },
+        {
+          "queryId": "PLAIN-3251",
+          "metrics": {
+            "ndcg10": 0.060129839513593235,
+            "recall10": 0.047619047619047616,
+            "recall100": 0.09523809523809523,
+            "mrr10": 0.14285714285714285
+          }
+        },
+        {
+          "queryId": "PLAIN-3261",
+          "metrics": {
+            "ndcg10": 0.14982420171299154,
+            "recall10": 0.07692307692307693,
+            "recall100": 0.15384615384615385,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "PLAIN-3271",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.04081632653061224,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3281",
+          "metrics": {
+            "ndcg10": 0.3239134396887189,
+            "recall10": 0.038461538461538464,
+            "recall100": 0.07692307692307693,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3292",
+          "metrics": {
+            "ndcg10": 0.28250993196317703,
+            "recall10": 0.5714285714285714,
+            "recall100": 0.8571428571428571,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "PLAIN-3302",
+          "metrics": {
+            "ndcg10": 0.29420263302058774,
+            "recall10": 0.05405405405405406,
+            "recall100": 0.3783783783783784,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3312",
+          "metrics": {
+            "ndcg10": 0.12658357902366055,
+            "recall10": 0.23076923076923078,
+            "recall100": 0.5384615384615384,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "PLAIN-3322",
+          "metrics": {
+            "ndcg10": 0.07839826897867533,
+            "recall10": 0.012658227848101266,
+            "recall100": 0.0759493670886076,
+            "mrr10": 0.16666666666666666
+          }
+        },
+        {
+          "queryId": "PLAIN-3332",
+          "metrics": {
+            "ndcg10": 0.45976656817084693,
+            "recall10": 0.2857142857142857,
+            "recall100": 0.7857142857142857,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-3342",
+          "metrics": {
+            "ndcg10": 0.7653606369886217,
+            "recall10": 0.6666666666666666,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3352",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.15384615384615385,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3362",
+          "metrics": {
+            "ndcg10": 0.5880534728737216,
+            "recall10": 0.2727272727272727,
+            "recall100": 0.2727272727272727,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3372",
+          "metrics": {
+            "ndcg10": 0.12025967902718647,
+            "recall10": 0.07142857142857142,
+            "recall100": 0.14285714285714285,
+            "mrr10": 0.14285714285714285
+          }
+        },
+        {
+          "queryId": "PLAIN-3382",
+          "metrics": {
+            "ndcg10": 0.14899930443346787,
+            "recall10": 0.14285714285714285,
+            "recall100": 0.42857142857142855,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-3392",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.13043478260869565,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3402",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.07142857142857142,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3412",
+          "metrics": {
+            "ndcg10": 0.2757017882369697,
+            "recall10": 0.061224489795918366,
+            "recall100": 0.20408163265306123,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3422",
+          "metrics": {
+            "ndcg10": 0.13309716119169637,
+            "recall10": 0.06451612903225806,
+            "recall100": 0.45161290322580644,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "PLAIN-3432",
+          "metrics": {
+            "ndcg10": 0.2426178552850034,
+            "recall10": 0.07142857142857142,
+            "recall100": 0.21428571428571427,
+            "mrr10": 0.25
+          }
+        },
+        {
+          "queryId": "PLAIN-3442",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.06896551724137931,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "PLAIN-3452",
+          "metrics": {
+            "ndcg10": 0.5768260756109673,
+            "recall10": 0.23529411764705882,
+            "recall100": 0.4117647058823529,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3462",
+          "metrics": {
+            "ndcg10": 0.7026305163854645,
+            "recall10": 0.109375,
+            "recall100": 0.40625,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "PLAIN-3472",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall100": 0.058823529411764705,
+            "mrr10": 0
+          }
+        }
+      ]
+    }
+  ]
+}
