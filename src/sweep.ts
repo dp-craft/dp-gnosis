@@ -50,6 +50,7 @@ import {
   baselineCell,
   bestCell,
   datasetsOf,
+  significanceLabel,
   type SweepCell,
   type SweepProvenance,
   writeSweepPerTopic,
@@ -331,8 +332,21 @@ const provenanceOf = (options: SweepOptions, gitSha: string): SweepProvenance =>
   bs: options.bs,
 });
 
-/** The one line a reader wants at the end: the winner and what it beat. */
-const winnerLine = (cells: readonly SweepCell[], dataset: string): string => {
+/**
+ * The verdict attached to the winning cell, or nothing when there is none to
+ * attach: the baseline itself won, or the cell was rated before its baseline
+ * existed. An absent test is stated as absence, never as a passing one.
+ */
+const verdictSuffix = (best: SweepCell): string =>
+  best.significance === undefined ? '' : ` — ${significanceLabel(best.significance)}`;
+
+/**
+ * The one line a reader wants at the end: the winner, what it beat, and whether
+ * that is more than noise. The delta alone claims a winner the numbers may not
+ * support — a measured scifact sweep printed `+0.0019` for a cell at p=0.46 —
+ * so the qualifier travels with it and cannot be read past.
+ */
+export const winnerLine = (cells: readonly SweepCell[], dataset: string): string => {
   const scoped = cells.filter(cell => cell.dataset === dataset);
   const best = bestCell(scoped);
   const base = baselineCell(scoped);
@@ -340,7 +354,8 @@ const winnerLine = (cells: readonly SweepCell[], dataset: string): string => {
   const delta = best.metrics.ndcg10 - base.metrics.ndcg10;
   return (
     `${dataset}: best k1=${best.k1} b=${best.b} nDCG@10 ${metric(best.metrics.ndcg10)} ` +
-    `(baseline ${metric(base.metrics.ndcg10)}, ${delta >= 0 ? '+' : ''}${metric(delta)})`
+    `(baseline ${metric(base.metrics.ndcg10)}, ${delta >= 0 ? '+' : ''}${metric(delta)})` +
+    verdictSuffix(best)
   );
 };
 
@@ -364,7 +379,9 @@ const writerFor = (options: SweepOptions, sha: string): SweepWriter => {
   };
 };
 
-const announce = (cells: readonly SweepCell[], written: WrittenSweep): void => {
+/** Reads the cells AS WRITTEN, so the winner lines carry the persisted verdicts. */
+const announce = (written: WrittenSweep): void => {
+  const { cells } = written;
   process.stdout.write(`\n${datasetsOf(cells).map(d => winnerLine(cells, d)).join('\n')}\n`);
   process.stdout.write(`\nwrote ${written.markdownPath}\n     ${written.svgPath}\n`);
   process.stdout.write(`     ${written.jsonPath}\n`);
@@ -381,7 +398,7 @@ export const main = async (argv: readonly string[], gitSha: string): Promise<num
     stem: writer.stem,
     write: writer.write,
   });
-  if (cells.length > 0) announce(cells, writer.write(cells));
+  if (cells.length > 0) announce(writer.write(cells));
   return datasetsOf(cells).length === entries.length && entries.length > 0 ? 0 : FAILURE_EXIT_CODE;
 };
 

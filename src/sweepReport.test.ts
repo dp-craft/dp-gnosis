@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -8,8 +8,10 @@ import type { Metrics } from './metrics.js';
 import {
   ANALYSIS_DIR,
   bestCell,
+  rateCells,
   renderHeatmapSvg,
   renderSweepMarkdown,
+  significanceLabel,
   SWEEP_DIR,
   SWEEP_PER_TOPIC_DIR,
   type SweepCell,
@@ -105,6 +107,15 @@ describe('renderSweepMarkdown', () => {
     expect(markdown).toContain('| scifact | k1=1.2, b=0.6 | 0.6100 | 0.6000 | +0.0100 |');
   });
 
+  it('never prints a delta without the verdict beside it', () => {
+    // An unrated cell reads as an em dash, not as "not significant": absent is
+    // not the same statement as tested-and-noise.
+    const best = markdown.split('\n').filter(line => line.startsWith('| nfcorpus | k1='));
+
+    expect(best).toHaveLength(1);
+    expect(best[0]?.endsWith('| — |')).toBe(true);
+  });
+
   it('carries one row per measured cell, with all four metrics', () => {
     expect(markdown).toContain('| nfcorpus | 1.2 | 0.75 | baseline | 0.3250 | 0.1625 | 0.3250 |');
     expect(markdown.split('\n').filter(line => line.startsWith('| nfcorpus | 1'))).toHaveLength(2);
@@ -155,6 +166,78 @@ describe('renderHeatmapSvg', () => {
     ]);
 
     expect(flat).not.toContain('NaN');
+  });
+});
+
+describe('rateCells', () => {
+  const ratedResults = resolve(root, 'rated-results');
+  const TOPICS = 24;
+
+  const perTopicTsv = (score: (index: number) => number): string =>
+    [
+      'query_id\tndcg10\trecall10\trecall100\tmrr10',
+      ...Array.from({ length: TOPICS }, (_unused, index) => `q${index}\t${score(index)}\t0\t0\t0`),
+    ].join('\n');
+
+  const writePerTopic = (target: SweepCell, score: (index: number) => number): void => {
+    const path = resolve(ratedResults, target.perTopicPath);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${perTopicTsv(score)}\n`, 'utf8');
+  };
+
+  const base = cell({ dataset: 'nfcorpus', k1: 1.2, b: 0.75, ndcg10: 0.325, baseline: true });
+  const better = cell({ dataset: 'nfcorpus', k1: 0.8, b: 0.3, ndcg10: 0.34 });
+  const noise = cell({ dataset: 'nfcorpus', k1: 1.0, b: 0.4, ndcg10: 0.326 });
+  const unreadable = cell({ dataset: 'nfcorpus', k1: 1.2, b: 0.6, ndcg10: 0.31 });
+
+  writePerTopic(base, () => 0.1);
+  writePerTopic(better, () => 0.6);
+  writePerTopic(noise, index => (index % 2 === 0 ? 0.2 : 0));
+
+  const rated = rateCells(ratedResults, [base, better, noise, unreadable]);
+  const at = (k1: number): SweepCell | undefined => rated.find(c => c.k1 === k1 && c.b !== 0.6);
+
+  it('gives a cell that really differs from the baseline a verdict', () => {
+    const verdict = at(0.8)?.significance;
+
+    expect(verdict?.kind).toBe('verdict');
+    expect(verdict).toMatchObject({ metric: 'ndcg10', topics: TOPICS, significant: true });
+    expect(verdict?.kind === 'verdict' && verdict.pValue).toBeLessThan(0.05);
+    expect(verdict?.kind === 'verdict' && verdict.ciLow).toBeGreaterThan(0);
+  });
+
+  it('calls a delta indistinguishable from noise not significant', () => {
+    const verdict = at(1.0)?.significance;
+
+    expect(verdict).toMatchObject({ kind: 'verdict', significant: false });
+    expect(significanceLabel(verdict)).toContain('not significant');
+  });
+
+  it('leaves the baseline cell without a verdict against itself', () => {
+    expect(at(1.2)?.baseline).toBe(true);
+    expect(at(1.2)?.significance).toBeUndefined();
+  });
+
+  it('reports a refusal as not tested, with its reason, never as not significant', () => {
+    const refused = rated.find(c => c.b === 0.6)?.significance;
+
+    expect(refused).toMatchObject({ kind: 'missing-per-topic' });
+    expect(significanceLabel(refused)).toBe('not tested (per-topic scores missing)');
+    expect(significanceLabel(refused)).not.toContain('not significant');
+  });
+
+  it('names only the unreadable side of the pair', () => {
+    const refused = rated.find(c => c.b === 0.6)?.significance;
+
+    expect(refused?.kind === 'missing-per-topic' && refused.paths).toHaveLength(1);
+    expect(refused?.kind === 'missing-per-topic' && refused.paths[0]).toContain('k1-1.20-b-0.60');
+  });
+
+  it('carries every verdict into the human document', () => {
+    const markdown = renderSweepMarkdown(provenance, rated, 'figure.svg');
+
+    expect(markdown).toContain('not tested (per-topic scores missing)');
+    expect(markdown).toContain('95% CI');
   });
 });
 

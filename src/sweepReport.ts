@@ -23,6 +23,15 @@ import { resolve } from 'node:path';
 import type { Metrics } from './metrics.js';
 import { renderPerTopicTsv, reportStem } from './report.js';
 import type { TopicScore } from './score.js';
+import {
+  CI_LEVEL,
+  type MetricName,
+  pairedScores,
+  readPerTopic,
+  type Significance,
+  type SignificanceVerdict,
+  type TopicScores
+} from './significance.js';
 
 const METRIC_DIGITS = 4;
 const CELL_DIGITS = 3;
@@ -60,6 +69,14 @@ export interface SweepCell {
    * rebuilding the filename — and a moved checkout still resolves.
    */
   readonly perTopicPath: string;
+  /**
+   * The paired test of THIS cell against its dataset's baseline cell on
+   * `SIGNIFICANCE_METRIC` — `pValue`, `ciLow`, `ciHigh` and `significant` when it
+   * ran, the named refusal when it could not. Absent on the baseline cell, which
+   * has nothing to be compared with, and on a cell rated before its dataset's
+   * baseline was measured.
+   */
+  readonly significance?: Significance;
 }
 
 /** Facts true of the whole sweep. */
@@ -85,6 +102,8 @@ export interface WrittenSweep {
   readonly jsonPath: string;
   readonly markdownPath: string;
   readonly svgPath: string;
+  /** The cells AS WRITTEN — each non-baseline one carrying its verdict. */
+  readonly cells: readonly SweepCell[];
 }
 
 const metric = (value: number): string => value.toFixed(METRIC_DIGITS);
@@ -111,6 +130,91 @@ export const bestCell = (cells: readonly SweepCell[]): SweepCell | undefined =>
 
 export const baselineCell = (cells: readonly SweepCell[]): SweepCell | undefined =>
   cells.find(cell => cell.baseline);
+
+// ------------------------------------------------------------ significance
+
+/**
+ * Is a cell's win over the baseline distinguishable from noise?
+ *
+ * A grid's best cell beat eleven others by construction, so its delta is a
+ * maximum of a sample and reads high even when nothing moved: a measured scifact
+ * sweep called `k1=1.2, b=0.6` the winner at +0.0019, which is p=0.46 with an
+ * interval straddling zero. A delta printed without that qualifier is the exact
+ * error the paired test exists to prevent, so every non-baseline cell is rated
+ * against its OWN dataset's baseline before any artefact is written.
+ *
+ * The statistic is `significance.pairedScores`, unchanged and un-retuned — the
+ * cells' per-topic TSVs are written in the run report's format precisely so this
+ * is a read, not a second implementation. Rating is paid on every checkpoint
+ * write, which costs one paired test per measured cell: cheap beside a cell's own
+ * ranking pass, and it keeps an early-stopped sweep's artefacts complete.
+ */
+const SIGNIFICANCE_METRIC: MetricName = 'ndcg10';
+
+interface LoadedCell {
+  readonly path: string;
+  readonly scores: TopicScores | undefined;
+}
+
+const loadCell = (resultsDir: string, cell: SweepCell): LoadedCell => {
+  const path = resolve(resultsDir, cell.perTopicPath);
+  return { path, scores: readPerTopic(path) };
+};
+
+/** Which side could not be read — a refusal names the file, never the verdict. */
+const unreadable = (dataset: string, loaded: readonly LoadedCell[]): Significance => ({
+  kind: 'missing-per-topic',
+  dataset,
+  paths: loaded.filter(one => one.scores === undefined).map(one => one.path),
+});
+
+const ratedAgainst = (resultsDir: string, base: SweepCell, cell: SweepCell): Significance => {
+  const before = loadCell(resultsDir, base);
+  const after = loadCell(resultsDir, cell);
+  return before.scores === undefined || after.scores === undefined
+    ? unreadable(cell.dataset, [before, after])
+    : pairedScores(cell.dataset, SIGNIFICANCE_METRIC, before.scores, after.scores);
+};
+
+const rateCell = (
+  resultsDir: string,
+  cells: readonly SweepCell[],
+  cell: SweepCell
+): SweepCell => {
+  const base = baselineCell(cellsFor(cells, cell.dataset));
+  return cell.baseline || base === undefined
+    ? cell
+    : { ...cell, significance: ratedAgainst(resultsDir, base, cell) };
+};
+
+/** Every cell with its verdict against its dataset's baseline attached. */
+export const rateCells = (
+  resultsDir: string,
+  cells: readonly SweepCell[]
+): readonly SweepCell[] => cells.map(cell => rateCell(resultsDir, cells, cell));
+
+const REFUSAL_REASONS: Readonly<Record<Exclude<Significance['kind'], 'verdict'>, string>> = {
+  'topics-differ': 'topic sets differ',
+  'missing-per-topic': 'per-topic scores missing',
+  'provenance-changed': 'provenance changed',
+};
+
+const verdictLabel = (verdict: SignificanceVerdict): string =>
+  `${verdict.significant ? 'significant' : 'not significant'} ` +
+  `(p=${metric(verdict.pValue)}, ${CI_LEVEL * 100}% CI ` +
+  `[${signed(verdict.ciLow)}, ${signed(verdict.ciHigh)}])`;
+
+/**
+ * The verdict in prose. A refusal reads as NOT TESTED with its reason: rendering
+ * it as "not significant" would claim a test that never ran. An unrated cell is
+ * an em dash — absent, which is again not the same statement.
+ */
+export const significanceLabel = (significance: Significance | undefined): string => {
+  if (significance === undefined) return '—';
+  return significance.kind === 'verdict'
+    ? verdictLabel(significance)
+    : `not tested (${REFUSAL_REASONS[significance.kind]})`;
+};
 
 // --------------------------------------------------------------- per-topic
 
@@ -169,28 +273,30 @@ export const writeSweepPerTopic = (options: SweepPerTopicOptions): string => {
 const gridRow = (cell: SweepCell): string =>
   `| ${cell.dataset} | ${cell.k1} | ${cell.b} | ${cell.baseline ? 'baseline' : ''} | ` +
   `${metric(cell.metrics.ndcg10)} | ${metric(cell.metrics.recall10)} | ` +
-  `${metric(cell.metrics.recall100)} | ${metric(cell.metrics.mrr10)} | ${cell.queryMs} |`;
+  `${metric(cell.metrics.recall100)} | ${metric(cell.metrics.mrr10)} | ${cell.queryMs} | ` +
+  `${significanceLabel(cell.significance)} |`;
 
 const GRID_HEADER: readonly string[] = [
-  '| dataset | k1 | b | | nDCG@10 | R@10 | R@100 | MRR@10 | query ms |',
-  '|---|---|---|---|---|---|---|---|---|',
+  '| dataset | k1 | b | | nDCG@10 | R@10 | R@100 | MRR@10 | query ms | vs baseline |',
+  '|---|---|---|---|---|---|---|---|---|---|',
 ];
 
 const bestRow = (cells: readonly SweepCell[], dataset: string): string => {
   const scoped = cellsFor(cells, dataset);
   const best = bestCell(scoped);
   const base = baselineCell(scoped);
-  if (best === undefined || base === undefined) return `| ${dataset} | — | — | — | — |`;
+  if (best === undefined || base === undefined) return `| ${dataset} | — | — | — | — | — |`;
   const delta = best.metrics.ndcg10 - base.metrics.ndcg10;
   return (
     `| ${dataset} | k1=${best.k1}, b=${best.b} | ${metric(best.metrics.ndcg10)} | ` +
-    `${metric(base.metrics.ndcg10)} | ${signed(delta)} |`
+    `${metric(base.metrics.ndcg10)} | ${signed(delta)} | ` +
+    `${significanceLabel(best.significance)} |`
   );
 };
 
 const BEST_HEADER: readonly string[] = [
-  '| dataset | best cell | best nDCG@10 | baseline (k1=1.2, b=0.75) | delta |',
-  '|---|---|---|---|---|',
+  '| dataset | best cell | best nDCG@10 | baseline (k1=1.2, b=0.75) | delta | vs baseline |',
+  '|---|---|---|---|---|---|',
 ];
 
 const CAVEAT: readonly string[] = [
@@ -391,13 +497,13 @@ export const writeSweepReport = (options: SweepReportOptions): WrittenSweep => {
   const jsonPath = resolve(sweepDir, `${stem}-${options.provenance.gitSha}.json`);
   const markdownPath = resolve(analysisDir, `${stem}-${ANALYSIS_SUFFIX}.md`);
   const svgPath = resolve(analysisDir, svgName);
-  const record = { provenance: options.provenance, cells: options.cells };
-  writeFileSync(jsonPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  const cells = rateCells(options.resultsDir, options.cells);
   writeFileSync(
-    markdownPath,
-    renderSweepMarkdown(options.provenance, options.cells, svgName),
+    jsonPath,
+    `${JSON.stringify({ provenance: options.provenance, cells }, null, 2)}\n`,
     'utf8'
   );
-  writeFileSync(svgPath, `${renderHeatmapSvg(options.cells)}\n`, 'utf8');
-  return { jsonPath, markdownPath, svgPath };
+  writeFileSync(markdownPath, renderSweepMarkdown(options.provenance, cells, svgName), 'utf8');
+  writeFileSync(svgPath, `${renderHeatmapSvg(cells)}\n`, 'utf8');
+  return { jsonPath, markdownPath, svgPath, cells };
 };

@@ -8,8 +8,16 @@ import type { BeirDoc } from './beir.js';
 import { prepareDataset, type PreparedDataset } from './engine.js';
 import type { BeirDataset, DatasetEntry } from './manifest.js';
 import type { Qrel } from './metrics.js';
-import { readPerTopic } from './significance.js';
-import { buildGrid, measureCell, numberCsv, parseSweepArgs, selectDatasets } from './sweep.js';
+import { readPerTopic, type Significance } from './significance.js';
+import {
+  buildGrid,
+  measureCell,
+  numberCsv,
+  parseSweepArgs,
+  selectDatasets,
+  winnerLine
+} from './sweep.js';
+import type { SweepCell } from './sweepReport.js';
 
 const DEFAULT_CELLS = 12;
 const BASELINE_CELLS = 1;
@@ -107,6 +115,81 @@ describe('buildGrid', () => {
 
     expect(grid).toHaveLength(2);
     expect(grid.filter(point => point.baseline)).toHaveLength(1);
+  });
+});
+
+describe('winnerLine', () => {
+  const cell = (
+    k1: number,
+    ndcg10: number,
+    baseline: boolean,
+    significance?: Significance
+  ): SweepCell => ({
+    dataset: 'scifact',
+    adapter: 'linear',
+    k1,
+    b: 0.6,
+    baseline,
+    topics: 300,
+    docCount: 5183,
+    atomCount: 5202,
+    queryMs: 1000,
+    metrics: { ndcg10, recall10: 0.6, recall100: 0.9, mrr10: 0.7 },
+    perTopicPath: `sweep/per-topic/stem-scifact-linear-k1-${k1.toFixed(2)}-b-0.60.tsv`,
+    significance,
+  });
+
+  const baseline = cell(1.2, 0.6883, true);
+
+  it('qualifies a winner whose improvement is indistinguishable from noise', () => {
+    // The measured scifact case: +0.0019 at p=0.4565, an interval straddling 0.
+    const line = winnerLine(
+      [
+        baseline,
+        cell(1.0, 0.6902, false, {
+          kind: 'verdict',
+          dataset: 'scifact',
+          metric: 'ndcg10',
+          topics: 300,
+          meanDifference: 0.0019,
+          pValue: 0.4565,
+          ciLow: -0.002417,
+          ciHigh: 0.006971,
+          significant: false,
+        }),
+      ],
+      'scifact'
+    );
+
+    expect(line).toContain('+0.0019');
+    expect(line).toContain('not significant');
+    expect(line).toContain('p=0.4565');
+    expect(line).toContain('95% CI [-0.0024, +0.0070]');
+  });
+
+  it('states a refusal as not tested with its reason, not as not significant', () => {
+    const line = winnerLine(
+      [
+        baseline,
+        cell(1.0, 0.6902, false, {
+          kind: 'topics-differ',
+          dataset: 'scifact',
+          onlyInPrevious: ['q7'],
+          onlyInLatest: [],
+        }),
+      ],
+      'scifact'
+    );
+
+    expect(line).toContain('not tested (topic sets differ)');
+    expect(line).not.toContain('not significant');
+  });
+
+  it('leaves the line unqualified when the baseline itself wins', () => {
+    const line = winnerLine([baseline, cell(1.0, 0.5, false)], 'scifact');
+
+    expect(line).toContain('baseline 0.6883, +0.0000');
+    expect(line).not.toContain('—');
   });
 });
 
