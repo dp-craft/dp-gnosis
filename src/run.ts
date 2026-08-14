@@ -39,7 +39,8 @@ import {
 } from './engine.js';
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
-import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
+import { describeDerivation, ensureVaultDataset } from './fetch/vault.js';
+import { type BeirDataset, type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
 import {
   corpusChecksum,
   currentGitSha,
@@ -112,6 +113,18 @@ export const datasetDir = (entry: DatasetEntry): string => {
 };
 
 /**
+ * A `beir-local` entry carrying `derive` is built from the repo's own atoms and
+ * golden set on EVERY run — the inputs are local files, so a cache could only
+ * make the run measure a vault that has since changed. The unreachable-gold
+ * count is printed rather than returned: it caps recall for the dataset, and a
+ * ceiling that is not visible next to the number it bounds gets read as quality.
+ */
+const deriveVault = (entry: BeirDataset): void => {
+  const derived = ensureVaultDataset(entry, SUITE_ROOT);
+  process.stdout.write(`${describeDerivation(entry.id, derived)}\n`);
+};
+
+/**
  * Fetch the dataset if its fetcher has not already put it on disk, then verify
  * the layout. `beir-local` points at a directory the repo already carries, so
  * there is nothing to fetch and a missing one is an error, not a download.
@@ -119,6 +132,7 @@ export const datasetDir = (entry: DatasetEntry): string => {
 export const ensureDataset = async (entry: DatasetEntry): Promise<string> => {
   if (entry.format === 'bright') await ensureBrightDataset(entry, DATA_DIR);
   if (entry.format === 'beir-zip') await ensureBeirDataset(entry, DATA_DIR);
+  if (entry.format === 'beir-local' && entry.derive !== undefined) deriveVault(entry);
   return datasetDir(entry);
 };
 

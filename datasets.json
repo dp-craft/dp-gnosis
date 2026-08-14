@@ -119,6 +119,36 @@
       "docShape": "long-web-page",
       "atomMaxChars": 4000,
       "enabled": true
+    },
+    {
+      "comment": "The REAL vault, the material dp-gnosis actually serves — every other entry is an English proxy. `derive` projects the ingested atoms plus the hand-authored golden set into the BEIR layout at `source` on EVERY run: both inputs are local files this repo already carries, so there is nothing to fetch and a cache could only measure a vault that has since changed. The atom FILENAME is the document id, which is what `relevantAtomIds` names and what `score.ts` recovers from `originPaths`.",
+      "id": "vault",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/vault",
+      "derive": {
+        "atoms": "../../dp-gnosis/vault",
+        "golden": "../dp-gnosis/golden/golden-set.v2.json"
+      },
+      "domain": "project-vault",
+      "docShape": "atom",
+      "queryShape": "keyword-and-question",
+      "enabled": true
+    },
+    {
+      "comment": "The Hungarian half of the same material, against its own golden set. Read it WITH the printed unreachable-gold count: 22 of its 117 judgments name atoms this corpus does not hold, so its recall is bounded well below 1 and its numbers are NOT comparable with `vault`.",
+      "id": "vault-hu",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/vault-hu",
+      "derive": {
+        "atoms": "../../dp-gnosis/cache/atoms-hu",
+        "golden": "../dp-gnosis/golden/golden-set-hu.v1.json"
+      },
+      "domain": "project-vault-hu",
+      "docShape": "atom",
+      "queryShape": "hungarian-question",
+      "enabled": true
     }
   ]
 }

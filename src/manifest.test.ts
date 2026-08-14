@@ -116,17 +116,28 @@ describe('parseManifest', () => {
 describe('the shipped datasets.json', () => {
   const entries = loadManifest(MANIFEST);
 
-  // AC delta: the eight long-document BRIGHT splits gain ONE passage-granularity
-  // twin (bright-biology-passages), so the counts move 11 → 12 and 8 → 9.
-  it('carries the three BEIR entries plus nine BRIGHT entries', () => {
-    expect(entries).toHaveLength(12);
+  // AC delta: P0-B adds the two REAL-vault entries (`vault`, `vault-hu`) as
+  // beir-local datasets derived from the repo's own atoms + golden sets, so the
+  // total moves 12 → 14 and the BEIR count 3 → 5. The BRIGHT count is untouched.
+  it('carries the five BEIR entries plus nine BRIGHT entries', () => {
+    expect(entries).toHaveLength(14);
     expect(entries.filter(e => e.format === 'bright')).toHaveLength(9);
   });
 
   // AC delta: every entry is enabled now that both fetchers exist. Before them,
   // only the three datasets already on disk or hand-fetchable could run.
-  it('enables every entry, each of the twelve having a fetcher', () => {
-    expect(enabledDatasets(entries)).toHaveLength(12);
+  it('enables every entry, each of the fourteen having a fetcher', () => {
+    expect(enabledDatasets(entries)).toHaveLength(14);
+  });
+
+  // The two vault entries are the only ones that DERIVE their BEIR layout, and
+  // both must name an atoms dir and a golden set — half a derivation is a typo.
+  it('gives each vault entry a derive block naming atoms and a golden set', () => {
+    const derived = entries.filter(e => e.format === 'beir-local' && e.derive !== undefined);
+
+    expect(derived.map(e => e.id)).toEqual(['vault', 'vault-hu']);
+    expect(derived.every(e => e.format === 'beir-local' && e.derive!.atoms.length > 0)).toBe(true);
+    expect(derived.every(e => e.format === 'beir-local' && e.derive!.golden.length > 0)).toBe(true);
   });
 
   it('caps BRIGHT atoms at 4000 chars — its documents are whole web pages', () => {

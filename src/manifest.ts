@@ -27,12 +27,25 @@ export interface DatasetBase {
   readonly enabled: boolean;
 }
 
+/**
+ * Where a `beir-local` entry's BEIR layout comes FROM when the repo carries the
+ * ingredients rather than the layout: a directory of ingested atoms plus a
+ * hand-authored golden set. Both paths are relative to the suite root, and both
+ * are read-only — `fetch/vault.ts` projects them into `source` on every run.
+ */
+export interface VaultDerivationSource {
+  readonly atoms: string;
+  readonly golden: string;
+}
+
 /** A BEIR archive fetched from `source`, or a BEIR directory already at `source`. */
 export interface BeirDataset extends DatasetBase {
   readonly format: 'beir-zip' | 'beir-local';
   readonly source: string;
   /** The qrels split to score — the `qrels/<split>.tsv` basename. */
   readonly qrels: string;
+  /** Absent means `source` already holds the BEIR layout; present means derive it. */
+  readonly derive?: VaultDerivationSource | undefined;
 }
 
 /**
@@ -122,6 +135,24 @@ const baseOf = (record: Readonly<Record<string, unknown>>, where: string): Datas
   enabled: requireBoolean(record, 'enabled', where),
 });
 
+/** Both keys are required together: a derivation with only one half is a typo. */
+const deriveOf = (
+  record: Readonly<Record<string, unknown>>,
+  where: string
+): VaultDerivationSource | undefined => {
+  const value = record['derive'];
+  if (value === undefined) return undefined;
+  return isRecord(value)
+    ? {
+        atoms: requireString(value, 'atoms', `${where}.derive`),
+        golden: requireString(value, 'golden', `${where}.derive`),
+      }
+    : fail(
+        `${where} has a non-object "derive"`,
+        'use { "derive": { "atoms": "<atoms dir>", "golden": "<golden set json>" } }'
+      );
+};
+
 const beirOf = (
   format: BeirDataset['format'],
   record: Readonly<Record<string, unknown>>,
@@ -131,6 +162,7 @@ const beirOf = (
   format,
   source: requireString(record, 'source', where),
   qrels: requireString(record, 'qrels', where),
+  derive: deriveOf(record, where),
 });
 
 const isGranularity = (value: unknown): value is BrightGranularity =>
