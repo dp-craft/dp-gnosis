@@ -285,6 +285,7 @@ const fromAtom = (atom: Atom, row: IndexRow, sourcePath: string): RetrievedAtom 
         body: atom.body,
         score: -row.rank,
         sourcePath,
+        originPaths: atom.frontmatter.sources,
       };
 };
 

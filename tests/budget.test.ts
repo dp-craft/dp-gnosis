@@ -21,6 +21,7 @@ const atom = (id: string, body: string): RetrievedAtom => ({
   body,
   score: 1,
   sourcePath: `vault/${id}.md`,
+  originPaths: [`doc/${id}.md`],
 });
 
 describe('estimateTokens', () => {

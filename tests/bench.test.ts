@@ -29,6 +29,7 @@ const atom = (id: string): RetrievedAtom => ({
   body: `body-${id}`,
   score: 1,
   sourcePath: `RUNNER-${id}.md`,
+  originPaths: [`doc/RUNNER-${id}.md`],
 });
 
 // Fixed ranking: a, b, c, d.

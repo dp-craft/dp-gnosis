@@ -84,6 +84,7 @@ interface ScannedDoc {
   readonly type: AtomType;
   readonly body: string;
   readonly sourcePath: string;
+  readonly originPaths: readonly string[];
   readonly terms: readonly string[];
   readonly freq: ReadonlyMap<string, number>;
 }
@@ -163,6 +164,7 @@ const fromAtom = (context: ScanContext, file: string, atom: Atom): ScannedDoc | 
         type: asType(atom.frontmatter.type),
         body: atom.body,
         sourcePath: join(context.dir, file),
+        originPaths: atom.frontmatter.sources,
         terms: documentTerms(context, atom),
       });
 };
@@ -246,6 +248,7 @@ const toRetrieved = (scored: ScoredDoc): RetrievedAtom => ({
   body: scored.doc.body,
   score: scored.score,
   sourcePath: scored.doc.sourcePath,
+  originPaths: scored.doc.originPaths,
 });
 
 const rank = (corpus: Corpus, terms: readonly string[], opts: RetrieveOptions): readonly ScoredDoc[] =>

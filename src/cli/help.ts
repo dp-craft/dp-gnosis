@@ -53,7 +53,7 @@ export const HELP_TEXT: string = [
   'JSON keys with --json (plus exitCode on every object):',
   '  ingest    command, written, skipped[{source,title,reasons}]',
   '  index     command, adapter, built, indexPath, note',
-  '  retrieve  command, adapter, query, k, mode, indexState, count, atoms[{id,title,domain,body,score,sourcePath}],',
+  '  retrieve  command, adapter, query, k, mode, indexState, count, atoms[{id,title,domain,body,score,sourcePath,originPaths[]}],',
   '            skipped[{id,sourcePath,estimatedTokens}], note',
   '  bench     command, markdownPath, jsonPath, adapters[], skippedAdapters[{name,reason}], corpora[], goldenSet',
   '  failure   error',

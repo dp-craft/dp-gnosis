@@ -120,6 +120,18 @@ const atomLine = (atom: RetrievedAtom): string =>
   `  ${formatScore(atom.score)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
 
 /**
+ * One line per ORIGIN document, under the atom it belongs to. A list rather than
+ * one joined value: the origins are separate documents, and an atom naming none
+ * emits no line at all instead of a blank one.
+ */
+const originLine = (origin: string): string => `    origin  ${origin}`;
+
+const atomLines = (atom: RetrievedAtom): readonly string[] => [
+  atomLine(atom),
+  ...atom.originPaths.map(originLine),
+];
+
+/**
  * The budget outcome as the renderings see it: `result.atoms` is already the
  * KEPT set, and `skipped` is what the caller must still be told about.
  */
@@ -150,7 +162,7 @@ const retrieveText = (budgeted: BudgetedResult): string => {
   return [
     `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
     ...(isUnavailable(result) ? [NO_CORPUS] : []),
-    ...result.atoms.map(atomLine),
+    ...result.atoms.flatMap(atomLines),
     ...skipText(budgeted),
   ].join('\n');
 };
@@ -225,12 +237,20 @@ const payload = (
  *
  * `<source>` is stated RELATIVE to the repo root: an absolute path is noise in a
  * pasted prompt, and the absolute form stays available in `--json`.
+ *
+ * `<origin>` is a SEPARATE element, one per origin document, and it is not
+ * relativized: ingest already wrote those paths repo-relative. It sits beside
+ * `<source>` rather than replacing it because the two answer different
+ * questions — which atom file this is, and which document it was cut from.
  */
+const originXml = (origin: string): string => `      <origin>${escapeXml(origin)}</origin>`;
+
 const documentXml = (atom: RetrievedAtom, repoRoot: string): string =>
   [
     `  <document ${xmlAttribute('id', atom.id)} ${xmlAttribute('score', formatScore(atom.score))} ${xmlAttribute('domain', atom.domain)}>`,
     '    <metadata>',
     `      <source>${escapeXml(relative(repoRoot, atom.sourcePath))}</source>`,
+    ...atom.originPaths.map(originXml),
     `      <section>${escapeXml(atom.title)}</section>`,
     '    </metadata>',
     '    <content>',

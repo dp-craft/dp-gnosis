@@ -263,6 +263,7 @@ const fromAtom = (atom: Atom, hit: SearchHit, sourcePath: string): RetrievedAtom
         body: atom.body,
         score: hit.score,
         sourcePath,
+        originPaths: atom.frontmatter.sources,
       };
 };
 

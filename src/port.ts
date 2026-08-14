@@ -31,6 +31,26 @@ export interface RetrievedAtom {
   readonly body: string;
   readonly score: number;
   readonly sourcePath: string;
+  /**
+   * The ORIGINAL document(s) the atom was cut from — its frontmatter `sources`,
+   * repo-relative as ingest wrote them. Distinct from `sourcePath`, which is the
+   * atom's OWN file under the atoms dir: one points at the derived artefact, the
+   * other at the evidence, and a caller that must open the proof needs the
+   * second.
+   *
+   * A LIST, never a single string: `AtomFrontmatter.sources` is
+   * `readonly string[]`, so collapsing it would silently drop entries. Measured
+   * 2026-08-14: all 11 345 vault atoms and all 5 202 SciFact probe atoms carry
+   * exactly one, and `ingest` writes exactly one, so the 1:1 case is the only
+   * one that occurs today — it is not the only one representable.
+   *
+   * EMPTY means the frontmatter named no source. Every disk-backed adapter is
+   * structurally incapable of producing it (`parseAtom` refuses an atom with
+   * zero sources), so it can only reach a rendering from a synthetic port. It
+   * renders as OMISSION — no text line, no xml element — never as an empty
+   * string; `--json` states the empty list verbatim.
+   */
+  readonly originPaths: readonly string[];
 }
 
 /** Caller-supplied retrieval knobs. */

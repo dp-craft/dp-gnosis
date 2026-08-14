@@ -9,6 +9,7 @@ const atom = (id: string, domain: RetrievedAtom['domain'], score: number): Retri
   body: `body-${id}`,
   score,
   sourcePath: `RUNNER-${id}.md`,
+  originPaths: [`doc/RUNNER-${id}.md`],
 });
 
 const RUNNER_A = atom('a', 'runner', 0.9);
