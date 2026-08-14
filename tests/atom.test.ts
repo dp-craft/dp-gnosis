@@ -35,6 +35,20 @@ const FULL_LINES = [
   '',
 ];
 
+const DRAFT_LINES = [
+  '---',
+  'type: knowledge',
+  'id: draft-atom',
+  'title: Draft atom',
+  'x_domain: standards',
+  'status: draft',
+  'sources:',
+  '  - claude-artifacts/standards/TS-TESTING.md',
+  '---',
+  'Body prose.',
+  '',
+];
+
 const MULTI_SOURCE_LINES = [
   '---',
   'type: knowledge',
@@ -111,7 +125,7 @@ describe('parseAtom / serializeAtom round-trip', () => {
   const fixtures: readonly (readonly [string, string])[] = [
     ['no optional fields', lf(MINIMAL_LINES)],
     ['all optional fields', lf(FULL_LINES)],
-    ['multiple sources', lf(MULTI_SOURCE_LINES)],
+    ['a draft with a repo-relative source', lf(DRAFT_LINES)],
     ['body containing a --- line', lf(DASHY_BODY_LINES)],
     ['no trailing newline', lf(NO_TRAILING_NEWLINE_LINES)],
     ['empty body', lf(EMPTY_BODY_LINES)],
@@ -163,7 +177,7 @@ describe('parseAtom field extraction', () => {
 
   it('reads all three status values', () => {
     expect(parsed(lf(MINIMAL_LINES)).frontmatter.status).toBe('stable');
-    expect(parsed(lf(MULTI_SOURCE_LINES)).frontmatter.status).toBe('draft');
+    expect(parsed(lf(DRAFT_LINES)).frontmatter.status).toBe('draft');
     expect(parsed(lf(DASHY_BODY_LINES)).frontmatter.status).toBe('deprecated');
   });
 
@@ -271,6 +285,31 @@ describe('parseAtom refusals (closed subset)', () => {
     expect(errorOf(withFrontmatter([...VALID_FIELDS.slice(0, 5), 'sources:']))).toContain(
       'sources'
     );
+  });
+
+  it('refuses more than one source and names the exactly-one rule', () => {
+    const error = errorOf(withFrontmatter([...VALID_FIELDS, '  - https://example.com/b']));
+    expect(error).toBe(
+      'field "sources" MUST hold exactly one flat source string — found 2'
+    );
+  });
+
+  it('refuses the three-source fixture with the same exactly-one message', () => {
+    expect(errorOf(lf(MULTI_SOURCE_LINES))).toBe(
+      'field "sources" MUST hold exactly one flat source string — found 3'
+    );
+  });
+
+  it('keeps the empty-sources message distinct from the too-many message', () => {
+    expect(errorOf(withFrontmatter(VALID_FIELDS.slice(0, 5)))).toBe(
+      'missing required field "sources" — at least one flat source string is required'
+    );
+  });
+
+  it('accepts exactly one source', () => {
+    expect(parsed(withFrontmatter(VALID_FIELDS)).frontmatter.sources).toEqual([
+      'https://example.com/a',
+    ]);
   });
 
   it('refuses a status outside the closed vocabulary', () => {

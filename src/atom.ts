@@ -195,10 +195,13 @@ const dateError = (map: ReadonlyMap<string, string>): string | undefined => {
   return bad === undefined ? undefined : `field "${bad}" MUST be an absolute YYYY-MM-DD date`;
 };
 
+const sourceCountError = (count: number): string =>
+  count === 0
+    ? 'missing required field "sources" — at least one flat source string is required'
+    : `field "sources" MUST hold exactly one flat source string — found ${count}`;
+
 const sourcesError = (sources: readonly string[]): string | undefined =>
-  sources.length > 0
-    ? undefined
-    : 'missing required field "sources" — at least one flat source string is required';
+  sources.length === 1 ? undefined : sourceCountError(sources.length);
 
 const validationError = (
   map: ReadonlyMap<string, string>,
