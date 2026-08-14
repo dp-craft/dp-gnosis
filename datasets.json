@@ -1,0 +1,105 @@
+{
+  "comment:purpose": "The manifest. Adding a domain is one entry here, no code. `domain` / `docShape` / `queryShape` are REPORT metadata only — they never reach the ingest profile, whose vocabulary is frozen in tools/dp-gnosis/src/config.ts.",
+  "datasets": [
+    {
+      "id": "nfcorpus",
+      "format": "beir-zip",
+      "qrels": "test",
+      "source": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/nfcorpus.zip",
+      "domain": "biomedical",
+      "docShape": "short-abstract",
+      "enabled": true
+    },
+    {
+      "id": "scifact",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "../../docs/benchmarks/2026-08-14-external-suite/data/scifact",
+      "domain": "scientific-claims",
+      "docShape": "abstract",
+      "enabled": true
+    },
+    {
+      "id": "arguana",
+      "format": "beir-zip",
+      "qrels": "test",
+      "source": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/arguana.zip",
+      "domain": "argumentation",
+      "docShape": "argument",
+      "queryShape": "long-form",
+      "enabled": true
+    },
+    {
+      "id": "bright-biology",
+      "format": "bright",
+      "split": "biology",
+      "domain": "biology",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    },
+    {
+      "id": "bright-earth_science",
+      "format": "bright",
+      "split": "earth_science",
+      "domain": "earth-science",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    },
+    {
+      "id": "bright-economics",
+      "format": "bright",
+      "split": "economics",
+      "domain": "economics",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    },
+    {
+      "id": "bright-psychology",
+      "format": "bright",
+      "split": "psychology",
+      "domain": "psychology",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    },
+    {
+      "id": "bright-robotics",
+      "format": "bright",
+      "split": "robotics",
+      "domain": "robotics",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    },
+    {
+      "id": "bright-stackoverflow",
+      "format": "bright",
+      "split": "stackoverflow",
+      "domain": "software",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    },
+    {
+      "id": "bright-sustainable_living",
+      "format": "bright",
+      "split": "sustainable_living",
+      "domain": "sustainable-living",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    },
+    {
+      "id": "bright-pony",
+      "format": "bright",
+      "split": "pony",
+      "domain": "programming-language",
+      "docShape": "long-web-page",
+      "atomMaxChars": 4000,
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,292 @@
+/**
+ * The entry point: manifest → per dataset (load, ingest, index, retrieve,
+ * score) → report → optional comparison against the recorded history.
+ *
+ * Three call-site duties live here, because no lower layer can discharge them:
+ *
+ * 1. **The rerank first pass is WIDENED, then sliced back.** The CLI reranks the
+ *    top `RERANK_K_INIT` (`retrieveCommand.ts:308` — `Math.max(request.k,
+ *    RERANK_K_INIT)`), and `engine.ts` deliberately does not replicate that. At
+ *    a depth below 20 an un-widened first pass would hand the reranker fewer
+ *    candidates than the shipped configuration ever sees, so the `--rerank` arm
+ *    would measure a configuration that does not exist. The constant is
+ *    IMPORTED from the engine's config, never restated, so the two cannot drift.
+ * 2. **A dataset failure fails the RUN.** The other datasets still run and are
+ *    still recorded — a fetch problem in one should not cost the rest — but the
+ *    process exits non-zero, because a partial run silently reported as complete
+ *    is the failure mode this suite exists to prevent.
+ * 3. **Topics come from the qrels, not the query file.** A query with no
+ *    judgments cannot be scored; including it would divide the mean by a topic
+ *    that could only ever contribute 0.
+ *
+ * Datasets are processed one at a time on purpose: ingest is CPU-bound and each
+ * dataset owns an exclusive work directory (`engine.ts` rule 3).
+ */
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
+import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
+import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
+import { compareAll, formatComparison } from './compare.js';
+import { openPort, prepareDataset, rerankIfRequested, retrieveDocs } from './engine.js';
+import { ensureBeirDataset } from './fetch/beirZip.js';
+import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
+import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
+import {
+  corpusChecksum,
+  currentGitSha,
+  type DatasetResult,
+  HISTORY_FILE,
+  readHistory,
+  type RunProvenance,
+  writeRunReport
+} from './report.js';
+import { scoreDataset, toDocumentRanking } from './score.js';
+
+const SUITE_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
+const MANIFEST_PATH = resolve(SUITE_ROOT, 'datasets.json');
+const RESULTS_DIR = resolve(SUITE_ROOT, 'results');
+const DATA_DIR = resolve(SUITE_ROOT, 'data');
+const WORK_ROOT = resolve(DATA_DIR, 'work');
+const CORPUS_FILE = 'corpus.jsonl';
+
+/** The adapter under measurement — the one `engine.openPort` builds. */
+const ADAPTER = 'fts5';
+
+const DEFAULT_DEPTH = 100;
+const METRIC_DIGITS = 4;
+const FAILURE_EXIT_CODE = 1;
+
+/** The flags `bench.sh` forwards. */
+export interface CliOptions {
+  /** Dataset ids to run; empty means every enabled entry. */
+  readonly only: readonly string[];
+  readonly depth: number;
+  readonly rerank: boolean;
+  readonly compare: boolean;
+  readonly perTopic: boolean;
+}
+
+interface Topic {
+  readonly id: string;
+  readonly text: string;
+}
+
+const flagValue = (argv: readonly string[], name: string): string | undefined => {
+  const index = argv.indexOf(name);
+  return index === -1 ? undefined : argv[index + 1];
+};
+
+const csv = (value: string | undefined): readonly string[] =>
+  value === undefined ? [] : value.split(',').map(part => part.trim()).filter(part => part.length > 0);
+
+export const parseArgs = (argv: readonly string[]): CliOptions => ({
+  only: csv(flagValue(argv, '--only')),
+  depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
+  rerank: argv.includes('--rerank'),
+  compare: argv.includes('--compare'),
+  perTopic: argv.includes('--per-topic'),
+});
+
+/**
+ * Where a dataset's BEIR files are. `beir-local` points at a directory that
+ * already exists; every other format is materialised into `data/<id>` by its
+ * fetcher, so a missing directory names the fetcher that has to run first.
+ */
+export const datasetDir = (entry: DatasetEntry): string => {
+  const dir =
+    entry.format === 'beir-local' ? resolve(SUITE_ROOT, entry.source) : resolve(DATA_DIR, entry.id);
+  if (existsSync(resolve(dir, CORPUS_FILE))) return dir;
+  throw new Error(
+    `dp-gnosis-bench: dataset "${entry.id}" has no ${CORPUS_FILE} at ${dir} — ` +
+      `fetch it first (format "${entry.format}"), or disable the entry in datasets.json`
+  );
+};
+
+/**
+ * Fetch the dataset if its fetcher has not already put it on disk, then verify
+ * the layout. `beir-local` points at a directory the repo already carries, so
+ * there is nothing to fetch and a missing one is an error, not a download.
+ */
+const ensureDataset = async (entry: DatasetEntry): Promise<string> => {
+  if (entry.format === 'bright') await ensureBrightDataset(entry, DATA_DIR);
+  if (entry.format === 'beir-zip') await ensureBeirDataset(entry, DATA_DIR);
+  return datasetDir(entry);
+};
+
+/**
+ * The atom cap the run ACTUALLY used. A silent manifest means the engine
+ * default, and that number is recorded rather than `null`: two runs straddling
+ * a change to `ATOM_MAX_CHARS` would otherwise both read `null`, and
+ * `compare.ts` would report a delta across two different measuring scales.
+ */
+export const effectiveAtomMaxChars = (entry: DatasetEntry): number =>
+  entry.atomMaxChars ?? ATOM_MAX_CHARS;
+
+/** Only queries the dataset actually judged; an unjudged topic is not scorable. */
+const topicsOf = (
+  queries: ReadonlyMap<string, string>,
+  qrels: ReadonlyMap<string, Qrel>
+): readonly Topic[] =>
+  [...qrels.keys()]
+    .map(id => ({ id, text: queries.get(id) ?? '' }))
+    .filter(topic => topic.text.length > 0);
+
+/** The CLI's `k_init` handling, which `engine.ts` leaves to its caller. */
+export const firstPassDepth = (depth: number, rerank: boolean): number =>
+  rerank ? Math.max(depth, RERANK_K_INIT) : depth;
+
+/**
+ * One dataset's query-time context. `excluded` is per QUERY, because BRIGHT
+ * ships per-query exclusions and scoring a document the dataset told us to drop
+ * makes the number wrong in both directions (`score.ts`).
+ */
+interface RankContext {
+  readonly port: KnowledgePort;
+  readonly options: CliOptions;
+  readonly excluded: ReadonlyMap<string, readonly string[]>;
+}
+
+const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly string[]> => {
+  const { options } = context;
+  const depth = firstPassDepth(options.depth, options.rerank);
+  const atoms = await retrieveDocs(context.port, topic.text, depth);
+  const ordered = await rerankIfRequested(topic.text, atoms, options.rerank);
+  return toDocumentRanking(ordered.slice(0, options.depth), context.excluded.get(topic.id) ?? []);
+};
+
+/** Sequential by design: one port, one index, one CPU-bound query at a time. */
+const rankAllTopics = async (
+  context: RankContext,
+  topics: readonly Topic[]
+): Promise<ReadonlyMap<string, readonly string[]>> =>
+  topics.reduce<Promise<ReadonlyMap<string, readonly string[]>>>(
+    async (pending, topic) =>
+      new Map([...(await pending), [topic.id, await rankTopic(context, topic)]]),
+    Promise.resolve(new Map())
+  );
+
+const queryDataset = async (
+  context: RankContext,
+  topics: readonly Topic[]
+): Promise<{ readonly rankings: ReadonlyMap<string, readonly string[]>; readonly queryMs: number }> => {
+  const startedAt = Date.now();
+  const rankings = await rankAllTopics(context, topics);
+  return { rankings, queryMs: Date.now() - startedAt };
+};
+
+const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
+  const dir = await ensureDataset(entry);
+  const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
+  const topics = topicsOf(readQueries(dir), qrels);
+  const prepared = await prepareDataset({
+    id: entry.id,
+    docs: readCorpus(dir),
+    workRoot: WORK_ROOT,
+    atomMaxChars: entry.atomMaxChars,
+  });
+  const port = openPort(prepared);
+  const context = { port, options, excluded: readExcluded(dir) };
+  const queried = await queryDataset(context, topics).finally(() => port.close?.());
+  const scored = scoreDataset(queried.rankings, qrels);
+  return {
+    dataset: entry.id,
+    ...corpusChecksum(resolve(dir, CORPUS_FILE)),
+    atomMaxChars: effectiveAtomMaxChars(entry),
+    topics: topics.length,
+    docCount: prepared.docCount,
+    atomCount: prepared.atomCount,
+    ingestMs: prepared.ingestMs,
+    queryMs: queried.queryMs,
+    metrics: scored.mean,
+    perTopic: scored.perTopic,
+  };
+};
+
+const metric = (value: number): string => value.toFixed(METRIC_DIGITS);
+
+const summaryLine = (result: DatasetResult): string =>
+  `${result.dataset}: nDCG@10 ${metric(result.metrics.ndcg10)}  ` +
+  `R@10 ${metric(result.metrics.recall10)}  R@100 ${metric(result.metrics.recall100)}  ` +
+  `MRR@10 ${metric(result.metrics.mrr10)}  ` +
+  `(${result.topics} topics, ${result.atomCount} atoms, ${result.ingestMs}ms ingest, ` +
+  `${result.queryMs}ms query)`;
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const attempt = async (
+  entry: DatasetEntry,
+  options: CliOptions
+): Promise<DatasetResult | undefined> => {
+  try {
+    const result = await runDataset(entry, options);
+    process.stdout.write(`${summaryLine(result)}\n`);
+    return result;
+  } catch (error) {
+    process.stderr.write(`${entry.id}: FAILED — ${messageOf(error)}\n`);
+    return undefined;
+  }
+};
+
+const isResult = (value: DatasetResult | undefined): value is DatasetResult => value !== undefined;
+
+const runAll = async (
+  entries: readonly DatasetEntry[],
+  options: CliOptions
+): Promise<readonly (DatasetResult | undefined)[]> =>
+  entries.reduce<Promise<readonly (DatasetResult | undefined)[]>>(
+    async (pending, entry) => [...(await pending), await attempt(entry, options)],
+    Promise.resolve([])
+  );
+
+const selected = (options: CliOptions): readonly DatasetEntry[] => {
+  const entries = enabledDatasets(loadManifest(MANIFEST_PATH));
+  return options.only.length === 0
+    ? entries
+    : entries.filter(entry => options.only.includes(entry.id));
+};
+
+const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
+  ts: new Date().toISOString(),
+  gitSha,
+  adapter: ADAPTER,
+  depth: options.depth,
+  rerank: options.rerank,
+});
+
+const printComparison = (): void => {
+  const history = readHistory(resolve(RESULTS_DIR, HISTORY_FILE));
+  process.stdout.write('\n-- compare (last two runs per dataset) --\n');
+  process.stdout.write(`${compareAll(history).map(formatComparison).join('\n')}\n`);
+};
+
+const record = (results: readonly DatasetResult[], options: CliOptions, sha: string): void => {
+  const written = writeRunReport({
+    resultsDir: RESULTS_DIR,
+    provenance: provenanceOf(options, sha),
+    results,
+    perTopic: options.perTopic,
+  });
+  process.stdout.write(`\nwrote ${written.markdownPath}\n`);
+};
+
+export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
+  const options = parseArgs(argv);
+  const entries = selected(options);
+  const outcomes = await runAll(entries, options);
+  const results = outcomes.filter(isResult);
+  if (results.length > 0) record(results, options, gitSha);
+  if (options.compare) printComparison();
+  return results.length === entries.length && entries.length > 0 ? 0 : FAILURE_EXIT_CODE;
+};
+
+/** Guarded so the exported helpers stay importable from a test. */
+const invokedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  process.exitCode = await main(process.argv.slice(2), currentGitSha(SUITE_ROOT));
+}

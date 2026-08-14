@@ -1,0 +1,9 @@
+{
+  "name": "dp-gnosis-bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/run.ts",
+    "test": "vitest run"
+  }
+}
