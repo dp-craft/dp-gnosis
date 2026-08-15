@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { type HistoryRow, PER_TOPIC_DIR, reportStem } from './report.js';
+import { type HistoryRow, PER_TOPIC_DIR, perTopicRelPath, reportStem } from './report.js';
 import {
   CI_LEVEL,
   pairedScores,
@@ -16,7 +16,7 @@ import {
   type TopicScores
 } from './significance.js';
 
-const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
+const BASE_ROW: HistoryRow = {
   ts: '2026-08-14T12:57:00.000Z',
   gitSha: 'aaa1111',
   dataset: 'bright-biology',
@@ -35,26 +35,53 @@ const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
   recall10: 0.2,
   recall100: 0.5,
   mrr10: 0.25,
-  ...overrides,
-});
+};
+
+/**
+ * A recorded row, carrying the per-topic path the writer would have recorded for
+ * it. `perTopicPath: undefined` in the overrides reproduces a row written before
+ * the field existed.
+ */
+const row = (overrides: Partial<HistoryRow>): HistoryRow => {
+  const merged = { ...BASE_ROW, ...overrides };
+  return { perTopicPath: perTopicRelPath(merged, merged.dataset), ...merged };
+};
 
 const tempResultsDir = (): string => mkdtempSync(resolve(tmpdir(), 'gnosis-bench-signif-'));
 
 const HEADER = 'query_id\tndcg10\trecall10\trecall100\tmrr10';
 
-/** Write a per-topic TSV at exactly the path the run reporter would have used. */
+const tsvBody = (scores: ReadonlyArray<readonly [string, number]>): string =>
+  [
+    HEADER,
+    ...scores.map(([id, value]) => `${id}\t${value.toFixed(4)}\t0.1000\t0.2000\t0.3000`),
+    '',
+  ].join('\n');
+
+/** Write a per-topic TSV at exactly the path the run reporter recorded on the row. */
 const writePerTopic = (
   resultsDir: string,
   run: HistoryRow,
   scores: ReadonlyArray<readonly [string, number]>
 ): void => {
   mkdirSync(resolve(resultsDir, PER_TOPIC_DIR), { recursive: true });
-  const lines = scores.map(
-    ([id, value]) => `${id}\t${value.toFixed(4)}\t0.1000\t0.2000\t0.3000`
+  writeFileSync(
+    resolve(resultsDir, run.perTopicPath ?? perTopicRelPath(run, run.dataset)),
+    tsvBody(scores),
+    'utf8'
   );
+};
+
+/** The legacy layout: stem + dataset only, with no adapter and no recorded path. */
+const writeLegacyPerTopic = (
+  resultsDir: string,
+  run: HistoryRow,
+  scores: ReadonlyArray<readonly [string, number]>
+): void => {
+  mkdirSync(resolve(resultsDir, PER_TOPIC_DIR), { recursive: true });
   writeFileSync(
     resolve(resultsDir, PER_TOPIC_DIR, `${reportStem(run.ts)}-${run.dataset}.tsv`),
-    [HEADER, ...lines, ''].join('\n'),
+    tsvBody(scores),
     'utf8'
   );
 };
@@ -75,13 +102,17 @@ const NULL_AFTER = [0.1, 0.4, 0.2, 0.55, 0.05, 0.7, 0.6, 0.35, 0.45, 0.15, 0.5, 
 
 const setup = (
   before: readonly number[],
-  after: readonly number[]
+  after: readonly number[],
+  latest: HistoryRow = later
 ): string => {
   const dir = tempResultsDir();
   writePerTopic(dir, row({}), paired(before));
-  writePerTopic(dir, later, paired(after));
+  writePerTopic(dir, latest, paired(after));
   return dir;
 };
+
+const meanOf = (values: readonly number[]): number =>
+  values.reduce((sum, value) => sum + value, 0) / values.length;
 
 describe('constants', () => {
   it('pins the seed, the iteration count and the CI level', () => {
@@ -94,7 +125,7 @@ describe('constants', () => {
 describe('readPerTopic', () => {
   it('reads the four metrics per query id', () => {
     const dir = setup(NULL_BEFORE, NULL_AFTER);
-    const scores = readPerTopic(perTopicPath(dir, row({})));
+    const scores = readPerTopic(perTopicPath(dir, row({})) ?? '');
     expect(scores?.size).toBe(12);
     expect(scores?.get('q000')?.ndcg10).toBeCloseTo(0.4, 6);
     expect(scores?.get('q000')?.recall100).toBeCloseTo(0.2, 6);
@@ -241,11 +272,12 @@ describe('pairedSignificance — refusals', () => {
 
 describe('pairedSignificance — treatment arms', () => {
   it('TESTS an adapter change and names the arm instead of refusing', () => {
-    const dir = setup(NULL_BEFORE, NULL_AFTER);
+    const arm = row({ ts: later.ts, gitSha: 'bbb2222', adapter: 'linear' });
+    const dir = setup(NULL_BEFORE, NULL_AFTER, arm);
     const result = pairedSignificance({
       resultsDir: dir,
       previous: row({}),
-      latest: row({ ts: later.ts, gitSha: 'bbb2222', adapter: 'linear' }),
+      latest: arm,
       metric: 'ndcg10',
     });
     expect(result.kind).toBe('verdict');
@@ -278,6 +310,65 @@ describe('pairedSignificance — treatment arms', () => {
     expect(result.kind).toBe('provenance-changed');
     if (result.kind !== 'provenance-changed') return;
     expect(result.changed.map(change => change.field).sort()).toEqual(['adapter', 'depth']);
+  });
+});
+
+describe('pairedSignificance — run attribution', () => {
+  const ARM_AFTER = NULL_BEFORE.map(value => value - 0.043);
+
+  it('pairs each arm against its OWN vector when two arms share a minute', () => {
+    const dir = tempResultsDir();
+    const fts5 = row({});
+    const lancedb = row({ adapter: 'lancedb' });
+    writePerTopic(dir, fts5, paired(NULL_BEFORE));
+    writePerTopic(dir, lancedb, paired(ARM_AFTER));
+    const result = pairedSignificance({
+      resultsDir: dir,
+      previous: fts5,
+      latest: lancedb,
+      metric: 'ndcg10',
+    });
+    expect(result.kind).toBe('verdict');
+    if (result.kind !== 'verdict') return;
+    expect(result.meanDifference).toBeCloseTo(meanOf(ARM_AFTER) - meanOf(NULL_BEFORE), 6);
+    expect(result.pValue).toBeLessThan(1);
+    expect(result.ciLow).not.toBe(result.ciHigh);
+  });
+
+  it('REFUSES a row that records no per-topic path rather than pairing it with a findable file', () => {
+    const dir = tempResultsDir();
+    const legacy = row({ perTopicPath: undefined });
+    const legacyLater = row({ ts: later.ts, gitSha: later.gitSha, perTopicPath: undefined });
+    writeLegacyPerTopic(dir, legacy, paired(NULL_BEFORE));
+    writeLegacyPerTopic(dir, legacyLater, paired(NULL_AFTER));
+    const result = pairedSignificance({
+      resultsDir: dir,
+      previous: legacy,
+      latest: legacyLater,
+      metric: 'ndcg10',
+    });
+    expect(result.kind).toBe('unattributable-run');
+    if (result.kind !== 'unattributable-run') return;
+    expect(result.runs).toEqual([
+      `${legacy.ts} (fts5)`,
+      `${legacyLater.ts} (fts5)`,
+    ]);
+  });
+
+  it('REFUSES when only the LATEST row lacks a recorded path', () => {
+    const dir = tempResultsDir();
+    const legacyLater = row({ ts: later.ts, gitSha: later.gitSha, perTopicPath: undefined });
+    writePerTopic(dir, row({}), paired(NULL_BEFORE));
+    writeLegacyPerTopic(dir, legacyLater, paired(NULL_AFTER));
+    const result = pairedSignificance({
+      resultsDir: dir,
+      previous: row({}),
+      latest: legacyLater,
+      metric: 'ndcg10',
+    });
+    expect(result.kind).toBe('unattributable-run');
+    if (result.kind !== 'unattributable-run') return;
+    expect(result.runs).toEqual([`${legacyLater.ts} (fts5)`]);
   });
 });
 
@@ -345,8 +436,8 @@ describe('pairedScores — the loaded-score seam', () => {
       latest: later,
       metric: 'ndcg10',
     });
-    const before = readPerTopic(perTopicPath(dir, row({})));
-    const after = readPerTopic(perTopicPath(dir, later));
+    const before = readPerTopic(perTopicPath(dir, row({})) ?? '');
+    const after = readPerTopic(perTopicPath(dir, later) ?? '');
     expect(before).toBeDefined();
     expect(after).toBeDefined();
     if (before === undefined || after === undefined) return;

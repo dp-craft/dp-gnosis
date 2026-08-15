@@ -197,6 +197,7 @@ const REFUSAL_REASONS: Readonly<Record<Exclude<Significance['kind'], 'verdict'>,
   'topics-differ': 'topic sets differ',
   'missing-per-topic': 'per-topic scores missing',
   'provenance-changed': 'provenance changed',
+  'unattributable-run': 'run records no per-topic path',
 };
 
 const verdictLabel = (verdict: SignificanceVerdict): string =>

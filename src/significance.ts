@@ -4,8 +4,9 @@
  * With per-topic sd around 0.20 over ~100 topics the standard error is ~0.02,
  * so a headline movement under ~0.04 on one split says nothing. Three of the
  * four recorded sweep results sit in exactly that band. This module answers the
- * question from artefacts that ALREADY exist: `results/per-topic/<stem>-<dataset>.tsv`
- * is written on every run, so a paired test costs no re-run.
+ * question from artefacts that ALREADY exist: a per-topic TSV is written on every
+ * run and its path is recorded on the run's history row, so a paired test costs
+ * no re-run and each side is read from the file its OWN run wrote.
  *
  * Two statistics over ONE paired per-topic difference vector:
  *
@@ -17,8 +18,11 @@
  * The permutation test is the IR standard (Smucker, Allan & Carterette 2007);
  * the bootstrap supplies the interval the permutation test does not.
  *
- * Two refusals are load-bearing:
+ * Three refusals are load-bearing:
  *
+ * - A run whose history row records no per-topic path is REFUSED. Deriving the
+ *   path from the timestamp lost the adapter and the second, so an arm
+ *   comparison read one file twice and reported p=1 on a real delta.
  * - Provenance is delegated to `compare.ts` verbatim. A test between two runs
  *   whose measuring scale moved would put a significance stamp on the exact
  *   error that module exists to prevent, so the same guard governs both.
@@ -36,7 +40,7 @@ import { resolve } from 'node:path';
 
 import { type ProvenanceChange, provenanceChanges, scaleChanges, treatmentChanges } from './compare.js';
 import type { Metrics } from './metrics.js';
-import { type HistoryRow, PER_TOPIC_DIR, reportStem } from './report.js';
+import type { HistoryRow } from './report.js';
 
 /** Fixed so a re-run reproduces the p-value exactly; any value works, this one is arbitrary-but-pinned. */
 export const SIGNIFICANCE_SEED = 0x5eed_0d17;
@@ -118,11 +122,25 @@ export interface SignificanceMissingPerTopic {
   readonly paths: readonly string[];
 }
 
+/**
+ * A run's history row records no per-topic path, so its OWN score vector cannot
+ * be identified. Refusing is the whole point: the derivable name carries neither
+ * the adapter nor the second, so falling back to it pairs an arm with whichever
+ * run happened to write that file — usually itself, at p=1 and zero width.
+ */
+export interface SignificanceUnattributableRun {
+  readonly kind: 'unattributable-run';
+  readonly dataset: string;
+  /** `<ts> (<adapter>)` for each row that cannot name its scores. */
+  readonly runs: readonly string[];
+}
+
 export type Significance =
   | SignificanceVerdict
   | SignificanceProvenanceChanged
   | SignificanceTopicsDiffer
-  | SignificanceMissingPerTopic;
+  | SignificanceMissingPerTopic
+  | SignificanceUnattributableRun;
 
 /** The two runs to pair, and the measure to test. */
 export interface PairedSignificanceOptions {
@@ -245,11 +263,13 @@ export const readPerTopic = (path: string): TopicScores | undefined => {
 };
 
 /**
- * Where the run's per-topic TSV lives. The stem is derived from `ts` by the
- * same `reportStem` the writer used, so the two cannot drift.
+ * Where the run's per-topic TSV lives — READ off the row the writer recorded it
+ * on, never derived. `undefined` for a row written before the field existed:
+ * a derived path is unattributable across adapters and across two runs of the
+ * same minute, and an unattributable path is what pairs a run with itself.
  */
-export const perTopicPath = (resultsDir: string, run: HistoryRow): string =>
-  resolve(resultsDir, PER_TOPIC_DIR, `${reportStem(run.ts)}-${run.dataset}.tsv`);
+export const perTopicPath = (resultsDir: string, run: HistoryRow): string | undefined =>
+  run.perTopicPath === undefined ? undefined : resolve(resultsDir, run.perTopicPath);
 
 const missingFrom = (left: TopicScores, right: TopicScores): readonly string[] =>
   [...left.keys()].filter(id => !right.has(id)).sort();
@@ -306,20 +326,51 @@ export const pairedScores = (
 };
 
 interface LoadedRun {
-  readonly path: string;
+  readonly row: HistoryRow;
+  /** `undefined` when the row records no path — the run is unattributable. */
+  readonly path: string | undefined;
   readonly scores: TopicScores | undefined;
 }
 
-const loadRun = (resultsDir: string, run: HistoryRow): LoadedRun => {
-  const path = perTopicPath(resultsDir, run);
-  return { path, scores: readPerTopic(path) };
+const loadRun = (resultsDir: string, row: HistoryRow): LoadedRun => {
+  const path = perTopicPath(resultsDir, row);
+  return { row, path, scores: path === undefined ? undefined : readPerTopic(path) };
 };
 
 const unreadable = (dataset: string, runs: readonly LoadedRun[]): SignificanceMissingPerTopic => ({
   kind: 'missing-per-topic',
   dataset,
-  paths: runs.filter(run => run.scores === undefined).map(run => run.path),
+  paths: runs.flatMap(run => (run.scores === undefined && run.path !== undefined ? [run.path] : [])),
 });
+
+const unattributable = (
+  dataset: string,
+  runs: readonly LoadedRun[]
+): SignificanceUnattributableRun => ({
+  kind: 'unattributable-run',
+  dataset,
+  runs: runs
+    .filter(run => run.path === undefined)
+    .map(run => `${run.row.ts} (${run.row.adapter})`),
+});
+
+/**
+ * The test, or the refusal that precedes it. Attribution is checked BEFORE
+ * readability: a row that cannot name its scores has no path to report missing.
+ */
+const pairedRuns = (
+  dataset: string,
+  metric: MetricName,
+  runs: readonly [LoadedRun, LoadedRun]
+): Significance => {
+  const [before, after] = runs;
+  if (before.path === undefined || after.path === undefined) {
+    return unattributable(dataset, runs);
+  }
+  return before.scores === undefined || after.scores === undefined
+    ? unreadable(dataset, runs)
+    : pairedScores(dataset, metric, before.scores, after.scores);
+};
 
 /** The arms carried onto the verdict, so a p-value never travels unlabelled. */
 const withArms = (
@@ -345,11 +396,12 @@ export const pairedSignificance = (options: PairedSignificanceOptions): Signific
       changed: provenanceChanges(options.previous, options.latest),
     };
   }
-  const before = loadRun(options.resultsDir, options.previous);
-  const after = loadRun(options.resultsDir, options.latest);
-  const paired =
-    before.scores === undefined || after.scores === undefined
-      ? unreadable(dataset, [before, after])
-      : pairedScores(dataset, options.metric, before.scores, after.scores);
-  return withArms(paired, treatmentChanges(options.previous, options.latest));
+  const runs = [
+    loadRun(options.resultsDir, options.previous),
+    loadRun(options.resultsDir, options.latest),
+  ] as const;
+  return withArms(
+    pairedRuns(dataset, options.metric, runs),
+    treatmentChanges(options.previous, options.latest)
+  );
 };

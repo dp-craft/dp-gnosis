@@ -5,7 +5,7 @@
  * |---|---|
  * | `<stem>-<sha>.md` | a human reads one row per dataset |
  * | `<stem>-<sha>.json` | the same numbers, machine-readable, for a later diff |
- * | `per-topic/<stem>-<dataset>.tsv` | per-topic scores, so a paired test can be run LATER without re-running the benchmark |
+ * | `per-topic/<instant>-<adapter>-<dataset>.tsv` | per-topic scores, so a paired test can be run LATER without re-running the benchmark |
  * | `history.jsonl` | one line per (run, dataset) — the progress table `--compare` reads |
  *
  * The history row carries PROVENANCE next to the metrics, and that is the whole
@@ -108,6 +108,13 @@ export interface HistoryRow extends Metrics {
   readonly corpusBytes: number;
   readonly corpusLines: number;
   readonly adapter: string;
+  /**
+   * The run's OWN per-topic TSV, relative to the results directory. Absent on
+   * rows written before it existed, and a paired test REFUSES such a row rather
+   * than deriving a path: a derived name cannot tell two arms recorded in the
+   * same minute apart, so the derivation silently pairs a run with itself.
+   */
+  readonly perTopicPath?: string;
   /** `null` only in rows written before the effective value was recorded. */
   readonly atomMaxChars: number | null;
   readonly depth: number;
@@ -146,6 +153,26 @@ export const reportStem = (generatedAt: string): string => {
   const time = generatedAt.slice(DATE_CHARS + 1, DATE_CHARS + 1 + TIME_CHARS).replace(':', '');
   return `${date}-${time}`;
 };
+
+/** Through the milliseconds: `2026-08-14T09:30:12.345Z` → `2026-08-14-093012345`. */
+const RUN_STAMP_CHARS = 23;
+
+/**
+ * The run instant at millisecond resolution — the report stem's minute cannot
+ * separate two runs launched in the same minute.
+ */
+export const runStamp = (generatedAt: string): string =>
+  generatedAt.slice(0, RUN_STAMP_CHARS).replace('T', '-').replace(/[:.]/g, '');
+
+/**
+ * `per-topic/<instant>-<adapter>-<dataset>.tsv`, relative to the results dir.
+ *
+ * Adapter and instant are BOTH in the name because either alone still collides:
+ * two arms of one comparison share a minute, and two runs of one arm share an
+ * adapter. The row records this exact string, so a reader never re-derives it.
+ */
+export const perTopicRelPath = (provenance: RunProvenance, dataset: string): string =>
+  `${PER_TOPIC_DIR}/${runStamp(provenance.ts)}-${provenance.adapter}-${dataset}.tsv`;
 
 /** Recorded when the tree is not a git checkout — never silently omitted. */
 export const UNKNOWN_SHA = 'unknown';
@@ -213,6 +240,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   corpusBytes: result.corpusBytes,
   corpusLines: result.corpusLines,
   adapter: provenance.adapter,
+  perTopicPath: perTopicRelPath(provenance, result.dataset),
   atomMaxChars: result.atomMaxChars,
   depth: provenance.depth,
   rerank: provenance.rerank,
@@ -323,10 +351,10 @@ export const renderPerTopicTsv = (perTopic: readonly TopicScore[]): string =>
 
 const writePerTopic = (
   resultsDir: string,
-  stem: string,
+  provenance: RunProvenance,
   result: DatasetResult
 ): string => {
-  const path = resolve(resultsDir, PER_TOPIC_DIR, `${stem}-${result.dataset}.tsv`);
+  const path = resolve(resultsDir, perTopicRelPath(provenance, result.dataset));
   writeFileSync(path, renderPerTopicTsv(result.perTopic), 'utf8');
   return path;
 };
@@ -336,9 +364,11 @@ const writePerTopic = (
  * re-analysed later (a paired test, a required-sample-size estimate) without
  * paying for the whole benchmark again.
  */
-const writePerTopicFiles = (options: RunReportOptions, stem: string): readonly string[] => {
+const writePerTopicFiles = (options: RunReportOptions): readonly string[] => {
   mkdirSync(resolve(options.resultsDir, PER_TOPIC_DIR), { recursive: true });
-  return options.results.map(result => writePerTopic(options.resultsDir, stem, result));
+  return options.results.map(result =>
+    writePerTopic(options.resultsDir, options.provenance, result)
+  );
 };
 
 /**
@@ -358,6 +388,6 @@ export const writeRunReport = (options: RunReportOptions): WrittenReport => {
     markdownPath: `${base}.md`,
     jsonPath: `${base}.json`,
     historyPath,
-    perTopicPaths: writePerTopicFiles(options, stem),
+    perTopicPaths: writePerTopicFiles(options),
   };
 };

@@ -96,6 +96,7 @@ describe('writeRunReport', () => {
         'recall100Sd',
         'recall10Sd',
         'rerank',
+        'perTopicPath',
         'topics',
         'ts',
       ].sort()
@@ -146,6 +147,28 @@ describe('writeRunReport', () => {
     expect(markdown).toContain('abstract');
     expect(written.perTopicPaths).toHaveLength(1);
     expect(readFileSync(written.perTopicPaths[0] ?? '', 'utf8')).toContain('q1');
+  });
+
+  it('records on the row the per-topic file it just wrote, keyed by adapter and instant', () => {
+    const dir = tempResultsDir();
+    const written = writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(row?.perTopicPath).toBe('per-topic/2026-08-14-093000000-fts5-scifact.tsv');
+    expect(resolve(dir, row?.perTopicPath ?? '')).toBe(written.perTopicPaths[0]);
+    expect(readFileSync(resolve(dir, row?.perTopicPath ?? ''), 'utf8')).toContain('q1');
+  });
+
+  it('gives two adapters run in the same minute their own per-topic files', () => {
+    const dir = tempResultsDir();
+    writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, adapter: 'lancedb' },
+      results: [result],
+    });
+    const rows = readHistory(resolve(dir, HISTORY_FILE));
+    expect(rows[0]?.perTopicPath).not.toBe(rows[1]?.perTopicPath);
+    expect(rows[1]?.perTopicPath).toContain('lancedb');
   });
 
   it('keeps appending: a second run adds a row rather than replacing the record', () => {
