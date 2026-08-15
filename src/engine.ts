@@ -46,6 +46,7 @@ import {
   createPort,
   hasPersistentIndex
 } from '../../dp-gnosis/src/cli/adapter.js';
+import type { RerankFusion } from '../../dp-gnosis/src/config.js';
 import { ingest } from '../../dp-gnosis/src/ingest.js';
 import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
@@ -477,14 +478,19 @@ export const retrieveDocs = async (
  * this suite exists to make impossible. `rerankAtoms` already refuses loudly
  * when 127.0.0.1:9292 is down or serves no reranker; the message is carried
  * through verbatim.
+ *
+ * `fusion` is the ENGINE's own resolution of a named protocol, passed straight
+ * through. Omitting it measures the shipped default, so this stays the one seam
+ * — the bench selects a rule, it never builds one.
  */
 export const rerankIfRequested = async (
   query: string,
   atoms: readonly RetrievedAtom[],
-  requested: boolean
+  requested: boolean,
+  fusion?: RerankFusion
 ): Promise<readonly RetrievedAtom[]> => {
   if (!requested) return atoms;
-  const outcome = await rerankAtoms(query, atoms);
+  const outcome = await rerankAtoms(query, atoms, { fusion });
   return outcome.ok
     ? outcome.atoms
     : fail(`dp-gnosis-bench: rerank refused — ${outcome.error}`, RERANK_REFUSED_CAUSE);

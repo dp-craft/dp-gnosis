@@ -16,6 +16,7 @@
  * | measuring scale | `corpusBytes` / `corpusLines` | a different corpus — the cheap checksum |
  * | treatment | `adapter` | a different engine path — the thing an A/B run exists to compare |
  * | treatment | `rerank` | a second-stage model in the loop, or not |
+ * | treatment | `rerankProfile` / `rerankWeight` | a different FUSION rule over the same two orders |
  *
  * A moved SCALE is still refused: the two numbers are not on one axis and no
  * label can rescue them. A moved TREATMENT is the experiment, so it is compared
@@ -38,7 +39,12 @@ export const SCALE_FIELDS = [
 ] as const;
 
 /** Fields that name the TREATMENT under measurement; a move IS the experiment. */
-export const TREATMENT_FIELDS = ['adapter', 'rerank'] as const;
+export const TREATMENT_FIELDS = [
+  'adapter',
+  'rerank',
+  'rerankProfile',
+  'rerankWeight',
+] as const;
 
 export type ScaleField = (typeof SCALE_FIELDS)[number];
 export type TreatmentField = (typeof TREATMENT_FIELDS)[number];

@@ -167,6 +167,18 @@ describe('writeRunReport', () => {
     expect(rows[0]?.rerank).toBe(false);
   });
 
+  it('records the rerank protocol on the row, so --compare can see a fusion change', () => {
+    const dir = tempResultsDir();
+    writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, rerank: true, rerankProfile: 'beir-ce' },
+      results: [result],
+    });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(row?.rerankProfile).toBe('beir-ce');
+    expect(row?.rerankWeight).toBeUndefined();
+  });
+
   it('carries the dataset descriptors so runs can be grouped by domain', () => {
     const dir = tempResultsDir();
     writeRunReport({ resultsDir: dir, provenance, results: [result] });

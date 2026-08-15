@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { compareAll, compareLastTwo, formatComparison } from './compare.js';
+import {
+  compareAll,
+  compareLastTwo,
+  formatComparison,
+  PROVENANCE_FIELDS,
+  SCALE_FIELDS,
+  TREATMENT_FIELDS
+} from './compare.js';
 import type { HistoryRow } from './report.js';
 
 const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
@@ -74,6 +81,41 @@ describe('compareLastTwo', () => {
     expect(line).toContain('ARM COMPARISON');
     expect(line).toContain('adapter');
     expect(line).toContain('+0.0500');
+  });
+
+  it('COMPARES a rerankProfile change as an arm comparison, never subtracting it silently', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankProfile: 'shipped' }),
+        row({ gitSha: 'bbb2222', rerank: true, rerankProfile: 'beir-ce', ndcg10: 0.63 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['rerankProfile']);
+    const line = formatComparison(result);
+    expect(line).toContain('ARM COMPARISON');
+    expect(line).toContain('rerankProfile');
+  });
+
+  it('COMPARES a raw rerankWeight override as an arm comparison too', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankProfile: 'shipped' }),
+        row({ gitSha: 'bbb2222', rerank: true, rerankProfile: 'shipped', rerankWeight: 0.8 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['rerankWeight']);
+  });
+
+  it('guards the rerank protocol through the DERIVED union, not a hand-written list', () => {
+    expect(TREATMENT_FIELDS).toContain('rerankProfile');
+    expect(TREATMENT_FIELDS).toContain('rerankWeight');
+    expect(PROVENANCE_FIELDS).toEqual([...SCALE_FIELDS, ...TREATMENT_FIELDS]);
   });
 
   it('COMPARES a rerank change as an arm comparison — that IS the experiment', () => {

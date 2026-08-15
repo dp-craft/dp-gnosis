@@ -37,6 +37,7 @@ import { currentGitSha, runStamp } from './report.js';
 import {
   ensureDataset,
   MANIFEST_PATH,
+  parseArgs,
   prepareOf,
   queryDataset,
   SUITE_ROOT,
@@ -213,7 +214,9 @@ export const measureCell = async (
   });
   const rankContext = {
     port,
-    options: { only: [], depth: run.depth, rerank: false, compare: false, adapter: ADAPTER },
+    // The bench defaults, with only what a grid cell varies overridden — the sweep
+    // never reranks, so it states no rerank protocol of its own.
+    options: { ...parseArgs([]), depth: run.depth, adapter: ADAPTER },
     excluded: context.excluded,
   };
   const queried = await queryDataset(rankContext, context.topics).finally(() => port.close?.());

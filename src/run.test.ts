@@ -4,7 +4,13 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
+import {
+  ATOM_MAX_CHARS,
+  DEFAULT_RERANK_PRESET,
+  RERANK_FUSION_PRESETS,
+  RERANK_K_INIT,
+  RERANK_RRF_K
+} from '../../dp-gnosis/src/config.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import {
   type DatasetResult,
@@ -34,6 +40,9 @@ describe('parseArgs', () => {
       rerank: false,
       compare: false,
       adapter: BENCH_DEFAULT_ADAPTER,
+      rerankProfile: DEFAULT_RERANK_PRESET,
+      rerankWeight: undefined,
+      rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
     });
   });
 
@@ -45,6 +54,9 @@ describe('parseArgs', () => {
         rerank: true,
         compare: true,
         adapter: BENCH_DEFAULT_ADAPTER,
+        rerankProfile: DEFAULT_RERANK_PRESET,
+        rerankWeight: undefined,
+        rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
       });
   });
 
@@ -56,6 +68,34 @@ describe('parseArgs', () => {
   it('FAILS LOUDLY on an unknown adapter rather than falling back', () => {
     expect(() => parseArgs(['--adapter', 'faiss'])).toThrow(/faiss/);
     expect(() => parseArgs(['--adapter', 'faiss'])).toThrow(/fts5/);
+  });
+
+  it('reads --rerank-profile as a NAME the engine resolves into its fusion rule', () => {
+    const options = parseArgs(['--rerank', '--rerank-profile', 'beir-ce']);
+    expect(options.rerankProfile).toBe('beir-ce');
+    expect(options.rerankFusion).toEqual({ kind: 'replace' });
+  });
+
+  it('FAILS LOUDLY on an unknown rerank profile, naming it and the known ones', () => {
+    expect(() => parseArgs(['--rerank-profile', 'monot5'])).toThrow(/monot5/);
+    expect(() => parseArgs(['--rerank-profile', 'monot5'])).toThrow(/shipped/);
+    expect(() => parseArgs(['--rerank-profile', 'monot5'])).toThrow(/beir-ce/);
+  });
+
+  it('applies --rerank-weight as a raw override on the named preset', () => {
+    const options = parseArgs(['--rerank', '--rerank-weight', '0.8']);
+    expect(options.rerankWeight).toBe(0.8);
+    expect(options.rerankFusion).toEqual({ kind: 'rrf', rrfK: RERANK_RRF_K, rerankWeight: 0.8 });
+  });
+
+  it('FAILS LOUDLY on a non-numeric --rerank-weight rather than measuring NaN', () => {
+    expect(() => parseArgs(['--rerank-weight', 'half'])).toThrow(/half/);
+  });
+
+  it('FAILS LOUDLY when a weight is overridden on a preset that has no weight term', () => {
+    expect(() => parseArgs(['--rerank-profile', 'beir-ce', '--rerank-weight', '0.8'])).toThrow(
+      /beir-ce/
+    );
   });
 });
 

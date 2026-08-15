@@ -54,6 +54,12 @@ export interface RunProvenance {
   readonly adapter: string;
   readonly depth: number;
   readonly rerank: boolean;
+  /**
+   * The rerank protocol BY NAME, and any raw weight override. Both absent on a
+   * run that did not rerank — there is no protocol to record for one.
+   */
+  readonly rerankProfile?: string | undefined;
+  readonly rerankWeight?: number | undefined;
 }
 
 /** One dataset's outcome plus the provenance that is specific to that dataset. */
@@ -141,6 +147,14 @@ export interface HistoryRow extends Metrics {
   readonly atomMaxChars: number | null;
   readonly depth: number;
   readonly rerank: boolean;
+  /**
+   * The rerank protocol this row was measured under, and the raw weight when one
+   * was overridden. Both are TREATMENT provenance (`compare.ts`), so a fusion-rule
+   * change is labelled an arm comparison instead of being subtracted. Absent on a
+   * BM25-only row, and on every row recorded before the protocol was nameable.
+   */
+  readonly rerankProfile?: string;
+  readonly rerankWeight?: number;
   readonly topics: number;
   readonly docCount: number;
   readonly atomCount: number;
@@ -300,6 +314,8 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   atomMaxChars: result.atomMaxChars,
   depth: provenance.depth,
   rerank: provenance.rerank,
+  rerankProfile: provenance.rerankProfile,
+  rerankWeight: provenance.rerankWeight,
   ...descriptorFields(result),
   ...costFields(result),
   ...result.metrics,

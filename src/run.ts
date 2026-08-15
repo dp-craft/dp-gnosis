@@ -35,8 +35,13 @@ import {
   type AdapterName,
   resolveAdapter
 } from '../../dp-gnosis/src/cli/adapter.js';
-import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
+import {
+  ATOM_MAX_CHARS,
+  DEFAULT_RERANK_PRESET,
+  RERANK_K_INIT,
+  type RerankFusion } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
+import { resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
 import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
 import { compareAll, type Comparison, formatComparison } from './compare.js';
 import {
@@ -92,6 +97,15 @@ export interface CliOptions {
   readonly compare: boolean;
   /** The adapter arm under measurement; recorded as provenance. */
   readonly adapter: AdapterName;
+  /**
+   * The rerank protocol BY NAME — what the run records, and what a reader of
+   * `history.jsonl` compares. The bench never restates the fusion rule itself.
+   */
+  readonly rerankProfile: string;
+  /** A raw weight override on the named preset; `undefined` means the preset's own. */
+  readonly rerankWeight: number | undefined;
+  /** The engine's resolution of that name, resolved ONCE so a bad one fails before any dataset. */
+  readonly rerankFusion: RerankFusion;
 }
 
 /** A scorable query: judged by the qrels, so it can contribute a non-zero mean. */
@@ -120,13 +134,43 @@ const parseAdapter = (value: string | undefined): AdapterName => {
   return adapter;
 };
 
-export const parseArgs = (argv: readonly string[]): CliOptions => ({
-  only: csv(flagValue(argv, '--only')),
-  depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
-  rerank: argv.includes('--rerank'),
-  compare: argv.includes('--compare'),
-  adapter: parseAdapter(flagValue(argv, '--adapter')),
-});
+/** A weight that is not a number would be measured as `NaN` and recorded as a run. */
+const parseRerankWeight = (value: string | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  const weight = Number(value);
+  if (Number.isFinite(weight)) return weight;
+  throw new Error(`dp-gnosis-bench: --rerank-weight expects a number, got "${value}"`);
+};
+
+/**
+ * The fusion rule the NAME selects, resolved by the ENGINE — the bench must not
+ * reimplement fusion, or the suite would stop measuring the shipped path. An
+ * unknown name (or a weight override on a preset with no weight term) refuses
+ * here, before a single dataset is touched, exactly as `--adapter` does: a
+ * fallback would publish a number under the wrong protocol label.
+ */
+const parseRerankFusion = (profile: string, rerankWeight: number | undefined): RerankFusion => {
+  try {
+    return resolveRerankFusion(profile, { rerankWeight });
+  } catch (error) {
+    throw new Error(`dp-gnosis-bench: ${messageOf(error)}`);
+  }
+};
+
+export const parseArgs = (argv: readonly string[]): CliOptions => {
+  const rerankProfile = flagValue(argv, '--rerank-profile') ?? DEFAULT_RERANK_PRESET;
+  const rerankWeight = parseRerankWeight(flagValue(argv, '--rerank-weight'));
+  return {
+    only: csv(flagValue(argv, '--only')),
+    depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
+    rerank: argv.includes('--rerank'),
+    compare: argv.includes('--compare'),
+    adapter: parseAdapter(flagValue(argv, '--adapter')),
+    rerankProfile,
+    rerankWeight,
+    rerankFusion: parseRerankFusion(rerankProfile, rerankWeight),
+  };
+};
 
 /**
  * Where a dataset's BEIR files are. `beir-local` points at a directory that
@@ -204,7 +248,12 @@ const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly s
   const { options } = context;
   const depth = firstPassDepth(options.depth, options.rerank);
   const atoms = await retrieveDocs(context.port, topic.text, depth);
-  const ordered = await rerankIfRequested(topic.text, atoms, options.rerank);
+  const ordered = await rerankIfRequested(
+    topic.text,
+    atoms,
+    options.rerank,
+    options.rerankFusion
+  );
   return toDocumentRanking(ordered.slice(0, options.depth), context.excluded.get(topic.id) ?? []);
 };
 
@@ -447,12 +496,19 @@ export const selectionError = (selection: Selection): string | undefined => {
     : undefined;
 };
 
+/**
+ * The rerank protocol is recorded ONLY on a rerank run: a row that reranked
+ * nothing has no protocol, and stamping the default on it would make every new
+ * BM25 row differ from every legacy one on a treatment field it never used.
+ */
 const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
   ts: new Date().toISOString(),
   gitSha,
   adapter: options.adapter,
   depth: options.depth,
   rerank: options.rerank,
+  rerankProfile: options.rerank ? options.rerankProfile : undefined,
+  rerankWeight: options.rerank ? options.rerankWeight : undefined,
 });
 
 /** The headline; the other three metrics are read off the delta line above it. */
