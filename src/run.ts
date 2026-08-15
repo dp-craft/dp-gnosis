@@ -16,7 +16,9 @@
  *    process exits non-zero, because a partial run silently reported as complete
  *    is the failure mode this suite exists to prevent. For the same reason an
  *    unknown `--only` id, and any selection that measures nothing, exit 1 with a
- *    message on stderr before a single dataset is touched.
+ *    message on stderr before a single dataset is touched. Each dataset is
+ *    RECORDED as it completes, so the same holds when the PROCESS dies rather
+ *    than a dataset — the reason the buffered form was replaced.
  * 3. **Topics come from the qrels, not the query file.** A query with no
  *    judgments cannot be scored; including it would divide the mean by a topic
  *    that could only ever contribute 0.
@@ -54,8 +56,9 @@ import {
   type DatasetResult,
   HISTORY_FILE,
   readHistory,
+  recordDataset,
   type RunProvenance,
-  writeRunReport
+  writeRunSummary
 } from './report.js';
 import { type DatasetScore, scoreDataset, toDocumentRanking } from './score.js';
 import { type MetricName, pairedSignificance, type Significance } from './significance.js';
@@ -354,13 +357,31 @@ const summaryLine = (result: DatasetResult): string =>
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/**
+ * The two halves of one dataset's turn, injected so the loop below can be driven
+ * with a failing dataset in a test — the property it guards (an earlier dataset
+ * is already on disk when a later one dies) is unobservable from a whole-suite
+ * call, which is precisely how it went unnoticed until an OOM cost 67.5 minutes
+ * of measurement.
+ */
+export interface DatasetRun {
+  readonly measure: (entry: DatasetEntry) => Promise<DatasetResult>;
+  readonly record: (result: DatasetResult) => void;
+}
+
+/**
+ * Recording happens INSIDE the try: a dataset that measured but could not be
+ * written down has not been recorded, and the run's contract counts recorded
+ * datasets, not measured ones.
+ */
 const attempt = async (
   entry: DatasetEntry,
-  options: CliOptions
+  run: DatasetRun
 ): Promise<DatasetResult | undefined> => {
   try {
-    const result = await runDataset(entry, options);
+    const result = await run.measure(entry);
     process.stdout.write(`${summaryLine(result)}\n`);
+    run.record(result);
     return result;
   } catch (error) {
     process.stderr.write(`${entry.id}: FAILED — ${messageOf(error)}\n`);
@@ -370,14 +391,22 @@ const attempt = async (
 
 const isResult = (value: DatasetResult | undefined): value is DatasetResult => value !== undefined;
 
-const runAll = async (
+/**
+ * Each dataset is recorded the moment it finishes, BEFORE the next one starts.
+ * Buffering to the end made "a partial run must never look complete" true only
+ * for a dataset failure: a process death (OOM, 2026-08-15, six datasets in) lost
+ * every completed dataset because not one row had been written.
+ */
+export const measureAndRecordAll = async (
   entries: readonly DatasetEntry[],
-  options: CliOptions
-): Promise<readonly (DatasetResult | undefined)[]> =>
-  entries.reduce<Promise<readonly (DatasetResult | undefined)[]>>(
-    async (pending, entry) => [...(await pending), await attempt(entry, options)],
-    Promise.resolve([])
-  );
+  run: DatasetRun
+): Promise<readonly DatasetResult[]> =>
+  (
+    await entries.reduce<Promise<readonly (DatasetResult | undefined)[]>>(
+      async (pending, entry) => [...(await pending), await attempt(entry, run)],
+      Promise.resolve([])
+    )
+  ).filter(isResult);
 
 /** What `--only` resolved to, and the ids it could not resolve. */
 export interface Selection {
@@ -461,12 +490,12 @@ const printComparison = (): void => {
   process.stdout.write(`${compareAll(history).flatMap(comparisonLines).join('\n')}\n`);
 };
 
-const record = (results: readonly DatasetResult[], options: CliOptions, sha: string): void => {
-  const written = writeRunReport({
-    resultsDir: RESULTS_DIR,
-    provenance: provenanceOf(options, sha),
-    results,
-  });
+/**
+ * The whole-run view, over exactly the datasets that ran. It adds no record —
+ * every one of them was already written down as it finished.
+ */
+const summarize = (provenance: RunProvenance, results: readonly DatasetResult[]): void => {
+  const written = writeRunSummary({ resultsDir: RESULTS_DIR, provenance, results });
   process.stdout.write(`\nwrote ${written.markdownPath}\n`);
 };
 
@@ -474,13 +503,24 @@ const record = (results: readonly DatasetResult[], options: CliOptions, sha: str
 const exitCode = (recorded: number, selectedCount: number): number =>
   recorded === selectedCount ? 0 : FAILURE_EXIT_CODE;
 
+/**
+ * The provenance is stamped ONCE, before the first dataset: it names the
+ * per-dataset artefact paths and the summary stem alike, so a suite that
+ * completes leaves a summary whose stem matches the rows it describes.
+ */
 const runSelection = async (
   entries: readonly DatasetEntry[],
   options: CliOptions,
   gitSha: string
 ): Promise<number> => {
-  const results = (await runAll(entries, options)).filter(isResult);
-  if (results.length > 0) record(results, options, gitSha);
+  const provenance = provenanceOf(options, gitSha);
+  const results = await measureAndRecordAll(entries, {
+    measure: entry => runDataset(entry, options),
+    record: result => {
+      recordDataset({ resultsDir: RESULTS_DIR, provenance, result });
+    },
+  });
+  if (results.length > 0) summarize(provenance, results);
   if (options.compare) printComparison();
   return exitCode(results.length, entries.length);
 };

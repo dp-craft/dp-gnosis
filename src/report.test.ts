@@ -9,16 +9,40 @@ import {
   HISTORY_FILE,
   type HistoryRow,
   readHistory,
+  recordDataset,
   renderTrecRun,
   reportStem,
   runFilePath,
   runFileRelPath,
   type RunProvenance,
+  type RunReportOptions,
   runTag,
-  writeRunReport
+  writeRunSummary
 } from './report.js';
 
 const tempResultsDir = (): string => mkdtempSync(resolve(tmpdir(), 'gnosis-bench-report-'));
+
+interface WrittenReport {
+  readonly markdownPath: string;
+  readonly jsonPath: string;
+  readonly perTopicPaths: readonly string[];
+  readonly runPaths: readonly string[];
+}
+
+/**
+ * A whole suite that finishes normally, in the order `run.ts` produces it: every
+ * dataset recorded as it completes, then the one end-of-run summary.
+ */
+const writeRunReport = (options: RunReportOptions): WrittenReport => {
+  const recorded = options.results.map(result =>
+    recordDataset({ resultsDir: options.resultsDir, provenance: options.provenance, result })
+  );
+  return {
+    ...writeRunSummary(options),
+    perTopicPaths: recorded.map(entry => entry.perTopicPath),
+    runPaths: recorded.map(entry => entry.runPath),
+  };
+};
 
 const provenance: RunProvenance = {
   ts: '2026-08-14T09:30:00.000Z',

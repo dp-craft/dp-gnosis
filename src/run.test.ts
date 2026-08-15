@@ -1,13 +1,25 @@
+import { existsSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
+import {
+  type DatasetResult,
+  HISTORY_FILE,
+  readHistory,
+  recordDataset,
+  type RunProvenance
+} from './report.js';
 import {
   BENCH_DEFAULT_ADAPTER,
   effectiveAtomMaxChars,
   firstPassDepth,
   main,
   MANIFEST_PATH,
+  measureAndRecordAll,
   parseArgs,
   percentileMs,
   selectDatasets,
@@ -150,5 +162,75 @@ describe('main dataset selection', () => {
     stdout.mockRestore();
     expect(code).not.toBe(0);
     expect(written).toContain('vault-hu-typo');
+  });
+});
+
+const FLAT_METRICS = {
+  ndcg10: 0.5,
+  recall10: 0.5,
+  recall20: 0.5,
+  recall100: 0.5,
+  recall300: undefined,
+  recall1000: undefined,
+  mrr10: 0.5,
+};
+
+const resultFor = (dataset: string): DatasetResult => ({
+  dataset,
+  domain: 'test-domain',
+  docShape: 'abstract',
+  corpusBytes: 10,
+  corpusLines: 2,
+  atomMaxChars: 4000,
+  topics: 1,
+  docCount: 2,
+  atomCount: 2,
+  ingestMs: 1,
+  queryMs: 1,
+  queryP50Ms: 1,
+  queryP95Ms: 1,
+  metrics: FLAT_METRICS,
+  metricsSd: FLAT_METRICS,
+  perTopic: [{ queryId: 'q1', metrics: FLAT_METRICS }],
+  rankings: new Map([['q1', ['doc-a']]]),
+});
+
+const testProvenance: RunProvenance = {
+  ts: '2026-08-15T10:00:00.000Z',
+  gitSha: 'sha1234',
+  adapter: 'fts5',
+  depth: 100,
+  rerank: false,
+};
+
+/**
+ * The 2026-08-15 failure: a 67.5-minute run completed six datasets, died of an
+ * OOM on the seventh, and wrote ZERO history rows because every artefact was
+ * buffered to the end. The property that has to hold is per-dataset, not
+ * per-run: when dataset N fails, 1…N−1 are already on disk.
+ */
+describe('measureAndRecordAll', () => {
+  it('has already recorded datasets 1…N−1 when dataset N throws', async () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-run-'));
+    const entries = loadManifest(MANIFEST_PATH).slice(0, 3);
+    const failing = entries[2]?.id ?? '';
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const results = await measureAndRecordAll(entries, {
+      measure: async entry => {
+        if (entry.id === failing) throw new Error('Reached heap limit Allocation failed');
+        return resultFor(entry.id);
+      },
+      record: result => {
+        recordDataset({ resultsDir: dir, provenance: testProvenance, result });
+      },
+    });
+    stdout.mockRestore();
+    stderr.mockRestore();
+    const rows = readHistory(resolve(dir, HISTORY_FILE));
+    expect(rows.map(row => row.dataset)).toEqual([entries[0]?.id, entries[1]?.id]);
+    expect(results.map(result => result.dataset)).toEqual([entries[0]?.id, entries[1]?.id]);
+    expect(rows.every(row => existsSync(resolve(dir, row.perTopicPath ?? '')))).toBe(true);
+    expect(rows.every(row => existsSync(resolve(dir, row.runPath ?? '')))).toBe(true);
   });
 });

@@ -9,6 +9,9 @@
  * | `runs/<instant>-<adapter>-<dataset>.trec` | the per-topic RANKINGS, in the format an external evaluator already reads |
  * | `history.jsonl` | one line per (run, dataset) — the progress table `--compare` reads |
  *
+ * The first three are written PER DATASET, as it completes (`recordDataset`);
+ * only the `.md`/`.json` summary is a whole-run artefact (`writeRunSummary`).
+ *
  * The history row carries PROVENANCE next to the metrics, and that is the whole
  * point of the file. Commit `0ee258ea` changed the measuring scale and the
  * numbers were chained across it anyway, because nothing recorded what the
@@ -86,7 +89,7 @@ export interface DatasetResult {
   readonly perTopic: readonly TopicScore[];
   /**
    * The document ranking per topic, in rank order — the run file's whole input.
-   * Kept OUT of the JSON summary (`writeRunReport`): the rankings are two orders
+   * Kept OUT of the JSON summary (`writeRunSummary`): the rankings are two orders
    * of magnitude bigger than the metrics, and the TREC run file is the format an
    * external evaluator already reads.
    */
@@ -145,16 +148,27 @@ export interface HistoryRow extends Metrics {
   readonly queryMs: number;
 }
 
-/** What one run wrote, so the caller can name the files it just produced. */
-export interface WrittenReport {
-  readonly markdownPath: string;
-  readonly jsonPath: string;
+/** The three artefacts recording ONE dataset produced, so the caller can name them. */
+export interface RecordedDataset {
   readonly historyPath: string;
-  readonly perTopicPaths: readonly string[];
-  readonly runPaths: readonly string[];
+  readonly perTopicPath: string;
+  readonly runPath: string;
 }
 
-/** Everything `writeRunReport` needs. The per-topic TSVs are not optional. */
+/** Everything `recordDataset` needs: one run's provenance, one dataset's outcome. */
+export interface DatasetRecordOptions {
+  readonly resultsDir: string;
+  readonly provenance: RunProvenance;
+  readonly result: DatasetResult;
+}
+
+/** The end-of-run summary paths — the pair that shares a stem. */
+export interface RunSummaryPaths {
+  readonly markdownPath: string;
+  readonly jsonPath: string;
+}
+
+/** Everything `writeRunSummary` needs: the datasets that actually ran. */
 export interface RunReportOptions {
   readonly resultsDir: string;
   readonly provenance: RunProvenance;
@@ -430,18 +444,6 @@ const writePerTopic = (
   return path;
 };
 
-/**
- * ALWAYS written: without the per-topic scores a recorded run cannot be
- * re-analysed later (a paired test, a required-sample-size estimate) without
- * paying for the whole benchmark again.
- */
-const writePerTopicFiles = (options: RunReportOptions): readonly string[] => {
-  mkdirSync(resolve(options.resultsDir, PER_TOPIC_DIR), { recursive: true });
-  return options.results.map(result =>
-    writePerTopic(options.resultsDir, options.provenance, result)
-  );
-};
-
 /** The TREC run format's second column: the unused iteration field, fixed. */
 const TREC_ITERATION = 'Q0';
 
@@ -490,15 +492,31 @@ const writeTrecRun = (
 };
 
 /**
- * ALWAYS written, exactly like the per-topic TSVs: an artefact that has to be
- * asked for is an analysis that never happens. The rankings cannot be recovered
- * from the metrics, so a run recorded without them can only be re-run.
+ * Record ONE dataset, the moment it finishes: its per-topic TSV, its TREC run
+ * file, and its history row. Called per dataset rather than once per run because
+ * a run that dies mid-suite (measured 2026-08-15: an OOM 67.5 minutes and six
+ * completed datasets in) previously wrote NOTHING — every completed dataset's
+ * numbers were lost, and "a partial run must never look complete" held only for
+ * a dataset failure, never for a process death.
+ *
+ * The artefacts are written BEFORE the history row is appended: a row names its
+ * `perTopicPath`/`runPath` and resolution reads only those fields, so a crash
+ * between the two must leave an unreferenced file (harmless) rather than a row
+ * pointing at a file that does not exist.
+ *
+ * Both artefacts are ALWAYS written: without the per-topic scores a recorded run
+ * cannot be re-analysed later without paying for the benchmark again, and the
+ * rankings cannot be recovered from the metrics at all.
  */
-const writeRunFiles = (options: RunReportOptions): readonly string[] => {
-  mkdirSync(resolve(options.resultsDir, RUN_FILE_DIR), { recursive: true });
-  return options.results.map(result =>
-    writeTrecRun(options.resultsDir, options.provenance, result)
-  );
+export const recordDataset = (options: DatasetRecordOptions): RecordedDataset => {
+  const { resultsDir, provenance, result } = options;
+  mkdirSync(resolve(resultsDir, PER_TOPIC_DIR), { recursive: true });
+  mkdirSync(resolve(resultsDir, RUN_FILE_DIR), { recursive: true });
+  const perTopicPath = writePerTopic(resultsDir, provenance, result);
+  const runPath = writeTrecRun(resultsDir, provenance, result);
+  const historyPath = resolve(resultsDir, HISTORY_FILE);
+  appendHistory(historyPath, [toHistoryRow(provenance, result)]);
+  return { historyPath, perTopicPath, runPath };
 };
 
 const RANKINGS_KEY = 'rankings';
@@ -513,22 +531,16 @@ const jsonRecord = (options: RunReportOptions): unknown => ({
 });
 
 /**
- * Write the run's four artefacts. The markdown and the JSON share a stem so a
- * summary can never be separated from the record it was rendered from.
+ * The end-of-run summary: markdown and JSON over the datasets that ACTUALLY
+ * ran, sharing a stem so a summary can never be separated from the record it
+ * was rendered from. It writes nothing `recordDataset` has not already put on
+ * disk — it is the view a suite that finished normally leaves behind.
  */
-export const writeRunReport = (options: RunReportOptions): WrittenReport => {
+export const writeRunSummary = (options: RunReportOptions): RunSummaryPaths => {
   const stem = reportStem(options.provenance.ts);
   const base = resolve(options.resultsDir, `${stem}-${options.provenance.gitSha}`);
   mkdirSync(options.resultsDir, { recursive: true });
   writeFileSync(`${base}.md`, renderMarkdown(options.provenance, options.results), 'utf8');
   writeFileSync(`${base}.json`, `${JSON.stringify(jsonRecord(options), null, 2)}\n`, 'utf8');
-  const historyPath = resolve(options.resultsDir, HISTORY_FILE);
-  appendHistory(historyPath, options.results.map(r => toHistoryRow(options.provenance, r)));
-  return {
-    markdownPath: `${base}.md`,
-    jsonPath: `${base}.json`,
-    historyPath,
-    perTopicPaths: writePerTopicFiles(options),
-    runPaths: writeRunFiles(options),
-  };
+  return { markdownPath: `${base}.md`, jsonPath: `${base}.json` };
 };
