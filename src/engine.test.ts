@@ -3,10 +3,11 @@ import { tmpdir } from 'node:os';
 import { basename, isAbsolute, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AdapterName } from '../../dp-gnosis/src/cli/adapter.js';
 import { runCli } from '../../dp-gnosis/src/cli/cli.js';
+import { DEFAULT_ATOM_TYPE, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { type AnalyzerId, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { BeirDoc } from './beir.js';
@@ -19,8 +20,12 @@ import {
   openPort,
   prepareDataset,
   type PreparedDataset,
+  rerankIfRequested,
   retrieveDocs
 } from './engine.js';
+
+/** A second reranker id — any id the shipped constant is not. */
+const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';
 
 const DATASET_ID = 'fixture';
 const DEPTH = 5;
@@ -365,5 +370,77 @@ describe('openPort — linear adapter with BM25 parameters', () => {
     const payload = JSON.parse(result.stdout) as { readonly atoms: readonly RetrievedAtom[] };
     expect(harness).toEqual(atomIds(payload.atoms));
     expect(harness.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The seam the recorded `rerankModel` claims: the id on the row MUST be the id
+ * that scored the documents. Asserted on the WIRE — the `/v1/rerank` payload —
+ * because a model that never left the bench would still be recorded, and the
+ * label would then describe a run nothing produced.
+ */
+describe('rerankIfRequested — the model reaches the reranker', () => {
+  const atom: RetrievedAtom = {
+    id: 'a1',
+    title: 'Photosynthesis',
+    domain: 'docs',
+    type: DEFAULT_ATOM_TYPE,
+    body: 'Marine algae convert sunlight into chemical energy.',
+    score: 1,
+    sourcePath: 'doc/a1.md',
+    originPaths: ['doc/a1.md'],
+  };
+
+  /** Answers both llama-swap endpoints and records every request payload. */
+  const stubServer = (served: readonly string[]): Record<string, unknown>[] => {
+    const payloads: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      async (url: string, init?: { readonly body?: string }): Promise<unknown> => {
+        if (url.endsWith('/v1/models')) {
+          return {
+            ok: true,
+            status: 200,
+            text: async (): Promise<string> =>
+              JSON.stringify({ data: served.map(id => ({ id })) }),
+          };
+        }
+        payloads.push(JSON.parse(init?.body ?? '{}') as Record<string, unknown>);
+        return {
+          ok: true,
+          status: 200,
+          text: async (): Promise<string> =>
+            JSON.stringify({ results: [{ index: 0, relevance_score: 1 }] }),
+        };
+      }
+    );
+    return payloads;
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sends the NAMED model to /v1/rerank', async () => {
+    const payloads = stubServer([OTHER_MODEL]);
+    await rerankIfRequested('algae', [atom], true, { model: OTHER_MODEL });
+    expect(payloads.map(payload => payload['model'])).toEqual([OTHER_MODEL]);
+  });
+
+  it('sends the SHIPPED model when the arm names none — every run to date', async () => {
+    const payloads = stubServer([RERANK_MODEL_ID]);
+    await rerankIfRequested('algae', [atom], true, {});
+    expect(payloads.map(payload => payload['model'])).toEqual([RERANK_MODEL_ID]);
+  });
+
+  /**
+   * A model the server does not serve REFUSES — it must never degrade into the
+   * BM25 order under a rerank label.
+   */
+  it('REFUSES a named model the server does not serve, naming that model', async () => {
+    stubServer([RERANK_MODEL_ID]);
+    await expect(rerankIfRequested('algae', [atom], true, { model: OTHER_MODEL })).rejects.toThrow(
+      new RegExp(OTHER_MODEL)
+    );
   });
 });

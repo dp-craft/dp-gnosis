@@ -501,18 +501,25 @@ export const retrieveDocs = async (
  * when 127.0.0.1:9292 is down or serves no reranker; the message is carried
  * through verbatim.
  *
- * `fusion` is the ENGINE's own resolution of a named protocol, passed straight
- * through. Omitting it measures the shipped default, so this stays the one seam
- * — the bench selects a rule, it never builds one.
+ * `arm` is passed straight through to the engine: `fusion` is the ENGINE's own
+ * resolution of a named protocol, and `model` the cross-encoder id it scores
+ * with. Omitting either measures the shipped default, so this stays the one seam
+ * — the bench selects a rule and a model, it never builds one.
  */
+export interface RerankArm {
+  readonly fusion?: RerankFusion;
+  /** Absent means the engine's shipped `RERANK_MODEL_ID` — today's every run. */
+  readonly model?: string | undefined;
+}
+
 export const rerankIfRequested = async (
   query: string,
   atoms: readonly RetrievedAtom[],
   requested: boolean,
-  fusion?: RerankFusion
+  arm: RerankArm = {}
 ): Promise<readonly RetrievedAtom[]> => {
   if (!requested) return atoms;
-  const outcome = await rerankAtoms(query, atoms, { fusion });
+  const outcome = await rerankAtoms(query, atoms, arm);
   return outcome.ok
     ? outcome.atoms
     : fail(`dp-gnosis-bench: rerank refused — ${outcome.error}`, RERANK_REFUSED_CAUSE);

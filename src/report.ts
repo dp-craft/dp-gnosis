@@ -61,6 +61,11 @@ export interface RunProvenance {
   readonly rerankProfile?: string | undefined;
   readonly rerankWeight?: number | undefined;
   /**
+   * The cross-encoder id the rerank arm scored with — absent for the same reason
+   * the two fields above are, present and RESOLVED on every run that reranked.
+   */
+  readonly rerankModel?: string | undefined;
+  /**
    * The analysis chain the index was BUILT with. Required, unlike the rerank
    * fields: every run has an analyzer whether or not it named one, and a row that
    * omitted it could never be told apart from one measured on another chain.
@@ -161,6 +166,14 @@ export interface HistoryRow extends Metrics {
    */
   readonly rerankProfile?: string;
   readonly rerankWeight?: number;
+  /**
+   * The reranker MODEL this row was measured under — TREATMENT provenance
+   * (`compare.ts`), so a model change is labelled an arm comparison instead of
+   * being subtracted. Absent on a BM25-only row, and on every row recorded before
+   * the model was selectable; those all used the engine's `RERANK_MODEL_ID`,
+   * which is how `compare.ts` reads an absent one.
+   */
+  readonly rerankModel?: string;
   /**
    * The analysis chain this row was measured under — TREATMENT provenance
    * (`compare.ts`), so an analyzer change is labelled an arm comparison instead
@@ -330,6 +343,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   rerank: provenance.rerank,
   rerankProfile: provenance.rerankProfile,
   rerankWeight: provenance.rerankWeight,
+  rerankModel: provenance.rerankModel,
   analyzer: provenance.analyzer,
   ...descriptorFields(result),
   ...costFields(result),
@@ -410,13 +424,22 @@ const markdownRow = (result: DatasetResult): string =>
   `${metric(result.metrics.recall100)} | ` +
   `${metric(result.metrics.mrr10)} | ${result.queryP50Ms} | ${result.queryP95Ms} |`;
 
+/**
+ * The reranker id is printed ONLY when one scored: a BM25 run has no reranker,
+ * so naming a model on its header would attribute the numbers to a model that
+ * never saw them.
+ */
+const rerankModelText = (provenance: RunProvenance): string =>
+  provenance.rerankModel === undefined ? '' : `, rerank model: \`${provenance.rerankModel}\``;
+
 const markdownHeader = (provenance: RunProvenance): readonly string[] => [
   '# dp-gnosis-bench run',
   '',
   `- generated at: \`${provenance.ts}\``,
   `- git sha: \`${provenance.gitSha}\``,
   `- adapter: \`${provenance.adapter}\`, analyzer: \`${provenance.analyzer}\`, ` +
-    `depth: ${provenance.depth}, rerank: ${provenance.rerank}`,
+    `depth: ${provenance.depth}, rerank: ${provenance.rerank}` +
+    rerankModelText(provenance),
   '',
   '> Scores are DOCUMENT-level: atoms are rolled up to their origin document before',
   '> scoring, so they stay comparable across chunker changes.',

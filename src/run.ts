@@ -39,6 +39,7 @@ import {
   ATOM_MAX_CHARS,
   DEFAULT_RERANK_PRESET,
   RERANK_K_INIT,
+  RERANK_MODEL_ID,
   type RerankFusion } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
 import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
@@ -116,6 +117,12 @@ export interface CliOptions {
   readonly rerankProfile: string;
   /** A raw weight override on the named preset; `undefined` means the preset's own. */
   readonly rerankWeight: number | undefined;
+  /**
+   * The cross-encoder MODEL the rerank arm scores with; `undefined` means the
+   * engine's shipped `RERANK_MODEL_ID`, which every recorded run used. Recorded
+   * as a treatment field, so two model arms can never be subtracted.
+   */
+  readonly rerankModel: string | undefined;
   /** The engine's resolution of that name, resolved ONCE so a bad one fails before any dataset. */
   readonly rerankFusion: RerankFusion;
   /**
@@ -223,19 +230,36 @@ const parseRerankFusion = (profile: string, rerankWeight: number | undefined): R
   }
 };
 
+/**
+ * A `--rerank-model` without `--rerank` REFUSES. Nothing would rerank, yet the
+ * row would carry the model id as its treatment — a run recorded under a model
+ * that never scored a single document, which is exactly what naming the model
+ * exists to prevent.
+ */
+const parseRerankModel = (value: string | undefined, rerank: boolean): string | undefined => {
+  if (value === undefined) return undefined;
+  if (rerank) return value;
+  throw new Error(
+    `dp-gnosis-bench: --rerank-model "${value}" requires --rerank — ` +
+      'without it nothing reranks and the row would name a model that never ran'
+  );
+};
+
 export const parseArgs = (argv: readonly string[]): CliOptions => {
   const rerankProfile = flagValue(argv, '--rerank-profile') ?? DEFAULT_RERANK_PRESET;
   const rerankWeight = parseRerankWeight(flagValue(argv, '--rerank-weight'));
   const adapter = parseAdapter(flagValue(argv, '--adapter'));
+  const rerank = argv.includes('--rerank');
   return {
     only: csv(flagValue(argv, '--only')),
     layer: parseLayer(flagValue(argv, '--layer')),
     depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
-    rerank: argv.includes('--rerank'),
+    rerank,
     compare: argv.includes('--compare'),
     adapter,
     rerankProfile,
     rerankWeight,
+    rerankModel: parseRerankModel(flagValue(argv, '--rerank-model'), rerank),
     rerankFusion: parseRerankFusion(rerankProfile, rerankWeight),
     analyzer: checkAnalyzerAdapter(adapter, parseAnalyzer(flagValue(argv, '--analyzer'))),
   };
@@ -317,12 +341,10 @@ const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly s
   const { options } = context;
   const depth = firstPassDepth(options.depth, options.rerank);
   const atoms = await retrieveDocs(context.port, topic.text, depth);
-  const ordered = await rerankIfRequested(
-    topic.text,
-    atoms,
-    options.rerank,
-    options.rerankFusion
-  );
+  const ordered = await rerankIfRequested(topic.text, atoms, options.rerank, {
+    fusion: options.rerankFusion,
+    model: options.rerankModel,
+  });
   return toDocumentRanking(ordered.slice(0, options.depth), context.excluded.get(topic.id) ?? []);
 };
 
@@ -616,8 +638,17 @@ export const selectionError = (selection: Selection): string | undefined => {
  * The rerank protocol is recorded ONLY on a rerank run: a row that reranked
  * nothing has no protocol, and stamping the default on it would make every new
  * BM25 row differ from every legacy one on a treatment field it never used.
+ *
+ * The MODEL is resolved before it is recorded, never left `undefined` on a run
+ * that reranked: the id that scored the documents is not recoverable from the
+ * numbers afterwards, and two model arms with no id on the row read as one
+ * treatment.
+ *
+ * Exported so a test can read the TREATMENT a flag set records without paying
+ * for a measured run — the value is unrecoverable from the numbers, so what it
+ * stamps is the property worth asserting.
  */
-const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
+export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
   ts: new Date().toISOString(),
   gitSha,
   adapter: options.adapter,
@@ -625,6 +656,7 @@ const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
   rerank: options.rerank,
   rerankProfile: options.rerank ? options.rerankProfile : undefined,
   rerankWeight: options.rerank ? options.rerankWeight : undefined,
+  rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
   analyzer: options.analyzer,
 });
 

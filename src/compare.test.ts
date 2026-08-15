@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   compareAll,
@@ -149,6 +150,61 @@ describe('compareLastTwo', () => {
   it('reads an ABSENT analyzer as the default chain, not as a changed treatment', () => {
     const result = compareLastTwo(
       [row({}), row({ gitSha: 'bbb2222', analyzer: DEFAULT_ANALYZER, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  it('guards the reranker MODEL as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('rerankModel');
+    expect(SCALE_FIELDS).not.toContain('rerankModel');
+  });
+
+  /**
+   * Two cross-encoders produce two different orders. Subtracting them would read
+   * a model swap as a quality movement of one arm — the failure `TREATMENT_FIELDS`
+   * exists to prevent, and the one a shipped-constant model id made unavoidable.
+   */
+  it('COMPARES a rerankModel change as an arm comparison, never subtracting it', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankModel: RERANK_MODEL_ID }),
+        row({
+          gitSha: 'bbb2222',
+          rerank: true,
+          rerankModel: 'jina-reranker-v2-base-multilingual',
+          ndcg10: 0.65,
+        }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['rerankModel']);
+    const line = formatComparison(result);
+    expect(line).toContain('ARM COMPARISON');
+    expect(line).toContain('rerankModel');
+    expect(line).toContain('jina-reranker-v2-base-multilingual');
+  });
+
+  /**
+   * Every row recorded before the model was selectable was scored by
+   * `RERANK_MODEL_ID`. Reading its absence as a move would label the first
+   * default-model comparison after this landed an arm comparison against an arm
+   * nobody ran — the whole recorded history against itself.
+   */
+  it('reads an ABSENT rerankModel as the shipped model, not as a changed treatment', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankProfile: 'shipped' }),
+        row({
+          gitSha: 'bbb2222',
+          rerank: true,
+          rerankProfile: 'shipped',
+          rerankModel: RERANK_MODEL_ID,
+          ndcg10: 0.65,
+        }),
+      ],
       'scifact'
     );
     expect(result.kind).toBe('delta');

@@ -9,6 +9,7 @@ import {
   DEFAULT_RERANK_PRESET,
   RERANK_FUSION_PRESETS,
   RERANK_K_INIT,
+  RERANK_MODEL_ID,
   RERANK_RRF_K
 } from '../../dp-gnosis/src/config.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
@@ -29,9 +30,13 @@ import {
   measureAndRecordAll,
   parseArgs,
   percentileMs,
+  provenanceOf,
   selectDatasets,
   selectionError
 } from './run.js';
+
+/** A second reranker id — any id the shipped constant is not. */
+const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';
 
 describe('parseArgs', () => {
   it('defaults to every enabled dataset at depth 100 with no rerank', () => {
@@ -89,6 +94,25 @@ describe('parseArgs', () => {
     const options = parseArgs(['--rerank', '--rerank-weight', '0.8']);
     expect(options.rerankWeight).toBe(0.8);
     expect(options.rerankFusion).toEqual({ kind: 'rrf', rrfK: RERANK_RRF_K, rerankWeight: 0.8 });
+  });
+
+  it('reads --rerank-model as the cross-encoder the arm is measured with', () => {
+    expect(parseArgs(['--rerank', '--rerank-model', OTHER_MODEL]).rerankModel).toBe(OTHER_MODEL);
+  });
+
+  it('leaves --rerank-model unset on a plain --rerank run — the shipped model', () => {
+    expect(parseArgs(['--rerank']).rerankModel).toBeUndefined();
+  });
+
+  /**
+   * Without `--rerank` nothing reranks, so a recorded model id would name a
+   * cross-encoder that never scored a document — a row indistinguishable from a
+   * measured arm. It refuses instead, naming both flags.
+   */
+  it('REFUSES --rerank-model without --rerank, naming both flags', () => {
+    expect(() => parseArgs(['--rerank-model', OTHER_MODEL])).toThrow(/--rerank-model/);
+    expect(() => parseArgs(['--rerank-model', OTHER_MODEL])).toThrow(/requires --rerank/);
+    expect(() => parseArgs(['--rerank-model', OTHER_MODEL])).toThrow(new RegExp(OTHER_MODEL));
   });
 
   it('defaults --analyzer to the engine chain every recorded run was measured on', () => {
@@ -270,6 +294,22 @@ describe('selectionError', () => {
   it('passes a non-empty fully matched selection', () => {
     const selection = selectDatasets(loadManifest(MANIFEST_PATH), ['vault-hu-rephrased']);
     expect(selectionError(selection)).toBeUndefined();
+  });
+});
+
+describe('provenanceOf — which reranker the row is attributed to', () => {
+  /** The default is unchanged: `--rerank` alone still records the shipped id. */
+  it('records the shipped model on a --rerank run that named none', () => {
+    expect(provenanceOf(parseArgs(['--rerank']), 'sha').rerankModel).toBe(RERANK_MODEL_ID);
+  });
+
+  it('records a named model verbatim, so two model arms cannot read as one', () => {
+    const provenance = provenanceOf(parseArgs(['--rerank', '--rerank-model', OTHER_MODEL]), 'sha');
+    expect(provenance.rerankModel).toBe(OTHER_MODEL);
+  });
+
+  it('records NO model on a run that did not rerank', () => {
+    expect(provenanceOf(parseArgs([]), 'sha').rerankModel).toBeUndefined();
   });
 });
 

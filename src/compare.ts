@@ -17,6 +17,7 @@
  * | treatment | `adapter` | a different engine path — the thing an A/B run exists to compare |
  * | treatment | `rerank` | a second-stage model in the loop, or not |
  * | treatment | `rerankProfile` / `rerankWeight` | a different FUSION rule over the same two orders |
+ * | treatment | `rerankModel` | a different CROSS-ENCODER producing the reranked order |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  *
  * A moved SCALE is still refused: the two numbers are not on one axis and no
@@ -27,6 +28,7 @@
  * `gitSha` and `ts` are deliberately NOT guarded: a changed engine commit is
  * precisely the thing a delta is supposed to measure.
  */
+import { RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { HistoryRow } from './report.js';
 
@@ -46,6 +48,7 @@ export const TREATMENT_FIELDS = [
   'rerank',
   'rerankProfile',
   'rerankWeight',
+  'rerankModel',
   'analyzer',
 ] as const;
 
@@ -135,8 +138,14 @@ export type Comparison =
  * it as unset would label every first comparison after this landed an ARM
  * COMPARISON against an arm that was never run. The engine's fts5 stamp resolves
  * an unstamped index by exactly this rule.
+ *
+ * `rerankModel` follows it: every row recorded before the model was selectable
+ * was scored by `RERANK_MODEL_ID`, the only reranker the engine ever called.
  */
-const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string>> = { analyzer: DEFAULT_ANALYZER };
+const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string>> = {
+  analyzer: DEFAULT_ANALYZER,
+  rerankModel: RERANK_MODEL_ID,
+};
 
 const valueOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>
   row[field] === undefined ? FIELD_DEFAULTS[field] : row[field];

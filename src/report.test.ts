@@ -198,6 +198,29 @@ describe('writeRunReport', () => {
     expect(row?.rerankWeight).toBeUndefined();
   });
 
+  /**
+   * The id that produced the order is unrecoverable from the numbers, so a row
+   * without it cannot be told from one measured on another cross-encoder — which
+   * is what `--compare` would then subtract as like-for-like.
+   */
+  it('records the reranker MODEL on the row, so --compare can see a model change', () => {
+    const dir = tempResultsDir();
+    writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, rerank: true, rerankModel: 'jina-reranker-v2-base-multilingual' },
+      results: [result],
+    });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(row?.rerankModel).toBe('jina-reranker-v2-base-multilingual');
+  });
+
+  it('records NO model on a BM25-only row — nothing reranked it', () => {
+    const dir = tempResultsDir();
+    writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(Object.keys(row ?? {})).not.toContain('rerankModel');
+  });
+
   it('carries the dataset descriptors so runs can be grouped by domain', () => {
     const dir = tempResultsDir();
     writeRunReport({ resultsDir: dir, provenance, results: [result] });
@@ -249,6 +272,24 @@ describe('writeRunReport', () => {
       results: [result],
     });
     expect(readFileSync(written.markdownPath, 'utf8')).toContain('analyzer: `nostem-fold`');
+  });
+
+  it('names the reranker model in the markdown header, beside the analyzer', () => {
+    const dir = tempResultsDir();
+    const written = writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, rerank: true, rerankModel: 'bge-reranker-v2-m3' },
+      results: [result],
+    });
+    expect(readFileSync(written.markdownPath, 'utf8')).toContain(
+      'rerank model: `bge-reranker-v2-m3`'
+    );
+  });
+
+  it('names NO reranker model on a BM25 header — no model saw those numbers', () => {
+    const dir = tempResultsDir();
+    const written = writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    expect(readFileSync(written.markdownPath, 'utf8')).not.toContain('rerank model:');
   });
 
   it('records on the row the per-topic file it just wrote, keyed by adapter and instant', () => {
