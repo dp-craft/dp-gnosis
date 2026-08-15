@@ -496,11 +496,36 @@ const pruneOrphans = async (
 };
 
 /**
- * An atom whose body holds nothing but its own heading line indexes nothing:
- * every index except the linear scan reads `atom.body`, and the heading line is
- * stripped before it is read, so the atom can never be retrieved by any query.
- * Measured on the live corpus, 107 of 43 228 atoms were empty this way —
- * bare-heading sections and sections whose whole body was an HTML comment.
+ * A vault AUTHORING rule: a heading-only section carries no knowledge of its
+ * own, so it is refused rather than written. Measured on the live corpus, 107
+ * of 43 228 atoms were empty this way — bare-heading sections and sections
+ * whose whole body was an HTML comment.
+ *
+ * This gate tests a DIFFERENT STRING than the index reads, and that asymmetry
+ * is deliberate but easy to misread. It reads `candidate.chunk.body` — the
+ * section's prose WITHOUT its heading line — while every index reads
+ * `atom.body`, which is `bodyWithHeading` `:356`, i.e. the heading line put
+ * BACK in front of that prose. Mechanism, established from the code: the
+ * chunker never puts the heading line into the chunk — `withHeading`
+ * (`chunker.ts:133`) opens each chunk at `lines: []`, one line past the
+ * heading — and `bodyWithHeading` re-adds it as `# <headingPath>`
+ * (`chunker.ts:77`), dropping it again ONLY when the prefixed body would
+ * exceed the cap. So a heading's terms ARE searchable.
+ *
+ * An earlier version of this comment claimed the heading "is stripped before it
+ * is read" — i.e. that a title's terms are not searchable. Falsified by direct
+ * measurement 2026-08-15: BEIR scifact document `4983` carries the term
+ * "newborn" only in its title, nowhere in its `text`, and the fts5 index
+ * returns that document for the token `newborn` (`fts5Adapter.ts:83,171`
+ * insert `stemText(parsed.atom.body)` into a single-column contentless table,
+ * so whatever `atom.body` holds is what is searchable).
+ *
+ * Consequence, recorded not fixed: a title-only SOURCE record is discarded even
+ * though it would have been retrievable. On BEIR TREC-COVID that was 42 139 of
+ * 171 332 records, costing 3 135 relevant judgments (12.71%) across 50 of 50
+ * topics. The rule stays as written — per plan decision D6 the benchmark's need
+ * is met in the bench projection (`tools/dp-gnosis-bench/src/corpus.ts`), so a
+ * benchmark corpus shape does not bend a vault authoring rule.
  */
 const emptyBodyReasons = (planned: PlannedAtom): readonly string[] =>
   stripComments(planned.candidate.chunk.body).length > 0
