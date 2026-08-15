@@ -103,6 +103,13 @@ describe('validateAtom', () => {
     expect(errors[0]).toContain('id');
   });
 
+  it('refuses an atom whose serialized text its own parser would refuse', () => {
+    const errors = validateAtom(atomWith({ title: '' }, 'body text\n'), none);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('title: ');
+    expect(errors[0]).toMatch(/parser refuses/i);
+  });
+
   it('reports every independent violation at once', () => {
     const broken = atomWith({ id: 'BAD ID', x_domain: 'nope' }, 'x'.repeat(ATOM_MAX_CHARS + 1));
     expect(validateAtom(broken, none)).toHaveLength(3);

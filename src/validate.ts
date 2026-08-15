@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises';
 
-import type { Atom } from './atom.js';
+import { type Atom, parseAtom, serializeAtom } from './atom.js';
 import { ATOM_FENCE_MAX_CHARS, bodyMaxChars, DEFAULT_INGEST_PROFILE } from './config.js';
 import type { IngestProfile } from './ingestProfile.js';
 import { ATOMS_DIR } from './paths.js';
@@ -87,6 +87,22 @@ const typeError = (type: string, vocabulary: readonly string[]): string | undefi
     : `field "type" is "${type}", outside the closed vocabulary — replace it with one of ${vocabulary.join(' | ')}`;
 
 /**
+ * The round trip is only guaranteed in the READ direction: `serializeAtom` will
+ * happily emit a line the parser then refuses — an empty required scalar emits
+ * `"title: "`, which `SCALAR_LINE_RE` rejects, and one bad line makes the WHOLE
+ * file unparseable, so every consumer silently skips the atom. Measured: 144 of
+ * 529 atoms in one corpus were written unreadable this way. Asking the parser
+ * rather than re-checking five fields by hand means this rule cannot drift away
+ * from what the parser actually accepts.
+ */
+const roundTripError = (atom: Atom): string | undefined => {
+  const result = parseAtom(serializeAtom(atom.frontmatter, atom.body));
+  return result.ok
+    ? undefined
+    : `atom "${atom.frontmatter.id}" serializes to a file its own parser refuses (${result.error}) — one bad line makes the whole atom unreadable and every consumer skips it, so give each frontmatter field a non-empty, single-line value`;
+};
+
+/**
  * Every reason the atom MUST NOT be written, each naming the correction its
  * author has to make. An empty list means the write is allowed.
  */
@@ -101,6 +117,7 @@ export const validateAtom = (
     sizeError(atom.body, profile.atomMaxChars),
     domainError(atom.frontmatter.x_domain, profile.domains),
     typeError(atom.frontmatter.type, profile.types),
+    roundTripError(atom),
   ].filter(isDefined);
 
 const toId = (filename: string): string => filename.slice(0, -MD_SUFFIX.length);
