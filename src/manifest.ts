@@ -15,6 +15,17 @@
  */
 import { readFileSync } from 'node:fs';
 
+/**
+ * The suite layers, from cheapest to most complete. A dataset belongs to as many
+ * as apply — `smoke` is the sub-minute sanity set, `par` the BM25 Tier-1 suite,
+ * `full` that plus the entries whose cost only the arm-bearing run earns back.
+ */
+export const LAYER_NAMES = ['smoke', 'par', 'full'] as const;
+
+export type LayerName = (typeof LAYER_NAMES)[number];
+
+export const LAYERS_TEXT = '"smoke", "par" or "full"';
+
 /** Fields every entry carries, whatever its format. */
 export interface DatasetBase {
   readonly id: string;
@@ -25,6 +36,12 @@ export interface DatasetBase {
   /** Per-corpus atom cap; absent means the shipped `ATOM_MAX_CHARS`. */
   readonly atomMaxChars?: number | undefined;
   readonly enabled: boolean;
+  /**
+   * Which layered runs touch this entry. REQUIRED, and `[]` is the way to say
+   * "no layer" — an absent key would make an entry invisible to every layered
+   * run while looking exactly like one nobody had classified yet.
+   */
+  readonly layers: readonly LayerName[];
 }
 
 /**
@@ -126,6 +143,36 @@ const requireBoolean = (
     : fail(`${where} has no boolean "${key}"`, `set "${key}" to true or false`);
 };
 
+const isLayerName = (value: unknown): value is LayerName =>
+  typeof value === 'string' && (LAYER_NAMES as readonly string[]).includes(value);
+
+/** A layer name if it is one, `undefined` otherwise — the `--layer` flag's guard. */
+export const resolveLayer = (value: string): LayerName | undefined =>
+  isLayerName(value) ? value : undefined;
+
+const layerOf = (value: unknown, where: string): LayerName =>
+  isLayerName(value)
+    ? value
+    : fail(`${where} has an unknown layer ${JSON.stringify(value)}`, `use ${LAYERS_TEXT}`);
+
+/**
+ * Required on every entry, empty array allowed. An optional field with a default
+ * would let a new entry join no layer by omission, and a layered run would then
+ * measure less than the manifest describes without saying so.
+ */
+const layersOf = (
+  record: Readonly<Record<string, unknown>>,
+  where: string
+): readonly LayerName[] => {
+  const value = record['layers'];
+  return Array.isArray(value)
+    ? value.map((item: unknown) => layerOf(item, `${where}.layers`))
+    : fail(
+        `${where} has no "layers" array`,
+        `add "layers": [] for an entry no layered run touches, or any of ${LAYERS_TEXT}`
+      );
+};
+
 const baseOf = (record: Readonly<Record<string, unknown>>, where: string): DatasetBase => ({
   id: requireString(record, 'id', where),
   domain: requireString(record, 'domain', where),
@@ -133,6 +180,7 @@ const baseOf = (record: Readonly<Record<string, unknown>>, where: string): Datas
   queryShape: optionalString(record, 'queryShape', where),
   atomMaxChars: optionalNumber(record, 'atomMaxChars', where),
   enabled: requireBoolean(record, 'enabled', where),
+  layers: layersOf(record, where),
 });
 
 /** Both keys are required together: a derivation with only one half is a typo. */
@@ -222,6 +270,12 @@ export const parseManifest = (raw: unknown): readonly DatasetEntry[] => {
 /** Read and validate the manifest at `path`. */
 export const loadManifest = (path: string): readonly DatasetEntry[] =>
   parseManifest(JSON.parse(readFileSync(path, 'utf8')) as unknown);
+
+/** The members of one layer, in manifest order. */
+export const datasetsInLayer = (
+  entries: readonly DatasetEntry[],
+  layer: LayerName
+): readonly DatasetEntry[] => entries.filter(entry => entry.layers.includes(layer));
 
 /** The entries a run actually processes. */
 export const enabledDatasets = (

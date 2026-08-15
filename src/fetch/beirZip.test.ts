@@ -38,6 +38,7 @@ const entry: BeirDataset = {
   domain: 'biomedical',
   docShape: 'short-abstract',
   enabled: true,
+  layers: [],
 };
 
 const tempDataDir = (): string => mkdtempSync(resolve(tmpdir(), 'gnosis-bench-zip-'));

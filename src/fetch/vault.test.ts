@@ -37,6 +37,7 @@ const entryFor = (root: string): BeirDataset => ({
   domain: 'personal-vault',
   docShape: 'atom',
   enabled: true,
+  layers: [],
   derive: { atoms: resolve(root, 'atoms'), golden: resolve(root, 'golden.json') },
 });
 

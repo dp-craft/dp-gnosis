@@ -54,7 +54,16 @@ import {
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
 import { describeDerivation, ensureVaultDataset } from './fetch/vault.js';
-import { type BeirDataset, type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
+import {
+  type BeirDataset,
+  type DatasetEntry,
+  datasetsInLayer,
+  enabledDatasets,
+  type LayerName,
+  LAYERS_TEXT,
+  loadManifest,
+  resolveLayer
+} from './manifest.js';
 import {
   corpusChecksum,
   currentGitSha,
@@ -92,6 +101,8 @@ const FAILURE_EXIT_CODE = 1;
 export interface CliOptions {
   /** Dataset ids to run; empty means every enabled entry. */
   readonly only: readonly string[];
+  /** The suite layer to run; `undefined` means "not filtered by layer". */
+  readonly layer: LayerName | undefined;
   readonly depth: number;
   readonly rerank: boolean;
   readonly compare: boolean;
@@ -134,6 +145,20 @@ const parseAdapter = (value: string | undefined): AdapterName => {
   return adapter;
 };
 
+/**
+ * An unknown `--layer` THROWS, naming the valid ones, exactly as `--adapter`
+ * does: silently running the whole suite instead of the layer asked for would
+ * cost an hour and record a run nobody requested.
+ */
+const parseLayer = (value: string | undefined): LayerName | undefined => {
+  if (value === undefined) return undefined;
+  const layer = resolveLayer(value);
+  if (layer === undefined) {
+    throw new Error(`dp-gnosis-bench: unknown --layer "${value}" — use ${LAYERS_TEXT}`);
+  }
+  return layer;
+};
+
 /** A weight that is not a number would be measured as `NaN` and recorded as a run. */
 const parseRerankWeight = (value: string | undefined): number | undefined => {
   if (value === undefined) return undefined;
@@ -162,6 +187,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
   const rerankWeight = parseRerankWeight(flagValue(argv, '--rerank-weight'));
   return {
     only: csv(flagValue(argv, '--only')),
+    layer: parseLayer(flagValue(argv, '--layer')),
     depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
     rerank: argv.includes('--rerank'),
     compare: argv.includes('--compare'),
@@ -457,11 +483,38 @@ export const measureAndRecordAll = async (
     )
   ).filter(isResult);
 
-/** What `--only` resolved to, and the ids it could not resolve. */
+/** What the flags resolved to, the ids they could not resolve, and how they were asked. */
 export interface Selection {
   readonly entries: readonly DatasetEntry[];
   readonly unknown: readonly string[];
+  /** The flags that produced it, so an EMPTY selection can name what emptied it. */
+  readonly criteria?: string | undefined;
 }
+
+/** `--layer` narrows the pool the ids are then matched against — an intersection. */
+const poolOf = (
+  all: readonly DatasetEntry[],
+  layer: LayerName | undefined
+): readonly DatasetEntry[] => (layer === undefined ? all : datasetsInLayer(all, layer));
+
+/**
+ * A bare run measures the DEFAULT suite; a named layer is an explicit request,
+ * so it measures its whole membership, `enabled` or not — the same rule `--only`
+ * follows.
+ */
+const withoutIds = (
+  pool: readonly DatasetEntry[],
+  layer: LayerName | undefined
+): readonly DatasetEntry[] => (layer === undefined ? enabledDatasets(pool) : pool);
+
+/** Named so an empty intersection reports the flags, never a bare "nothing". */
+const criteriaOf = (only: readonly string[], layer: LayerName | undefined): string | undefined => {
+  const parts = [
+    ...(layer === undefined ? [] : [`--layer ${layer}`]),
+    ...(only.length === 0 ? [] : [`--only ${only.join(',')}`]),
+  ];
+  return parts.length === 0 ? undefined : parts.join(' with ');
+};
 
 /**
  * `enabled` means "member of the DEFAULT suite", not "runnable". So `--only`
@@ -469,16 +522,22 @@ export interface Selection {
  * arm datasets are disabled precisely so they do not change what a bare run
  * measures. Filtering the enabled set first made `--only <disabled-or-typo>`
  * measure nothing and say nothing.
+ *
+ * `--layer` composes with it as an INTERSECTION: an id outside the layer is a
+ * known id that this run does not measure, so it is not "unknown" — it empties
+ * the selection instead, and `selectionError` refuses the run by name.
  */
 export const selectDatasets = (
   all: readonly DatasetEntry[],
-  only: readonly string[]
+  only: readonly string[],
+  layer?: LayerName | undefined
 ): Selection => {
-  if (only.length === 0) return { entries: enabledDatasets(all), unknown: [] };
+  const pool = poolOf(all, layer);
   const known = new Set(all.map(entry => entry.id));
   return {
-    entries: all.filter(entry => only.includes(entry.id)),
+    entries: only.length === 0 ? withoutIds(pool, layer) : pool.filter(e => only.includes(e.id)),
     unknown: only.filter(id => !known.has(id)),
+    criteria: criteriaOf(only, layer),
   };
 };
 
@@ -486,14 +545,16 @@ export const selectDatasets = (
  * Why the run cannot start, or `undefined`. A selection that measures nothing
  * MUST NOT exit 0 — the suite's contract is that a partial run never looks
  * complete, and measuring zero datasets is the emptiest partial run there is.
+ * An empty `--layer`/`--only` intersection lands here too, naming both flags:
+ * every id was known, so the "unknown id" message would be a lie.
  */
 export const selectionError = (selection: Selection): string | undefined => {
   if (selection.unknown.length > 0) {
     return `dp-gnosis-bench: unknown dataset id(s): ${selection.unknown.join(', ')}`;
   }
-  return selection.entries.length === 0
-    ? 'dp-gnosis-bench: no datasets selected — nothing was measured'
-    : undefined;
+  if (selection.entries.length > 0) return undefined;
+  const asked = selection.criteria === undefined ? '' : ` by ${selection.criteria}`;
+  return `dp-gnosis-bench: no datasets selected${asked} — nothing was measured`;
 };
 
 /**
@@ -583,7 +644,7 @@ const runSelection = async (
 
 export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
   const options = parseArgs(argv);
-  const selection = selectDatasets(loadManifest(MANIFEST_PATH), options.only);
+  const selection = selectDatasets(loadManifest(MANIFEST_PATH), options.only, options.layer);
   const problem = selectionError(selection);
   if (problem === undefined) return runSelection(selection.entries, options, gitSha);
   process.stderr.write(`${problem}\n`);

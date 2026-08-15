@@ -80,6 +80,7 @@ describe('selectDatasets', () => {
     domain: 'test',
     docShape: 'short',
     enabled: true,
+    layers: [],
     format: 'beir-local',
     source: `./${id}`,
     qrels: 'test',
@@ -235,6 +236,7 @@ describe('measureCell — per-topic persistence', () => {
     domain: 'biology',
     docShape: 'passage',
     enabled: true,
+    layers: [],
   };
 
   const docs: readonly BeirDoc[] = [

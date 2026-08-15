@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import type { BrightDataset } from './manifest.js';
-import { enabledDatasets, loadManifest, parseManifest } from './manifest.js';
+import { datasetsInLayer, enabledDatasets, loadManifest, parseManifest } from './manifest.js';
 
 const MANIFEST = resolve(fileURLToPath(import.meta.url), '../../datasets.json');
 
@@ -17,6 +17,7 @@ const entry = (over: Record<string, unknown> = {}): Record<string, unknown> => (
   domain: 'demo',
   docShape: 'abstract',
   enabled: true,
+  layers: [],
   ...over,
 });
 
@@ -36,8 +37,34 @@ describe('parseManifest', () => {
         queryShape: 'long-form',
         atomMaxChars: 4000,
         enabled: true,
+        layers: [],
       },
     ]);
+  });
+
+  it('reads the layers an entry declares, in the order it declares them', () => {
+    const parsed = parseManifest(wrap(entry({ layers: ['smoke', 'par', 'full'] })));
+    expect(parsed[0]?.layers).toEqual(['smoke', 'par', 'full']);
+  });
+
+  // Required, not optional-with-a-default: an entry that omitted the key would be
+  // invisible to every layered run while looking like one nobody had classified.
+  it('names the fix when an entry declares no layers at all', () => {
+    const broken = entry();
+    delete broken['layers'];
+    expect(() => parseManifest(wrap(broken))).toThrow(
+      /datasets\[0\] has no "layers" array.*"layers": \[\].*"smoke", "par" or "full"/s
+    );
+  });
+
+  it('accepts an explicit empty layers list — no layered run touches that entry', () => {
+    expect(parseManifest(wrap(entry({ layers: [] })))[0]?.layers).toEqual([]);
+  });
+
+  it('names the fix when an entry declares an unknown layer', () => {
+    expect(() => parseManifest(wrap(entry({ layers: ['tier1'] })))).toThrow(
+      /datasets\[0\]\.layers has an unknown layer "tier1".*"smoke", "par" or "full"/s
+    );
   });
 
   it('reads a bright entry by its split', () => {
@@ -49,6 +76,7 @@ describe('parseManifest', () => {
         domain: 'programming-language',
         docShape: 'long-web-page',
         enabled: false,
+        layers: [],
       })
     );
     expect(parsed[0]).toMatchObject({ format: 'bright', split: 'pony', enabled: false });
@@ -234,6 +262,57 @@ describe('the shipped datasets.json', () => {
     expect(bright.filter(e => e.granularity === 'passage').map(e => e.id)).toEqual([
       'bright-biology-passages',
     ]);
+  });
+
+  // datasets.json is the ONE owner of the layer membership (plan D5) — nothing
+  // restates it in an npm script, so these three lists are the whole definition.
+  it('ships smoke as the four sub-minute datasets', () => {
+    expect(datasetsInLayer(entries, 'smoke').map(e => e.id)).toEqual([
+      'nfcorpus',
+      'scifact',
+      'vault',
+      'vault-hu',
+    ]);
+  });
+
+  it('ships par as the six Tier-1 BM25 datasets, trec-covid among them', () => {
+    expect(datasetsInLayer(entries, 'par').map(e => e.id)).toEqual([
+      'nfcorpus',
+      'scifact',
+      'arguana',
+      'trec-covid',
+      'scidocs',
+      'fiqa',
+    ]);
+  });
+
+  // `full` is `par` plus webis-touche2020 — the rerank-REGRESSION control, whose
+  // 40-minute ingest only the arm-bearing layer earns back.
+  it('ships full as par plus webis-touche2020, and nothing else', () => {
+    const par = datasetsInLayer(entries, 'par').map(e => e.id);
+    expect(datasetsInLayer(entries, 'full').map(e => e.id)).toEqual([...par, 'webis-touche2020']);
+  });
+
+  // The cost asymmetry is measured, not preferred: a later contributor moving
+  // webis-touche2020 into `par` must meet the numbers that kept it out.
+  it('records why webis-touche2020 is full-only, in measured terms', () => {
+    const raw: unknown = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+    const rawEntries = (raw as { datasets: readonly { id: string; comment?: string }[] }).datasets;
+    const comment = rawEntries.find(e => e.id === 'webis-touche2020')?.comment ?? '';
+
+    expect(comment).toMatch(/2,413 s/);
+    expect(comment).toMatch(/3,776 topics/);
+    expect(comment).toMatch(/rerank regression/i);
+  });
+
+  // Plan risk R4 assumed a ~10 min ingest for trec-covid; it measures 270 s.
+  it('records why trec-covid IS in par, against the plan risk that doubted it', () => {
+    const raw: unknown = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+    const rawEntries = (raw as { datasets: readonly { id: string; comment?: string }[] }).datasets;
+    const comment = rawEntries.find(e => e.id === 'trec-covid')?.comment ?? '';
+
+    expect(comment).toMatch(/270 s/);
+    expect(comment).toMatch(/R4/);
   });
 
   it('has unique ids', () => {

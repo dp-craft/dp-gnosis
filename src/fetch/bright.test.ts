@@ -86,6 +86,7 @@ const entry: BrightDataset = {
   docShape: 'long-web-page',
   atomMaxChars: 4000,
   enabled: true,
+  layers: [],
 };
 
 const passageEntry: BrightDataset = {

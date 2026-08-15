@@ -88,6 +88,16 @@ describe('parseArgs', () => {
     expect(options.rerankFusion).toEqual({ kind: 'rrf', rrfK: RERANK_RRF_K, rerankWeight: 0.8 });
   });
 
+  it('reads --layer as the suite layer to run', () => {
+    expect(parseArgs(['--layer', 'smoke']).layer).toBe('smoke');
+    expect(parseArgs([]).layer).toBeUndefined();
+  });
+
+  it('FAILS LOUDLY on an unknown layer, naming it and the valid ones', () => {
+    expect(() => parseArgs(['--layer', 'tier1'])).toThrow(/tier1/);
+    expect(() => parseArgs(['--layer', 'tier1'])).toThrow(/smoke.*par.*full/s);
+  });
+
   it('FAILS LOUDLY on a non-numeric --rerank-weight rather than measuring NaN', () => {
     expect(() => parseArgs(['--rerank-weight', 'half'])).toThrow(/half/);
   });
@@ -126,6 +136,7 @@ describe('effectiveAtomMaxChars', () => {
     docShape: 'abstract',
     atomMaxChars,
     enabled: true,
+    layers: [],
   });
 
   it('resolves the ENGINE default when the manifest is silent, never null', () => {
@@ -173,6 +184,32 @@ describe('selectDatasets', () => {
     expect(selection.entries.map(entry => entry.id)).toEqual(['vault']);
     expect(selection.unknown).toEqual(['vault-typo']);
   });
+
+  it('selects exactly the layer members when --layer is given alone', () => {
+    const selection = selectDatasets(manifest, [], 'smoke');
+    expect(selection.entries.map(entry => entry.id)).toEqual([
+      'nfcorpus',
+      'scifact',
+      'vault',
+      'vault-hu',
+    ]);
+    expect(selection.unknown).toEqual([]);
+  });
+
+  it('INTERSECTS --layer with --only', () => {
+    const selection = selectDatasets(manifest, ['scifact'], 'par');
+    expect(selection.entries.map(entry => entry.id)).toEqual(['scifact']);
+    expect(selection.unknown).toEqual([]);
+  });
+
+  // A known id outside the layer is NOT unknown — reporting it as a typo would
+  // send the reader after the wrong defect. The empty intersection is the error.
+  it('empties the selection when --only names a known id outside --layer', () => {
+    const selection = selectDatasets(manifest, ['vault'], 'par');
+    expect(selection.entries).toEqual([]);
+    expect(selection.unknown).toEqual([]);
+    expect(selectionError(selection)).toMatch(/--layer par with --only vault/);
+  });
 });
 
 describe('selectionError', () => {
@@ -202,6 +239,25 @@ describe('main dataset selection', () => {
     stdout.mockRestore();
     expect(code).not.toBe(0);
     expect(written).toContain('vault-hu-typo');
+  });
+
+  // An empty layer/id intersection MUST fail loudly by name, exactly as an
+  // unknown --only id does — never a silent no-op that exits 0 measuring nothing.
+  it('exits non-zero naming both flags when --layer and --only intersect to nothing', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    const code = await main(['--layer', 'par', '--only', 'vault'], 'sha');
+    const written = stderr.mock.calls.map(call => String(call[0])).join('');
+    stderr.mockRestore();
+    stdout.mockRestore();
+    expect(code).not.toBe(0);
+    expect(written).toContain('--layer par with --only vault');
+  });
+
+  // As with --adapter, the throw escapes main and kills the process non-zero
+  // before a single dataset is touched.
+  it('refuses an unknown --layer before measuring, naming it and the valid layers', async () => {
+    await expect(main(['--layer', 'tier1'], 'sha')).rejects.toThrow(/tier1.*smoke.*par.*full/s);
   });
 });
 
