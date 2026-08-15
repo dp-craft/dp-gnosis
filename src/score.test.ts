@@ -30,6 +30,8 @@ describe('toDocumentRanking', () => {
   });
 });
 
+const DEPTH_100 = 100;
+
 describe('scoreDataset', () => {
   const qrels = new Map<string, Qrel>([
     ['q1', new Map([['a', 1]])],
@@ -42,7 +44,8 @@ describe('scoreDataset', () => {
         ['q1', ['a', 'b']],
         ['q2', ['a', 'b']],
       ]),
-      qrels
+      qrels,
+      DEPTH_100
     );
     expect(result.perTopic.map(t => t.queryId)).toEqual(['q1', 'q2']);
     expect(result.perTopic[0]?.metrics.ndcg10).toBeCloseTo(1, 12);
@@ -56,7 +59,8 @@ describe('scoreDataset', () => {
         ['q1', ['a', 'b']],
         ['q2', ['a', 'b']],
       ]),
-      qrels
+      qrels,
+      DEPTH_100
     );
     // per-topic nDCG@10 is [1, 0]; sample sd = sqrt(((0.5)^2 + (0.5)^2) / 1).
     expect(result.sd.ndcg10).toBeCloseTo(Math.SQRT1_2, 12);
@@ -65,11 +69,32 @@ describe('scoreDataset', () => {
   });
 
   it('reports a zero sd for a single topic, where a sample sd is undefined', () => {
-    expect(scoreDataset(new Map([['q1', ['a']]]), qrels).sd.ndcg10).toBe(0);
+    expect(scoreDataset(new Map([['q1', ['a']]]), qrels, DEPTH_100).sd.ndcg10).toBe(0);
   });
 
   it('treats a topic with no qrels entry as all-zero instead of throwing', () => {
-    const result = scoreDataset(new Map([['unknown', ['a']]]), qrels);
-    expect(result.mean).toEqual({ ndcg10: 0, recall10: 0, recall100: 0, mrr10: 0 });
+    const result = scoreDataset(new Map([['unknown', ['a']]]), qrels, DEPTH_100);
+    expect(result.mean).toEqual({
+      ndcg10: 0,
+      recall10: 0,
+      recall20: 0,
+      recall100: 0,
+      recall300: undefined,
+      recall1000: undefined,
+      mrr10: 0,
+    });
+  });
+
+  it('carries the run DEPTH into the cutoffs: @20 is measured at depth 100, @300 is not', () => {
+    const result = scoreDataset(new Map([['q1', ['a', 'b']]]), qrels, DEPTH_100);
+    expect(result.mean.recall20).toBe(1);
+    expect(result.mean.recall300).toBeUndefined();
+    expect(result.perTopic[0]?.metrics.recall1000).toBeUndefined();
+  });
+
+  it('measures every cutoff the run actually retrieved to', () => {
+    const result = scoreDataset(new Map([['q1', ['a', 'b']]]), qrels, 1000);
+    expect(result.mean.recall300).toBe(1);
+    expect(result.mean.recall1000).toBe(1);
   });
 });

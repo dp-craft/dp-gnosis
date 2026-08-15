@@ -135,7 +135,15 @@ describe('winnerLine', () => {
     docCount: 5183,
     atomCount: 5202,
     queryMs: 1000,
-    metrics: { ndcg10, recall10: 0.6, recall100: 0.9, mrr10: 0.7 },
+    metrics: {
+      ndcg10,
+      recall10: 0.6,
+      recall20: 0.7,
+      recall100: 0.9,
+      recall300: undefined,
+      recall1000: undefined,
+      mrr10: 0.7,
+    },
     perTopicPath: `sweep/per-topic/stem-scifact-linear-k1-${k1.toFixed(2)}-b-0.60.tsv`,
     significance,
   });

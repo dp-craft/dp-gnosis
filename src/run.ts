@@ -331,7 +331,7 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
     docCount: prepared.docCount,
     atomCount: prepared.atomCount,
     ingestMs: prepared.ingestMs,
-    ...measurementsOf(queried, scoreDataset(queried.rankings, qrels)),
+    ...measurementsOf(queried, scoreDataset(queried.rankings, qrels, options.depth)),
   };
 };
 

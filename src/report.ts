@@ -306,10 +306,21 @@ export const appendHistory = (historyPath: string, rows: readonly HistoryRow[]):
 
 const metric = (value: number): string => value.toFixed(METRIC_DIGITS);
 
+/** An unmeasurable cutoff reads as absent, not as a number. */
+const optionalMetric = (value: number | undefined): string =>
+  value === undefined ? '—' : metric(value);
+
+/**
+ * R@20 is in the human table because it is the RERANKER's objective — it reads
+ * `RERANK_K_INIT`=20 candidates, so a gain that misses R@20 buys nothing
+ * downstream. R@300/@1000 stay in the JSON and the per-topic TSV: they exist for
+ * the depth curve, and a nine-metric row is unreadable.
+ */
 const markdownRow = (result: DatasetResult): string =>
   `| ${result.dataset} | ${result.domain} | ${result.docShape} | ${result.topics} | ` +
   `${metric(result.metrics.ndcg10)} | ${metric(result.metricsSd.ndcg10)} | ` +
-  `${metric(result.metrics.recall10)} | ${metric(result.metrics.recall100)} | ` +
+  `${metric(result.metrics.recall10)} | ${optionalMetric(result.metrics.recall20)} | ` +
+  `${metric(result.metrics.recall100)} | ` +
   `${metric(result.metrics.mrr10)} | ${result.queryP50Ms} | ${result.queryP95Ms} |`;
 
 const markdownHeader = (provenance: RunProvenance): readonly string[] => [
@@ -322,23 +333,41 @@ const markdownHeader = (provenance: RunProvenance): readonly string[] => [
   '> Scores are DOCUMENT-level: atoms are rolled up to their origin document before',
   '> scoring, so they stay comparable across chunker changes.',
   '',
-  '| dataset | domain | docShape | topics | nDCG@10 | nDCG@10 sd | R@10 | R@100 | MRR@10 | ' +
-    'q p50 ms | q p95 ms |',
-  '|---|---|---|---|---|---|---|---|---|---|---|',
+  '| dataset | domain | docShape | topics | nDCG@10 | nDCG@10 sd | R@10 | R@20 | R@100 | ' +
+    'MRR@10 | q p50 ms | q p95 ms |',
+  '|---|---|---|---|---|---|---|---|---|---|---|---|',
 ];
 
 const renderMarkdown = (provenance: RunProvenance, results: readonly DatasetResult[]): string =>
   [...markdownHeader(provenance), ...results.map(markdownRow), ''].join('\n');
 
-const TSV_HEADER = 'query_id\tndcg10\trecall10\trecall100\tmrr10';
+/** The per-topic TSV's key column; a file not starting with it is not ours. */
+export const PER_TOPIC_QUERY_COLUMN = 'query_id';
+
+/**
+ * The metric columns, in file order. `significance.ts` reads a TSV by these
+ * NAMES off its header line, never by position: files recorded before the recall
+ * cutoffs existed carry the shorter header and must still parse.
+ */
+export const PER_TOPIC_METRIC_COLUMNS = [
+  'ndcg10',
+  'recall10',
+  'recall20',
+  'recall100',
+  'recall300',
+  'recall1000',
+  'mrr10',
+] as const satisfies readonly (keyof Metrics)[];
+
+const TSV_HEADER = [PER_TOPIC_QUERY_COLUMN, ...PER_TOPIC_METRIC_COLUMNS].join('\t');
+
+/** An unmeasurable cutoff is an EMPTY field — 0 would read as "measured, none". */
+const tsvCell = (value: number | undefined): string => (value === undefined ? '' : metric(value));
 
 const tsvRow = (topic: TopicScore): string =>
   [
     topic.queryId,
-    metric(topic.metrics.ndcg10),
-    metric(topic.metrics.recall10),
-    metric(topic.metrics.recall100),
-    metric(topic.metrics.mrr10),
+    ...PER_TOPIC_METRIC_COLUMNS.map(column => tsvCell(topic.metrics[column])),
   ].join('\t');
 
 /**

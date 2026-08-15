@@ -40,7 +40,7 @@ import { resolve } from 'node:path';
 
 import { type ProvenanceChange, provenanceChanges, scaleChanges, treatmentChanges } from './compare.js';
 import type { Metrics } from './metrics.js';
-import type { HistoryRow } from './report.js';
+import { type HistoryRow, PER_TOPIC_QUERY_COLUMN } from './report.js';
 
 /** Fixed so a re-run reproduces the p-value exactly; any value works, this one is arbitrary-but-pinned. */
 export const SIGNIFICANCE_SEED = 0x5eed_0d17;
@@ -67,10 +67,12 @@ const TIE_EPSILON = 1e-12;
 const PERMUTATION_STREAM = SIGNIFICANCE_SEED;
 const BOOTSTRAP_STREAM = SIGNIFICANCE_SEED ^ 0x9e37_79b9;
 
-/** `report.ts`'s TSV header, verbatim — a file that does not start with it is not ours. */
-const TSV_HEADER = 'query_id\tndcg10\trecall10\trecall100\tmrr10';
-
-const TSV_COLUMNS = 5;
+/**
+ * The metrics EVERY per-topic TSV has carried since the first recorded run. A
+ * file missing one of them is not ours; a file missing only the later recall
+ * cutoffs is a legacy file and still parses, with those cutoffs `undefined`.
+ */
+const REQUIRED_COLUMNS = ['ndcg10', 'recall10', 'recall100', 'mrr10'] as const;
 
 /** Which of the four measures the test is run on; the caller names it. */
 export type MetricName = keyof Metrics;
@@ -135,12 +137,27 @@ export interface SignificanceUnattributableRun {
   readonly runs: readonly string[];
 }
 
+/**
+ * The requested measure is absent from at least one side's per-topic scores —
+ * a legacy file that predates the metric, or a run whose retrieval depth never
+ * reached the cutoff. Refusing is the point: pairing on a substituted 0 would
+ * report a difference the runs never measured.
+ */
+export interface SignificanceMetricUnavailable {
+  readonly kind: 'metric-unavailable';
+  readonly dataset: string;
+  readonly metric: MetricName;
+  /** Why it cannot be paired, in the words a reader needs. */
+  readonly reason: string;
+}
+
 export type Significance =
   | SignificanceVerdict
   | SignificanceProvenanceChanged
   | SignificanceTopicsDiffer
   | SignificanceMissingPerTopic
-  | SignificanceUnattributableRun;
+  | SignificanceUnattributableRun
+  | SignificanceMetricUnavailable;
 
 /** The two runs to pair, and the measure to test. */
 export interface PairedSignificanceOptions {
@@ -223,29 +240,65 @@ const bootstrapInterval = (
   return { low: quantile(means, tail), high: quantile(means, 1 - tail) };
 };
 
-const parseMetrics = (columns: readonly string[]): Metrics | undefined => {
-  const values = columns.slice(1).map(Number);
-  return values.length === TSV_COLUMNS - 1 && values.every(Number.isFinite)
-    ? { ndcg10: values[0] ?? 0, recall10: values[1] ?? 0, recall100: values[2] ?? 0, mrr10: values[3] ?? 0 }
-    : undefined;
+/** An empty or non-numeric field is ABSENT, which is not the number 0. */
+const cellValue = (raw: string | undefined): number | undefined => {
+  const value = raw === undefined || raw.trim().length === 0 ? Number.NaN : Number(raw);
+  return Number.isFinite(value) ? value : undefined;
 };
 
-const parseRow = (line: string): readonly [string, Metrics] | undefined => {
-  const columns = line.split('\t');
-  const metrics = columns.length === TSV_COLUMNS ? parseMetrics(columns) : undefined;
-  return metrics === undefined || columns[0] === undefined || columns[0].length === 0
+type CellsByColumn = ReadonlyMap<string, number | undefined>;
+
+const parseMetrics = (cells: CellsByColumn): Metrics | undefined => {
+  const present = REQUIRED_COLUMNS.filter(column => cells.get(column) !== undefined);
+  return present.length < REQUIRED_COLUMNS.length
     ? undefined
-    : [columns[0], metrics];
+    : {
+        ndcg10: cells.get('ndcg10') ?? 0,
+        recall10: cells.get('recall10') ?? 0,
+        recall20: cells.get('recall20'),
+        recall100: cells.get('recall100') ?? 0,
+        recall300: cells.get('recall300'),
+        recall1000: cells.get('recall1000'),
+        mrr10: cells.get('mrr10') ?? 0,
+      };
+};
+
+/** Fields addressed by the header's column NAMES, so a legacy file still reads. */
+const cellsOf = (header: readonly string[], columns: readonly string[]): CellsByColumn =>
+  new Map(header.map((name, index) => [name, cellValue(columns[index])] as const));
+
+const parseRow = (
+  header: readonly string[],
+  line: string
+): readonly [string, Metrics] | undefined => {
+  const columns = line.split('\t');
+  const queryId = columns[0];
+  if (queryId === undefined || queryId.length === 0 || columns.length !== header.length) {
+    return undefined;
+  }
+  const metrics = parseMetrics(cellsOf(header, columns));
+  return metrics === undefined ? undefined : [queryId, metrics];
 };
 
 const isEntry = (
   entry: readonly [string, Metrics] | undefined
 ): entry is readonly [string, Metrics] => entry !== undefined;
 
+/** Ours when it is keyed by `query_id` and names every metric a run has always had. */
+const headerOf = (line: string | undefined): readonly string[] | undefined => {
+  const columns = line === undefined ? [] : line.split('\t');
+  return columns[0] === PER_TOPIC_QUERY_COLUMN &&
+    REQUIRED_COLUMNS.every(column => columns.includes(column))
+    ? columns
+    : undefined;
+};
+
 const parseTsv = (text: string): TopicScores | undefined => {
   const lines = text.split('\n').filter(line => line.trim().length > 0);
-  const entries = lines.slice(1).map(parseRow).filter(isEntry);
-  return lines[0] === TSV_HEADER && entries.length > 0 ? new Map(entries) : undefined;
+  const header = headerOf(lines[0]);
+  if (header === undefined) return undefined;
+  const entries = lines.slice(1).map(line => parseRow(header, line)).filter(isEntry);
+  return entries.length > 0 ? new Map(entries) : undefined;
 };
 
 /**
@@ -274,9 +327,34 @@ export const perTopicPath = (resultsDir: string, run: HistoryRow): string | unde
 const missingFrom = (left: TopicScores, right: TopicScores): readonly string[] =>
   [...left.keys()].filter(id => !right.has(id)).sort();
 
-/** Defined for every id by the time this runs — the topic sets were matched first. */
-const scoreOf = (scores: TopicScores, id: string, metric: MetricName): number =>
-  scores.get(id)?.[metric] ?? 0;
+const isMeasured = (value: number | undefined): value is number => value !== undefined;
+
+/**
+ * Every topic's value for `metric`, or `undefined` when ANY topic lacks it. A
+ * partial vector is not a measurement: filling the gaps with 0 invents a
+ * difference, and dropping those topics biases the estimate.
+ */
+const measuredValues = (
+  scores: TopicScores,
+  ids: readonly string[],
+  metric: MetricName
+): readonly number[] | undefined => {
+  const values = ids.map(id => scores.get(id)?.[metric]).filter(isMeasured);
+  return values.length === ids.length ? values : undefined;
+};
+
+const metricUnavailable = (
+  dataset: string,
+  metric: MetricName
+): SignificanceMetricUnavailable => ({
+  kind: 'metric-unavailable',
+  dataset,
+  metric,
+  reason:
+    `${metric} is absent from at least one run's per-topic scores — the file predates ` +
+    'the metric, or the run never retrieved to that cutoff. A paired test on a ' +
+    'substituted 0 would report a difference neither run measured.',
+});
 
 const verdictOf = (
   dataset: string,
@@ -319,10 +397,13 @@ export const pairedScores = (
   if (onlyInPrevious.length + onlyInLatest.length > 0) {
     return { kind: 'topics-differ', dataset, onlyInPrevious, onlyInLatest };
   }
-  const differences = [...before.keys()]
-    .sort()
-    .map(id => scoreOf(after, id, metric) - scoreOf(before, id, metric));
-  return verdictOf(dataset, metric, differences);
+  const ids = [...before.keys()].sort();
+  const beforeValues = measuredValues(before, ids, metric);
+  const afterValues = measuredValues(after, ids, metric);
+  if (beforeValues === undefined || afterValues === undefined) {
+    return metricUnavailable(dataset, metric);
+  }
+  return verdictOf(dataset, metric, afterValues.map((value, i) => value - (beforeValues[i] ?? 0)));
 };
 
 interface LoadedRun {

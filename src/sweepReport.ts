@@ -199,6 +199,7 @@ const REFUSAL_REASONS: Readonly<Record<Exclude<Significance['kind'], 'verdict'>,
   'missing-per-topic': 'per-topic scores missing',
   'provenance-changed': 'provenance changed',
   'unattributable-run': 'run records no per-topic path',
+  'metric-unavailable': 'metric not recorded on both sides',
 };
 
 const verdictLabel = (verdict: SignificanceVerdict): string =>
@@ -272,15 +273,20 @@ export const writeSweepPerTopic = (options: SweepPerTopicOptions): string => {
 
 // ---------------------------------------------------------------- markdown
 
+/** R@20 only, for the reason `report.ts`'s results table carries it. */
+const optionalMetric = (value: number | undefined): string =>
+  value === undefined ? '—' : metric(value);
+
 const gridRow = (cell: SweepCell): string =>
   `| ${cell.dataset} | ${cell.k1} | ${cell.b} | ${cell.baseline ? 'baseline' : ''} | ` +
   `${metric(cell.metrics.ndcg10)} | ${metric(cell.metrics.recall10)} | ` +
-  `${metric(cell.metrics.recall100)} | ${metric(cell.metrics.mrr10)} | ${cell.queryMs} | ` +
+  `${optionalMetric(cell.metrics.recall20)} | ${metric(cell.metrics.recall100)} | ` +
+  `${metric(cell.metrics.mrr10)} | ${cell.queryMs} | ` +
   `${significanceLabel(cell.significance)} |`;
 
 const GRID_HEADER: readonly string[] = [
-  '| dataset | k1 | b | | nDCG@10 | R@10 | R@100 | MRR@10 | query ms | vs baseline |',
-  '|---|---|---|---|---|---|---|---|---|---|',
+  '| dataset | k1 | b | | nDCG@10 | R@10 | R@20 | R@100 | MRR@10 | query ms | vs baseline |',
+  '|---|---|---|---|---|---|---|---|---|---|---|',
 ];
 
 const bestRow = (cells: readonly SweepCell[], dataset: string): string => {

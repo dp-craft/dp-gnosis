@@ -149,6 +149,36 @@
       "docShape": "atom",
       "queryShape": "hungarian-question",
       "enabled": true
+    },
+    {
+      "comment": "ROW X of the pre-rerank campaign — the query-phrasing ARM of `vault`. Identical corpus, identical topic ids, identical relevantAtomIds; ONLY the query text differs, rewritten to keyword form per tools/dp-gnosis/README.md § Query rephrasing. The bench sends RAW query text, so phrasing — the largest measured quality lever in the system (P@10 0.20 -> 0.80) — is otherwise invisible to it; a committed rephrased golden file makes it a deterministic, perfectly paired experiment. `enabled` is FALSE on purpose: this is an arm, and enabling it would silently change what a bare `gnosis:bench` measures. Run it with `--only vault-rephrased`. 20 of the 60 topics are byte-identical to the base set by design (README rule 5 — MUST NOT dilute a query that already carries the exact rare term), so a whole-set delta is diluted by 33% guaranteed ties and the changed-topic subset MUST be reported alongside it.",
+      "id": "vault-rephrased",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/vault-rephrased",
+      "derive": {
+        "atoms": "../../dp-gnosis/vault",
+        "golden": "../dp-gnosis/golden/golden-set-rephrased.v2.json"
+      },
+      "domain": "project-vault",
+      "docShape": "atom",
+      "queryShape": "keyword-rephrased",
+      "enabled": false
+    },
+    {
+      "comment": "ROW X, Hungarian arm — the phrasing pair of `vault-hu`. All 31 topics are full inflected questions, so all 31 are rewritten; this is the cleaner half of the experiment. It also carries the README's non-English instruction (write the word STEM the document uses, not the inflected form the asker speaks), so it measures de-inflection and intent-stripping together, not separately. `enabled` FALSE for the same reason as `vault-rephrased`; run with `--only vault-hu-rephrased`.",
+      "id": "vault-hu-rephrased",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/vault-hu-rephrased",
+      "derive": {
+        "atoms": "../../dp-gnosis/cache/atoms-hu",
+        "golden": "../dp-gnosis/golden/golden-set-hu-rephrased.v1.json"
+      },
+      "domain": "project-vault-hu",
+      "docShape": "atom",
+      "queryShape": "hungarian-keyword-rephrased",
+      "enabled": false
     }
   ]
 }

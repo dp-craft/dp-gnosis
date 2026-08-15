@@ -217,7 +217,7 @@ export const measureCell = async (
     excluded: context.excluded,
   };
   const queried = await queryDataset(rankContext, context.topics).finally(() => port.close?.());
-  const scored = scoreDataset(queried.rankings, context.qrels);
+  const scored = scoreDataset(queried.rankings, context.qrels, run.depth);
   const identity = { dataset: context.entry.id, adapter: ADAPTER, k1: point.k1, b: point.b };
   return {
     ...identity,

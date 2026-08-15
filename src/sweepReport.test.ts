@@ -27,7 +27,10 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 const metrics = (ndcg10: number): Metrics => ({
   ndcg10,
   recall10: ndcg10 / 2,
+  recall20: ndcg10 * 0.75,
   recall100: ndcg10,
+  recall300: undefined,
+  recall1000: undefined,
   mrr10: ndcg10 * 2,
 });
 
@@ -116,8 +119,10 @@ describe('renderSweepMarkdown', () => {
     expect(best[0]?.endsWith('| — |')).toBe(true);
   });
 
-  it('carries one row per measured cell, with all four metrics', () => {
-    expect(markdown).toContain('| nfcorpus | 1.2 | 0.75 | baseline | 0.3250 | 0.1625 | 0.3250 |');
+  it('carries one row per measured cell, with every tabled metric incl. R@20', () => {
+    expect(markdown).toContain(
+      '| nfcorpus | 1.2 | 0.75 | baseline | 0.3250 | 0.1625 | 0.2438 | 0.3250 |'
+    );
     expect(markdown.split('\n').filter(line => line.startsWith('| nfcorpus | 1'))).toHaveLength(2);
   });
 

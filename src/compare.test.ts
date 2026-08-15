@@ -20,7 +20,10 @@ const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
   queryMs: 300,
   ndcg10: 0.6,
   recall10: 0.5,
+  recall20: 0.7,
   recall100: 0.9,
+  recall300: undefined,
+  recall1000: undefined,
   mrr10: 0.55,
   ...overrides,
 });

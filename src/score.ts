@@ -77,14 +77,19 @@ export const toDocumentRanking = (
 /**
  * Score one dataset. The mean is over EVERY topic that was run, including those
  * that retrieved nothing relevant — dropping them would flatter the run.
+ *
+ * `depth` is the run's retrieval depth, and it is REQUIRED: the rankings were
+ * truncated to it (`run.ts`), so a recall cutoff above it cannot be measured and
+ * must be recorded as absent rather than as the recall at the truncation point.
  */
 export const scoreDataset = (
   rankingsByQuery: ReadonlyMap<string, readonly string[]>,
-  qrels: ReadonlyMap<string, Qrel>
+  qrels: ReadonlyMap<string, Qrel>,
+  depth: number
 ): DatasetScore => {
   const perTopic = [...rankingsByQuery].map(([queryId, ranking]) => ({
     queryId,
-    metrics: scoreTopic(ranking, qrels.get(queryId) ?? EMPTY_QREL),
+    metrics: scoreTopic(ranking, qrels.get(queryId) ?? EMPTY_QREL, depth),
   }));
   const metrics = perTopic.map(topic => topic.metrics);
   return { perTopic, mean: meanMetrics(metrics), sd: sdMetrics(metrics) };

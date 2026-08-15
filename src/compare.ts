@@ -57,11 +57,18 @@ export interface ProvenanceChange {
   readonly latest: HistoryRow[ProvenanceField];
 }
 
-/** The signed metric movement from the older run to the newer one. */
+/**
+ * The signed metric movement from the older run to the newer one. A recall
+ * cutoff either run did not measure has NO delta — `undefined`, never a
+ * subtraction against a missing value.
+ */
 export interface MetricDelta {
   readonly ndcg10: number;
   readonly recall10: number;
+  readonly recall20: number | undefined;
   readonly recall100: number;
+  readonly recall300: number | undefined;
+  readonly recall1000: number | undefined;
   readonly mrr10: number;
 }
 
@@ -149,10 +156,20 @@ export const treatmentChanges = (
   latest: HistoryRow
 ): readonly ProvenanceChange[] => changesIn(previous, latest, TREATMENT_FIELDS);
 
+/** Both sides must have measured it; otherwise there is nothing to subtract. */
+const optionalDelta = (
+  previous: number | undefined,
+  latest: number | undefined
+): number | undefined =>
+  previous === undefined || latest === undefined ? undefined : latest - previous;
+
 const deltaOf = (previous: HistoryRow, latest: HistoryRow): MetricDelta => ({
   ndcg10: latest.ndcg10 - previous.ndcg10,
   recall10: latest.recall10 - previous.recall10,
+  recall20: optionalDelta(previous.recall20, latest.recall20),
   recall100: latest.recall100 - previous.recall100,
+  recall300: optionalDelta(previous.recall300, latest.recall300),
+  recall1000: optionalDelta(previous.recall1000, latest.recall1000),
   mrr10: latest.mrr10 - previous.mrr10,
 });
 
@@ -197,10 +214,17 @@ export const compareAll = (history: readonly HistoryRow[]): readonly Comparison[
 const signed = (value: number): string =>
   `${value >= 0 ? '+' : ''}${value.toFixed(DELTA_DIGITS)}`;
 
+/** A cutoff one side never measured is omitted, not printed as a zero movement. */
+const optionalText = (label: string, value: number | undefined): string =>
+  value === undefined ? '' : `${label} ${signed(value)}  `;
+
 const metricsText = (comparison: ComparisonDelta | ComparisonArmDelta): string =>
   `nDCG@10 ${signed(comparison.delta.ndcg10)}  ` +
   `R@10 ${signed(comparison.delta.recall10)}  ` +
+  optionalText('R@20', comparison.delta.recall20) +
   `R@100 ${signed(comparison.delta.recall100)}  ` +
+  optionalText('R@300', comparison.delta.recall300) +
+  optionalText('R@1000', comparison.delta.recall1000) +
   `MRR@10 ${signed(comparison.delta.mrr10)}  ` +
   `(${comparison.previous.gitSha} → ${comparison.latest.gitSha})`;
 

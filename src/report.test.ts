@@ -38,9 +38,38 @@ const result: DatasetResult = {
   queryMs: 340,
   queryP50Ms: 11,
   queryP95Ms: 29,
-  metrics: { ndcg10: 0.6863, recall10: 0.8, recall100: 0.9177, mrr10: 0.66 },
-  metricsSd: { ndcg10: 0.31, recall10: 0.28, recall100: 0.19, mrr10: 0.36 },
-  perTopic: [{ queryId: 'q1', metrics: { ndcg10: 1, recall10: 1, recall100: 1, mrr10: 1 } }],
+  metrics: {
+    ndcg10: 0.6863,
+    recall10: 0.8,
+    recall20: 0.85,
+    recall100: 0.9177,
+    recall300: undefined,
+    recall1000: undefined,
+    mrr10: 0.66,
+  },
+  metricsSd: {
+    ndcg10: 0.31,
+    recall10: 0.28,
+    recall20: 0.26,
+    recall100: 0.19,
+    recall300: undefined,
+    recall1000: undefined,
+    mrr10: 0.36,
+  },
+  perTopic: [
+    {
+      queryId: 'q1',
+      metrics: {
+        ndcg10: 1,
+        recall10: 1,
+        recall20: 1,
+        recall100: 1,
+        recall300: undefined,
+        recall1000: undefined,
+        mrr10: 1,
+      },
+    },
+  ],
 };
 
 /**
@@ -92,6 +121,7 @@ describe('writeRunReport', () => {
         'queryP95Ms',
         'queryShape',
         'recall10',
+        'recall20',
         'recall100',
         'recall100Sd',
         'recall10Sd',
@@ -205,5 +235,48 @@ describe('readHistory', () => {
 
   it('returns nothing for a record that does not exist yet', () => {
     expect(readHistory(resolve(tempResultsDir(), HISTORY_FILE))).toEqual([]);
+  });
+});
+
+describe('the new recall cutoffs', () => {
+  const readPerTopicTsv = (dir: string): readonly string[] =>
+    readFileSync(
+      writeRunReport({ resultsDir: dir, provenance, results: [result] }).perTopicPaths[0] ?? '',
+      'utf8'
+    ).split('\n');
+
+  it('names every cutoff in the per-topic TSV header', () => {
+    expect(readPerTopicTsv(tempResultsDir())[0]).toBe(
+      'query_id\tndcg10\trecall10\trecall20\trecall100\trecall300\trecall1000\tmrr10'
+    );
+  });
+
+  it('writes an unmeasurable cutoff as an EMPTY field, never as 0', () => {
+    const header = readPerTopicTsv(tempResultsDir())[0]?.split('\t') ?? [];
+    const row = readPerTopicTsv(tempResultsDir())[1]?.split('\t') ?? [];
+    expect(row[header.indexOf('recall20')]).toBe('1.0000');
+    expect(row[header.indexOf('recall300')]).toBe('');
+    expect(row[header.indexOf('recall1000')]).toBe('');
+  });
+
+  it('records a measured recall@20 on the history row and OMITS the unmeasurable ones', () => {
+    const dir = tempResultsDir();
+    writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(row?.recall20).toBeCloseTo(0.85, 12);
+    expect(Object.keys(row ?? {})).not.toContain('recall300');
+    expect(Object.keys(row ?? {})).not.toContain('recall1000');
+  });
+
+  it('shows R@20 in the human table — the reranker objective — but not @300/@1000', () => {
+    const dir = tempResultsDir();
+    const markdown = readFileSync(
+      writeRunReport({ resultsDir: dir, provenance, results: [result] }).markdownPath,
+      'utf8'
+    );
+    expect(markdown).toContain('| R@20 |');
+    expect(markdown).not.toContain('R@300');
+    expect(markdown).not.toContain('R@1000');
+    expect(markdown).toContain('0.8500');
   });
 });

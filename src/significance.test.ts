@@ -33,7 +33,10 @@ const BASE_ROW: HistoryRow = {
   queryMs: 300,
   ndcg10: 0.3,
   recall10: 0.2,
+  recall20: 0.35,
   recall100: 0.5,
+  recall300: undefined,
+  recall1000: undefined,
   mrr10: 0.25,
 };
 
@@ -396,7 +399,15 @@ const scoresOf = (
   new Map(
     entries.map(([id, value]) => [
       id,
-      { ndcg10: value, recall10: 0.1, recall100: 0.2, mrr10: 0.3 },
+      {
+        ndcg10: value,
+        recall10: 0.1,
+        recall20: 0.15,
+        recall100: 0.2,
+        recall300: undefined,
+        recall1000: undefined,
+        mrr10: 0.3,
+      },
     ])
   );
 
@@ -442,5 +453,75 @@ describe('pairedScores — the loaded-score seam', () => {
     expect(after).toBeDefined();
     if (before === undefined || after === undefined) return;
     expect(pairedScores('bright-biology', 'ndcg10', before, after)).toEqual(viaRuns);
+  });
+});
+
+// ------------------------------------------------ the added recall cutoffs
+
+/** The header recorded TSVs on disk carry — five columns, no @20/@300/@1000. */
+const LEGACY_HEADER = 'query_id\tndcg10\trecall10\trecall100\tmrr10';
+
+const CURRENT_HEADER =
+  'query_id\tndcg10\trecall10\trecall20\trecall100\trecall300\trecall1000\tmrr10';
+
+const writeTsv = (body: string): string => {
+  const path = resolve(tempResultsDir(), 'scores.tsv');
+  writeFileSync(path, body, 'utf8');
+  return path;
+};
+
+const legacyTsv = (values: readonly number[]): string =>
+  [LEGACY_HEADER, ...values.map((v, i) => `q${i}\t${v.toFixed(4)}\t0.1000\t0.2000\t0.3000`), ''].join('\n');
+
+const currentTsv = (values: readonly number[]): string =>
+  [
+    CURRENT_HEADER,
+    ...values.map((v, i) => `q${i}\t${v.toFixed(4)}\t0.1000\t${v.toFixed(4)}\t0.2000\t\t\t0.3000`),
+    '',
+  ].join('\n');
+
+describe('per-topic TSV parsed by COLUMN NAME', () => {
+  it('still reads a legacy five-column file, with the new metrics undefined', () => {
+    const scores = readPerTopic(writeTsv(legacyTsv(NULL_BEFORE)));
+    expect(scores?.size).toBe(NULL_BEFORE.length);
+    expect(scores?.get('q0')?.ndcg10).toBeCloseTo(0.4, 6);
+    expect(scores?.get('q0')?.recall100).toBeCloseTo(0.2, 6);
+    expect(scores?.get('q0')?.recall20).toBeUndefined();
+    expect(scores?.get('q0')?.recall300).toBeUndefined();
+  });
+
+  it('reads the current header, and an EMPTY field is undefined rather than 0', () => {
+    const scores = readPerTopic(writeTsv(currentTsv(NULL_BEFORE)));
+    expect(scores?.get('q0')?.recall20).toBeCloseTo(0.4, 6);
+    expect(scores?.get('q0')?.mrr10).toBeCloseTo(0.3, 6);
+    expect(scores?.get('q0')?.recall300).toBeUndefined();
+    expect(scores?.get('q0')?.recall1000).toBeUndefined();
+  });
+});
+
+describe('a metric absent from a file is a REFUSAL, never a fabricated 0', () => {
+  it('refuses a recall@20 test against a legacy file, and states why', () => {
+    const before = readPerTopic(writeTsv(legacyTsv(NULL_BEFORE)));
+    const after = readPerTopic(writeTsv(currentTsv(NULL_BEFORE.map(v => v + 0.05))));
+    expect(before).toBeDefined();
+    expect(after).toBeDefined();
+    if (before === undefined || after === undefined) return;
+    const result = pairedScores('bright-biology', 'recall20', before, after);
+    expect(result.kind).toBe('metric-unavailable');
+    if (result.kind !== 'metric-unavailable') return;
+    expect(result.metric).toBe('recall20');
+    expect(result.reason.length).toBeGreaterThan(0);
+  });
+
+  it('runs the test when BOTH files recorded the metric', () => {
+    const before = readPerTopic(writeTsv(currentTsv(NULL_BEFORE)));
+    const after = readPerTopic(writeTsv(currentTsv(NULL_BEFORE.map(v => v + 0.05))));
+    expect(before).toBeDefined();
+    expect(after).toBeDefined();
+    if (before === undefined || after === undefined) return;
+    const result = pairedScores('bright-biology', 'recall20', before, after);
+    expect(result.kind).toBe('verdict');
+    if (result.kind !== 'verdict') return;
+    expect(result.meanDifference).toBeCloseTo(0.05, 6);
   });
 });

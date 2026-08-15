@@ -116,12 +116,27 @@ describe('parseManifest', () => {
 describe('the shipped datasets.json', () => {
   const entries = loadManifest(MANIFEST);
 
-  // AC delta: P0-B adds the two REAL-vault entries (`vault`, `vault-hu`) as
-  // beir-local datasets derived from the repo's own atoms + golden sets, so the
-  // total moves 12 → 14 and the BEIR count 3 → 5. The BRIGHT count is untouched.
-  it('carries the five BEIR entries plus nine BRIGHT entries', () => {
-    expect(entries).toHaveLength(14);
+  // AC delta: the query-phrasing campaign adds two ARMS of the vault entries
+  // (`vault-rephrased`, `vault-hu-rephrased`) — same corpus, same judgments, only
+  // the query text differs — so the total moves 14 → 16 and the vault family 2 → 4.
+  // The external-BEIR (3) and BRIGHT (9) counts are untouched. Asserting the three
+  // kinds by id keeps an accidental sixteenth-plus-one entry failing this test.
+  it('carries three external BEIR, nine BRIGHT, two vault and two vault-arm entries', () => {
+    const ids = entries.map(e => e.id);
+    const isVault = (id: string): boolean => id === 'vault' || id.startsWith('vault-');
+    const external = ids.filter(id => !id.startsWith('bright-') && !isVault(id));
+
     expect(entries.filter(e => e.format === 'bright')).toHaveLength(9);
+    expect(external).toEqual(['nfcorpus', 'scifact', 'arguana']);
+    expect(ids.filter(id => isVault(id) && !id.endsWith('-rephrased'))).toEqual([
+      'vault',
+      'vault-hu',
+    ]);
+    expect(ids.filter(id => id.endsWith('-rephrased'))).toEqual([
+      'vault-rephrased',
+      'vault-hu-rephrased',
+    ]);
+    expect(entries).toHaveLength(3 + 9 + 2 + 2);
   });
 
   // AC delta: every entry is enabled now that both fetchers exist. Before them,
@@ -130,14 +145,49 @@ describe('the shipped datasets.json', () => {
     expect(enabledDatasets(entries)).toHaveLength(14);
   });
 
-  // The two vault entries are the only ones that DERIVE their BEIR layout, and
-  // both must name an atoms dir and a golden set — half a derivation is a typo.
+  // The four vault-family entries are the only ones that DERIVE their BEIR layout,
+  // and each must name an atoms dir and a golden set — half a derivation is a typo.
   it('gives each vault entry a derive block naming atoms and a golden set', () => {
     const derived = entries.filter(e => e.format === 'beir-local' && e.derive !== undefined);
 
-    expect(derived.map(e => e.id)).toEqual(['vault', 'vault-hu']);
+    expect(derived.map(e => e.id)).toEqual([
+      'vault',
+      'vault-hu',
+      'vault-rephrased',
+      'vault-hu-rephrased',
+    ]);
     expect(derived.every(e => e.format === 'beir-local' && e.derive!.atoms.length > 0)).toBe(true);
     expect(derived.every(e => e.format === 'beir-local' && e.derive!.golden.length > 0)).toBe(true);
+  });
+
+  // The rephrased arms exist to isolate QUERY PHRASING. Same corpus, different
+  // query text: if the atoms path ever drifts apart, the arm silently measures a
+  // corpus difference instead — the exact defect class this suite guards.
+  it.each([
+    ['vault-rephrased', 'vault'],
+    ['vault-hu-rephrased', 'vault-hu'],
+  ])('pairs %s to %s: same atoms corpus, different golden set', (armId, baseId) => {
+    const deriveOf = (id: string): { atoms: string; golden: string } => {
+      const found = entries.find(e => e.id === id);
+      if (found === undefined || found.format !== 'beir-local' || found.derive === undefined) {
+        throw new Error(`${id} is not a derived beir-local entry`);
+      }
+      return { atoms: found.derive.atoms, golden: found.derive.golden };
+    };
+    const arm = deriveOf(armId);
+    const base = deriveOf(baseId);
+
+    expect(arm.atoms).toBe(base.atoms);
+    expect(arm.golden).not.toBe(base.golden);
+  });
+
+  // Enabling an arm would silently change what a bare `npm run gnosis:bench`
+  // measures — they are run with `--only <id>`.
+  it('ships both rephrased arms disabled, so the default suite is unchanged', () => {
+    const arms = entries.filter(e => e.id.endsWith('-rephrased'));
+
+    expect(arms.map(e => e.id)).toEqual(['vault-rephrased', 'vault-hu-rephrased']);
+    expect(arms.map(e => e.enabled)).toEqual([false, false]);
   });
 
   it('caps BRIGHT atoms at 4000 chars — its documents are whole web pages', () => {
