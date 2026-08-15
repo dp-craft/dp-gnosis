@@ -1,11 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
 
 import { buildFts5Index, createFts5Adapter } from '../src/adapters/fts5Adapter.js';
 import type { KnowledgePort } from '../src/port.js';
+import { stemText } from '../src/query.js';
 
 const NOW = new Date('2026-08-08T00:00:00.000Z');
 
@@ -551,5 +552,178 @@ describe('createFts5Adapter', () => {
     const result = await port().retrieve('zustand', { k: 2, types: ['adr'] });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-x1', 'atom-x2']);
+  });
+});
+
+/**
+ * The index CARRIES the analysis chain that built it, and the query side reads
+ * it back — so symmetry between hop 7 and hop 11 is a property of the artifact
+ * rather than a convention two call sites happen to honour.
+ */
+describe('fts5 analyzer stamp', () => {
+  /** A corpus of realistic atom bodies, several of them stemming-sensitive. */
+  const FIXTURE: readonly AtomSpec[] = [
+    {
+      file: 'a.md',
+      id: 'atom-selectors',
+      body: 'Zustand selectors MUST return stable references; unstable selectors cause render loops.',
+    },
+    {
+      file: 'b.md',
+      id: 'atom-fts5',
+      body: 'The fts5 table is contentless, so bodies are re-read from disk at call time.',
+    },
+    {
+      file: 'c.md',
+      id: 'atom-adr',
+      body: 'adr-018 supersedes the six-category mandate and defines the layered test model.',
+    },
+    {
+      file: 'd.md',
+      id: 'atom-stemming',
+      body: 'Porter stemming folds selectors and selector onto one term, so both spellings match.',
+    },
+    {
+      file: 'e.md',
+      id: 'atom-cafe',
+      body: 'A café note about diacritic folding and the unicode61 tokenizer of SQLite.',
+    },
+  ];
+
+  const QUERIES: readonly string[] = [
+    'zustand selectors',
+    'adr-018',
+    'diacritic folding cafe',
+    'contentless bodies disk',
+    'stemming spellings',
+  ];
+
+  const writeFixture = (): void => FIXTURE.forEach(writeAtom);
+
+  /**
+   * The PRE-CHANGE writer, reproduced verbatim: `stemText` bodies, no
+   * `index_meta`. It is both the back-compat artifact and the reference the
+   * default path is compared against.
+   */
+  const buildLegacyIndex = (): void => {
+    rmSync(indexPath, { force: true });
+    mkdirSync(dirname(indexPath), { recursive: true });
+    const db = new Database(indexPath);
+    db.exec(
+      'CREATE TABLE atom_meta(rowid INTEGER PRIMARY KEY, id TEXT NOT NULL, path TEXT NOT NULL)'
+    );
+    db.exec('CREATE VIRTUAL TABLE atom_fts USING fts5(body, content=\'\', detail=full)');
+    const meta = db.prepare('INSERT INTO atom_meta(rowid, id, path) VALUES (?, ?, ?)');
+    const fts = db.prepare('INSERT INTO atom_fts(rowid, body) VALUES (?, ?)');
+    db.transaction(() =>
+      [...FIXTURE]
+        .sort((left, right) => (left.file < right.file ? -1 : 1))
+        .forEach((spec, index) => {
+          meta.run(index + 1, spec.id, spec.file);
+          fts.run(index + 1, stemText(spec.body));
+        })
+    )();
+    db.close();
+  };
+
+  const readStamp = (): string | undefined => {
+    const db = new Database(indexPath, { readonly: true });
+    const table = db
+      .prepare('SELECT name FROM sqlite_master WHERE type = \'table\' AND name = \'index_meta\'')
+      .get();
+    const row =
+      table === undefined
+        ? undefined
+        : (db.prepare('SELECT value AS value FROM index_meta WHERE key = \'analyzer\'').get() as
+            | { value: string }
+            | undefined);
+    db.close();
+    return row?.value;
+  };
+
+  const restamp = (value: string): void => {
+    const db = new Database(indexPath);
+    db.prepare('UPDATE index_meta SET value = ? WHERE key = \'analyzer\'').run(value);
+    db.close();
+  };
+
+  const answers = async (): Promise<unknown> => {
+    const instance = port();
+    const results = [];
+    for (const query of QUERIES) results.push(await instance.retrieve(query, { k: 5 }));
+    instance.close?.();
+    return results.map(result => result.atoms);
+  };
+
+  it('answers a default build exactly as the pre-stamp writer did, rows and ranking alike', async () => {
+    writeFixture();
+    buildFts5Index({ atomsDir, indexPath });
+    const stamped = await answers();
+
+    buildLegacyIndex();
+    const legacy = await answers();
+
+    expect(stamped).toEqual(legacy);
+    expect(legacy).not.toEqual([[], [], [], [], []]);
+  });
+
+  it('stamps the default analyzer when no analyzer is named', () => {
+    writeFixture();
+
+    buildFts5Index({ atomsDir, indexPath });
+
+    expect(readStamp()).toBe('porter-fold');
+  });
+
+  it('round-trips a named analyzer: stamped on build, read back on query', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selectors stability' });
+    buildFts5Index({ atomsDir, indexPath, analyzer: 'nostem-fold' });
+
+    expect(readStamp()).toBe('nostem-fold');
+    expect((await port().retrieve('selectors', { k: 5 })).atoms.map(atom => atom.id)).toEqual([
+      'atom-a',
+    ]);
+  });
+
+  it('answers differently under nostem-fold than under porter-fold for a stemmed term', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selectors stability' });
+
+    buildFts5Index({ atomsDir, indexPath, analyzer: 'nostem-fold' });
+    const unstemmed = await port().retrieve('selector', { k: 5 });
+    buildFts5Index({ atomsDir, indexPath, analyzer: 'porter-fold' });
+    const stemmed = await port().retrieve('selector', { k: 5 });
+
+    expect(unstemmed.atoms).toEqual([]);
+    expect(stemmed.atoms.map(atom => atom.id)).toEqual(['atom-a']);
+  });
+
+  it('reads an index carrying no index_meta as porter-fold, without throwing or rebuilding', async () => {
+    writeFixture();
+    buildLegacyIndex();
+
+    const result = await port().retrieve('zustand selectors', { k: 5 });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-selectors', 'atom-stemming']);
+    expect(readStamp()).toBeUndefined();
+  });
+
+  it('refuses an index stamped with an analyzer outside the known chains', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selectors stability' });
+    buildFts5Index({ atomsDir, indexPath });
+    restamp('klingon-fold');
+
+    const attempt = async (): Promise<unknown> => await port().retrieve('zustand', { k: 5 });
+
+    await expect(attempt()).rejects.toThrow(/unknown analyzer "klingon-fold"/);
+  });
+
+  it('keeps a multi-token chunk an adjacency phrase under the stamped analyzer', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-adjacent', body: 'adr-018 defines the layered test model' });
+    writeAtom({ file: 'b.md', id: 'atom-apart', body: 'adr work covers 018 somewhere else' });
+    buildFts5Index({ atomsDir, indexPath });
+
+    const result = await port().retrieve('adr-018', { k: 5 });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-adjacent']);
   });
 });

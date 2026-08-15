@@ -35,9 +35,16 @@
  * the inflection case. It is refused: that is a DIFFERENT Porter implementation
  * from the one every other adapter uses, so this adapter would stem by its own
  * rules and `--adapter` would stop being a comparison of retrieval. Instead the
- * text is stemmed through the package-wide `stemText` (`query.ts`) BEFORE it is
- * inserted, and every query chunk is stemmed before it reaches `MATCH` — one
- * stemmer, both sides, shared with every other adapter.
+ * text runs through a package-wide named analyzer (`analyzeToText`, `query.ts`)
+ * BEFORE it is inserted, and every query chunk runs through the SAME named
+ * analyzer before it reaches `MATCH`.
+ *
+ * ANALYZER SYMMETRY IS STRUCTURAL, not conventional. The chain's id is STAMPED
+ * into `index_meta` in the same transaction that writes the rows, and the query
+ * side reads it back off the file it opens — so no caller can pick a chain for
+ * the query that differs from the one the index holds. An index predating the
+ * stamp carries no `index_meta`; it reads as `porter-fold`, the only chain that
+ * ever built one. An index stamped with an id outside `ANALYZERS` REFUSES.
  *
  * NO `prefix=` index — RECORDED CHOICE AND TRAP. `buildQuery` (`query.ts`) emits
  * plain terms only, so a prefix index would index nothing anyone asks for. If a
@@ -67,7 +74,7 @@ import type {
   RetrieveOptions
 } from '../port.js';
 import { assertTypeFilter } from '../port.js';
-import { stemText } from '../query.js';
+import { type AnalyzerId, ANALYZERS, analyzeToText, DEFAULT_ANALYZER } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
 /** `mode`/`name` reported by this adapter. */
@@ -77,6 +84,18 @@ const MARKDOWN_EXT = '.md';
 
 const CREATE_META_SQL =
   'CREATE TABLE atom_meta(rowid INTEGER PRIMARY KEY, id TEXT NOT NULL, path TEXT NOT NULL)';
+/**
+ * INDEX-LEVEL facts, one row per key — deliberately NOT `atom_meta`, which is
+ * per-atom: stamping the analyzer there would repeat it once per row and let
+ * two rows disagree about which chain produced the index they share.
+ */
+const CREATE_INDEX_META_SQL = 'CREATE TABLE index_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)';
+const INSERT_INDEX_META_SQL = 'INSERT INTO index_meta(key, value) VALUES (?, ?)';
+const SELECT_INDEX_META_SQL = 'SELECT value AS value FROM index_meta WHERE key = ?';
+const HAS_INDEX_META_SQL =
+  'SELECT name FROM sqlite_master WHERE type = \'table\' AND name = \'index_meta\'';
+/** The stamped key naming the analysis chain hop 7 used. */
+const ANALYZER_KEY = 'analyzer';
 const CREATE_FTS_SQL =
   'CREATE VIRTUAL TABLE atom_fts USING fts5(body, content=\'\', detail=full)';
 const INSERT_META_SQL = 'INSERT INTO atom_meta(rowid, id, path) VALUES (?, ?, ?)';
@@ -96,16 +115,29 @@ const SEARCH_SQL =
 
 const WHITESPACE_RE = /\s+/;
 
-/** Options for a full index rebuild. */
-export interface BuildFts5IndexOptions {
+/** Which corpus, and which index file over it. */
+interface Fts5IndexLocation {
   /** Curated atoms root. MUST NOT be pointed at the proposals root. */
   readonly atomsDir: string;
   /** Destination index file; its parent directory is created if absent. */
   readonly indexPath: string;
 }
 
-/** Options for one adapter instance. */
-export interface Fts5AdapterOptions extends BuildFts5IndexOptions {
+/** Options for a full index rebuild. */
+export interface BuildFts5IndexOptions extends Fts5IndexLocation {
+  /**
+   * The analysis chain hop 7 applies, STAMPED into the index it produces.
+   * Absent means `DEFAULT_ANALYZER`, which is today's behaviour unchanged.
+   */
+  readonly analyzer?: AnalyzerId;
+}
+
+/**
+ * Options for one adapter instance — deliberately NO `analyzer`. The query side
+ * reads the chain back off the index it opens, so a caller cannot name one here
+ * and silently analyze against an index built by a different chain.
+ */
+export interface Fts5AdapterOptions extends Fts5IndexLocation {
   /** Injected clock for `isRetrievable`; never read from inside. */
   readonly now: Date;
 }
@@ -159,18 +191,29 @@ const collectEntries = (atomsDir: string): readonly IndexEntry[] =>
     .map(rel => toEntry(atomsDir, rel))
     .filter(isDefined);
 
-const writeEntries = (db: Database.Database, entries: readonly IndexEntry[]): void => {
+/**
+ * The stamp is written inside the SAME transaction as the rows it describes, so
+ * a build that dies part-way leaves no index claiming a chain it never applied:
+ * either both land or neither does.
+ */
+const writeEntries = (
+  db: Database.Database,
+  entries: readonly IndexEntry[],
+  analyzer: AnalyzerId
+): void => {
   const meta = db.prepare(INSERT_META_SQL);
   const fts = db.prepare(INSERT_FTS_SQL);
-  db.transaction(() =>
+  const stamp = db.prepare(INSERT_INDEX_META_SQL);
+  db.transaction(() => {
+    stamp.run(ANALYZER_KEY, analyzer);
     entries.forEach((entry, index) => {
       meta.run(index + 1, entry.id, entry.path);
-      // INDEX SIDE of the shared stemmer: `unicode61` then tokenizes text that
-      // is already stems, so the inverted index holds the same terms the linear
-      // scan computes in memory.
-      fts.run(index + 1, stemText(entry.body));
-    })
-  )();
+      // INDEX SIDE of the shared analyzer: `unicode61` then tokenizes text that
+      // is already analyzed, so the inverted index holds the same terms the
+      // linear scan computes in memory.
+      fts.run(index + 1, analyzeToText(entry.body, analyzer));
+    });
+  })();
 };
 
 /**
@@ -186,8 +229,40 @@ export const buildFts5Index = (options: BuildFts5IndexOptions): void => {
   const db = new Database(options.indexPath);
   db.exec(CREATE_META_SQL);
   db.exec(CREATE_FTS_SQL);
-  writeEntries(db, entries);
+  db.exec(CREATE_INDEX_META_SQL);
+  writeEntries(db, entries, options.analyzer ?? DEFAULT_ANALYZER);
   db.close();
+};
+
+/** A stamped id outside `ANALYZERS` REFUSES — a silent fallback would analyze
+ * the query by a different chain than the index holds and publish the result
+ * under the wrong label. */
+const isAnalyzerId = (value: string): value is AnalyzerId => Object.keys(ANALYZERS).includes(value);
+
+const asAnalyzer = (value: string): AnalyzerId => {
+  if (isAnalyzerId(value)) return value;
+  throw new Error(
+    `fts5 index: unknown analyzer "${value}" — known analyzers are ${Object.keys(ANALYZERS).join(', ')}.`
+  );
+};
+
+const hasIndexMeta = (db: Database.Database): boolean =>
+  db.prepare(HAS_INDEX_META_SQL).get() !== undefined;
+
+const stampValue = (db: Database.Database): string | undefined =>
+  hasIndexMeta(db)
+    ? (db.prepare(SELECT_INDEX_META_SQL).get(ANALYZER_KEY) as { readonly value: string } | undefined)
+        ?.value
+    : undefined;
+
+/**
+ * An index built before the stamp existed carries no `index_meta`. `porter-fold`
+ * is the ONLY chain that ever produced one, so reading an absent stamp as that
+ * chain is exact rather than a guess — and it neither throws nor rebuilds.
+ */
+const stampedAnalyzer = (db: Database.Database): AnalyzerId => {
+  const value = stampValue(db);
+  return value === undefined ? DEFAULT_ANALYZER : asAnalyzer(value);
 };
 
 /**
@@ -199,23 +274,30 @@ export const buildFts5Index = (options: BuildFts5IndexOptions): void => {
 const escapeTerm = (term: string): string => `"${term.replaceAll('"', '""')}"`;
 
 /**
- * QUERY SIDE of the shared stemmer. The query is still split on whitespace ONLY
- * — `query.ts` owns tokenization and an adapter MUST NOT re-tokenize — but each
- * whitespace chunk is then run through the package-wide `stemText`, so it
- * carries the same stems the index holds. A chunk whose characters are all
- * FTS5 syntax (a lone `"`) stems to the empty string and is dropped rather than
- * emitted as an empty literal.
+ * QUERY SIDE of the shared analyzer. `analyzer` is the chain STAMPED into the
+ * index being searched, never a parameter a caller chose: index and query are
+ * analyzed by construction rather than by convention.
  *
- * Stemming a chunk keeps its internal token ORDER, so a multi-token chunk such
+ * The query is still split on whitespace ONLY — `query.ts` owns tokenization and
+ * an adapter MUST NOT re-tokenize — but each whitespace chunk is then run
+ * through the package-wide `analyzeToText`, so it carries the same terms the
+ * index holds. A chunk whose characters are all FTS5 syntax (a lone `"`)
+ * analyzes to the empty string and is dropped rather than emitted as an empty
+ * literal.
+ *
+ * Analyzing a chunk keeps its internal token ORDER, so a multi-token chunk such
  * as `adr-018` stays the adjacency-requiring phrase `"adr 018"` it already was
- * — the stemmer changes the terms, never the query's shape.
+ * — the analyzer changes the terms, never the query's shape.
  *
  * Disjunction, not FTS5's implicit AND: a `buildQuery` string carries up to 32
  * distilled terms, and requiring all of them would match nothing. `undefined`
  * for a term-free query — an empty `MATCH` is a syntax error.
  */
-const toMatchExpression = (query: string): string | undefined => {
-  const phrases = query.split(WHITESPACE_RE).map(stemText).filter(phrase => phrase.length > 0);
+const toMatchExpression = (query: string, analyzer: AnalyzerId): string | undefined => {
+  const phrases = query
+    .split(WHITESPACE_RE)
+    .map(chunk => analyzeToText(chunk, analyzer))
+    .filter(phrase => phrase.length > 0);
   return phrases.length === 0 ? undefined : phrases.map(escapeTerm).join(' OR ');
 };
 
@@ -379,6 +461,8 @@ interface OpenIndex {
   readonly db: Database.Database;
   readonly count: Database.Statement;
   readonly search: Database.Statement;
+  /** Read off the file being searched — the query side's ONLY source of it. */
+  readonly analyzer: AnalyzerId;
 }
 
 /**
@@ -401,6 +485,7 @@ const openIndex = (indexPath: string): OpenIndex => {
     db,
     count: db.prepare(COUNT_META_SQL),
     search: db.prepare(SEARCH_SQL),
+    analyzer: stampedAnalyzer(db),
   };
 };
 
@@ -415,7 +500,9 @@ const openIndex = (indexPath: string): OpenIndex => {
  * keyed by path, which would outlive the instance that owns it.
  */
 interface IndexHandle {
-  readonly snapshot: (indexPath: string, match: string | undefined) => IndexSnapshot;
+  /** Takes the RAW query: the match expression can only be built once the
+   * index — and therefore its stamped analyzer — is open. */
+  readonly snapshot: (indexPath: string, query: string) => IndexSnapshot;
   readonly close: () => void;
 }
 
@@ -443,17 +530,20 @@ const acquire = (cell: HandleCell, indexPath: string): OpenIndex => {
     : reopen(cell, indexPath);
 };
 
-const snapshotOf = (index: OpenIndex, match: string | undefined): IndexSnapshot => ({
-  count: (index.count.get() as { readonly n: number }).n,
-  rows: match === undefined ? [] : (index.search.all(match) as readonly IndexRow[]),
-});
+const snapshotOf = (index: OpenIndex, query: string): IndexSnapshot => {
+  const match = toMatchExpression(query, index.analyzer);
+  return {
+    count: (index.count.get() as { readonly n: number }).n,
+    rows: match === undefined ? [] : (index.search.all(match) as readonly IndexRow[]),
+  };
+};
 
 const createIndexHandle = (): IndexHandle => {
   const cell: HandleCell = { open: undefined };
   return {
     close: (): void => release(cell),
-    snapshot: (indexPath: string, match: string | undefined): IndexSnapshot =>
-      snapshotOf(acquire(cell, indexPath), match),
+    snapshot: (indexPath: string, query: string): IndexSnapshot =>
+      snapshotOf(acquire(cell, indexPath), query),
   };
 };
 
@@ -465,7 +555,7 @@ interface Fts5Instance {
 }
 
 const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): RetrievalResult => {
-  const snapshot = self.handle.snapshot(self.options.indexPath, toMatchExpression(query));
+  const snapshot = self.handle.snapshot(self.options.indexPath, query);
   return {
     atoms: selectAtoms(self.options, snapshot.rows, opts),
     mode: FTS5_MODE,
