@@ -30,6 +30,50 @@
       "enabled": true
     },
     {
+      "comment": "DISABLED ON PURPOSE — it FAILS the assertIngestSound 90% document-coverage gate today. 42,139 of its 171,332 records carry a non-empty title and an EMPTY text (the CORD-19 metadata-only population), and emptyBodyReasons discards the resulting title-only atoms. Dropping them is not neutral: 3,135 relevant judgments (12.71%) across 50 of 50 topics become unreachable, a hard recall ceiling of ~0.873. The fix is scoped to the bench projection (plan T-04), NOT to the engine authoring rule; this entry flips to true at T-05. Archive confirmed HTTP 200 at 73,876,720 bytes.",
+      "id": "trec-covid",
+      "format": "beir-zip",
+      "qrels": "test",
+      "source": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/trec-covid.zip",
+      "domain": "biomedical",
+      "docShape": "short-abstract",
+      "queryShape": "keyword",
+      "enabled": false
+    },
+    {
+      "comment": "BEIR citation-prediction set: the query is a paper TITLE and the judged documents are the papers it cites, so it measures title→abstract matching rather than question→passage. Archive confirmed HTTP 200 at 142,471,588 bytes.",
+      "id": "scidocs",
+      "format": "beir-zip",
+      "qrels": "test",
+      "source": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scidocs.zip",
+      "domain": "scientific-papers",
+      "docShape": "short-abstract",
+      "queryShape": "paper-title",
+      "enabled": true
+    },
+    {
+      "comment": "Financial-domain opinionated QA over StackExchange answers — the only Tier-1 entry whose documents are user-written forum prose rather than edited scientific text. Archive confirmed HTTP 200 at 17,948,027 bytes.",
+      "id": "fiqa",
+      "format": "beir-zip",
+      "qrels": "test",
+      "source": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/fiqa.zip",
+      "domain": "finance",
+      "docShape": "forum-answer",
+      "queryShape": "question",
+      "enabled": true
+    },
+    {
+      "comment": "The id is the ARCHIVE id — touche2020.zip is a 404, and ensureBeirDataset resolves <dataDir>/<entry.id>/corpus.jsonl against the archive's inner directory, so the entry id MUST equal it. Kept deliberately as the rerank-REGRESSION control: it is the only BEIR dataset where a cross-encoder DEGRADES the result (published BM25 0.367 -> BM25+CE 0.271), so an arm that improves everything is measuring something other than reranking. Archive confirmed HTTP 200 at 227,132,363 bytes.",
+      "id": "webis-touche2020",
+      "format": "beir-zip",
+      "qrels": "test",
+      "source": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/webis-touche2020.zip",
+      "domain": "argumentation",
+      "docShape": "argument",
+      "queryShape": "question",
+      "enabled": true
+    },
+    {
       "id": "bright-biology",
       "format": "bright",
       "split": "biology",

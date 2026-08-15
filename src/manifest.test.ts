@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -116,18 +117,27 @@ describe('parseManifest', () => {
 describe('the shipped datasets.json', () => {
   const entries = loadManifest(MANIFEST);
 
-  // AC delta: the query-phrasing campaign adds two ARMS of the vault entries
-  // (`vault-rephrased`, `vault-hu-rephrased`) — same corpus, same judgments, only
-  // the query text differs — so the total moves 14 → 16 and the vault family 2 → 4.
-  // The external-BEIR (3) and BRIGHT (9) counts are untouched. Asserting the three
-  // kinds by id keeps an accidental sixteenth-plus-one entry failing this test.
-  it('carries three external BEIR, nine BRIGHT, two vault and two vault-arm entries', () => {
+  // AC delta: the BEIR Tier-1 expansion adds four external `beir-zip` entries
+  // (`trec-covid`, `scidocs`, `fiqa`, `webis-touche2020`), so the external-BEIR count
+  // moves 3 → 7 and the total 16 → 20. BRIGHT (9), vault (2) and the vault arms (2)
+  // are untouched. The external list is asserted in MANIFEST ORDER — `webis-touche2020`
+  // is the archive id (touche2020.zip is a 404) and `ensureBeirDataset` resolves
+  // `<dataDir>/<id>/corpus.jsonl`, so a renamed id would break the fetch, not this test.
+  it('carries seven external BEIR, nine BRIGHT, two vault and two vault-arm entries', () => {
     const ids = entries.map(e => e.id);
     const isVault = (id: string): boolean => id === 'vault' || id.startsWith('vault-');
     const external = ids.filter(id => !id.startsWith('bright-') && !isVault(id));
 
     expect(entries.filter(e => e.format === 'bright')).toHaveLength(9);
-    expect(external).toEqual(['nfcorpus', 'scifact', 'arguana']);
+    expect(external).toEqual([
+      'nfcorpus',
+      'scifact',
+      'arguana',
+      'trec-covid',
+      'scidocs',
+      'fiqa',
+      'webis-touche2020',
+    ]);
     expect(ids.filter(id => isVault(id) && !id.endsWith('-rephrased'))).toEqual([
       'vault',
       'vault-hu',
@@ -136,13 +146,17 @@ describe('the shipped datasets.json', () => {
       'vault-rephrased',
       'vault-hu-rephrased',
     ]);
-    expect(entries).toHaveLength(3 + 9 + 2 + 2);
+    expect(entries).toHaveLength(7 + 9 + 2 + 2);
   });
 
-  // AC delta: every entry is enabled now that both fetchers exist. Before them,
-  // only the three datasets already on disk or hand-fetchable could run.
-  it('enables every entry, each of the fourteen having a fetcher', () => {
-    expect(enabledDatasets(entries)).toHaveLength(14);
+  // AC delta: the default suite is no longer "every entry". Three of the twenty ship
+  // disabled — the two rephrased arms (run by `--only`) and `trec-covid`, which fails
+  // the 90% document-coverage gate until the bench projection is fixed — leaving 17.
+  it('enables seventeen of the twenty entries, each having a fetcher', () => {
+    const disabled = entries.filter(e => !e.enabled).map(e => e.id);
+
+    expect(disabled).toEqual(['trec-covid', 'vault-rephrased', 'vault-hu-rephrased']);
+    expect(enabledDatasets(entries)).toHaveLength(17);
   });
 
   // The four vault-family entries are the only ones that DERIVE their BEIR layout,
@@ -188,6 +202,21 @@ describe('the shipped datasets.json', () => {
 
     expect(arms.map(e => e.id)).toEqual(['vault-rephrased', 'vault-hu-rephrased']);
     expect(arms.map(e => e.enabled)).toEqual([false, false]);
+  });
+
+  // trec-covid is not "not fetched yet" — it FAILS the 90% document-coverage gate
+  // because 42,139 title-only records are discarded as empty-bodied. Enabling it
+  // before the bench projection is fixed breaks a bare `npm run gnosis:bench`, so the
+  // reason must ship next to the flag, not only in the plan.
+  it('ships trec-covid disabled with the coverage-gate reason stated in the manifest', () => {
+    const trecCovid = entries.find(e => e.id === 'trec-covid');
+    const raw: unknown = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+    const rawEntries = (raw as { datasets: readonly { id: string; comment?: string }[] }).datasets;
+    const comment = rawEntries.find(e => e.id === 'trec-covid')?.comment ?? '';
+
+    expect(trecCovid?.enabled).toBe(false);
+    expect(comment).toMatch(/coverage/i);
+    expect(comment).toMatch(/42,139/);
   });
 
   it('caps BRIGHT atoms at 4000 chars — its documents are whole web pages', () => {
