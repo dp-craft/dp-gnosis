@@ -1,0 +1,2616 @@
+{
+  "provenance": {
+    "ts": "2026-08-15T01:17:07.106Z",
+    "gitSha": "2b0572eb",
+    "adapter": "linear",
+    "depth": 100,
+    "k1s": [
+      0.6,
+      0.9,
+      1.2,
+      1.5,
+      1.8
+    ],
+    "bs": [
+      0,
+      0.05,
+      0.1,
+      0.2,
+      0.3,
+      0.45,
+      0.6,
+      0.75,
+      0.9
+    ]
+  },
+  "cells": [
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 14200,
+      "metrics": {
+        "ndcg10": 0.3495914503786646,
+        "recall10": 0.4544378306878306,
+        "recall100": 0.748926917989418,
+        "mrr10": 0.41069444444444436
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.08522500000000004,
+        "pValue": 0.0040995900409959,
+        "ciLow": -0.13926000000000002,
+        "ciHigh": -0.028204999999999997,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8423,
+      "metrics": {
+        "ndcg10": 0.38376899941129505,
+        "recall10": 0.4644031084656082,
+        "recall100": 0.7610333994708995,
+        "mrr10": 0.4622619047619048
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.051051666666666655,
+        "pValue": 0.046295370462953706,
+        "ciLow": -0.09818500000000004,
+        "ciHigh": -0.0010333333333333416,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8556,
+      "metrics": {
+        "ndcg10": 0.393326837462918,
+        "recall10": 0.47065310846560826,
+        "recall100": 0.7633482142857144,
+        "mrr10": 0.4828439153439153
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.04149333333333335,
+        "pValue": 0.0812918708129187,
+        "ciLow": -0.0856,
+        "ciHigh": 0.00515333333333334,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8532,
+      "metrics": {
+        "ndcg10": 0.39503329809474075,
+        "recall10": 0.47329199735449723,
+        "recall100": 0.7661838624338625,
+        "mrr10": 0.4827777777777777
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.039783333333333344,
+        "pValue": 0.05849415058494151,
+        "ciLow": -0.07881833333333335,
+        "ciHigh": 0.000978333333333333,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8571,
+      "metrics": {
+        "ndcg10": 0.4106392794981516,
+        "recall10": 0.48372850529100514,
+        "recall100": 0.7795767195767197,
+        "mrr10": 0.5182407407407407
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.024173333333333328,
+        "pValue": 0.21877812218778123,
+        "ciLow": -0.06007833333333333,
+        "ciHigh": 0.01429333333333335,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8594,
+      "metrics": {
+        "ndcg10": 0.4201990029487562,
+        "recall10": 0.48685350529100513,
+        "recall100": 0.7847850529100528,
+        "mrr10": 0.5520105820105818
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.014613333333333334,
+        "pValue": 0.37866213378662134,
+        "ciLow": -0.045441666666666665,
+        "ciHigh": 0.01815166666666667,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8403,
+      "metrics": {
+        "ndcg10": 0.42272090109520327,
+        "recall10": 0.4910201719576718,
+        "recall100": 0.7923164682539683,
+        "mrr10": 0.560297619047619
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.012093333333333333,
+        "pValue": 0.39376062393760625,
+        "ciLow": -0.039689999999999996,
+        "ciHigh": 0.015245000000000005,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8685,
+      "metrics": {
+        "ndcg10": 0.4308251803859944,
+        "recall10": 0.4848280423280421,
+        "recall100": 0.8143998015873016,
+        "mrr10": 0.586058201058201
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.003985,
+        "pValue": 0.6037396260373963,
+        "ciLow": -0.01899,
+        "ciHigh": 0.011073333333333333,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8344,
+      "metrics": {
+        "ndcg10": 0.4190559967244926,
+        "recall10": 0.47802248677248665,
+        "recall100": 0.8170122354497356,
+        "mrr10": 0.5583928571428572
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.60-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.015758333333333336,
+        "pValue": 0.1670832916708329,
+        "ciLow": -0.037165,
+        "ciHigh": 0.0060500000000000016,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8695,
+      "metrics": {
+        "ndcg10": 0.3514247314294721,
+        "recall10": 0.45860449735449726,
+        "recall100": 0.7503736772486772,
+        "mrr10": 0.4077777777777777
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.08339500000000004,
+        "pValue": 0.0047995200479952005,
+        "ciLow": -0.13702333333333339,
+        "ciHigh": -0.026815,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8514,
+      "metrics": {
+        "ndcg10": 0.39480318275095294,
+        "recall10": 0.4777711640211639,
+        "recall100": 0.7619593253968254,
+        "mrr10": 0.47321428571428564
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.04001499999999999,
+        "pValue": 0.15428457154284572,
+        "ciLow": -0.09161500000000003,
+        "ciHigh": 0.015193333333333333,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8461,
+      "metrics": {
+        "ndcg10": 0.39962783931942614,
+        "recall10": 0.4780142195767194,
+        "recall100": 0.7631746031746032,
+        "mrr10": 0.4811772486772486
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.03519333333333334,
+        "pValue": 0.1503849615038496,
+        "ciLow": -0.07999666666666666,
+        "ciHigh": 0.012149999999999994,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8598,
+      "metrics": {
+        "ndcg10": 0.4011307791139339,
+        "recall10": 0.4780142195767194,
+        "recall100": 0.7722602513227513,
+        "mrr10": 0.49324074074074065
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.03368833333333333,
+        "pValue": 0.12248775122487751,
+        "ciLow": -0.07347333333333332,
+        "ciHigh": 0.00882666666666668,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8392,
+      "metrics": {
+        "ndcg10": 0.40726920105935427,
+        "recall10": 0.4786937830687829,
+        "recall100": 0.7850744047619046,
+        "mrr10": 0.5068055555555555
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.02754333333333333,
+        "pValue": 0.15348465153484653,
+        "ciLow": -0.06346500000000002,
+        "ciHigh": 0.009125000000000001,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8494,
+      "metrics": {
+        "ndcg10": 0.42056685118258924,
+        "recall10": 0.48685350529100513,
+        "recall100": 0.8025016534391535,
+        "mrr10": 0.5561309523809522
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.014251666666666668,
+        "pValue": 0.32726727327267274,
+        "ciLow": -0.04227666666666669,
+        "ciHigh": 0.013671666666666664,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8339,
+      "metrics": {
+        "ndcg10": 0.4310753832675439,
+        "recall10": 0.4945502645502644,
+        "recall100": 0.8177066798941799,
+        "mrr10": 0.5758531746031745
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.0037399999999999946,
+        "pValue": 0.7511248875112488,
+        "ciLow": -0.026426666666666657,
+        "ciHigh": 0.018371666666666668,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8598,
+      "metrics": {
+        "ndcg10": 0.43615019281771794,
+        "recall10": 0.4970965608465607,
+        "recall100": 0.828652447089947,
+        "mrr10": 0.5869378306878306
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": 0.0013333333333333342,
+        "pValue": 0.7913208679132087,
+        "ciLow": -0.007275000000000002,
+        "ciHigh": 0.011039999999999998,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8369,
+      "metrics": {
+        "ndcg10": 0.42075659807784116,
+        "recall10": 0.49128306878306865,
+        "recall100": 0.813440806878307,
+        "mrr10": 0.553154761904762
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-0.90-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.014061666666666668,
+        "pValue": 0.21677832216778323,
+        "ciLow": -0.03545,
+        "ciHigh": 0.00740666666666667,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8498,
+      "metrics": {
+        "ndcg10": 0.3510603792457292,
+        "recall10": 0.46179894179894176,
+        "recall100": 0.7476537698412699,
+        "mrr10": 0.4015277777777777
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.08375833333333335,
+        "pValue": 0.006199380061993801,
+        "ciLow": -0.13924833333333328,
+        "ciHigh": -0.025396666666666682,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8661,
+      "metrics": {
+        "ndcg10": 0.38623724251928493,
+        "recall10": 0.46999338624338616,
+        "recall100": 0.7640426587301586,
+        "mrr10": 0.4608730158730158
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.04858666666666668,
+        "pValue": 0.09249075092490751,
+        "ciLow": -0.10238166666666666,
+        "ciHigh": 0.008756666666666664,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8544,
+      "metrics": {
+        "ndcg10": 0.3911761299320499,
+        "recall10": 0.47610449735449717,
+        "recall100": 0.7687301587301587,
+        "mrr10": 0.467010582010582
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.04364833333333334,
+        "pValue": 0.07899210078992101,
+        "ciLow": -0.08998833333333334,
+        "ciHigh": 0.004429999999999998,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8620,
+      "metrics": {
+        "ndcg10": 0.40163274435218216,
+        "recall10": 0.47883267195767176,
+        "recall100": 0.7818336640211639,
+        "mrr10": 0.4926851851851851
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.03318666666666667,
+        "pValue": 0.12378762123787622,
+        "ciLow": -0.07275666666666668,
+        "ciHigh": 0.00858333333333333,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8530,
+      "metrics": {
+        "ndcg10": 0.4088755662015993,
+        "recall10": 0.4842493386243385,
+        "recall100": 0.7957886904761905,
+        "mrr10": 0.5079166666666666
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.02593666666666667,
+        "pValue": 0.15648435156484353,
+        "ciLow": -0.05962333333333335,
+        "ciHigh": 0.008996666666666668,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8649,
+      "metrics": {
+        "ndcg10": 0.42423074572260794,
+        "recall10": 0.4924669312169311,
+        "recall100": 0.8085863095238095,
+        "mrr10": 0.5505026455026454
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.010583333333333337,
+        "pValue": 0.43355664433556645,
+        "ciLow": -0.03667166666666667,
+        "ciHigh": 0.015715000000000007,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8365,
+      "metrics": {
+        "ndcg10": 0.43463505296488314,
+        "recall10": 0.49484788359788345,
+        "recall100": 0.8193931878306879,
+        "mrr10": 0.5772420634920634
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.00018333333333332978,
+        "pValue": 0.9866013398660134,
+        "ciLow": -0.021836666666666667,
+        "ciHigh": 0.020880000000000006,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8630,
+      "metrics": {
+        "ndcg10": 0.4348190067698024,
+        "recall10": 0.4908201058201057,
+        "recall100": 0.8239153439153438,
+        "mrr10": 0.5799404761904761
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.75.tsv"
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8505,
+      "metrics": {
+        "ndcg10": 0.42077840188560434,
+        "recall10": 0.48665343915343906,
+        "recall100": 0.8079431216931217,
+        "mrr10": 0.5545701058201058
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.20-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.014036666666666664,
+        "pValue": 0.20317968203179682,
+        "ciLow": -0.034613333333333336,
+        "ciHigh": 0.007308333333333336,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8466,
+      "metrics": {
+        "ndcg10": 0.34385704658316135,
+        "recall10": 0.4606084656084656,
+        "recall100": 0.7365426587301587,
+        "mrr10": 0.38501984126984123
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.09096333333333334,
+        "pValue": 0.0033996600339966003,
+        "ciLow": -0.14592499999999997,
+        "ciHigh": -0.03341166666666668,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8693,
+      "metrics": {
+        "ndcg10": 0.37870860169411635,
+        "recall10": 0.46999338624338616,
+        "recall100": 0.7478968253968252,
+        "mrr10": 0.44059523809523804
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.05611500000000002,
+        "pValue": 0.05089491050894911,
+        "ciLow": -0.1098433333333333,
+        "ciHigh": 0.00016000000000000226,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8353,
+      "metrics": {
+        "ndcg10": 0.3820126415641587,
+        "recall10": 0.4662086640211639,
+        "recall100": 0.7673412698412696,
+        "mrr10": 0.4464285714285714
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.05281000000000001,
+        "pValue": 0.046795320467953205,
+        "ciLow": -0.10166333333333334,
+        "ciHigh": -0.001973333333333337,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8485,
+      "metrics": {
+        "ndcg10": 0.3944784828949165,
+        "recall10": 0.47883267195767176,
+        "recall100": 0.782131283068783,
+        "mrr10": 0.4676851851851851
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.040338333333333344,
+        "pValue": 0.06469353064693531,
+        "ciLow": -0.08021166666666667,
+        "ciHigh": 0.0016183333333333416,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8536,
+      "metrics": {
+        "ndcg10": 0.40324317683724487,
+        "recall10": 0.4796197089947089,
+        "recall100": 0.8006498015873016,
+        "mrr10": 0.4908531746031745
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.031573333333333335,
+        "pValue": 0.09449055094490551,
+        "ciLow": -0.06744833333333333,
+        "ciHigh": 0.004745000000000001,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8452,
+      "metrics": {
+        "ndcg10": 0.42932148187334335,
+        "recall10": 0.4892923280423279,
+        "recall100": 0.8116617063492063,
+        "mrr10": 0.5643716931216931
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.005496666666666664,
+        "pValue": 0.6951304869513049,
+        "ciLow": -0.031803333333333336,
+        "ciHigh": 0.021105,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8613,
+      "metrics": {
+        "ndcg10": 0.43414933363035924,
+        "recall10": 0.4976256613756612,
+        "recall100": 0.8209060846560848,
+        "mrr10": 0.5770502645502644
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.0006683333333333321,
+        "pValue": 0.9535046495350465,
+        "ciLow": -0.022199999999999998,
+        "ciHigh": 0.020578333333333348,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8256,
+      "metrics": {
+        "ndcg10": 0.4382296749143863,
+        "recall10": 0.5074867724867723,
+        "recall100": 0.817202380952381,
+        "mrr10": 0.5806415343915343
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": 0.003411666666666666,
+        "pValue": 0.6696330366963303,
+        "ciLow": -0.005143333333333335,
+        "ciHigh": 0.015409999999999998,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8414,
+      "metrics": {
+        "ndcg10": 0.4176500055380947,
+        "recall10": 0.4901256613756613,
+        "recall100": 0.8167394179894181,
+        "mrr10": 0.5369312169312169
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.50-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.01716666666666667,
+        "pValue": 0.1070892910708929,
+        "ciLow": -0.03731,
+        "ciHigh": 0.0037366666666666633,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8509,
+      "metrics": {
+        "ndcg10": 0.3388642001705299,
+        "recall10": 0.45088624338624333,
+        "recall100": 0.7374685846560847,
+        "mrr10": 0.3837698412698412
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.09595333333333335,
+        "pValue": 0.0027997200279972004,
+        "ciLow": -0.15153666666666668,
+        "ciHigh": -0.03772000000000001,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8335,
+      "metrics": {
+        "ndcg10": 0.37646736057417934,
+        "recall10": 0.4646362433862433,
+        "recall100": 0.7497486772486769,
+        "mrr10": 0.4396428571428571
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.05835666666666668,
+        "pValue": 0.049095090490950906,
+        "ciLow": -0.11361666666666664,
+        "ciHigh": -0.000875000000000004,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8552,
+      "metrics": {
+        "ndcg10": 0.3756406241034717,
+        "recall10": 0.4561292989417989,
+        "recall100": 0.7527579365079362,
+        "mrr10": 0.4442063492063492
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.05918333333333334,
+        "pValue": 0.0287971202879712,
+        "ciLow": -0.108855,
+        "ciHigh": -0.006876666666666666,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8310,
+      "metrics": {
+        "ndcg10": 0.3893747060880725,
+        "recall10": 0.48247850529100517,
+        "recall100": 0.7668535052910052,
+        "mrr10": 0.44506613756613744
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.04544166666666668,
+        "pValue": 0.0547945205479452,
+        "ciLow": -0.08876500000000001,
+        "ciHigh": -0.00000833333333333519,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8369,
+      "metrics": {
+        "ndcg10": 0.4063118655614569,
+        "recall10": 0.48378637566137556,
+        "recall100": 0.8018733465608465,
+        "mrr10": 0.5031944444444444
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.028500000000000004,
+        "pValue": 0.1354864513548645,
+        "ciLow": -0.0653766666666667,
+        "ciHigh": 0.008044999999999997,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8352,
+      "metrics": {
+        "ndcg10": 0.4266366338409154,
+        "recall10": 0.4892923280423279,
+        "recall100": 0.8146709656084656,
+        "mrr10": 0.5589087301587301
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.008184999999999996,
+        "pValue": 0.5775422457754225,
+        "ciLow": -0.03632166666666667,
+        "ciHigh": 0.019540000000000002,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8361,
+      "metrics": {
+        "ndcg10": 0.42877517016938127,
+        "recall10": 0.5006349206349204,
+        "recall100": 0.8121097883597882,
+        "mrr10": 0.5520767195767194
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.0060416666666666665,
+        "pValue": 0.6004399560043996,
+        "ciLow": -0.029613333333333332,
+        "ciHigh": 0.01439833333333333,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8570,
+      "metrics": {
+        "ndcg10": 0.42555202528717884,
+        "recall10": 0.49498677248677236,
+        "recall100": 0.8236838624338624,
+        "mrr10": 0.5524007936507935
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.009260000000000001,
+        "pValue": 0.30726927307269275,
+        "ciLow": -0.026543333333333332,
+        "ciHigh": 0.00604333333333334,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11345,
+      "queryMs": 8366,
+      "metrics": {
+        "ndcg10": 0.41755321154894637,
+        "recall10": 0.49591269841269825,
+        "recall100": 0.8235185185185185,
+        "mrr10": 0.5217724867724868
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-linear-k1-1.80-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault",
+        "metric": "ndcg10",
+        "topics": 60,
+        "meanDifference": -0.017266666666666666,
+        "pValue": 0.1760823917608239,
+        "ciLow": -0.04186499999999999,
+        "ciHigh": 0.006963333333333339,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 302,
+      "metrics": {
+        "ndcg10": 0.5213017267143847,
+        "recall10": 0.5698924731182795,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.6795698924731183
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06527096774193547,
+        "pValue": 0.0301969803019698,
+        "ciLow": 0.013099999999999997,
+        "ciHigh": 0.12004516129032258,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 205,
+      "metrics": {
+        "ndcg10": 0.5054340385615032,
+        "recall10": 0.5806451612903226,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.621505376344086
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.0494032258064516,
+        "pValue": 0.0654934506549345,
+        "ciLow": 0.002545161290322587,
+        "ciHigh": 0.10229999999999997,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 200,
+      "metrics": {
+        "ndcg10": 0.4952540661344804,
+        "recall10": 0.5741935483870968,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6016129032258064
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.03921612903225806,
+        "pValue": 0.11838816118388161,
+        "ciLow": -0.005180645161290323,
+        "ciHigh": 0.08913870967741934,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 185,
+      "metrics": {
+        "ndcg10": 0.5017200466802136,
+        "recall10": 0.5983870967741935,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.596236559139785
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.04568064516129032,
+        "pValue": 0.029897010298970104,
+        "ciLow": 0.009209677419354833,
+        "ciHigh": 0.08981612903225807,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 188,
+      "metrics": {
+        "ndcg10": 0.5080663133923022,
+        "recall10": 0.6155913978494625,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5938172043010752
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.05203225806451611,
+        "pValue": 0.0136986301369863,
+        "ciLow": 0.014932258064516125,
+        "ciHigh": 0.09518064516129031,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 193,
+      "metrics": {
+        "ndcg10": 0.5024146077202987,
+        "recall10": 0.6080645161290322,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.5881720430107528
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.04638387096774192,
+        "pValue": 0.014098590140985901,
+        "ciLow": 0.011948387096774184,
+        "ciHigh": 0.0857774193548387,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 170,
+      "metrics": {
+        "ndcg10": 0.49179485132124284,
+        "recall10": 0.6016129032258065,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.5870967741935483
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.03575806451612903,
+        "pValue": 0.0187981201879812,
+        "ciLow": 0.00841935483870967,
+        "ciHigh": 0.06640645161290323,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 176,
+      "metrics": {
+        "ndcg10": 0.48763711658582537,
+        "recall10": 0.5951612903225806,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.5897849462365591
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.03159677419354838,
+        "pValue": 0.027597240275972403,
+        "ciLow": 0.005877419354838703,
+        "ciHigh": 0.06106451612903225,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.6,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 173,
+      "metrics": {
+        "ndcg10": 0.48082460400562804,
+        "recall10": 0.5790322580645161,
+        "recall100": 0.8661290322580646,
+        "mrr10": 0.5897849462365591
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.60-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.024787096774193548,
+        "pValue": 0.06029397060293971,
+        "ciLow": 0.0016999999999999945,
+        "ciHigh": 0.05190645161290322,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 176,
+      "metrics": {
+        "ndcg10": 0.5275172478831975,
+        "recall10": 0.5887096774193549,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6784946236559141
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.07148709677419354,
+        "pValue": 0.009599040095990401,
+        "ciLow": 0.023367741935483872,
+        "ciHigh": 0.12211290322580644,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 169,
+      "metrics": {
+        "ndcg10": 0.5177318509737212,
+        "recall10": 0.582258064516129,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6564516129032257
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06169677419354839,
+        "pValue": 0.0100989901009899,
+        "ciLow": 0.019693548387096763,
+        "ciHigh": 0.10971612903225807,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 383,
+      "metrics": {
+        "ndcg10": 0.5032727489576667,
+        "recall10": 0.5983870967741935,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6010752688172043
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.04723225806451614,
+        "pValue": 0.026497350264973504,
+        "ciLow": 0.009703225806451608,
+        "ciHigh": 0.09200322580645164,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 185,
+      "metrics": {
+        "ndcg10": 0.5063064635897067,
+        "recall10": 0.6048387096774194,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5970814132104455
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.05026774193548386,
+        "pValue": 0.0231976802319768,
+        "ciLow": 0.011864516129032252,
+        "ciHigh": 0.09492258064516126,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 196,
+      "metrics": {
+        "ndcg10": 0.5112792424392059,
+        "recall10": 0.6172043010752688,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.5987455197132616
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.05525161290322581,
+        "pValue": 0.0084991500849915,
+        "ciLow": 0.01830645161290322,
+        "ciHigh": 0.09794193548387095,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 177,
+      "metrics": {
+        "ndcg10": 0.497186578969958,
+        "recall10": 0.6043010752688173,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.5881720430107528
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.04115483870967741,
+        "pValue": 0.015398460153984602,
+        "ciLow": 0.011367741935483868,
+        "ciHigh": 0.07539354838709675,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 182,
+      "metrics": {
+        "ndcg10": 0.49112951940823,
+        "recall10": 0.596236559139785,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.6059139784946236
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.03509032258064515,
+        "pValue": 0.000999900009999,
+        "ciLow": 0.01363870967741935,
+        "ciHigh": 0.06151290322580645,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 187,
+      "metrics": {
+        "ndcg10": 0.4819554728645808,
+        "recall10": 0.5736559139784946,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.6059139784946236
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.025919354838709677,
+        "pValue": 0.0047995200479952005,
+        "ciLow": 0.007480645161290322,
+        "ciHigh": 0.049980645161290325,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 0.9,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 188,
+      "metrics": {
+        "ndcg10": 0.46875167805938356,
+        "recall10": 0.5844086021505377,
+        "recall100": 0.8580645161290323,
+        "mrr10": 0.5682795698924731
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-0.90-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.012719354838709679,
+        "pValue": 0.09359064093590641,
+        "ciLow": -0.00004516129032258194,
+        "ciHigh": 0.02763548387096774,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 184,
+      "metrics": {
+        "ndcg10": 0.5279808563724766,
+        "recall10": 0.593010752688172,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.682258064516129
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.07195161290322581,
+        "pValue": 0.011498850114988501,
+        "ciLow": 0.02406451612903225,
+        "ciHigh": 0.12244516129032258,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 178,
+      "metrics": {
+        "ndcg10": 0.5262262760419332,
+        "recall10": 0.6075268817204302,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.656989247311828
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.07019354838709677,
+        "pValue": 0.0038996100389961006,
+        "ciLow": 0.028009677419354836,
+        "ciHigh": 0.11654516129032258,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 185,
+      "metrics": {
+        "ndcg10": 0.5156309565006512,
+        "recall10": 0.6129032258064516,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6193548387096776
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.05959354838709676,
+        "pValue": 0.010298970102989701,
+        "ciLow": 0.019570967741935494,
+        "ciHigh": 0.1041258064516129,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 168,
+      "metrics": {
+        "ndcg10": 0.509742644132099,
+        "recall10": 0.6172043010752688,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5970814132104455
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.05370967741935483,
+        "pValue": 0.013298670132986702,
+        "ciLow": 0.015761290322580633,
+        "ciHigh": 0.09709354838709677,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 173,
+      "metrics": {
+        "ndcg10": 0.5061666062376902,
+        "recall10": 0.6172043010752688,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5949820788530465
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.05013870967741935,
+        "pValue": 0.000999900009999,
+        "ciLow": 0.023412903225806452,
+        "ciHigh": 0.08006129032258061,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 172,
+      "metrics": {
+        "ndcg10": 0.49215229701493435,
+        "recall10": 0.596236559139785,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6032258064516128
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.036116129032258054,
+        "pValue": 0.00039996000399960006,
+        "ciLow": 0.01785483870967741,
+        "ciHigh": 0.056974193548387085,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 214,
+      "metrics": {
+        "ndcg10": 0.4681991653428022,
+        "recall10": 0.5639784946236559,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5833333333333334
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.012164516129032254,
+        "pValue": 0.0081991800819918,
+        "ciLow": 0.002645161290322581,
+        "ciHigh": 0.02482903225806451,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.75,
+      "baseline": true,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 181,
+      "metrics": {
+        "ndcg10": 0.4560308541513971,
+        "recall10": 0.5575268817204301,
+        "recall100": 0.8661290322580646,
+        "mrr10": 0.5645161290322581
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.75.tsv"
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.2,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 170,
+      "metrics": {
+        "ndcg10": 0.4274286179037762,
+        "recall10": 0.5521505376344086,
+        "recall100": 0.8500000000000001,
+        "mrr10": 0.5064516129032258
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.20-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": -0.02860645161290322,
+        "pValue": 0.06239376062393761,
+        "ciLow": -0.06155483870967743,
+        "ciHigh": -0.0020645161290322547,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 195,
+      "metrics": {
+        "ndcg10": 0.520814821914991,
+        "recall10": 0.5865591397849461,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6795698924731183
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06478387096774194,
+        "pValue": 0.014098590140985901,
+        "ciLow": 0.019109677419354838,
+        "ciHigh": 0.11246129032258063,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 210,
+      "metrics": {
+        "ndcg10": 0.5245758431855247,
+        "recall10": 0.6091397849462366,
+        "recall100": 0.8903225806451613,
+        "mrr10": 0.6580645161290323
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06854193548387097,
+        "pValue": 0.0093990600939906,
+        "ciLow": 0.024296774193548396,
+        "ciHigh": 0.11722580645161292,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 223,
+      "metrics": {
+        "ndcg10": 0.516060467480532,
+        "recall10": 0.6091397849462366,
+        "recall100": 0.8903225806451613,
+        "mrr10": 0.639247311827957
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06002580645161291,
+        "pValue": 0.012098790120987902,
+        "ciLow": 0.019541935483870964,
+        "ciHigh": 0.10439354838709677,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 183,
+      "metrics": {
+        "ndcg10": 0.5089184792395334,
+        "recall10": 0.6091397849462366,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6126344086021506
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.05288709677419354,
+        "pValue": 0.005599440055994401,
+        "ciLow": 0.019070967741935476,
+        "ciHigh": 0.09252580645161289,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 187,
+      "metrics": {
+        "ndcg10": 0.5019055469246955,
+        "recall10": 0.6091397849462366,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5960573476702509
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.04587419354838709,
+        "pValue": 0.0020997900209979003,
+        "ciLow": 0.020270967741935486,
+        "ciHigh": 0.0749516129032258,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 182,
+      "metrics": {
+        "ndcg10": 0.4865055773526361,
+        "recall10": 0.5881720430107528,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6069892473118279
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.03047096774193548,
+        "pValue": 0.0012998700129987,
+        "ciLow": 0.013080645161290313,
+        "ciHigh": 0.05081612903225806,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 183,
+      "metrics": {
+        "ndcg10": 0.4665133204443407,
+        "recall10": 0.5639784946236559,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.5806451612903226
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.010483870967741936,
+        "pValue": 0.017998200179982,
+        "ciLow": 0.0016129032258064512,
+        "ciHigh": 0.022722580645161285,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 177,
+      "metrics": {
+        "ndcg10": 0.45685081346733003,
+        "recall10": 0.5575268817204301,
+        "recall100": 0.8580645161290323,
+        "mrr10": 0.5655913978494623
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.0008161290322580633,
+        "pValue": 0.6871312868713129,
+        "ciLow": -0.0026322580645161326,
+        "ciHigh": 0.004670967741935481,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.5,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 180,
+      "metrics": {
+        "ndcg10": 0.4223900656431469,
+        "recall10": 0.553763440860215,
+        "recall100": 0.8500000000000001,
+        "mrr10": 0.48924731182795694
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.50-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": -0.03365483870967742,
+        "pValue": 0.024797520247975203,
+        "ciLow": -0.06646774193548388,
+        "ciHigh": -0.007141935483870967,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 168,
+      "metrics": {
+        "ndcg10": 0.5232939381647352,
+        "recall10": 0.5946236559139784,
+        "recall100": 0.8903225806451613,
+        "mrr10": 0.6741935483870969
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.00.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06726129032258067,
+        "pValue": 0.008399160083991601,
+        "ciLow": 0.02368064516129032,
+        "ciHigh": 0.11313225806451613,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.05,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 174,
+      "metrics": {
+        "ndcg10": 0.5205898454996215,
+        "recall10": 0.6026881720430106,
+        "recall100": 0.8903225806451613,
+        "mrr10": 0.6580645161290323
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.05.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06456129032258064,
+        "pValue": 0.010198980101989802,
+        "ciLow": 0.021593548387096782,
+        "ciHigh": 0.11240000000000001,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.1,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 181,
+      "metrics": {
+        "ndcg10": 0.5177006858064424,
+        "recall10": 0.6026881720430106,
+        "recall100": 0.8903225806451613,
+        "mrr10": 0.6580645161290323
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.10.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.06166451612903225,
+        "pValue": 0.004999500049995001,
+        "ciLow": 0.024854838709677418,
+        "ciHigh": 0.1034806451612903,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.2,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 192,
+      "metrics": {
+        "ndcg10": 0.5019660506264968,
+        "recall10": 0.5946236559139784,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.6169738863287251
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.20.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.045935483870967735,
+        "pValue": 0.016698330166983303,
+        "ciLow": 0.01307419354838709,
+        "ciHigh": 0.08522580645161289,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.3,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 181,
+      "metrics": {
+        "ndcg10": 0.49555333449203887,
+        "recall10": 0.6026881720430107,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5870967741935483
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.30.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.039522580645161294,
+        "pValue": 0.0031996800319968005,
+        "ciLow": 0.015541935483870964,
+        "ciHigh": 0.06794193548387097,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.45,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 183,
+      "metrics": {
+        "ndcg10": 0.4739620172826081,
+        "recall10": 0.5639784946236559,
+        "recall100": 0.8903225806451613,
+        "mrr10": 0.6016129032258064
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.45.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.017925806451612902,
+        "pValue": 0.014798520147985201,
+        "ciLow": 0.004854838709677421,
+        "ciHigh": 0.03331935483870968,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.6,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 185,
+      "metrics": {
+        "ndcg10": 0.4698229760186701,
+        "recall10": 0.5639784946236559,
+        "recall100": 0.8822580645161291,
+        "mrr10": 0.5978494623655913
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.60.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": 0.013790322580645161,
+        "pValue": 0.033896610338966106,
+        "ciLow": 0.00131612903225807,
+        "ciHigh": 0.02937419354838709,
+        "significant": true
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.75,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 199,
+      "metrics": {
+        "ndcg10": 0.4310492785579443,
+        "recall10": 0.5575268817204301,
+        "recall100": 0.8741935483870968,
+        "mrr10": 0.5102150537634409
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.75.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": -0.024987096774193546,
+        "pValue": 0.05449455054494551,
+        "ciLow": -0.05625806451612904,
+        "ciHigh": -0.0024290322580645136,
+        "significant": false
+      }
+    },
+    {
+      "dataset": "vault-hu",
+      "adapter": "linear",
+      "k1": 1.8,
+      "b": 0.9,
+      "baseline": false,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 559,
+      "queryMs": 208,
+      "metrics": {
+        "ndcg10": 0.4197797856392847,
+        "recall10": 0.5591397849462365,
+        "recall100": 0.8661290322580646,
+        "mrr10": 0.4828341013824885
+      },
+      "perTopicPath": "sweep/per-topic/2026-08-15-0117-vault-hu-linear-k1-1.80-b-0.90.tsv",
+      "significance": {
+        "kind": "verdict",
+        "dataset": "vault-hu",
+        "metric": "ndcg10",
+        "topics": 31,
+        "meanDifference": -0.03626774193548386,
+        "pValue": 0.0217978202179782,
+        "ciLow": -0.06990645161290324,
+        "ciHigh": -0.007767741935483881,
+        "significant": true
+      }
+    }
+  ]
+}
