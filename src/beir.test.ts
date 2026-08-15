@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { type BeirDoc, readCorpus, readQrels, readQueries } from './beir.js';
+import { safeDocId } from './docId.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-'));
 
@@ -101,6 +102,59 @@ describe('readCorpus over awkward file shapes', () => {
 
   it('tolerates CRLF, as JSON.parse ignores the trailing carriage return', () => {
     expect(corpusOf(`${rows.join('\r\n')}\r\n`)).toEqual(expected);
+  });
+});
+
+/**
+ * `webis-touche2020` ids embed an ISO timestamp, so all 382,545 carry a `:` and
+ * `corpus.ts:fileNameFor` rejects every one. Corpus and qrels MUST go through the
+ * SAME mapping, or scoring would join nothing at all.
+ */
+describe('readCorpus / readQrels over unsafe ids', () => {
+  const toucheDir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-unsafe-'));
+  afterAll(() => rmSync(toucheDir, { recursive: true, force: true }));
+
+  const rawA = 'c67482ba-2019-04-18T13:32:05Z-00000-000';
+  const rawB = '197beaca-2019-04-18T11:28:59Z-00001-000';
+  const safeA = 'c67482ba-2019-04-18T13_32_05Z-00000-000';
+
+  writeFileSync(
+    resolve(toucheDir, 'corpus.jsonl'),
+    [
+      JSON.stringify({ _id: rawA, title: 'Alpha', text: 'first body' }),
+      JSON.stringify({ _id: rawB, title: 'Beta', text: 'second body' }),
+    ].join('\n'),
+    'utf8'
+  );
+  mkdirSync(resolve(toucheDir, 'qrels'), { recursive: true });
+  writeFileSync(
+    resolve(toucheDir, 'qrels/test.tsv'),
+    ['query-id\tcorpus-id\tscore', `1\t${rawA}\t2`, `1\t${rawB}\t0`, ''].join('\n'),
+    'utf8'
+  );
+
+  it('maps corpus ids onto the filename-safe set', () => {
+    expect(readCorpus(toucheDir).map(d => d.id)).toEqual([safeA, safeDocId(rawB)]);
+  });
+
+  it('rewrites the qrels corpus-id through the same function, so the join holds', () => {
+    const qrels = readQrels(toucheDir, 'test');
+    const corpusIds = new Set(readCorpus(toucheDir).map(d => d.id));
+    expect([...(qrels.get('1') ?? new Map()).keys()].every(id => corpusIds.has(id))).toBe(true);
+    expect(qrels.get('1')?.get(safeA)).toBe(2);
+  });
+
+  it('refuses a corpus whose ids would merge, naming both originals', () => {
+    const clashDir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-clash-'));
+    writeFileSync(
+      resolve(clashDir, 'corpus.jsonl'),
+      [JSON.stringify({ _id: 'a:b', text: 'x' }), JSON.stringify({ _id: 'a/b', text: 'y' })].join(
+        '\n'
+      ),
+      'utf8'
+    );
+    expect(() => readCorpus(clashDir)).toThrow(/"a:b".*"a\/b"|"a\/b".*"a:b"/s);
+    rmSync(clashDir, { recursive: true, force: true });
   });
 });
 

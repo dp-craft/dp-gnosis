@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { assertNoIdCollisions, safeDocId } from './docId.js';
 import { mapNonEmptyLines } from './lines.js';
 import type { Qrel } from './metrics.js';
 
@@ -45,11 +46,24 @@ const toDoc = (row: Readonly<Record<string, unknown>>): BeirDoc => ({
   text: asString(row['text']),
 });
 
-/** Every corpus document, in file order. Rows without an `_id` are dropped. */
-export const readCorpus = (dir: string): readonly BeirDoc[] =>
-  readJsonl(resolve(dir, CORPUS_FILE))
+const toSafeDoc = (doc: BeirDoc): BeirDoc => ({ ...doc, id: safeDocId(doc.id) });
+
+/**
+ * Every corpus document, in file order. Rows without an `_id` are dropped.
+ *
+ * Ids come back MAPPED through `safeDocId` — the identity on every dataset whose
+ * ids are already filename-safe, and the only reason `webis-touche2020` (whose
+ * ids all embed a `:`) can be materialised at all. `readQrels` maps through the
+ * same function, so the qrels join is preserved; a mapping that merged two
+ * documents refuses here rather than corrupting the dataset's metrics.
+ */
+export const readCorpus = (dir: string): readonly BeirDoc[] => {
+  const docs = readJsonl(resolve(dir, CORPUS_FILE))
     .map(toDoc)
     .filter(doc => doc.id.length > 0);
+  assertNoIdCollisions(docs.map(doc => doc.id));
+  return docs.map(toSafeDoc);
+};
 
 /** Query id → query text. */
 export const readQueries = (dir: string): ReadonlyMap<string, string> =>
@@ -57,7 +71,12 @@ export const readQueries = (dir: string): ReadonlyMap<string, string> =>
     readJsonl(resolve(dir, QUERIES_FILE)).map(row => [asString(row['_id']), asString(row['text'])])
   );
 
-/** Tab-separated WITH a header row, which is skipped by matching the header text. */
+/**
+ * Tab-separated WITH a header row, which is skipped by matching the header text.
+ * The `corpus-id` column goes through the SAME `safeDocId` as the corpus — the
+ * judgments must be keyed on the ids `score.ts` recovers from the atoms, or the
+ * dataset would score zero against a corpus it fully covers.
+ */
 export const readQrels = (dir: string, split: string): ReadonlyMap<string, Qrel> =>
   readFileSync(resolve(dir, QRELS_DIR, `${split}.tsv`), 'utf8')
     .split('\n')
@@ -65,6 +84,6 @@ export const readQrels = (dir: string, split: string): ReadonlyMap<string, Qrel>
     .filter(cols => cols.length >= 3 && cols[0] !== QRELS_HEADER_ID)
     .reduce((acc, cols) => {
       const perQuery = acc.get(cols[0]!) ?? new Map<string, number>();
-      perQuery.set(cols[1]!, Number(cols[2]));
+      perQuery.set(safeDocId(cols[1]!), Number(cols[2]));
       return acc.set(cols[0]!, perQuery);
     }, new Map<string, Map<string, number>>());

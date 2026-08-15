@@ -30,7 +30,8 @@
  * `insects_attracted_to_light/Proximate_and_ultimate_causation.txt` — and
  * `corpus.ts:fileNameFor` REJECTS it by design, because the corpus filename is
  * how `score.ts` maps a retrieved atom back to a qrels key. Sanitising it there
- * would break that mapping silently, so it is mapped HERE, once, and the
+ * would break that mapping silently, so it is mapped at fetch time, once —
+ * through the suite's single `docId.ts:safeDocId` — and the
  * surrogate is what lands in `corpus.jsonl`, in `qrels/test.tsv` and in
  * `excluded.json` alike. The mapping is written to `id-map.json` so any number
  * this suite reports can be traced back to the published ids.
@@ -47,12 +48,12 @@
  * IDEMPOTENT like every fetcher here: a `corpus.jsonl` already on disk means
  * the split is present, and nothing is requested.
  */
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { type AsyncBuffer, parquetReadObjects } from 'hyparquet';
 
+import { safeDocId } from '../docId.js';
 import type { BrightDataset, BrightGranularity } from '../manifest.js';
 
 const CORPUS_FILE = 'corpus.jsonl';
@@ -85,28 +86,6 @@ const EXCLUDED_SENTINEL = 'N/A';
 const QRELS_HEADER = 'query-id\tcorpus-id\tscore';
 const PATH_SEPARATOR = '/';
 const TXT_SUFFIX = '.txt';
-
-/** Everything outside the filename-safe set `corpus.ts` accepts becomes `_`. */
-const UNSAFE_CHARS = /[^A-Za-z0-9_-]/g;
-
-/** The length half of `corpus.ts:DOC_ID_PATTERN` — the surrogate MUST fit it. */
-const MAX_ID_LENGTH = 200;
-
-/**
- * Hex chars of the raw id's sha256 kept when a surrogate is truncated. Character
- * sanitising alone does not bound LENGTH, and BRIGHT ids are URLs: the
- * `sustainable_living` split carries ids of 261 chars, which `fileNameFor`
- * rejects outright. Truncating alone would silently MERGE two documents sharing
- * a 200-char prefix — a whole tracking-parameter URL family does — so the tail
- * is a digest of the raw id, making the surrogate unique, stable across
- * re-fetches, and traceable through `id-map.json`.
- */
-const ID_HASH_CHARS = 8;
-const ID_HASH_SEPARATOR = '-';
-const TRUNCATED_PREFIX_LENGTH = MAX_ID_LENGTH - ID_HASH_CHARS - ID_HASH_SEPARATOR.length;
-
-const rawIdDigest = (rawId: string): string =>
-  createHash('sha256').update(rawId, 'utf8').digest('hex').slice(0, ID_HASH_CHARS);
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -145,16 +124,13 @@ const strings = (row: Row, key: string): readonly string[] => {
 };
 
 /**
- * A published BRIGHT id → the filename-safe id this suite uses everywhere.
- * Deterministic and total, so the corpus, the qrels and the exclusions can each
- * map independently and still agree. Over-long ids keep a truncated prefix plus
- * a digest of the RAW id, which is what keeps a prefix-sharing family distinct.
+ * A published BRIGHT id → the filename-safe id this suite uses everywhere. It IS
+ * `docId.ts:safeDocId`, not a BRIGHT-local copy: `beir.ts` maps `webis-touche2020`
+ * with the same function, and a second, subtly different sanitiser would give the
+ * suite two id spaces that disagree and mis-join qrels silently. Named here for
+ * the BRIGHT vocabulary (`id-map.json` calls these surrogates).
  */
-export const surrogateId = (rawId: string): string => {
-  const safe = rawId.replace(UNSAFE_CHARS, '_');
-  if (safe.length <= MAX_ID_LENGTH) return safe;
-  return `${safe.slice(0, TRUNCATED_PREFIX_LENGTH)}${ID_HASH_SEPARATOR}${rawIdDigest(rawId)}`;
-};
+export const surrogateId = safeDocId;
 
 /** `a/Protein_folding.txt` → `Protein_folding` — the page title BRIGHT records. */
 export const titleOf = (rawId: string): string => {

@@ -9,8 +9,10 @@
  *
  * The filename IS the mapping back to the document: `score` recovers the doc id
  * from the retrieved atom's `originPaths` basename. So an id is VALIDATED, never
- * sanitised — a rewritten filename would break that mapping silently. BRIGHT ids
- * contain `/`; its fetcher maps them to safe ids before they reach this layer.
+ * sanitised — a rewritten filename would break that mapping silently. Ids that
+ * need mapping (BRIGHT paths, `webis-touche2020` timestamps) go through the one
+ * `docId.ts:safeDocId` in the fetcher / the BEIR reader, which maps the qrels
+ * with the same function, before they ever reach this layer.
  *
  * The profile's vocabulary is the SHIPPED one (`docs` / `vendor-doc`). The
  * manifest's `domain` field MUST NOT flow in here: `tools/dp-gnosis/src/config.ts`
