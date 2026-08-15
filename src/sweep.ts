@@ -180,7 +180,7 @@ const contextFor = async (entry: DatasetEntry): Promise<DatasetContext> => {
     qrels,
     topics: topicsOf(readQueries(dir), qrels),
     excluded: readExcluded(dir),
-    prepared: await prepareOf(entry, dir),
+    prepared: await prepareOf(entry, dir, ADAPTER),
   };
 };
 

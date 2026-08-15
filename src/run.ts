@@ -299,19 +299,29 @@ const measurementsOf = (
   perTopic: scored.perTopic,
 });
 
-export const prepareOf = (entry: DatasetEntry, dir: string): Promise<PreparedDataset> =>
+/**
+ * The arm is passed DOWN, not assumed: `prepareDataset` builds the index that
+ * arm reads, so an adapter can never be measured over an index another adapter
+ * built. `sweep.ts` passes its own fixed `linear`.
+ */
+export const prepareOf = (
+  entry: DatasetEntry,
+  dir: string,
+  adapter: AdapterName
+): Promise<PreparedDataset> =>
   prepareDataset({
     id: entry.id,
     docs: readCorpus(dir),
     workRoot: WORK_ROOT,
     atomMaxChars: entry.atomMaxChars,
+    adapter,
   });
 
 const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
   const dir = await ensureDataset(entry);
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
   const topics = topicsOf(readQueries(dir), qrels);
-  const prepared = await prepareOf(entry, dir);
+  const prepared = await prepareOf(entry, dir, options.adapter);
   const port = openPort(prepared, { adapter: options.adapter });
   const context = { port, options, excluded: readExcluded(dir) };
   const queried = await queryDataset(context, topics).finally(() => port.close?.());

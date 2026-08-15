@@ -4,6 +4,7 @@ import { basename, isAbsolute, resolve } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import type { AdapterName } from '../../dp-gnosis/src/cli/adapter.js';
 import { runCli } from '../../dp-gnosis/src/cli/cli.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import type { BeirDoc } from './beir.js';
@@ -78,6 +79,54 @@ describe('prepareDataset', () => {
     expect(isAbsolute(prepared.indexPath)).toBe(true);
     expect(prepared.atomsDir.startsWith(resolve(root, DATASET_ID))).toBe(true);
     expect(prepared.indexPath.startsWith(resolve(root, DATASET_ID))).toBe(true);
+  });
+});
+
+/**
+ * PER-ADAPTER PREPARATION. `prepareDataset` used to build the fts5 index alone
+ * and hand that one path to whatever adapter `openPort` was asked for:
+ * `minisearch` parsed a SQLite file as JSON and threw, and `lancedb` found no
+ * dataset, retrieved nothing, and recorded an all-zero row as if it were a
+ * quality finding. Each arm must be measured on the index built FOR it.
+ */
+describe('prepareDataset — per-adapter index', () => {
+  const atomsFor = async (adapter: AdapterName): Promise<number> => {
+    const scoped = await prepareDataset({
+      id: `${DATASET_ID}-${adapter}`,
+      docs,
+      workRoot: root,
+      adapter,
+    });
+    const scopedPort = openPort(scoped, { adapter });
+    const atoms = await retrieveDocs(scopedPort, queries[0]!, DEPTH);
+    scopedPort.close?.();
+    return atoms.length;
+  };
+
+  it('builds the minisearch index its own port reads', async () => {
+    expect(await atomsFor('minisearch')).toBeGreaterThan(0);
+  });
+
+  it('builds the lancedb dataset its own port reads', async () => {
+    expect(await atomsFor('lancedb')).toBeGreaterThan(0);
+  }, 180_000);
+});
+
+/**
+ * The silent-zero guard: an adapter needing a persistent index MUST NOT be
+ * opened against an index another adapter built. Refusing at `openPort` fires
+ * before the query loop, so no metric row can be produced from a foreign index.
+ */
+describe('openPort — foreign index refusal', () => {
+  it('refuses a persistent-index adapter the dataset was not prepared for', () => {
+    expect(() => openPort(prepared, { adapter: 'minisearch' })).toThrow(/minisearch/);
+    expect(() => openPort(prepared, { adapter: 'lancedb' })).toThrow(/lancedb/);
+  });
+
+  it('still opens the index-free linear adapter over any prepared dataset', () => {
+    const linear = openPort(prepared, { adapter: 'linear' });
+    expect(linear.name).toBe('linear-scan');
+    linear.close?.();
   });
 });
 

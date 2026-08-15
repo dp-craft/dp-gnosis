@@ -26,16 +26,23 @@
  *    green benchmark reporting 0.0 as if it were a quality finding. The assert
  *    below is the only thing between that and a trusted number.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
 
 import { buildFts5Index } from '../../dp-gnosis/src/adapters/fts5Adapter.js';
+import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.js';
 import { createLinearScanAdapter } from '../../dp-gnosis/src/adapters/linearScanAdapter.js';
+import { buildMiniSearchIndex } from '../../dp-gnosis/src/adapters/miniSearchAdapter.js';
 import { parseAtom } from '../../dp-gnosis/src/atom.js';
-import { type AdapterName, createPort } from '../../dp-gnosis/src/cli/adapter.js';
+import {
+  type AdapterName,
+  createPort,
+  hasPersistentIndex
+} from '../../dp-gnosis/src/cli/adapter.js';
 import { ingest } from '../../dp-gnosis/src/ingest.js';
+import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { rerankAtoms } from '../../dp-gnosis/src/rerank.js';
 import type { BeirDoc } from './beir.js';
@@ -64,6 +71,12 @@ export const LOW_COVERAGE_CAUSE = 'dp-gnosis-bench/low-document-coverage';
 /** `error.cause` when `--rerank` was asked for and the reranker refused. */
 export const RERANK_REFUSED_CAUSE = 'dp-gnosis-bench/rerank-refused';
 
+/** `error.cause` when the requested adapter's own index could not be produced. */
+export const ADAPTER_INDEX_CAUSE = 'dp-gnosis-bench/adapter-index-unavailable';
+
+/** `error.cause` when a port was asked for an index built for a different adapter. */
+export const FOREIGN_INDEX_CAUSE = 'dp-gnosis-bench/foreign-index';
+
 /** One dataset's corpus, in memory, plus where it may write. */
 export interface PrepareDatasetOptions {
   readonly id: string;
@@ -72,12 +85,20 @@ export interface PrepareDatasetOptions {
   readonly workRoot: string;
   /** Per-corpus atom cap; absent means the shipped `ATOM_MAX_CHARS`. */
   readonly atomMaxChars?: number | undefined;
+  /**
+   * The arm this dataset is being prepared for. Absent means `fts5`, the arm the
+   * recorded history was measured on. It decides which index is BUILT, and the
+   * prepared dataset carries it so `openPort` can refuse a foreign one.
+   */
+  readonly adapter?: AdapterName | undefined;
 }
 
 /** What one dataset's ingest+index produced, and what querying it needs. */
 export interface PreparedDataset {
   readonly atomsDir: string;
   readonly indexPath: string;
+  /** The adapter `indexPath` was built for; `openPort` refuses any other. */
+  readonly adapter: AdapterName;
   /** Atoms actually present in the index — not atoms written to disk. */
   readonly atomCount: number;
   readonly docCount: number;
@@ -157,36 +178,159 @@ const coveredDocIds = (atomsDir: string, relPaths: readonly string[]): readonly 
 const requirePath = (value: string | undefined, field: string): string =>
   value ?? fail(`dp-gnosis-bench: the generated profile declared no ${field}`, EMPTY_INDEX_CAUSE);
 
-/**
- * Materialize, ingest, index, verify. Every path handed to the engine is
- * ABSOLUTE and the profile is the in-memory object — nothing is read from the
- * process's working directory and nothing is written outside `workRoot/<id>`.
- */
-export const prepareDataset = async (
-  options: PrepareDatasetOptions
-): Promise<PreparedDataset> => {
+/** Where one dataset writes, and the profile the engine ingests it under. */
+interface DatasetPaths {
+  readonly workDir: string;
+  readonly atomsDir: string;
+  /** The fts5 probe index, and the stem every other arm's artefact hangs off. */
+  readonly indexPath: string;
+  readonly profile: IngestProfile;
+}
+
+const datasetPaths = (options: PrepareDatasetOptions): DatasetPaths => {
   const workDir = resolve(options.workRoot, options.id);
-  const corpus = materializeCorpus(options.docs, resolve(workDir, CORPUS_DIR_NAME));
   const profile = buildProfile({
     datasetId: options.id,
     workDir,
     corpusDirName: CORPUS_DIR_NAME,
     atomMaxChars: options.atomMaxChars,
   });
-  const atomsDir = requirePath(profile.atomsDir, 'atomsDir');
-  const indexPath = requirePath(profile.indexPath, 'indexPath');
+  return {
+    workDir,
+    profile,
+    atomsDir: requirePath(profile.atomsDir, 'atomsDir'),
+    indexPath: requirePath(profile.indexPath, 'indexPath'),
+  };
+};
+
+/**
+ * Ingest, then build the fts5 PROBE index. The probe is built on every arm, not
+ * only the fts5 one, because it is the sole artefact this suite can enumerate
+ * (`atom_meta`) without re-implementing an adapter's internals — and the fact it
+ * proves, that ingest survived the frozen `ATOM_DOMAINS` narrowing with enough
+ * document coverage, is a property of the INGEST, which every arm shares. Two
+ * arms are therefore comparable on `atomCount` as well as on their metrics.
+ */
+const ingestAndProbe = async (paths: DatasetPaths): Promise<number> => {
   const startedAt = Date.now();
-  await ingest({ corpusRoots: profile.corpusRoots, outputDir: atomsDir, repoRoot: workDir, profile });
-  buildFts5Index({ atomsDir, indexPath });
-  const ingestMs = Date.now() - startedAt;
-  const indexed = indexedAtomPaths(indexPath);
+  await ingest({
+    corpusRoots: paths.profile.corpusRoots,
+    outputDir: paths.atomsDir,
+    repoRoot: paths.workDir,
+    profile: paths.profile,
+  });
+  buildFts5Index({ atomsDir: paths.atomsDir, indexPath: paths.indexPath });
+  return Date.now() - startedAt;
+};
+
+/**
+ * Each arm's artefact gets its OWN path off the shared stem: `linear` reads the
+ * atoms directory and `fts5` reads the probe, so both keep the stem itself,
+ * while `minisearch` writes a JSON file and `lancedb` writes a DIRECTORY tree —
+ * two arms sharing one path would corrupt each other.
+ */
+const INDEX_SUFFIXES: Readonly<Record<AdapterName, string>> = {
+  linear: '',
+  fts5: '',
+  minisearch: '-minisearch.json',
+  lancedb: '-lancedb',
+};
+
+interface IndexLocation {
+  readonly atomsDir: string;
+  readonly indexPath: string;
+}
+
+const buildRefusedMessage = (adapter: AdapterName, datasetId: string): string =>
+  `dp-gnosis-bench: dataset "${datasetId}" could not build a "${adapter}" index — the adapter's ` +
+  'optional dependency did not load. Install it, or measure an arm whose adapter is available; ' +
+  'querying without its own index would retrieve nothing and record an all-zero row as a result.';
+
+const requireBuilt = (built: boolean, adapter: AdapterName, datasetId: string): void => {
+  if (!built) fail(buildRefusedMessage(adapter, datasetId), ADAPTER_INDEX_CAUSE);
+};
+
+/**
+ * One builder per adapter, total over the vocabulary so a new adapter cannot be
+ * measured until its index path is stated. `linear` scans the atoms directory and
+ * `fts5` reads the probe already built above, so neither builds anything here.
+ */
+const INDEX_BUILDERS: Readonly<
+  Record<AdapterName, (location: IndexLocation, datasetId: string) => Promise<void>>
+> = {
+  linear: async (): Promise<void> => undefined,
+  fts5: async (): Promise<void> => undefined,
+  minisearch: async (location, datasetId): Promise<void> =>
+    requireBuilt(await buildMiniSearchIndex(location), 'minisearch', datasetId),
+  lancedb: async (location, datasetId): Promise<void> =>
+    requireBuilt(
+      await buildLanceDbIndex({ atomsDir: location.atomsDir, indexDir: location.indexPath }),
+      'lancedb',
+      datasetId
+    ),
+};
+
+const missingArtefactMessage = (adapter: AdapterName, indexPath: string): string =>
+  `dp-gnosis-bench: the "${adapter}" index at ${indexPath} does not exist after its build — ` +
+  'a port opened against it would retrieve nothing and record an all-zero row as a result.';
+
+/** POSITIVE check: the artefact this adapter needs is on disk, at its own path. */
+const assertIndexArtefact = (adapter: AdapterName, indexPath: string): void => {
+  if (hasPersistentIndex(adapter) && !existsSync(indexPath)) {
+    fail(missingArtefactMessage(adapter, indexPath), ADAPTER_INDEX_CAUSE);
+  }
+};
+
+interface AdapterIndexRequest {
+  readonly adapter: AdapterName;
+  readonly datasetId: string;
+  readonly paths: DatasetPaths;
+}
+
+interface BuiltIndex {
+  readonly indexPath: string;
+  readonly ms: number;
+}
+
+const buildAdapterIndex = async (request: AdapterIndexRequest): Promise<BuiltIndex> => {
+  const indexPath = `${request.paths.indexPath}${INDEX_SUFFIXES[request.adapter]}`;
+  const startedAt = Date.now();
+  const location: IndexLocation = { atomsDir: request.paths.atomsDir, indexPath };
+  await INDEX_BUILDERS[request.adapter](location, request.datasetId);
+  assertIndexArtefact(request.adapter, indexPath);
+  return { indexPath, ms: Date.now() - startedAt };
+};
+
+/**
+ * Materialize, ingest, index, verify. Every path handed to the engine is
+ * ABSOLUTE and the profile is the in-memory object — nothing is read from the
+ * process's working directory and nothing is written outside `workRoot/<id>`.
+ * The index BUILT is the requested arm's own; `ingestMs` covers ingest, the
+ * probe and that build, so an arm's index cost is never hidden.
+ */
+export const prepareDataset = async (
+  options: PrepareDatasetOptions
+): Promise<PreparedDataset> => {
+  const adapter = options.adapter ?? ADAPTER;
+  const paths = datasetPaths(options);
+  const corpus = materializeCorpus(options.docs, resolve(paths.workDir, CORPUS_DIR_NAME));
+  const probeMs = await ingestAndProbe(paths);
+  const indexed = indexedAtomPaths(paths.indexPath);
   assertIngestSound({
     datasetId: options.id,
     indexedAtomCount: indexed.length,
-    coveredDocIds: coveredDocIds(atomsDir, indexed),
+    coveredDocIds: coveredDocIds(paths.atomsDir, indexed),
     inputDocIds: [...corpus.fileNameById.keys()],
   });
-  return { atomsDir, indexPath, atomCount: indexed.length, docCount: corpus.docCount, ingestMs };
+  const built = await buildAdapterIndex({ adapter, datasetId: options.id, paths });
+  return {
+    atomsDir: paths.atomsDir,
+    indexPath: built.indexPath,
+    adapter,
+    atomCount: indexed.length,
+    docCount: corpus.docCount,
+    ingestMs: probeMs + built.ms,
+  };
 };
 
 /**
@@ -225,6 +369,25 @@ const openLinearPort = (prepared: PreparedDataset, options: PortOptions): Knowle
     ...(options.cacheCorpusScan === undefined ? {} : { cacheCorpusScan: options.cacheCorpusScan }),
   });
 
+const foreignIndexMessage = (requested: AdapterName, prepared: AdapterName): string =>
+  `dp-gnosis-bench: refusing to open the "${requested}" adapter over an index prepared for ` +
+  `"${prepared}" — the two formats are not interchangeable, and the port would either throw on ` +
+  'a foreign file or retrieve nothing and record an all-zero row as a result. Prepare the ' +
+  `dataset with adapter "${requested}".`;
+
+/**
+ * The silent-zero guard, and it is POSITIVE: the artefact must have been built
+ * FOR the requested adapter, which is a recorded fact of `prepareDataset`, not
+ * an error string to pattern-match. It fires before the query loop, so no metric
+ * row can be produced from a foreign index. `linear` is exempt because it reads
+ * the atoms directory and opens no index at all (`hasPersistentIndex`).
+ */
+const assertPreparedFor = (prepared: PreparedDataset, requested: AdapterName): void => {
+  if (hasPersistentIndex(requested) && requested !== prepared.adapter) {
+    fail(foreignIndexMessage(requested, prepared.adapter), FOREIGN_INDEX_CAUSE);
+  }
+};
+
 /**
  * ONE port per dataset: the first retrieve stats every atom (~700 ms at 43k),
  * so a port per query would pay that cost per topic. The caller closes it
@@ -233,10 +396,12 @@ const openLinearPort = (prepared: PreparedDataset, options: PortOptions): Knowle
 export const openPort = (
   prepared: PreparedDataset,
   options: PortOptions = DEFAULT_PORT_OPTIONS
-): KnowledgePort =>
-  options.adapter === 'linear'
+): KnowledgePort => {
+  assertPreparedFor(prepared, options.adapter);
+  return options.adapter === 'linear'
     ? openLinearPort(prepared, options)
     : createPort(options.adapter, prepared.atomsDir, prepared.indexPath);
+};
 
 /**
  * The measured call. `rawQueryText` is the dataset's query VERBATIM — the same
