@@ -213,7 +213,7 @@ export const measureCell = async (
   });
   const rankContext = {
     port,
-    options: { only: [], depth: run.depth, rerank: false, compare: false },
+    options: { only: [], depth: run.depth, rerank: false, compare: false, adapter: ADAPTER },
     excluded: context.excluded,
   };
   const queried = await queryDataset(rankContext, context.topics).finally(() => port.close?.());

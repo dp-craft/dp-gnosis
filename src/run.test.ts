@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
 import type { DatasetEntry } from './manifest.js';
-import { effectiveAtomMaxChars, firstPassDepth, parseArgs, percentileMs } from './run.js';
+import { BENCH_DEFAULT_ADAPTER, effectiveAtomMaxChars, firstPassDepth, parseArgs, percentileMs } from './run.js';
 
 describe('parseArgs', () => {
   it('defaults to every enabled dataset at depth 100 with no rerank', () => {
@@ -11,6 +11,7 @@ describe('parseArgs', () => {
       depth: 100,
       rerank: false,
       compare: false,
+      adapter: BENCH_DEFAULT_ADAPTER,
     });
   });
 
@@ -21,7 +22,18 @@ describe('parseArgs', () => {
         depth: 20,
         rerank: true,
         compare: true,
+        adapter: BENCH_DEFAULT_ADAPTER,
       });
+  });
+
+  it('reads --adapter as the registered adapter to measure', () => {
+    expect(parseArgs(['--adapter', 'linear']).adapter).toBe('linear');
+    expect(parseArgs(['--adapter', 'minisearch']).adapter).toBe('minisearch');
+  });
+
+  it('FAILS LOUDLY on an unknown adapter rather than falling back', () => {
+    expect(() => parseArgs(['--adapter', 'faiss'])).toThrow(/faiss/);
+    expect(() => parseArgs(['--adapter', 'faiss'])).toThrow(/fts5/);
   });
 });
 

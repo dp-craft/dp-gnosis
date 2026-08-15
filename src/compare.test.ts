@@ -58,6 +58,42 @@ describe('compareLastTwo', () => {
     expect(result.changed.map(change => change.field).sort()).toEqual(['corpusBytes', 'rerank']);
   });
 
+  it('COMPARES an adapter change as an arm comparison, labelled as one', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', adapter: 'linear', ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['adapter']);
+    expect(result.delta.ndcg10).toBeCloseTo(0.05, 12);
+    const line = formatComparison(result);
+    expect(line).toContain('ARM COMPARISON');
+    expect(line).toContain('adapter');
+    expect(line).toContain('+0.0500');
+  });
+
+  it('COMPARES a rerank change as an arm comparison — that IS the experiment', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', rerank: true, ndcg10: 0.62 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['rerank']);
+  });
+
+  it('still REFUSES when a measuring-scale field moved alongside a treatment field', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', adapter: 'linear', depth: 300 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('provenance-changed');
+    if (result.kind !== 'provenance-changed') return;
+    expect(result.changed.map(change => change.field).sort()).toEqual(['adapter', 'depth']);
+    expect(formatComparison(result)).toContain('NO DELTA REPORTED');
+  });
+
   it('reports insufficient history rather than inventing a baseline', () => {
     expect(compareLastTwo([row({})], 'scifact').kind).toBe('insufficient-history');
     expect(compareLastTwo([], 'scifact').kind).toBe('insufficient-history');

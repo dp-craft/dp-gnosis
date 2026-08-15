@@ -34,7 +34,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { type ProvenanceChange, provenanceChanges } from './compare.js';
+import { type ProvenanceChange, provenanceChanges, scaleChanges, treatmentChanges } from './compare.js';
 import type { Metrics } from './metrics.js';
 import { type HistoryRow, PER_TOPIC_DIR, reportStem } from './report.js';
 
@@ -88,6 +88,12 @@ export interface SignificanceVerdict {
   readonly ciHigh: number;
   /** `pValue < ALPHA`. An interval straddling 0 is the same statement, read visually. */
   readonly significant: boolean;
+  /**
+   * Present ONLY when the two runs differ by a treatment field: the verdict then
+   * rates one arm against another, not one commit against the next. Absent for a
+   * like-for-like pair, so a reader who sees it cannot miss the distinction.
+   */
+  readonly arms?: readonly ProvenanceChange[];
 }
 
 /** The scale moved between the runs — the same refusal `compare.ts` makes. */
@@ -315,17 +321,35 @@ const unreadable = (dataset: string, runs: readonly LoadedRun[]): SignificanceMi
   paths: runs.filter(run => run.scores === undefined).map(run => run.path),
 });
 
+/** The arms carried onto the verdict, so a p-value never travels unlabelled. */
+const withArms = (
+  result: Significance,
+  arms: readonly ProvenanceChange[]
+): Significance =>
+  result.kind === 'verdict' && arms.length > 0 ? { ...result, arms } : result;
+
 /**
  * Whether `latest` beat `previous` on `metric` by more than noise, with the
  * interval that says by how much — or the reason the two runs cannot be paired.
+ *
+ * A moved measuring SCALE still refuses, unchanged. A moved TREATMENT is tested
+ * and the arms ride along on the verdict: refusing there would have made the
+ * one comparison the harness exists to support impossible to state.
  */
 export const pairedSignificance = (options: PairedSignificanceOptions): Significance => {
   const { dataset } = options.previous;
-  const changed = provenanceChanges(options.previous, options.latest);
-  if (changed.length > 0) return { kind: 'provenance-changed', dataset, changed };
+  if (scaleChanges(options.previous, options.latest).length > 0) {
+    return {
+      kind: 'provenance-changed',
+      dataset,
+      changed: provenanceChanges(options.previous, options.latest),
+    };
+  }
   const before = loadRun(options.resultsDir, options.previous);
   const after = loadRun(options.resultsDir, options.latest);
-  return before.scores === undefined || after.scores === undefined
-    ? unreadable(dataset, [before, after])
-    : pairedScores(dataset, options.metric, before.scores, after.scores);
+  const paired =
+    before.scores === undefined || after.scores === undefined
+      ? unreadable(dataset, [before, after])
+      : pairedScores(dataset, options.metric, before.scores, after.scores);
+  return withArms(paired, treatmentChanges(options.previous, options.latest));
 };

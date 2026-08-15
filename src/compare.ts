@@ -7,16 +7,20 @@
  * differs. It names the field that changed instead, and a changed measuring
  * scale can never again masquerade as a quality change.
  *
- * The guarded fields are the ones that alter what is being measured rather than
- * how well the engine does it:
+ * A guarded field is one of two kinds, and the two demand OPPOSITE answers:
  *
- * | Field | What a change means |
- * |---|---|
- * | `atomMaxChars` | a different chunking, so a different ranking unit |
- * | `adapter` | a different engine path |
- * | `depth` | a different retrieval cut, which moves recall mechanically |
- * | `rerank` | a second-stage model in the loop, or not |
- * | `corpusBytes` / `corpusLines` | a different corpus — the cheap checksum |
+ * | Kind | Field | What a change means |
+ * |---|---|---|
+ * | measuring scale | `atomMaxChars` | a different chunking, so a different ranking unit |
+ * | measuring scale | `depth` | a different retrieval cut, which moves recall mechanically |
+ * | measuring scale | `corpusBytes` / `corpusLines` | a different corpus — the cheap checksum |
+ * | treatment | `adapter` | a different engine path — the thing an A/B run exists to compare |
+ * | treatment | `rerank` | a second-stage model in the loop, or not |
+ *
+ * A moved SCALE is still refused: the two numbers are not on one axis and no
+ * label can rescue them. A moved TREATMENT is the experiment, so it is compared
+ * — but reported as an ARM COMPARISON, never as a like-for-like delta, because
+ * the two arms differ by construction rather than by a regression.
  *
  * `gitSha` and `ts` are deliberately NOT guarded: a changed engine commit is
  * precisely the thing a delta is supposed to measure.
@@ -25,17 +29,26 @@ import type { HistoryRow } from './report.js';
 
 const DELTA_DIGITS = 4;
 
-/** The fields whose change invalidates a delta. Order fixes the report's order. */
-export const PROVENANCE_FIELDS = [
+/** Fields that change WHAT is measured; a move invalidates any subtraction. */
+export const SCALE_FIELDS = [
   'atomMaxChars',
-  'adapter',
   'depth',
-  'rerank',
   'corpusBytes',
   'corpusLines',
 ] as const;
 
-export type ProvenanceField = (typeof PROVENANCE_FIELDS)[number];
+/** Fields that name the TREATMENT under measurement; a move IS the experiment. */
+export const TREATMENT_FIELDS = ['adapter', 'rerank'] as const;
+
+export type ScaleField = (typeof SCALE_FIELDS)[number];
+export type TreatmentField = (typeof TREATMENT_FIELDS)[number];
+export type ProvenanceField = ScaleField | TreatmentField;
+
+/** Every guarded field. Derived from the two kinds so neither can drift. */
+export const PROVENANCE_FIELDS: readonly ProvenanceField[] = [
+  ...SCALE_FIELDS,
+  ...TREATMENT_FIELDS,
+];
 
 /** A guarded field that moved between the two runs, with both of its values. */
 export interface ProvenanceChange {
@@ -61,6 +74,22 @@ export interface ComparisonDelta {
   readonly delta: MetricDelta;
 }
 
+/**
+ * Two ARMS of one experiment: the measuring scale held still and a treatment
+ * field moved on purpose, so the difference is attributable to the treatment
+ * and to nothing else. Kept apart from `delta` so no reader can mistake a
+ * between-arms difference for a regression on one arm.
+ */
+export interface ComparisonArmDelta {
+  readonly kind: 'arm-delta';
+  readonly dataset: string;
+  readonly previous: HistoryRow;
+  readonly latest: HistoryRow;
+  readonly delta: MetricDelta;
+  /** The treatment fields that differ — what the two arms actually are. */
+  readonly arms: readonly ProvenanceChange[];
+}
+
 /** The refusal: the scale moved, so the numbers are not on the same axis. */
 export interface ComparisonRefused {
   readonly kind: 'provenance-changed';
@@ -77,7 +106,11 @@ export interface ComparisonMissing {
   readonly runs: number;
 }
 
-export type Comparison = ComparisonDelta | ComparisonRefused | ComparisonMissing;
+export type Comparison =
+  | ComparisonDelta
+  | ComparisonArmDelta
+  | ComparisonRefused
+  | ComparisonMissing;
 
 const changedField = (
   previous: HistoryRow,
@@ -91,12 +124,30 @@ const changedField = (
 const isChange = (change: ProvenanceChange | undefined): change is ProvenanceChange =>
   change !== undefined;
 
+const changesIn = (
+  previous: HistoryRow,
+  latest: HistoryRow,
+  fields: readonly ProvenanceField[]
+): readonly ProvenanceChange[] =>
+  fields.map(field => changedField(previous, latest, field)).filter(isChange);
+
 /** Every guarded field that moved — all of them, so one report names them all. */
 export const provenanceChanges = (
   previous: HistoryRow,
   latest: HistoryRow
-): readonly ProvenanceChange[] =>
-  PROVENANCE_FIELDS.map(field => changedField(previous, latest, field)).filter(isChange);
+): readonly ProvenanceChange[] => changesIn(previous, latest, PROVENANCE_FIELDS);
+
+/** The measuring-scale moves only — the ones that make a pair incomparable. */
+export const scaleChanges = (
+  previous: HistoryRow,
+  latest: HistoryRow
+): readonly ProvenanceChange[] => changesIn(previous, latest, SCALE_FIELDS);
+
+/** The treatment moves only — the ones that make a pair an EXPERIMENT. */
+export const treatmentChanges = (
+  previous: HistoryRow,
+  latest: HistoryRow
+): readonly ProvenanceChange[] => changesIn(previous, latest, TREATMENT_FIELDS);
 
 const deltaOf = (previous: HistoryRow, latest: HistoryRow): MetricDelta => ({
   ndcg10: latest.ndcg10 - previous.ndcg10,
@@ -110,10 +161,15 @@ const comparePair = (
   previous: HistoryRow,
   latest: HistoryRow
 ): Comparison => {
-  const changed = provenanceChanges(previous, latest);
-  return changed.length > 0
-    ? { kind: 'provenance-changed', dataset, previous, latest, changed }
-    : { kind: 'delta', dataset, previous, latest, delta: deltaOf(previous, latest) };
+  if (scaleChanges(previous, latest).length > 0) {
+    const changed = provenanceChanges(previous, latest);
+    return { kind: 'provenance-changed', dataset, previous, latest, changed };
+  }
+  const arms = treatmentChanges(previous, latest);
+  const delta = deltaOf(previous, latest);
+  return arms.length > 0
+    ? { kind: 'arm-delta', dataset, previous, latest, delta, arms }
+    : { kind: 'delta', dataset, previous, latest, delta };
 };
 
 /**
@@ -141,12 +197,15 @@ export const compareAll = (history: readonly HistoryRow[]): readonly Comparison[
 const signed = (value: number): string =>
   `${value >= 0 ? '+' : ''}${value.toFixed(DELTA_DIGITS)}`;
 
-const deltaLine = (comparison: ComparisonDelta): string =>
-  `${comparison.dataset}: nDCG@10 ${signed(comparison.delta.ndcg10)}  ` +
+const metricsText = (comparison: ComparisonDelta | ComparisonArmDelta): string =>
+  `nDCG@10 ${signed(comparison.delta.ndcg10)}  ` +
   `R@10 ${signed(comparison.delta.recall10)}  ` +
   `R@100 ${signed(comparison.delta.recall100)}  ` +
   `MRR@10 ${signed(comparison.delta.mrr10)}  ` +
   `(${comparison.previous.gitSha} → ${comparison.latest.gitSha})`;
+
+const deltaLine = (comparison: ComparisonDelta): string =>
+  `${comparison.dataset}: ${metricsText(comparison)}`;
 
 const changeText = (change: ProvenanceChange): string =>
   `${change.field} ${JSON.stringify(change.previous)} → ${JSON.stringify(change.latest)}`;
@@ -156,9 +215,18 @@ const refusalLine = (comparison: ComparisonRefused): string =>
   `${comparison.changed.map(changeText).join(', ')}. ` +
   'Re-run both arms under one provenance before reading these numbers as quality.';
 
+/**
+ * The arm line leads with the label and the two arms, so the numbers are never
+ * read before the reader knows they belong to two different treatments.
+ */
+const armLine = (comparison: ComparisonArmDelta): string =>
+  `${comparison.dataset}: ARM COMPARISON — ${comparison.arms.map(changeText).join(', ')} — ` +
+  `two TREATMENTS, not a like-for-like delta: ${metricsText(comparison)}`;
+
 /** One line a human can act on, whichever outcome the comparison had. */
 export const formatComparison = (comparison: Comparison): string => {
   if (comparison.kind === 'delta') return deltaLine(comparison);
+  if (comparison.kind === 'arm-delta') return armLine(comparison);
   if (comparison.kind === 'provenance-changed') return refusalLine(comparison);
   return `${comparison.dataset}: only ${comparison.runs} recorded run — nothing to compare yet.`;
 };

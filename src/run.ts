@@ -26,10 +26,15 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import {
+  adapterError,
+  type AdapterName,
+  resolveAdapter
+} from '../../dp-gnosis/src/cli/adapter.js';
 import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
 import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
-import { compareAll, formatComparison } from './compare.js';
+import { compareAll, type Comparison, formatComparison } from './compare.js';
 import {
   openPort,
   prepareDataset,
@@ -51,6 +56,8 @@ import {
   writeRunReport
 } from './report.js';
 import { type DatasetScore, scoreDataset, toDocumentRanking } from './score.js';
+import { type MetricName, pairedSignificance, type Significance } from './significance.js';
+import { significanceLabel } from './sweepReport.js';
 
 /** The suite directory; every other path here is resolved from it, never from `cwd`. */
 export const SUITE_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
@@ -60,8 +67,12 @@ const DATA_DIR = resolve(SUITE_ROOT, 'data');
 const WORK_ROOT = resolve(DATA_DIR, 'work');
 const CORPUS_FILE = 'corpus.jsonl';
 
-/** The adapter under measurement — the one `engine.openPort` builds. */
-const ADAPTER = 'fts5';
+/**
+ * The adapter measured when `--adapter` is silent. NOT the engine CLI's default
+ * (`linear`): the suite's recorded history is fts5, and moving the bench default
+ * would silently re-base every comparison against it.
+ */
+export const BENCH_DEFAULT_ADAPTER: AdapterName = 'fts5';
 
 const DEFAULT_DEPTH = 100;
 const METRIC_DIGITS = 4;
@@ -74,6 +85,8 @@ export interface CliOptions {
   readonly depth: number;
   readonly rerank: boolean;
   readonly compare: boolean;
+  /** The adapter arm under measurement; recorded as provenance. */
+  readonly adapter: AdapterName;
 }
 
 /** A scorable query: judged by the qrels, so it can contribute a non-zero mean. */
@@ -90,11 +103,24 @@ const flagValue = (argv: readonly string[], name: string): string | undefined =>
 const csv = (value: string | undefined): readonly string[] =>
   value === undefined ? [] : value.split(',').map(part => part.trim()).filter(part => part.length > 0);
 
+/**
+ * An unknown `--adapter` THROWS. Falling back to the default would record a run
+ * whose provenance says one engine path while another was measured — the exact
+ * confusion `compare.ts` refuses to subtract across.
+ */
+const parseAdapter = (value: string | undefined): AdapterName => {
+  if (value === undefined) return BENCH_DEFAULT_ADAPTER;
+  const adapter = resolveAdapter(value);
+  if (adapter === undefined) throw new Error(`dp-gnosis-bench: ${adapterError(value)}`);
+  return adapter;
+};
+
 export const parseArgs = (argv: readonly string[]): CliOptions => ({
   only: csv(flagValue(argv, '--only')),
   depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
   rerank: argv.includes('--rerank'),
   compare: argv.includes('--compare'),
+  adapter: parseAdapter(flagValue(argv, '--adapter')),
 });
 
 /**
@@ -286,7 +312,7 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
   const topics = topicsOf(readQueries(dir), qrels);
   const prepared = await prepareOf(entry, dir);
-  const port = openPort(prepared);
+  const port = openPort(prepared, { adapter: options.adapter });
   const context = { port, options, excluded: readExcluded(dir) };
   const queried = await queryDataset(context, topics).finally(() => port.close?.());
   return {
@@ -346,15 +372,44 @@ const selected = (options: CliOptions): readonly DatasetEntry[] => {
 const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
   ts: new Date().toISOString(),
   gitSha,
-  adapter: ADAPTER,
+  adapter: options.adapter,
   depth: options.depth,
   rerank: options.rerank,
 });
 
+/** The headline; the other three metrics are read off the delta line above it. */
+const SIGNIFICANCE_METRIC: MetricName = 'ndcg10';
+
+/** An arm comparison says so on its OWN line — a p-value read alone must not mislead. */
+const armPrefix = (result: Significance): string =>
+  result.kind === 'verdict' && result.arms !== undefined ? 'ARM COMPARISON — ' : '';
+
+/**
+ * The paired permutation p and bootstrap interval for the pair just compared,
+ * from `significance.ts` — the same statistic the sweep rates its cells with.
+ * A comparison that produced no delta (refused, or too little history) gets no
+ * line: there is nothing to rate.
+ */
+const significanceLines = (comparison: Comparison): readonly string[] => {
+  if (comparison.kind !== 'delta' && comparison.kind !== 'arm-delta') return [];
+  const result = pairedSignificance({
+    resultsDir: RESULTS_DIR,
+    previous: comparison.previous,
+    latest: comparison.latest,
+    metric: SIGNIFICANCE_METRIC,
+  });
+  return [`  nDCG@10: ${armPrefix(result)}${significanceLabel(result)}`];
+};
+
+const comparisonLines = (comparison: Comparison): readonly string[] => [
+  formatComparison(comparison),
+  ...significanceLines(comparison),
+];
+
 const printComparison = (): void => {
   const history = readHistory(resolve(RESULTS_DIR, HISTORY_FILE));
   process.stdout.write('\n-- compare (last two runs per dataset) --\n');
-  process.stdout.write(`${compareAll(history).map(formatComparison).join('\n')}\n`);
+  process.stdout.write(`${compareAll(history).flatMap(comparisonLines).join('\n')}\n`);
 };
 
 const record = (results: readonly DatasetResult[], options: CliOptions, sha: string): void => {

@@ -239,6 +239,48 @@ describe('pairedSignificance — refusals', () => {
   });
 });
 
+describe('pairedSignificance — treatment arms', () => {
+  it('TESTS an adapter change and names the arm instead of refusing', () => {
+    const dir = setup(NULL_BEFORE, NULL_AFTER);
+    const result = pairedSignificance({
+      resultsDir: dir,
+      previous: row({}),
+      latest: row({ ts: later.ts, gitSha: 'bbb2222', adapter: 'linear' }),
+      metric: 'ndcg10',
+    });
+    expect(result.kind).toBe('verdict');
+    if (result.kind !== 'verdict') return;
+    expect(result.arms?.map(change => change.field)).toEqual(['adapter']);
+    expect(result.topics).toBe(12);
+  });
+
+  it('leaves `arms` unset for a like-for-like pair', () => {
+    const dir = setup(NULL_BEFORE, NULL_AFTER);
+    const result = pairedSignificance({
+      resultsDir: dir,
+      previous: row({}),
+      latest: later,
+      metric: 'ndcg10',
+    });
+    expect(result.kind).toBe('verdict');
+    if (result.kind !== 'verdict') return;
+    expect(result.arms).toBeUndefined();
+  });
+
+  it('still REFUSES when a scale field moved alongside the arm', () => {
+    const dir = setup(NULL_BEFORE, NULL_AFTER);
+    const result = pairedSignificance({
+      resultsDir: dir,
+      previous: row({}),
+      latest: row({ ts: later.ts, gitSha: 'bbb2222', adapter: 'linear', depth: 300 }),
+      metric: 'ndcg10',
+    });
+    expect(result.kind).toBe('provenance-changed');
+    if (result.kind !== 'provenance-changed') return;
+    expect(result.changed.map(change => change.field).sort()).toEqual(['adapter', 'depth']);
+  });
+});
+
 describe('pairedSignificance — metric selection', () => {
   it('tests the named metric, not always nDCG@10', () => {
     const dir = setup(NULL_BEFORE, NULL_AFTER);
