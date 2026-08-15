@@ -115,6 +115,48 @@ recorded what the scale had been.
 inherited the engine default and a run that set the same number explicitly are
 the same measurement and must read alike.
 
+## Validate the metrics against `pytrec_eval`
+
+`scripts/validate-metrics.py` re-scores a recorded run with `pytrec_eval` (the
+Python binding of `trec_eval`) and diffs nDCG@10 / R@100 against the matching
+`history.jsonl` row. It is a **one-off dev-time check, not a CI gate**: it needs
+a Python toolchain, and the answer changes only when `src/metrics.ts` changes.
+
+One-time setup, from this directory (`.venv/` is git-ignored):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install pytrec_eval numpy
+```
+
+Run it (datasets default to `scifact nfcorpus`):
+
+```bash
+.venv/bin/python scripts/validate-metrics.py scifact nfcorpus
+```
+
+Exit 0 = agreement within 1e-4 · exit 1 = disagreement · exit 2 = bad input.
+It resolves the run file from the row's `runPath` field, never by rebuilding a
+path. Two conventions have to be aligned by hand or the check reports a
+disagreement that is not a defect, and both are stated in the script's
+docstring: the mean is taken over the **qrels** topic set (a zero-hit topic has
+no lines in the run file and still counts as 0, as `metrics.ts` does), and the
+ids in the run file are already document-level and deduped, so the script
+re-maps nothing.
+
+**On a disagreement, do not tune the script.** Characterise which convention
+differs and report it — `metrics.ts` being `trec_eval`-equivalent is what every
+external comparability claim in this suite rests on.
+
+Measured 2026-08-15 at `gitSha` `35c7a546`, run `2026-08-15-114122694-fts5-*`:
+
+| Dataset | topics | nDCG@10 (`pytrec_eval` / `metrics.ts`) | R@100 (`pytrec_eval` / `metrics.ts`) |
+|---|---|---|---|
+| scifact | 300 | 0.685766 / 0.685766 | 0.917667 / 0.917667 |
+| nfcorpus | 323 | 0.316405 / 0.316405 | 0.246264 / 0.246264 |
+
+Agreement is to floating-point noise (max |diff| 4.4e-16), not merely to 4
+decimal places.
+
 ## Sweep BM25 k1 and b
 
 ```
