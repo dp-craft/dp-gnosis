@@ -9,7 +9,9 @@ import { runCli } from '../../dp-gnosis/src/cli/cli.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import type { BeirDoc } from './beir.js';
 import {
+  assertCorpusMaterialized,
   assertIngestSound,
+  CORPUS_MISMATCH_CAUSE,
   EMPTY_INDEX_CAUSE,
   LOW_COVERAGE_CAUSE,
   openPort,
@@ -164,6 +166,29 @@ describe('assertIngestSound', () => {
         indexedAtomCount: 9,
         coveredDocIds: inputDocIds.slice(0, 9),
         inputDocIds,
+      })
+    ).not.toThrow();
+  });
+});
+
+describe('assertCorpusMaterialized', () => {
+  it('throws naming both counts when stale documents outnumber the corpus', () => {
+    const act = (): void =>
+      assertCorpusMaterialized({
+        datasetId: 'vault-hu',
+        corpusDocCount: 454,
+        materializedFileCount: 568,
+      });
+    expect(act).toThrow(/vault-hu.*568 document files.*454 documents/s);
+    expect(act).toThrow(expect.objectContaining({ cause: CORPUS_MISMATCH_CAUSE }));
+  });
+
+  it('accepts a directory holding exactly the corpus', () => {
+    expect(() =>
+      assertCorpusMaterialized({
+        datasetId: 'vault-hu',
+        corpusDocCount: 454,
+        materializedFileCount: 454,
       })
     ).not.toThrow();
   });

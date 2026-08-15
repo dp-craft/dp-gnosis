@@ -6,7 +6,7 @@
  * point of the suite (`beirIndex.ts`, the harness this replaces, built its own
  * index and its own SQL and therefore could not see an engine regression).
  *
- * Four rules, each verified against the engine source, each silent when broken:
+ * Five rules, each verified against the engine source, each silent when broken:
  *
  * 1. The RAW query text goes to `port.retrieve` — `retrieveCommand.ts:349`
  *    passes exactly that, and `fts5Adapter.toMatchExpression` does the stemming
@@ -25,6 +25,11 @@
  *    index time with no error anywhere: an empty index, zero results, and a
  *    green benchmark reporting 0.0 as if it were a quality finding. The assert
  *    below is the only thing between that and a trusted number.
+ * 5. Corpus IDENTITY is asserted before ingest. Materialization prunes the docs
+ *    directory to exactly the current corpus, and `assertCorpusMaterialized`
+ *    proves it did. Without that, a corpus that SHRANK left its dropped
+ *    documents on disk to be ingested forever as distractors — invisible to
+ *    rule 4, which validates gold reachability, not corpus identity.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
@@ -46,7 +51,7 @@ import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { rerankAtoms } from '../../dp-gnosis/src/rerank.js';
 import type { BeirDoc } from './beir.js';
-import { buildProfile, materializeCorpus } from './corpus.js';
+import { buildProfile, materializeCorpus, type MaterializedCorpus } from './corpus.js';
 
 const MARKDOWN_EXT = '.md';
 
@@ -76,6 +81,9 @@ export const ADAPTER_INDEX_CAUSE = 'dp-gnosis-bench/adapter-index-unavailable';
 
 /** `error.cause` when a port was asked for an index built for a different adapter. */
 export const FOREIGN_INDEX_CAUSE = 'dp-gnosis-bench/foreign-index';
+
+/** `error.cause` when the directory about to be ingested is not exactly the corpus. */
+export const CORPUS_MISMATCH_CAUSE = 'dp-gnosis-bench/corpus-materialization-mismatch';
 
 /** One dataset's corpus, in memory, plus where it may write. */
 export interface PrepareDatasetOptions {
@@ -145,6 +153,36 @@ export const assertIngestSound = (facts: IngestSoundness): void => {
   const covered = coveredCount(facts);
   const ratio = covered / Math.max(facts.inputDocIds.length, 1);
   if (ratio < MIN_DOCUMENT_COVERAGE) fail(lowCoverageMessage(facts, covered), LOW_COVERAGE_CAUSE);
+};
+
+/** What the corpus-identity assert judges, separated so it can be tested alone. */
+export interface CorpusMaterialization {
+  readonly datasetId: string;
+  /** Documents the dataset's `corpus.jsonl` declares. */
+  readonly corpusDocCount: number;
+  /** Document files observed in the ingest directory afterwards. */
+  readonly materializedFileCount: number;
+}
+
+const corpusMismatchMessage = (facts: CorpusMaterialization): string =>
+  `dp-gnosis-bench: dataset "${facts.datasetId}" is about to ingest ` +
+  `${facts.materializedFileCount} document files from a corpus of ${facts.corpusDocCount} ` +
+  'documents. A surplus is stale output from an earlier, larger corpus: those documents are ' +
+  'indexed as distractors that occupy a rank and can never be credited, so every metric is ' +
+  'understated (measured on vault-hu: 114 stale files cost 0.05 nDCG@10). A deficit means ' +
+  'documents were never written. Delete the dataset work directory and re-run.';
+
+/**
+ * Refuse a dataset whose ingest directory is not EXACTLY its corpus. Sibling of
+ * `assertIngestSound` and the same kind of check: both refuse a run whose numbers
+ * would be silently wrong rather than absent. This one runs BEFORE ingest, because
+ * once a stale document is an atom nothing downstream can tell it from a real one —
+ * gold reachability stays 1.0000 and the run reports no anomaly at all.
+ */
+export const assertCorpusMaterialized = (facts: CorpusMaterialization): void => {
+  if (facts.materializedFileCount !== facts.corpusDocCount) {
+    fail(corpusMismatchMessage(facts), CORPUS_MISMATCH_CAUSE);
+  }
 };
 
 interface IndexedPathRow {
@@ -302,6 +340,23 @@ const buildAdapterIndex = async (request: AdapterIndexRequest): Promise<BuiltInd
 };
 
 /**
+ * Materialize into the dataset's own `docs` directory, then PROVE that directory
+ * holds exactly this corpus before a single atom is written from it.
+ */
+const materializeChecked = (
+  options: PrepareDatasetOptions,
+  paths: DatasetPaths
+): MaterializedCorpus => {
+  const corpus = materializeCorpus(options.docs, resolve(paths.workDir, CORPUS_DIR_NAME));
+  assertCorpusMaterialized({
+    datasetId: options.id,
+    corpusDocCount: corpus.docCount,
+    materializedFileCount: corpus.presentFileCount,
+  });
+  return corpus;
+};
+
+/**
  * Materialize, ingest, index, verify. Every path handed to the engine is
  * ABSOLUTE and the profile is the in-memory object — nothing is read from the
  * process's working directory and nothing is written outside `workRoot/<id>`.
@@ -313,7 +368,7 @@ export const prepareDataset = async (
 ): Promise<PreparedDataset> => {
   const adapter = options.adapter ?? ADAPTER;
   const paths = datasetPaths(options);
-  const corpus = materializeCorpus(options.docs, resolve(paths.workDir, CORPUS_DIR_NAME));
+  const corpus = materializeChecked(options, paths);
   const probeMs = await ingestAndProbe(paths);
   const indexed = indexedAtomPaths(paths.indexPath);
   assertIngestSound({

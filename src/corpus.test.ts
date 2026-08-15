@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, resolve } from 'node:path';
 
@@ -47,6 +47,52 @@ describe('materializeCorpus', () => {
   it('creates the target directory when it does not exist', () => {
     const nested = resolve(root, 'a/b/c');
     expect(materializeCorpus(docs, nested).docCount).toBe(2);
+  });
+
+  it('counts the documents actually present on disk, not the ones it wrote', () => {
+    const target = resolve(root, 'present-count');
+    expect(materializeCorpus(docs, target).presentFileCount).toBe(2);
+  });
+});
+
+describe('materializeCorpus on a shrunken corpus', () => {
+  it('removes a document file the corpus no longer claims', () => {
+    const target = resolve(root, 'shrunk');
+    materializeCorpus(docs, target);
+    const shrunk = materializeCorpus([docs[0]!], target);
+    expect(existsSync(resolve(target, 'MED-2.a_b-1.md'))).toBe(false);
+    expect(existsSync(resolve(target, '10009203.md'))).toBe(true);
+    expect(shrunk.docCount).toBe(1);
+    expect(shrunk.presentFileCount).toBe(1);
+  });
+
+  it('removes a stale document seeded by an earlier, larger corpus', () => {
+    const target = resolve(root, 'preseeded');
+    mkdirSync(target, { recursive: true });
+    writeFileSync(resolve(target, 'ghost-doc.md'), '# Ghost\n\nstale body\n', 'utf8');
+    expect(materializeCorpus(docs, target).presentFileCount).toBe(2);
+    expect(existsSync(resolve(target, 'ghost-doc.md'))).toBe(false);
+  });
+
+  it('refuses loudly when an entry is not a generated document', () => {
+    const target = resolve(root, 'unprunable');
+    mkdirSync(resolve(target, 'nested'), { recursive: true });
+    expect(() => materializeCorpus(docs, target)).toThrow(/not generated documents.*nested/s);
+    expect(() => materializeCorpus(docs, target)).toThrow(
+      expect.objectContaining({ cause: 'dp-gnosis-bench/unprunable-corpus-dir' })
+    );
+  });
+
+  it('never deletes outside the dataset directory it was given', () => {
+    const sibling = resolve(root, 'ds-b/docs');
+    mkdirSync(sibling, { recursive: true });
+    writeFileSync(resolve(sibling, 'sibling-doc.md'), '# Sibling\n\nbody\n', 'utf8');
+    const own = resolve(root, 'ds-a/docs');
+    materializeCorpus(docs, own);
+    writeFileSync(resolve(root, 'ds-a/corpus-manifest.json'), '{}', 'utf8');
+    materializeCorpus([docs[0]!], own);
+    expect(existsSync(resolve(sibling, 'sibling-doc.md'))).toBe(true);
+    expect(existsSync(resolve(root, 'ds-a/corpus-manifest.json'))).toBe(true);
   });
 });
 

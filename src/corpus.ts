@@ -18,7 +18,7 @@
  * against it, so an atom with an unknown domain is dropped at index time — an
  * empty index and zero results, with no error anywhere.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
@@ -36,10 +36,22 @@ const PROFILE_DOMAIN = 'docs';
 const PROFILE_TYPE = 'vendor-doc';
 const PROFILE_DEFAULT_TYPE = 'vendor-doc';
 
+/** `error.cause` when the corpus directory holds something materialization cannot own. */
+export const UNPRUNABLE_CORPUS_DIR_CAUSE = 'dp-gnosis-bench/unprunable-corpus-dir';
+
+/** How many foreign entry names a refusal names before it stops listing. */
+const NAMED_FOREIGN_ENTRIES = 5;
+
 /** What `materializeCorpus` wrote, and how to get from an id to its file and back. */
 export interface MaterializedCorpus {
   readonly dir: string;
   readonly docCount: number;
+  /**
+   * Document files OBSERVED in `dir` after the write and the prune — read back
+   * from disk, never inferred from `docs`. It is the only number that can
+   * disagree with `docCount`, and that disagreement is the corruption signal.
+   */
+  readonly presentFileCount: number;
   readonly fileNameById: ReadonlyMap<string, string>;
   readonly idByFileName: ReadonlyMap<string, string>;
 }
@@ -75,6 +87,46 @@ const writeDoc = (targetDir: string, doc: BeirDoc): readonly [string, string] =>
   return [doc.id, fileName];
 };
 
+const unprunableMessage = (dir: string, names: readonly string[]): string =>
+  `dp-gnosis-bench corpus: ${dir} holds ${names.length} entries that are not generated ` +
+  `documents (${names.slice(0, NAMED_FOREIGN_ENTRIES).join(', ')}). Materialization cannot ` +
+  'guarantee the directory holds exactly this corpus without deleting them, and it MUST NOT ' +
+  'delete anything it did not write. Point the dataset at a directory it owns exclusively, ' +
+  'or remove the foreign entries by hand.';
+
+/**
+ * The document files currently in `dir`. Refuses rather than guess: an entry that
+ * is not a plain `<id>.md` file is something materialization never wrote, so it
+ * can neither keep it (the corpus would be wrong) nor delete it safely.
+ */
+const presentDocFiles = (dir: string): readonly string[] => {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const foreign = entries.filter(entry => !entry.isFile() || !entry.name.endsWith(MARKDOWN_EXT));
+  if (foreign.length > 0) {
+    throw new Error(
+      unprunableMessage(
+        dir,
+        foreign.map(entry => entry.name)
+      ),
+      { cause: UNPRUNABLE_CORPUS_DIR_CAUSE }
+    );
+  }
+  return entries.map(entry => entry.name);
+};
+
+/**
+ * Delete every document the CURRENT corpus does not claim. A corpus that shrank
+ * used to leave its dropped documents behind forever, and ingest kept indexing
+ * them as distractors — measured on `vault-hu`: 114 stale files, +0.05 nDCG@10
+ * once removed, larger than any treatment effect on that corpus. Deletion is
+ * scoped to `dir`'s OWN entries (`readdir` names carry no separator), so it can
+ * never reach the parent, where `writeManifest` keeps `corpus-manifest.json`.
+ */
+const pruneStaleDocs = (dir: string, keep: ReadonlySet<string>): void => {
+  const stale = presentDocFiles(dir).filter(name => !keep.has(name));
+  stale.forEach(name => rmSync(resolve(dir, name), { force: true }));
+};
+
 /** Write one `<docid>.md` per document; return the reversible id ↔ filename map. */
 export const materializeCorpus = (
   docs: readonly BeirDoc[],
@@ -82,10 +134,13 @@ export const materializeCorpus = (
 ): MaterializedCorpus => {
   mkdirSync(targetDir, { recursive: true });
   const pairs = docs.map(doc => writeDoc(targetDir, doc));
+  const fileNameById = new Map(pairs);
+  pruneStaleDocs(targetDir, new Set(fileNameById.values()));
   return {
     dir: targetDir,
     docCount: pairs.length,
-    fileNameById: new Map(pairs),
+    presentFileCount: presentDocFiles(targetDir).length,
+    fileNameById,
     idByFileName: new Map(pairs.map(([id, fileName]) => [fileName, id])),
   };
 };
