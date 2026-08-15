@@ -136,7 +136,7 @@
       "enabled": true
     },
     {
-      "comment": "The Hungarian half of the same material, against its own golden set. Read it WITH the printed unreachable-gold count: 22 of its 117 judgments name atoms this corpus does not hold, so its recall is bounded well below 1 and its numbers are NOT comparable with `vault`.",
+      "comment": "The Hungarian half of the same material, against its own golden set. The recall ceiling is 1.0000 — all 117 judgments resolve (an older comment here claimed 22 were unreachable; that was a stale atom cache, re-measured 2026-08-15 as 0 unreachable). Its numbers are still NOT comparable with `vault` in absolute terms, for a different reason: 454 documents against vault's 11345 puts its random-ranking floor far higher (R@100 floor 0.2203 vs 0.0088), so compare only after normalising onto each corpus's own random-to-perfect scale.",
       "id": "vault-hu",
       "format": "beir-local",
       "qrels": "test",
