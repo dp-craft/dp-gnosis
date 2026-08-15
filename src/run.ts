@@ -285,13 +285,17 @@ const descriptorOf = (
   atomMaxChars: effectiveAtomMaxChars(entry),
 });
 
-/** What the run measured. `rankings` stays out: the JSON report is a summary. */
+/**
+ * What the run measured. `rankings` is carried through to the TREC run file and
+ * NOWHERE else — `report.ts` keeps it out of the JSON summary, which stays the
+ * one-row-per-dataset record it has always been.
+ */
 const measurementsOf = (
   queried: QueryOutcome,
   scored: DatasetScore
 ): Pick<
   DatasetResult,
-  'queryMs' | 'queryP50Ms' | 'queryP95Ms' | 'metrics' | 'metricsSd' | 'perTopic'
+  'queryMs' | 'queryP50Ms' | 'queryP95Ms' | 'metrics' | 'metricsSd' | 'perTopic' | 'rankings'
 > => ({
   queryMs: queried.queryMs,
   queryP50Ms: queried.queryP50Ms,
@@ -299,6 +303,7 @@ const measurementsOf = (
   metrics: scored.mean,
   metricsSd: scored.sd,
   perTopic: scored.perTopic,
+  rankings: queried.rankings,
 });
 
 /**

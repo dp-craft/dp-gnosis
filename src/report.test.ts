@@ -7,9 +7,14 @@ import { describe, expect, it } from 'vitest';
 import {
   type DatasetResult,
   HISTORY_FILE,
+  type HistoryRow,
   readHistory,
+  renderTrecRun,
   reportStem,
+  runFilePath,
+  runFileRelPath,
   type RunProvenance,
+  runTag,
   writeRunReport
 } from './report.js';
 
@@ -56,6 +61,7 @@ const result: DatasetResult = {
     recall1000: undefined,
     mrr10: 0.36,
   },
+  rankings: new Map([['q1', ['doc-a', 'doc-b']]]),
   perTopic: [
     {
       queryId: 'q1',
@@ -127,6 +133,7 @@ describe('writeRunReport', () => {
         'recall10Sd',
         'rerank',
         'perTopicPath',
+        'runPath',
         'topics',
         'ts',
       ].sort()
@@ -235,6 +242,86 @@ describe('readHistory', () => {
 
   it('returns nothing for a record that does not exist yet', () => {
     expect(readHistory(resolve(tempResultsDir(), HISTORY_FILE))).toEqual([]);
+  });
+});
+
+describe('renderTrecRun', () => {
+  const lines = (body: string): readonly string[] =>
+    body.split('\n').filter(line => line.length > 0);
+
+  it('renders qid Q0 docid rank score tag, with a 1-based rank', () => {
+    const body = renderTrecRun(new Map([['q1', ['doc-a', 'doc-b']]]), 'fts5');
+    expect(lines(body)).toEqual(['q1 Q0 doc-a 1 2 fts5', 'q1 Q0 doc-b 2 1 fts5']);
+  });
+
+  it('never ties two scores in one topic — trec_eval re-sorts by score, not by our order', () => {
+    const ranking = ['a', 'b', 'c', 'd'];
+    const scores = lines(renderTrecRun(new Map([['q1', ranking]]), 'fts5')).map(line =>
+      Number(line.split(' ')[4])
+    );
+    expect(new Set(scores).size).toBe(ranking.length);
+    expect([...scores].sort((x, y) => y - x)).toEqual(scores);
+  });
+
+  it('writes no line for a topic that retrieved nothing, and an empty body for no topics', () => {
+    const withEmptyTopic = new Map<string, readonly string[]>([
+      ['q1', []],
+      ['q2', ['doc-a']],
+    ]);
+    expect(renderTrecRun(withEmptyTopic, 'fts5')).toBe('q2 Q0 doc-a 1 1 fts5\n');
+    expect(renderTrecRun(new Map(), 'fts5')).toBe('');
+  });
+
+  it('tags the run with the adapter, and names the rerank arm apart from it', () => {
+    expect(runTag(provenance)).toBe('fts5');
+    expect(runTag({ ...provenance, rerank: true })).toBe('fts5-rerank');
+  });
+});
+
+describe('runFileRelPath', () => {
+  it('keys the file by millisecond instant, adapter and dataset', () => {
+    expect(runFileRelPath(provenance, 'scifact')).toBe(
+      'runs/2026-08-14-093000000-fts5-scifact.trec'
+    );
+  });
+
+  it('separates two adapters that differ in nothing but the arm', () => {
+    expect(runFileRelPath(provenance, 'scifact')).not.toBe(
+      runFileRelPath({ ...provenance, adapter: 'lancedb' }, 'scifact')
+    );
+  });
+});
+
+describe('runFilePath', () => {
+  it('resolves the recorded field, never a reconstructed name', () => {
+    const dir = tempResultsDir();
+    const written = writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(row?.runPath).toBe('runs/2026-08-14-093000000-fts5-scifact.trec');
+    expect(runFilePath(dir, row as HistoryRow)).toBe(written.runPaths[0]);
+  });
+
+  it('reports NOT AVAILABLE for a legacy row that records no run path', () => {
+    const legacy = JSON.parse(OLD_FORMAT_ROW) as HistoryRow;
+    expect(legacy.runPath).toBeUndefined();
+    expect(runFilePath('/results', legacy)).toBeUndefined();
+  });
+});
+
+describe('the TREC run file', () => {
+  it('is written unconditionally, one per dataset, from the run rankings', () => {
+    const dir = tempResultsDir();
+    const written = writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    expect(written.runPaths).toHaveLength(1);
+    expect(readFileSync(written.runPaths[0] ?? '', 'utf8')).toBe(
+      'q1 Q0 doc-a 1 2 fts5\nq1 Q0 doc-b 2 1 fts5\n'
+    );
+  });
+
+  it('keeps the rankings out of the JSON summary — the run file owns them', () => {
+    const dir = tempResultsDir();
+    const written = writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    expect(readFileSync(written.jsonPath, 'utf8')).not.toContain('rankings');
   });
 });
 

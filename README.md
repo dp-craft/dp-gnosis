@@ -79,14 +79,28 @@ is 57,359 rows (~574 requests) — the fetcher logs progress every 50 pages.
 
 ## Read the results
 
-Each run writes four artefacts under `results/`:
+Each run writes five artefacts under `results/`:
 
 | File | For |
 |---|---|
 | `<stem>-<sha>.md` | one row per dataset, for a human |
 | `<stem>-<sha>.json` | the same numbers, machine-readable |
-| `per-topic/<stem>-<dataset>.tsv` | per-topic scores, so a paired significance test can run LATER without re-running the benchmark |
+| `per-topic/<instant>-<adapter>-<dataset>.tsv` | per-topic scores, so a paired significance test can run LATER without re-running the benchmark |
+| `runs/<instant>-<adapter>-<dataset>.trec` | the per-topic RANKINGS in TREC run format (`qid Q0 docid rank score tag`, rank 1-based), so an external evaluator (`pytrec_eval`) can attest the metrics and a later analysis can fuse or diff rankings without a re-run |
 | `history.jsonl` | one append-only line per (run, dataset) — the progress table |
+
+Both per-run files are written UNCONDITIONALLY, and both are recorded on the
+history row (`perTopicPath`, `runPath`). A reader resolves ONLY those fields: a
+name derived from the row cannot tell two arms recorded in the same minute
+apart, so a legacy row lacking the field reads as "not available" rather than
+landing on a file another run wrote.
+
+**Retention — `results/runs/` is git-ignored.** A run file carries every
+retrieved document for every topic: about **8 MB per arm** at `--depth 100` over
+the Tier-1 suite, against a few kilobytes for the whole rest of `results/`. They
+are fully regenerable by re-running the arm, and every metric derived from them
+is already in `history.jsonl`. Keep the run file an open analysis is reading;
+delete the rest.
 
 A `history.jsonl` row carries the four metrics (`ndcg10`, `recall10`,
 `recall100`, `mrr10`) next to the PROVENANCE that makes them comparable: `ts`,

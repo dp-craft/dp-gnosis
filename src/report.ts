@@ -1,11 +1,12 @@
 /**
- * The progress record: four artefacts per run, one of them append-only.
+ * The progress record: five artefacts per run, one of them append-only.
  *
  * | File | Why it exists |
  * |---|---|
  * | `<stem>-<sha>.md` | a human reads one row per dataset |
  * | `<stem>-<sha>.json` | the same numbers, machine-readable, for a later diff |
  * | `per-topic/<instant>-<adapter>-<dataset>.tsv` | per-topic scores, so a paired test can be run LATER without re-running the benchmark |
+ * | `runs/<instant>-<adapter>-<dataset>.trec` | the per-topic RANKINGS, in the format an external evaluator already reads |
  * | `history.jsonl` | one line per (run, dataset) — the progress table `--compare` reads |
  *
  * The history row carries PROVENANCE next to the metrics, and that is the whole
@@ -38,6 +39,9 @@ export const HISTORY_FILE = 'history.jsonl';
 
 /** Per-topic TSVs live in their own subdirectory to keep the run files scannable. */
 export const PER_TOPIC_DIR = 'per-topic';
+
+/** TREC run files live in their own subdirectory — they are the bulky artefact. */
+export const RUN_FILE_DIR = 'runs';
 
 /** Facts true of the whole run — identical on every dataset's history row. */
 export interface RunProvenance {
@@ -80,6 +84,13 @@ export interface DatasetResult {
   /** Sample sd (n-1) of the per-topic values behind `metrics`. */
   readonly metricsSd: Metrics;
   readonly perTopic: readonly TopicScore[];
+  /**
+   * The document ranking per topic, in rank order — the run file's whole input.
+   * Kept OUT of the JSON summary (`writeRunReport`): the rankings are two orders
+   * of magnitude bigger than the metrics, and the TREC run file is the format an
+   * external evaluator already reads.
+   */
+  readonly rankings: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
@@ -116,6 +127,13 @@ export interface HistoryRow extends Metrics {
    * same minute apart, so the derivation silently pairs a run with itself.
    */
   readonly perTopicPath?: string;
+  /**
+   * The run's OWN TREC run file, relative to the results directory, read by
+   * `pytrec_eval` and by any later per-topic error analysis. Absent on rows
+   * written before it existed, and resolution REFUSES such a row rather than
+   * deriving a name — the same rule `perTopicPath` states above.
+   */
+  readonly runPath?: string;
   /** `null` only in rows written before the effective value was recorded. */
   readonly atomMaxChars: number | null;
   readonly depth: number;
@@ -133,6 +151,7 @@ export interface WrittenReport {
   readonly jsonPath: string;
   readonly historyPath: string;
   readonly perTopicPaths: readonly string[];
+  readonly runPaths: readonly string[];
 }
 
 /** Everything `writeRunReport` needs. The per-topic TSVs are not optional. */
@@ -174,6 +193,25 @@ export const runStamp = (generatedAt: string): string =>
  */
 export const perTopicRelPath = (provenance: RunProvenance, dataset: string): string =>
   `${PER_TOPIC_DIR}/${runStamp(provenance.ts)}-${provenance.adapter}-${dataset}.tsv`;
+
+/**
+ * `runs/<instant>-<adapter>-<dataset>.trec`, relative to the results dir.
+ *
+ * Millisecond instant and adapter for exactly the reason `perTopicRelPath` needs
+ * both: a minute-resolution stem let two arms of one comparison overwrite each
+ * other's artefacts with no error. The row records this exact string.
+ */
+export const runFileRelPath = (provenance: RunProvenance, dataset: string): string =>
+  `${RUN_FILE_DIR}/${runStamp(provenance.ts)}-${provenance.adapter}-${dataset}.trec`;
+
+/**
+ * Where the run's TREC run file lives — READ off the row the writer recorded it
+ * on, never derived. `undefined` for a row written before the field existed: a
+ * derived name cannot tell two arms of one minute apart, so it would hand an
+ * evaluator another run's rankings under this run's label.
+ */
+export const runFilePath = (resultsDir: string, run: HistoryRow): string | undefined =>
+  run.runPath === undefined ? undefined : resolve(resultsDir, run.runPath);
 
 /** Recorded when the tree is not a git checkout — never silently omitted. */
 export const UNKNOWN_SHA = 'unknown';
@@ -244,6 +282,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   corpusLines: result.corpusLines,
   adapter: provenance.adapter,
   perTopicPath: perTopicRelPath(provenance, result.dataset),
+  runPath: runFileRelPath(provenance, result.dataset),
   atomMaxChars: result.atomMaxChars,
   depth: provenance.depth,
   rerank: provenance.rerank,
@@ -403,6 +442,76 @@ const writePerTopicFiles = (options: RunReportOptions): readonly string[] => {
   );
 };
 
+/** The TREC run format's second column: the unused iteration field, fixed. */
+const TREC_ITERATION = 'Q0';
+
+/**
+ * The run's label in the run file's last column — the adapter, and the arm when
+ * one is on. `trec_eval` prints it back, so a mislabelled file is a mis-attributed
+ * measurement; there is no other column that says WHICH configuration ran.
+ */
+export const runTag = (provenance: RunProvenance): string =>
+  provenance.rerank ? `${provenance.adapter}-rerank` : provenance.adapter;
+
+/**
+ * The score column is DERIVED from the rank, because this suite carries an ORDER
+ * and not a score vector. It must be strictly decreasing: `trec_eval` and
+ * `pytrec_eval` re-sort each topic by score and break ties by document id, so a
+ * constant (or repeating) score silently replaces the measured ranking with an
+ * alphabetical one. `length - index` is exact at every depth.
+ */
+const trecLines = (queryId: string, ranking: readonly string[], tag: string): readonly string[] =>
+  ranking.map((docId, index) =>
+    [queryId, TREC_ITERATION, docId, index + 1, ranking.length - index, tag].join(' ')
+  );
+
+/**
+ * The TREC run file body — `qid Q0 docid rank score tag`, rank 1-based. Pure: a
+ * topic that retrieved nothing contributes no line, which is what an evaluator
+ * reads as "this topic scored zero", and no topics at all yield an empty file.
+ */
+export const renderTrecRun = (
+  rankings: ReadonlyMap<string, readonly string[]>,
+  tag: string
+): string =>
+  [...rankings]
+    .flatMap(([queryId, ranking]) => trecLines(queryId, ranking, tag))
+    .map(line => `${line}\n`)
+    .join('');
+
+const writeTrecRun = (
+  resultsDir: string,
+  provenance: RunProvenance,
+  result: DatasetResult
+): string => {
+  const path = resolve(resultsDir, runFileRelPath(provenance, result.dataset));
+  writeFileSync(path, renderTrecRun(result.rankings, runTag(provenance)), 'utf8');
+  return path;
+};
+
+/**
+ * ALWAYS written, exactly like the per-topic TSVs: an artefact that has to be
+ * asked for is an analysis that never happens. The rankings cannot be recovered
+ * from the metrics, so a run recorded without them can only be re-run.
+ */
+const writeRunFiles = (options: RunReportOptions): readonly string[] => {
+  mkdirSync(resolve(options.resultsDir, RUN_FILE_DIR), { recursive: true });
+  return options.results.map(result =>
+    writeTrecRun(options.resultsDir, options.provenance, result)
+  );
+};
+
+const RANKINGS_KEY = 'rankings';
+
+/** The JSON sidecar is a SUMMARY: the rankings live in the run file, once. */
+const summaryOf = (result: DatasetResult): Readonly<Record<string, unknown>> =>
+  Object.fromEntries(Object.entries(result).filter(([key]) => key !== RANKINGS_KEY));
+
+const jsonRecord = (options: RunReportOptions): unknown => ({
+  provenance: options.provenance,
+  results: options.results.map(summaryOf),
+});
+
 /**
  * Write the run's four artefacts. The markdown and the JSON share a stem so a
  * summary can never be separated from the record it was rendered from.
@@ -412,8 +521,7 @@ export const writeRunReport = (options: RunReportOptions): WrittenReport => {
   const base = resolve(options.resultsDir, `${stem}-${options.provenance.gitSha}`);
   mkdirSync(options.resultsDir, { recursive: true });
   writeFileSync(`${base}.md`, renderMarkdown(options.provenance, options.results), 'utf8');
-  const record = { provenance: options.provenance, results: options.results };
-  writeFileSync(`${base}.json`, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  writeFileSync(`${base}.json`, `${JSON.stringify(jsonRecord(options), null, 2)}\n`, 'utf8');
   const historyPath = resolve(options.resultsDir, HISTORY_FILE);
   appendHistory(historyPath, options.results.map(r => toHistoryRow(options.provenance, r)));
   return {
@@ -421,5 +529,6 @@ export const writeRunReport = (options: RunReportOptions): WrittenReport => {
     jsonPath: `${base}.json`,
     historyPath,
     perTopicPaths: writePerTopicFiles(options),
+    runPaths: writeRunFiles(options),
   };
 };
