@@ -14,7 +14,9 @@
  * 2. **A dataset failure fails the RUN.** The other datasets still run and are
  *    still recorded — a fetch problem in one should not cost the rest — but the
  *    process exits non-zero, because a partial run silently reported as complete
- *    is the failure mode this suite exists to prevent.
+ *    is the failure mode this suite exists to prevent. For the same reason an
+ *    unknown `--only` id, and any selection that measures nothing, exit 1 with a
+ *    message on stderr before a single dataset is touched.
  * 3. **Topics come from the qrels, not the query file.** A query with no
  *    judgments cannot be scored; including it would divide the mean by a topic
  *    that could only ever contribute 0.
@@ -372,11 +374,43 @@ const runAll = async (
     Promise.resolve([])
   );
 
-const selected = (options: CliOptions): readonly DatasetEntry[] => {
-  const entries = enabledDatasets(loadManifest(MANIFEST_PATH));
-  return options.only.length === 0
-    ? entries
-    : entries.filter(entry => options.only.includes(entry.id));
+/** What `--only` resolved to, and the ids it could not resolve. */
+export interface Selection {
+  readonly entries: readonly DatasetEntry[];
+  readonly unknown: readonly string[];
+}
+
+/**
+ * `enabled` means "member of the DEFAULT suite", not "runnable". So `--only`
+ * selects across the WHOLE manifest: an explicit id is a direct request, and the
+ * arm datasets are disabled precisely so they do not change what a bare run
+ * measures. Filtering the enabled set first made `--only <disabled-or-typo>`
+ * measure nothing and say nothing.
+ */
+export const selectDatasets = (
+  all: readonly DatasetEntry[],
+  only: readonly string[]
+): Selection => {
+  if (only.length === 0) return { entries: enabledDatasets(all), unknown: [] };
+  const known = new Set(all.map(entry => entry.id));
+  return {
+    entries: all.filter(entry => only.includes(entry.id)),
+    unknown: only.filter(id => !known.has(id)),
+  };
+};
+
+/**
+ * Why the run cannot start, or `undefined`. A selection that measures nothing
+ * MUST NOT exit 0 — the suite's contract is that a partial run never looks
+ * complete, and measuring zero datasets is the emptiest partial run there is.
+ */
+export const selectionError = (selection: Selection): string | undefined => {
+  if (selection.unknown.length > 0) {
+    return `dp-gnosis-bench: unknown dataset id(s): ${selection.unknown.join(', ')}`;
+  }
+  return selection.entries.length === 0
+    ? 'dp-gnosis-bench: no datasets selected — nothing was measured'
+    : undefined;
 };
 
 const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
@@ -431,14 +465,28 @@ const record = (results: readonly DatasetResult[], options: CliOptions, sha: str
   process.stdout.write(`\nwrote ${written.markdownPath}\n`);
 };
 
-export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
-  const options = parseArgs(argv);
-  const entries = selected(options);
-  const outcomes = await runAll(entries, options);
-  const results = outcomes.filter(isResult);
+/** Every selected dataset ran and was recorded, or the run failed. */
+const exitCode = (recorded: number, selectedCount: number): number =>
+  recorded === selectedCount ? 0 : FAILURE_EXIT_CODE;
+
+const runSelection = async (
+  entries: readonly DatasetEntry[],
+  options: CliOptions,
+  gitSha: string
+): Promise<number> => {
+  const results = (await runAll(entries, options)).filter(isResult);
   if (results.length > 0) record(results, options, gitSha);
   if (options.compare) printComparison();
-  return results.length === entries.length && entries.length > 0 ? 0 : FAILURE_EXIT_CODE;
+  return exitCode(results.length, entries.length);
+};
+
+export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
+  const options = parseArgs(argv);
+  const selection = selectDatasets(loadManifest(MANIFEST_PATH), options.only);
+  const problem = selectionError(selection);
+  if (problem === undefined) return runSelection(selection.entries, options, gitSha);
+  process.stderr.write(`${problem}\n`);
+  return FAILURE_EXIT_CODE;
 };
 
 /** Guarded so the exported helpers stay importable from a test. */

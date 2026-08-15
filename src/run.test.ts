@@ -1,8 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ATOM_MAX_CHARS, RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
-import type { DatasetEntry } from './manifest.js';
-import { BENCH_DEFAULT_ADAPTER, effectiveAtomMaxChars, firstPassDepth, parseArgs, percentileMs } from './run.js';
+import { type DatasetEntry, loadManifest } from './manifest.js';
+import {
+  BENCH_DEFAULT_ADAPTER,
+  effectiveAtomMaxChars,
+  firstPassDepth,
+  main,
+  MANIFEST_PATH,
+  parseArgs,
+  percentileMs,
+  selectDatasets,
+  selectionError
+} from './run.js';
 
 describe('parseArgs', () => {
   it('defaults to every enabled dataset at depth 100 with no rerank', () => {
@@ -85,5 +95,60 @@ describe('firstPassDepth', () => {
   it('leaves a depth above RERANK_K_INIT alone, reranking and BM25 alike', () => {
     expect(firstPassDepth(100, true)).toBe(100);
     expect(firstPassDepth(5, false)).toBe(5);
+  });
+});
+
+describe('selectDatasets', () => {
+  const manifest = loadManifest(MANIFEST_PATH);
+
+  it('selects exactly the enabled entries when --only is silent', () => {
+    const selection = selectDatasets(manifest, []);
+    expect(selection.entries.map(entry => entry.id)).toEqual(
+      manifest.filter(entry => entry.enabled).map(entry => entry.id)
+    );
+    expect(selection.unknown).toEqual([]);
+  });
+
+  it('honours an --only id that names a disabled entry', () => {
+    const selection = selectDatasets(manifest, ['vault-hu-rephrased']);
+    expect(selection.entries.map(entry => entry.id)).toEqual(['vault-hu-rephrased']);
+    expect(selection.entries[0]?.enabled).toBe(false);
+    expect(selection.unknown).toEqual([]);
+  });
+
+  it('reports an --only id that matches no manifest entry', () => {
+    const selection = selectDatasets(manifest, ['vault', 'vault-typo']);
+    expect(selection.entries.map(entry => entry.id)).toEqual(['vault']);
+    expect(selection.unknown).toEqual(['vault-typo']);
+  });
+});
+
+describe('selectionError', () => {
+  it('names every unmatched id', () => {
+    const message = selectionError({ entries: [], unknown: ['nope', 'also-nope'] });
+    expect(message).toContain('nope');
+    expect(message).toContain('also-nope');
+  });
+
+  it('refuses an empty selection', () => {
+    expect(selectionError({ entries: [], unknown: [] })).toMatch(/no dataset/i);
+  });
+
+  it('passes a non-empty fully matched selection', () => {
+    const selection = selectDatasets(loadManifest(MANIFEST_PATH), ['vault-hu-rephrased']);
+    expect(selectionError(selection)).toBeUndefined();
+  });
+});
+
+describe('main dataset selection', () => {
+  it('exits non-zero and names the unknown id on stderr, measuring nothing', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    const code = await main(['--only', 'vault-hu-typo'], 'sha');
+    const written = stderr.mock.calls.map(call => String(call[0])).join('');
+    stderr.mockRestore();
+    stdout.mockRestore();
+    expect(code).not.toBe(0);
+    expect(written).toContain('vault-hu-typo');
   });
 });
