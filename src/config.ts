@@ -181,6 +181,44 @@ export const RERANK_RRF_K = 20;
 export const RERANK_RRF_WEIGHT = 0.5;
 
 /**
+ * How the reranked order is combined with the first-pass order.
+ *
+ * `rrf` fuses the two; `replace` discards the first-pass order entirely and
+ * emits the reranker's. Two members, because two protocols exist — this is a
+ * closed set, not an extension point.
+ */
+export type RerankFusion =
+  | { readonly kind: 'rrf'; readonly rrfK: number; readonly rerankWeight: number }
+  | { readonly kind: 'replace' };
+
+/**
+ * The named rerank protocols. A name — not a bare number pair — is what a run
+ * records, so a non-standard configuration cannot be published as a standard
+ * one by accident.
+ *
+ * `shipped` is what every recorded rerank number was measured under, and is
+ * the default: {@link RERANK_RRF_K} / {@link RERANK_RRF_WEIGHT}.
+ *
+ * `beir-ce` is the published BEIR BM25+CE protocol — the cross-encoder's order
+ * REPLACES the first pass. It exists to make our numbers comparable with that
+ * baseline, NOT because it retrieves better: pure reranking is the arm the
+ * measurement above rejected for serving.
+ */
+export const RERANK_FUSION_PRESETS = {
+  shipped: { kind: 'rrf', rrfK: RERANK_RRF_K, rerankWeight: RERANK_RRF_WEIGHT },
+  'beir-ce': { kind: 'replace' },
+} as const satisfies Readonly<Record<string, RerankFusion>>;
+
+/** The name a caller may ask for. */
+export type RerankPresetName = keyof typeof RERANK_FUSION_PRESETS;
+
+/** Every valid preset name, for a caller that must reject an unknown one. */
+export const RERANK_PRESET_NAMES = Object.keys(RERANK_FUSION_PRESETS) as readonly RerankPresetName[];
+
+/** The protocol a caller that names none gets — today's shipped behaviour. */
+export const DEFAULT_RERANK_PRESET: RerankPresetName = 'shipped';
+
+/**
  * Hard cap on how many terms a constructed retrieval query may carry.
  *
  * A task's targets, test contract and spec excerpts together run to thousands

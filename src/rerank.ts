@@ -6,8 +6,10 @@
  * FUSION, not replacement — the reranked order is RRF-fused with the first-pass
  * order (`src/config.ts`, `RERANK_RRF_K` / `RERANK_RRF_WEIGHT`), because pure
  * reranking measurably regresses MRR while the fused cell improves every
- * metric. A future edit that drops the first-pass term is a quality regression,
- * not a simplification.
+ * metric. A future edit that makes the first-pass term unreachable is a quality
+ * regression, not a simplification. The `beir-ce` preset does drop it, but only
+ * for a caller that asks for it BY NAME, to reproduce the published BEIR
+ * BM25+CE protocol; the default is and stays `shipped`.
  *
  * REFUSAL, not fallback — an endpoint that is down, or up without the model, is
  * reported as a usage failure. Returning unreranked atoms under `--rerank`
@@ -18,12 +20,15 @@
  */
 import { createRerankerClient, extractDoc, type RerankResult } from './bench/reranker.js';
 import {
+  DEFAULT_RERANK_PRESET,
   RERANK_DEFAULT_URL,
   RERANK_DOC_MAX_CHARS,
+  RERANK_FUSION_PRESETS,
   RERANK_MODEL_ID,
-  RERANK_RRF_K,
-  RERANK_RRF_WEIGHT,
-  RERANK_URL_ENV_VAR
+  RERANK_PRESET_NAMES,
+  RERANK_URL_ENV_VAR,
+  type RerankFusion,
+  type RerankPresetName
 } from './config.js';
 import type { RetrievedAtom } from './port.js';
 
@@ -57,29 +62,102 @@ export interface FusedItem<T> {
   readonly score: number;
 }
 
-const rrfTerm = (weight: number, rank: number | undefined): number =>
-  rank === undefined ? 0 : weight / (RERANK_RRF_K + rank);
+type RrfFusion = Extract<RerankFusion, { readonly kind: 'rrf' }>;
+
+const rrfTerm = (rrfK: number, weight: number, rank: number | undefined): number =>
+  rank === undefined ? 0 : weight / (rrfK + rank);
+
+/** One candidate's two 1-based ranks, plus how many the reranker returned. */
+interface Ranks {
+  /** `undefined` when the reranker did not return this candidate. */
+  readonly rerank: number | undefined;
+  readonly firstPass: number;
+  readonly returned: number;
+}
+
+const rrfScore = (fusion: RrfFusion, ranks: Ranks): number =>
+  rrfTerm(fusion.rrfK, fusion.rerankWeight, ranks.rerank) +
+  rrfTerm(fusion.rrfK, 1 - fusion.rerankWeight, ranks.firstPass);
 
 /**
- * Reciprocal-rank fusion of the reranked order with the first-pass order.
+ * The replacement score is `1/rank` over the EMITTED order: the fusion sees
+ * ranks, not the cross-encoder's raw relevance scores, and a score that did not
+ * produce the order it is printed beside would misread in a TREC run file. An
+ * index the reranker did not return sorts below every one it did.
+ */
+const replacementScore = (ranks: Ranks): number =>
+  1 / (ranks.rerank ?? ranks.returned + ranks.firstPass);
+
+const fusedScore = (fusion: RerankFusion, ranks: Ranks): number =>
+  fusion.kind === 'rrf' ? rrfScore(fusion, ranks) : replacementScore(ranks);
+
+/**
+ * Combines the reranked order with the first-pass order under `fusion`.
  *
  * `rerankOrder` lists FIRST-PASS INDICES best-first. An index the reranker did
- * not return keeps its first-pass term alone rather than being dropped: a
- * candidate that reached the reranker was already retrieved, and losing it here
- * would silently shrink the result.
+ * not return is kept — scored from the first pass alone under `rrf`, appended
+ * in first-pass order under `replace` — rather than dropped: a candidate that
+ * reached the reranker was already retrieved, and losing it here would silently
+ * shrink the result.
  */
-export const fuseByRrf = <T>(
+export const fuseRanking = <T>(
   firstPass: readonly T[],
-  rerankOrder: readonly number[]
+  rerankOrder: readonly number[],
+  fusion: RerankFusion
 ): readonly FusedItem<T>[] => {
   const rerankRank = new Map(rerankOrder.map((index, position) => [index, position + 1]));
   const scored = firstPass.map((item, index) => ({
     item,
-    score:
-      rrfTerm(RERANK_RRF_WEIGHT, rerankRank.get(index)) +
-      rrfTerm(1 - RERANK_RRF_WEIGHT, index + 1),
+    score: fusedScore(fusion, {
+      rerank: rerankRank.get(index),
+      firstPass: index + 1,
+      returned: rerankOrder.length,
+    }),
   }));
   return [...scored].sort((left, right) => right.score - left.score);
+};
+
+/** `undefined` when `name` is not a preset — the caller decides how to refuse. */
+const presetOf = (name: string): RerankFusion | undefined =>
+  (RERANK_PRESET_NAMES as readonly string[]).includes(name)
+    ? RERANK_FUSION_PRESETS[name as RerankPresetName]
+    : undefined;
+
+const presetOrRefuse = (name: string): RerankFusion => {
+  const preset = presetOf(name);
+  if (preset !== undefined) return preset;
+  throw new Error(
+    `rerank fusion: unknown preset "${name}" — known presets are ${RERANK_PRESET_NAMES.join(', ')}.`
+  );
+};
+
+const weighted = (fusion: RerankFusion, rerankWeight: number): RerankFusion => {
+  if (fusion.kind !== 'rrf') {
+    throw new Error(
+      `rerank fusion: a weight override applies only to an RRF preset; "beir-ce" has no weight term.`
+    );
+  }
+  return { ...fusion, rerankWeight };
+};
+
+/** A raw numeric override on top of a named preset — the parameters stay measurable. */
+export interface RerankFusionOverrides {
+  readonly rerankWeight?: number;
+}
+
+/**
+ * The fusion a NAME selects, with any raw override applied. An unknown name is
+ * a usage error, not a fallback to the default: silently reranking under the
+ * shipped protocol when `beir-ce` was asked for would publish the wrong number
+ * under the right label.
+ */
+export const resolveRerankFusion = (
+  name: string = DEFAULT_RERANK_PRESET,
+  overrides: RerankFusionOverrides = {}
+): RerankFusion => {
+  const preset = presetOrRefuse(name);
+  const { rerankWeight } = overrides;
+  return rerankWeight === undefined ? preset : weighted(preset, rerankWeight);
 };
 
 /** What `rerankAtoms` hands back: a new order, or a message naming the fault. */
@@ -166,18 +244,34 @@ const bestFirst = (results: readonly RerankResult[]): readonly number[] =>
   [...results].sort((left, right) => right.relevanceScore - left.relevanceScore).map(r => r.index);
 
 /**
+ * What a caller may vary. Both are omissible and both default to what the CLI
+ * has always done, so an existing two-argument call is unchanged.
+ */
+export interface RerankOptions {
+  readonly baseUrl?: string;
+  readonly fusion?: RerankFusion;
+}
+
+/** The env-resolved URL and the shipped preset are what an omission means. */
+const resolved = (options: RerankOptions): Required<RerankOptions> => ({
+  baseUrl: options.baseUrl ?? resolveRerankUrl(),
+  fusion: options.fusion ?? RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
+});
+
+/**
  * Reorder `atoms` by the fused ranking, carrying the FUSED score on each atom —
  * the score a caller reads must be the one that produced the order it reads.
  */
 export const rerankAtoms = async (
   query: string,
   atoms: readonly RetrievedAtom[],
-  baseUrl: string = resolveRerankUrl()
+  options: RerankOptions = {}
 ): Promise<RerankOutcome> => {
+  const { baseUrl, fusion } = resolved(options);
   const refusal = await catalogueRefusal(baseUrl);
   if (refusal !== undefined) return { ok: false, error: refusal };
   const scored = await scoreDocuments(baseUrl, query, atoms);
   if (!scored.ok) return { ok: false, error: scored.error };
-  const fused = fuseByRrf(atoms, bestFirst(scored.results));
+  const fused = fuseRanking(atoms, bestFirst(scored.results), fusion);
   return { ok: true, atoms: fused.map(entry => ({ ...entry.item, score: entry.score })) };
 };

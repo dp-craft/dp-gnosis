@@ -12,8 +12,8 @@ import { join } from 'node:path';
 
 import { estimateTokens } from '../src/budget.js';
 import { runCli } from '../src/cli/cli.js';
-import { RERANK_MODEL_ID } from '../src/config.js';
-import { fuseByRrf } from '../src/rerank.js';
+import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
+import { fuseRanking } from '../src/rerank.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Gamma'] as const;
 
@@ -91,9 +91,9 @@ const stubServer = (models: readonly string[], order: readonly number[]): string
   return calls;
 };
 
-describe('fuseByRrf', () => {
+describe('fuseRanking — the shipped preset', () => {
   it('fuses the reranked order with the first-pass order at K=20, w=0.5', () => {
-    const fused = fuseByRrf(['a', 'b', 'c', 'd'], [1, 2, 3, 0]);
+    const fused = fuseRanking(['a', 'b', 'c', 'd'], [1, 2, 3, 0], RERANK_FUSION_PRESETS.shipped);
 
     // 'b': first-pass rank 2 and rerank rank 1 beats 'a' at first-pass 1, rerank 4.
     expect(fused.map(entry => entry.item)).toEqual(['b', 'a', 'c', 'd']);
@@ -102,7 +102,7 @@ describe('fuseByRrf', () => {
   });
 
   it('scores an entry the reranker did not return from the first pass alone', () => {
-    const fused = fuseByRrf(['a', 'b'], [1]);
+    const fused = fuseRanking(['a', 'b'], [1], RERANK_FUSION_PRESETS.shipped);
 
     expect(fused.map(entry => entry.item)).toEqual(['b', 'a']);
     expect(fused[1]?.score).toBeCloseTo(0.5 / 21, 10);
