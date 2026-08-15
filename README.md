@@ -241,7 +241,7 @@ Phrasing is not cosmetic. It is the single largest lever on result quality in th
 | architectural requirements of runner | `agentic code runner architecture ownership boundaries design rules` | ambiguous noun → use the full product name |
 | functional programming style | `functional programming immutability pure functions no classes` | expand to the concepts the documents name |
 
-The four rules:
+The five rules:
 
 1. **Strip intent words.** "how to", "I want", "please show me", "info about", "available", "related" — high frequency, zero discrimination. They add score mass to documents that match them incidentally.
 2. **Name things as the documents name them.** Query the vocabulary of the corpus, not the vocabulary of the asker.
@@ -275,12 +275,19 @@ WHEN TO CALL
 REWRITE THE QUERY FIRST — MANDATORY
 This engine matches stemmed words. It does not understand questions. Rewriting a
 natural-language question changes ~90% of the top-10 results, so pass keywords,
-never the user's sentence.
+never the user's sentence. Measured on a paired benchmark: on a non-English
+corpus this is worth +0.2407 nDCG@10 (p=0.0002); on English it buys deep recall
+(+0.0848 R@100, p=0.0009) rather than a better top-10.
 1. Strip intent framing: "how to", "I want", "show me", "info about", "available".
 2. Use the vocabulary the documents use, not the user's.
 3. Add synonyms yourself — there is no synonymy ("e2e" will not match
    "end-to-end"; include both).
 4. Keep rare, specific terms; they carry the most weight.
+5. EXCEPTION to 3: if the user's own words already contain the exact rare term,
+   do NOT pad the query with synonyms — the added terms sink the exact match.
+   Rephrase to supply a missing domain term, never to decorate one already there.
+6. Non-English query: write the word STEM the document uses, not the inflected
+   form. Stemming is English-only, so "használata" will not match "használ".
 Word order and grammar are irrelevant — it is a bag of words.
 Example: "how do I start the e2e tests?" -> "run e2e end-to-end playwright test
 command spec".
