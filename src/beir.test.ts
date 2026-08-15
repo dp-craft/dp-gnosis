@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { readCorpus, readQrels, readQueries } from './beir.js';
+import { type BeirDoc, readCorpus, readQrels, readQueries } from './beir.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-'));
 
@@ -57,6 +57,50 @@ describe('readQueries', () => {
     const queries = readQueries(dir);
     expect(queries.get('q1')).toBe('does alpha work');
     expect(queries.size).toBe(2);
+  });
+});
+
+/**
+ * The jsonl readers stream (`lines.ts`) instead of reading one string. These
+ * pin the projection against the file shapes that distinguish a chunked reader
+ * from the old `readFileSync(...).split('\n')` one.
+ */
+describe('readCorpus over awkward file shapes', () => {
+  const shapeDir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-shape-'));
+  afterAll(() => rmSync(shapeDir, { recursive: true, force: true }));
+
+  const corpusOf = (content: string): readonly BeirDoc[] => {
+    const dataDir = mkdtempSync(resolve(shapeDir, 'd-'));
+    writeFileSync(resolve(dataDir, 'corpus.jsonl'), content, 'utf8');
+    return readCorpus(dataDir);
+  };
+
+  const rows = [
+    JSON.stringify({ _id: 'd1', title: 'Alpha', text: 'first' }),
+    JSON.stringify({ _id: 'd2', title: '', text: '' }),
+    JSON.stringify({ title: 'no id at all', text: 'dropped' }),
+    JSON.stringify({ _id: 'd3', title: 'Gamma', text: 'árvíztűrő tükörfúrógép' }),
+  ];
+  const expected: readonly BeirDoc[] = [
+    { id: 'd1', title: 'Alpha', text: 'first' },
+    { id: 'd2', title: '', text: '' },
+    { id: 'd3', title: 'Gamma', text: 'árvíztűrő tükörfúrógép' },
+  ];
+
+  it('reads a file with a trailing newline', () => {
+    expect(corpusOf(`${rows.join('\n')}\n`)).toEqual(expected);
+  });
+
+  it('reads a file with no trailing newline', () => {
+    expect(corpusOf(rows.join('\n'))).toEqual(expected);
+  });
+
+  it('reads a file with blank lines interspersed', () => {
+    expect(corpusOf(`\n${rows.join('\n\n')}\n\n`)).toEqual(expected);
+  });
+
+  it('tolerates CRLF, as JSON.parse ignores the trailing carriage return', () => {
+    expect(corpusOf(`${rows.join('\r\n')}\r\n`)).toEqual(expected);
   });
 });
 

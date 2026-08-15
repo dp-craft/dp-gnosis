@@ -25,6 +25,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import { countNonEmptyLines } from './lines.js';
 import type { Metrics } from './metrics.js';
 import type { TopicScore } from './score.js';
 
@@ -194,12 +195,14 @@ export const currentGitSha = (cwd: string): string => {
  * Byte size and non-empty line count of a corpus file. Cheap enough to run on
  * every dataset of every run, and it changes whenever the corpus does — which
  * is exactly the condition under which two runs must not be subtracted.
+ *
+ * The count streams (`lines.ts`) because a corpus above Node's ~0.5 GB
+ * single-string cap cannot be read into one string; the counted line set is
+ * unchanged, and `lines.test.ts` pins it against the old expression.
  */
 export const corpusChecksum = (corpusPath: string): CorpusChecksum => ({
   corpusBytes: statSync(corpusPath).size,
-  corpusLines: readFileSync(corpusPath, 'utf8')
-    .split('\n')
-    .filter(line => line.trim().length > 0).length,
+  corpusLines: countNonEmptyLines(corpusPath),
 });
 
 type DescriptorFields = Pick<HistoryRow, 'domain' | 'docShape' | 'queryShape'>;

@@ -7,10 +7,17 @@
  * — same `_id`/`title`/`text` projection, same tab-separated qrels with the
  * header row skipped by matching `query-id`. It is copied rather than
  * re-derived so the numbers stay comparable with the recorded baseline.
+ *
+ * WHAT is parsed is still that verbatim projection; only HOW the bytes reach it
+ * changed. `readFileSync(path,'utf8')` cannot hold a corpus above Node's
+ * 0x1fffffe8 (~0.5 GB) single-string cap — `webis-touche2020` is 0.69 GB and
+ * threw before parsing — so the jsonl files stream through `lines.ts`, whose
+ * line semantics are pinned against the old expression.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { mapNonEmptyLines } from './lines.js';
 import type { Qrel } from './metrics.js';
 
 export type { Qrel } from './metrics.js';
@@ -28,10 +35,7 @@ const QRELS_DIR = 'qrels';
 const QRELS_HEADER_ID = 'query-id';
 
 const readJsonl = (path: string): readonly Record<string, unknown>[] =>
-  readFileSync(path, 'utf8')
-    .split('\n')
-    .filter(line => line.trim().length > 0)
-    .map(line => JSON.parse(line) as Record<string, unknown>);
+  mapNonEmptyLines(path, line => JSON.parse(line) as Record<string, unknown>);
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
 
