@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
@@ -251,14 +251,40 @@ describe('writeSweepReport', () => {
     });
 
     expect(written.jsonPath).toBe(
-      resolve(root, 'results', SWEEP_DIR, '2026-08-14-0930-abc1234.json')
+      resolve(root, 'results', SWEEP_DIR, '2026-08-14-093000000-abc1234.json')
     );
     expect(written.markdownPath).toBe(
-      resolve(root, 'repo', ANALYSIS_DIR, '2026-08-14-0930-bm25-k1-b-sweep.md')
+      resolve(root, 'repo', ANALYSIS_DIR, '2026-08-14-093000000-bm25-k1-b-sweep.md')
     );
     expect(written.svgPath).toBe(
-      resolve(root, 'repo', ANALYSIS_DIR, '2026-08-14-0930-bm25-k1-b-sweep.svg')
+      resolve(root, 'repo', ANALYSIS_DIR, '2026-08-14-093000000-bm25-k1-b-sweep.svg')
     );
+  });
+
+  it('gives two sweeps started in the same minute distinct json, md and svg paths', () => {
+    const call = (ts: string): ReturnType<typeof writeSweepReport> =>
+      writeSweepReport({
+        resultsDir: resolve(root, 'results'),
+        repoRoot: resolve(root, 'repo'),
+        provenance: { ...provenance, ts },
+        cells,
+      });
+
+    const first = call('2026-08-14T09:30:12.345Z');
+    const second = call('2026-08-14T09:30:47.891Z');
+
+    expect(first.jsonPath).not.toBe(second.jsonPath);
+    expect(first.markdownPath).not.toBe(second.markdownPath);
+    expect(first.svgPath).not.toBe(second.svgPath);
+    const paths = [
+      first.jsonPath,
+      first.markdownPath,
+      first.svgPath,
+      second.jsonPath,
+      second.markdownPath,
+      second.svgPath,
+    ];
+    expect(paths.filter(path => existsSync(path))).toEqual(paths);
   });
 
   it('records k1, b and adapter on every cell of the machine record', () => {

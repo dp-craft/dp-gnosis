@@ -33,7 +33,7 @@ import { readQrels, readQueries } from './beir.js';
 import { openPort } from './engine.js';
 import { readExcluded } from './fetch/bright.js';
 import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
-import { currentGitSha, reportStem } from './report.js';
+import { currentGitSha, runStamp } from './report.js';
 import {
   ensureDataset,
   MANIFEST_PATH,
@@ -360,9 +360,13 @@ export const winnerLine = (cells: readonly SweepCell[], dataset: string): string
 };
 
 /**
- * The checkpoint writer. Provenance — and therefore the report stem — is fixed
- * ONCE, before the first cell: a stem derived per call would scatter a long
- * run's checkpoints across a new set of files every minute.
+ * The checkpoint writer. Provenance — and therefore the stem — is fixed ONCE,
+ * before the first cell: a stem derived per call would scatter a long run's
+ * checkpoints across a new set of files.
+ *
+ * The stem is `runStamp` (milliseconds), not `reportStem` (minutes): two sweeps
+ * fanned out in the same minute would otherwise share every per-topic TSV name,
+ * and a silently overwritten vector corrupts the paired test that reads it.
  */
 interface SweepWriter {
   /** Shared by the checkpoint artefacts and by every cell's per-topic TSV. */
@@ -370,10 +374,10 @@ interface SweepWriter {
   readonly write: (cells: readonly SweepCell[]) => WrittenSweep;
 }
 
-const writerFor = (options: SweepOptions, sha: string): SweepWriter => {
+export const writerFor = (options: SweepOptions, sha: string): SweepWriter => {
   const provenance = provenanceOf(options, sha);
   return {
-    stem: reportStem(provenance.ts),
+    stem: runStamp(provenance.ts),
     write: cells =>
       writeSweepReport({ resultsDir: RESULTS_DIR, repoRoot: REPO_ROOT, provenance, cells }),
   };

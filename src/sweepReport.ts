@@ -10,8 +10,9 @@
  * Every cell carries `adapter`, `k1` and `b` next to its metrics, for the reason
  * `report.ts` carries `adapter`/`depth`/`atomMaxChars`: a number whose operating
  * point was not recorded cannot be compared with a later one. The stem is
- * `report.reportStem`, so a sweep and a run taken at the same minute sort
- * together.
+ * `report.runStamp` — millisecond resolution, because two sweeps fanned out in
+ * the same minute at the same sha would otherwise write the same three paths
+ * and the last writer would silently win.
  *
  * The SVG is hand-written. A charting dependency for one static figure would be
  * a dependency the suite has to keep alive forever, and the figure is a grid of
@@ -21,7 +22,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { Metrics } from './metrics.js';
-import { renderPerTopicTsv, reportStem } from './report.js';
+import { renderPerTopicTsv, runStamp } from './report.js';
 import type { TopicScore } from './score.js';
 import {
   CI_LEVEL,
@@ -489,7 +490,7 @@ export const renderHeatmapSvg = (cells: readonly SweepCell[]): string => {
 // ------------------------------------------------------------------ write
 
 export const writeSweepReport = (options: SweepReportOptions): WrittenSweep => {
-  const stem = reportStem(options.provenance.ts);
+  const stem = runStamp(options.provenance.ts);
   const svgName = `${stem}-${ANALYSIS_SUFFIX}.svg`;
   const analysisDir = resolve(options.repoRoot, ANALYSIS_DIR);
   const sweepDir = resolve(options.resultsDir, SWEEP_DIR);

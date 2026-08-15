@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { BeirDoc } from './beir.js';
 import { prepareDataset, type PreparedDataset } from './engine.js';
@@ -15,9 +15,10 @@ import {
   numberCsv,
   parseSweepArgs,
   selectDatasets,
-  winnerLine
+  winnerLine,
+  writerFor
 } from './sweep.js';
-import type { SweepCell } from './sweepReport.js';
+import { type SweepCell, sweepPerTopicName } from './sweepReport.js';
 
 const DEFAULT_CELLS = 12;
 const BASELINE_CELLS = 1;
@@ -190,6 +191,26 @@ describe('winnerLine', () => {
 
     expect(line).toContain('baseline 0.6883, +0.0000');
     expect(line).not.toContain('—');
+  });
+});
+
+describe('writerFor — stem resolution', () => {
+  afterEach(() => vi.useRealTimers());
+
+  const stemAt = (instant: string): string => {
+    vi.setSystemTime(new Date(instant));
+    return writerFor(parseSweepArgs([]), 'abc1234').stem;
+  };
+
+  it('gives two sweeps started in the same minute distinct per-topic TSV names', () => {
+    vi.useFakeTimers();
+    const identity = { dataset: 'fixture', adapter: 'linear', k1: 1.2, b: 0.6 } as const;
+
+    const first = stemAt('2026-08-14T09:30:12.345Z');
+    const second = stemAt('2026-08-14T09:30:47.891Z');
+
+    expect(first).not.toBe(second);
+    expect(sweepPerTopicName(first, identity)).not.toBe(sweepPerTopicName(second, identity));
   });
 });
 
