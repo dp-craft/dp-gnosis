@@ -149,14 +149,15 @@ describe('the shipped datasets.json', () => {
     expect(entries).toHaveLength(7 + 9 + 2 + 2);
   });
 
-  // AC delta: the default suite is no longer "every entry". Three of the twenty ship
-  // disabled — the two rephrased arms (run by `--only`) and `trec-covid`, which fails
-  // the 90% document-coverage gate until the bench projection is fixed — leaving 17.
-  it('enables seventeen of the twenty entries, each having a fetcher', () => {
+  // AC delta: the T-04 projection fix gives a title-only record a non-empty chunk body,
+  // so `trec-covid` clears the 90% document-coverage gate and joins the default suite —
+  // 17 → 18 enabled. The only entries still disabled are the two rephrased arms, which
+  // are run by `--only` and MUST stay out of a bare `npm run gnosis:bench`.
+  it('enables eighteen of the twenty entries, each having a fetcher', () => {
     const disabled = entries.filter(e => !e.enabled).map(e => e.id);
 
-    expect(disabled).toEqual(['trec-covid', 'vault-rephrased', 'vault-hu-rephrased']);
-    expect(enabledDatasets(entries)).toHaveLength(17);
+    expect(disabled).toEqual(['vault-rephrased', 'vault-hu-rephrased']);
+    expect(enabledDatasets(entries)).toHaveLength(18);
   });
 
   // The four vault-family entries are the only ones that DERIVE their BEIR layout,
@@ -204,19 +205,21 @@ describe('the shipped datasets.json', () => {
     expect(arms.map(e => e.enabled)).toEqual([false, false]);
   });
 
-  // trec-covid is not "not fetched yet" — it FAILS the 90% document-coverage gate
-  // because 42,139 title-only records are discarded as empty-bodied. Enabling it
-  // before the bench projection is fixed breaks a bare `npm run gnosis:bench`, so the
-  // reason must ship next to the flag, not only in the plan.
-  it('ships trec-covid disabled with the coverage-gate reason stated in the manifest', () => {
+  // AC delta: trec-covid ships ENABLED once the T-04 projection fix keeps its 42,139
+  // title-only records. What makes enabling it SAFE is exactly that history, so the
+  // manifest comment must still carry it — otherwise a later contributor who breaks the
+  // projection sees a plain enabled entry and no trace of the coverage gate it once
+  // failed, nor of the 12.71% of relevant judgments that were unreachable.
+  it('ships trec-covid enabled with the coverage-gate history stated in the manifest', () => {
     const trecCovid = entries.find(e => e.id === 'trec-covid');
     const raw: unknown = JSON.parse(readFileSync(MANIFEST, 'utf8'));
     const rawEntries = (raw as { datasets: readonly { id: string; comment?: string }[] }).datasets;
     const comment = rawEntries.find(e => e.id === 'trec-covid')?.comment ?? '';
 
-    expect(trecCovid?.enabled).toBe(false);
+    expect(trecCovid?.enabled).toBe(true);
     expect(comment).toMatch(/coverage/i);
     expect(comment).toMatch(/42,139/);
+    expect(comment).toMatch(/12\.71%/);
   });
 
   it('caps BRIGHT atoms at 4000 chars — its documents are whole web pages', () => {

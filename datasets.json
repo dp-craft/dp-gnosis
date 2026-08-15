@@ -30,7 +30,7 @@
       "enabled": true
     },
     {
-      "comment": "DISABLED ON PURPOSE — it FAILS the assertIngestSound 90% document-coverage gate today. 42,139 of its 171,332 records carry a non-empty title and an EMPTY text (the CORD-19 metadata-only population), and emptyBodyReasons discards the resulting title-only atoms. Dropping them is not neutral: 3,135 relevant judgments (12.71%) across 50 of 50 topics become unreachable, a hard recall ceiling of ~0.873. The fix is scoped to the bench projection (plan T-04), NOT to the engine authoring rule; this entry flips to true at T-05. Archive confirmed HTTP 200 at 73,876,720 bytes.",
+      "comment": "42,139 of its 171,332 records carry a non-empty title and an EMPTY text — the CORD-19 metadata-only population, where the source never had an abstract, so nothing is lost in atom production. Before the T-04 projection fix those title-only atoms were all discarded as empty-bodied and the dataset FAILED the assertIngestSound 90% document-coverage gate; dropping them cost 3,135 relevant judgments (12.71%) across 50 of 50 topics, a hard recall ceiling of ~0.873. toMarkdown now gives a title-only record a non-empty chunk body, so the gate keeps them and this entry is enabled. The most expensive Tier-1 entry to ingest — ~10 min (measured 610 s), which is why plan risk R4 flags it for the `full` layer. Archive confirmed HTTP 200 at 73,876,720 bytes.",
       "id": "trec-covid",
       "format": "beir-zip",
       "qrels": "test",
@@ -38,7 +38,7 @@
       "domain": "biomedical",
       "docShape": "short-abstract",
       "queryShape": "keyword",
-      "enabled": false
+      "enabled": true
     },
     {
       "comment": "BEIR citation-prediction set: the query is a paper TITLE and the judged documents are the papers it cites, so it measures title→abstract matching rather than question→passage. Archive confirmed HTTP 200 at 142,471,588 bytes.",
