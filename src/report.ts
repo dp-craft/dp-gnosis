@@ -60,6 +60,12 @@ export interface RunProvenance {
    */
   readonly rerankProfile?: string | undefined;
   readonly rerankWeight?: number | undefined;
+  /**
+   * The analysis chain the index was BUILT with. Required, unlike the rerank
+   * fields: every run has an analyzer whether or not it named one, and a row that
+   * omitted it could never be told apart from one measured on another chain.
+   */
+  readonly analyzer: string;
 }
 
 /** One dataset's outcome plus the provenance that is specific to that dataset. */
@@ -155,6 +161,14 @@ export interface HistoryRow extends Metrics {
    */
   readonly rerankProfile?: string;
   readonly rerankWeight?: number;
+  /**
+   * The analysis chain this row was measured under — TREATMENT provenance
+   * (`compare.ts`), so an analyzer change is labelled an arm comparison instead
+   * of being subtracted. Absent on every row recorded before the chain was
+   * selectable; those were all built by the engine's `DEFAULT_ANALYZER`, which is
+   * how `compare.ts` reads an absent one.
+   */
+  readonly analyzer?: string;
   readonly topics: number;
   readonly docCount: number;
   readonly atomCount: number;
@@ -316,6 +330,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   rerank: provenance.rerank,
   rerankProfile: provenance.rerankProfile,
   rerankWeight: provenance.rerankWeight,
+  analyzer: provenance.analyzer,
   ...descriptorFields(result),
   ...costFields(result),
   ...result.metrics,
@@ -400,7 +415,8 @@ const markdownHeader = (provenance: RunProvenance): readonly string[] => [
   '',
   `- generated at: \`${provenance.ts}\``,
   `- git sha: \`${provenance.gitSha}\``,
-  `- adapter: \`${provenance.adapter}\`, depth: ${provenance.depth}, rerank: ${provenance.rerank}`,
+  `- adapter: \`${provenance.adapter}\`, analyzer: \`${provenance.analyzer}\`, ` +
+    `depth: ${provenance.depth}, rerank: ${provenance.rerank}`,
   '',
   '> Scores are DOCUMENT-level: atoms are rolled up to their origin document before',
   '> scoring, so they stay comparable across chunker changes.',

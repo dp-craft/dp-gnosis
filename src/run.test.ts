@@ -11,6 +11,7 @@ import {
   RERANK_K_INIT,
   RERANK_RRF_K
 } from '../../dp-gnosis/src/config.js';
+import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import {
   type DatasetResult,
@@ -43,6 +44,7 @@ describe('parseArgs', () => {
       rerankProfile: DEFAULT_RERANK_PRESET,
       rerankWeight: undefined,
       rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
+      analyzer: DEFAULT_ANALYZER,
     });
   });
 
@@ -57,6 +59,7 @@ describe('parseArgs', () => {
         rerankProfile: DEFAULT_RERANK_PRESET,
         rerankWeight: undefined,
         rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
+        analyzer: DEFAULT_ANALYZER,
       });
   });
 
@@ -86,6 +89,47 @@ describe('parseArgs', () => {
     const options = parseArgs(['--rerank', '--rerank-weight', '0.8']);
     expect(options.rerankWeight).toBe(0.8);
     expect(options.rerankFusion).toEqual({ kind: 'rrf', rrfK: RERANK_RRF_K, rerankWeight: 0.8 });
+  });
+
+  it('defaults --analyzer to the engine chain every recorded run was measured on', () => {
+    expect(parseArgs([]).analyzer).toBe(DEFAULT_ANALYZER);
+    expect(DEFAULT_ANALYZER).toBe('porter-fold');
+  });
+
+  it('reads --analyzer as the chain the index is built with', () => {
+    expect(parseArgs(['--analyzer', 'nostem-fold']).analyzer).toBe('nostem-fold');
+    expect(parseArgs(['--analyzer', 'porter-nofold']).analyzer).toBe('porter-nofold');
+  });
+
+  it('FAILS LOUDLY on an unknown analyzer, naming it and every valid id', () => {
+    expect(() => parseArgs(['--analyzer', 'snowball'])).toThrow(/snowball/);
+    Object.keys(ANALYZERS).forEach(id => {
+      expect(() => parseArgs(['--analyzer', 'snowball'])).toThrow(new RegExp(id));
+    });
+  });
+
+  it('REFUSES a named analyzer on an adapter that does not honour it, naming both', () => {
+    const argv = ['--adapter', 'linear', '--analyzer', 'nostem-fold'];
+    expect(() => parseArgs(argv)).toThrow(/linear/);
+    expect(() => parseArgs(argv)).toThrow(/nostem-fold/);
+    expect(() => parseArgs(argv)).toThrow(/fts5/);
+    expect(() => parseArgs(['--adapter', 'minisearch', '--analyzer', 'porter-nofold'])).toThrow(
+      /minisearch/
+    );
+  });
+
+  it('leaves the DEFAULT analyzer on a non-fts5 adapter alone — every legacy invocation', () => {
+    expect(parseArgs(['--adapter', 'linear']).analyzer).toBe(DEFAULT_ANALYZER);
+    expect(parseArgs(['--adapter', 'linear']).adapter).toBe('linear');
+    expect(parseArgs(['--adapter', 'lancedb', '--analyzer', DEFAULT_ANALYZER]).adapter).toBe(
+      'lancedb'
+    );
+  });
+
+  it('accepts a named analyzer on fts5, the one adapter that builds its index with it', () => {
+    expect(parseArgs(['--adapter', 'fts5', '--analyzer', 'nostem-fold']).analyzer).toBe(
+      'nostem-fold'
+    );
   });
 
   it('reads --layer as the suite layer to run', () => {
@@ -297,6 +341,7 @@ const testProvenance: RunProvenance = {
   adapter: 'fts5',
   depth: 100,
   rerank: false,
+  analyzer: DEFAULT_ANALYZER,
 };
 
 /**

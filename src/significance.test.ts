@@ -4,7 +4,14 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { type HistoryRow, PER_TOPIC_DIR, perTopicRelPath, reportStem } from './report.js';
+import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
+import {
+  type HistoryRow,
+  PER_TOPIC_DIR,
+  perTopicRelPath,
+  reportStem,
+  type RunProvenance
+} from './report.js';
 import {
   CI_LEVEL,
   pairedScores,
@@ -45,9 +52,15 @@ const BASE_ROW: HistoryRow = {
  * it. `perTopicPath: undefined` in the overrides reproduces a row written before
  * the field existed.
  */
+/** A row is provenance-shaped except for the analyzer, absent on a legacy row. */
+const asProvenance = (run: HistoryRow): RunProvenance => ({
+  ...run,
+  analyzer: run.analyzer ?? DEFAULT_ANALYZER,
+});
+
 const row = (overrides: Partial<HistoryRow>): HistoryRow => {
   const merged = { ...BASE_ROW, ...overrides };
-  return { perTopicPath: perTopicRelPath(merged, merged.dataset), ...merged };
+  return { perTopicPath: perTopicRelPath(asProvenance(merged), merged.dataset), ...merged };
 };
 
 const tempResultsDir = (): string => mkdtempSync(resolve(tmpdir(), 'gnosis-bench-signif-'));
@@ -69,7 +82,7 @@ const writePerTopic = (
 ): void => {
   mkdirSync(resolve(resultsDir, PER_TOPIC_DIR), { recursive: true });
   writeFileSync(
-    resolve(resultsDir, run.perTopicPath ?? perTopicRelPath(run, run.dataset)),
+    resolve(resultsDir, run.perTopicPath ?? perTopicRelPath(asProvenance(run), run.dataset)),
     tsvBody(scores),
     'utf8'
   );

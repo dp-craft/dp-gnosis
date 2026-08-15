@@ -2,11 +2,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, resolve } from 'node:path';
 
+import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AdapterName } from '../../dp-gnosis/src/cli/adapter.js';
 import { runCli } from '../../dp-gnosis/src/cli/cli.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
+import { type AnalyzerId, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { BeirDoc } from './beir.js';
 import {
   assertCorpusMaterialized,
@@ -112,6 +114,56 @@ describe('prepareDataset — per-adapter index', () => {
   it('builds the lancedb dataset its own port reads', async () => {
     expect(await atomsFor('lancedb')).toBeGreaterThan(0);
   }, 180_000);
+});
+
+/**
+ * PER-ANALYZER PREPARATION. The chain is applied at BUILD time and stamped into
+ * the index; the query side reads it back off that stamp, so a reused index from
+ * another chain would analyze every query under a label the run does not claim.
+ * `buildFts5Index` rebuilds wholesale, and these two cases are what proves it.
+ */
+describe('prepareDataset — per-analyzer index', () => {
+  const ANALYZER_DATASET = `${DATASET_ID}-analyzer`;
+  /** Singular; the corpus holds only "pigments", so only a stemmer can match it. */
+  const STEMMED_QUERY = 'pigment';
+
+  const prepareWith = async (analyzer?: AnalyzerId): Promise<PreparedDataset> =>
+    prepareDataset({
+      id: ANALYZER_DATASET,
+      docs,
+      workRoot: root,
+      ...(analyzer === undefined ? {} : { analyzer }),
+    });
+
+  const stampOf = (indexPath: string): string | undefined => {
+    const db = new Database(indexPath, { readonly: true });
+    const row = db.prepare('SELECT value AS value FROM index_meta WHERE key = ?').get('analyzer') as
+      | { readonly value?: string }
+      | undefined;
+    db.close();
+    return row?.value;
+  };
+
+  const hitsFor = async (scoped: PreparedDataset): Promise<number> => {
+    const scopedPort = openPort(scoped);
+    const atoms = await retrieveDocs(scopedPort, STEMMED_QUERY, DEPTH);
+    scopedPort.close?.();
+    return atoms.length;
+  };
+
+  it('stamps the DEFAULT chain when the caller names none', async () => {
+    expect(stampOf((await prepareWith()).indexPath)).toBe(DEFAULT_ANALYZER);
+  });
+
+  it('REBUILDS under the named chain rather than reusing the index already there', async () => {
+    const porter = await prepareWith('porter-fold');
+    const porterHits = await hitsFor(porter);
+    const nostem = await prepareWith('nostem-fold');
+    expect(nostem.indexPath).toBe(porter.indexPath);
+    expect(stampOf(nostem.indexPath)).toBe('nostem-fold');
+    expect(porterHits).toBeGreaterThan(0);
+    expect(await hitsFor(nostem)).toBeLessThan(porterHits);
+  });
 });
 
 /**

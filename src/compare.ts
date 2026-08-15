@@ -17,6 +17,7 @@
  * | treatment | `adapter` | a different engine path — the thing an A/B run exists to compare |
  * | treatment | `rerank` | a second-stage model in the loop, or not |
  * | treatment | `rerankProfile` / `rerankWeight` | a different FUSION rule over the same two orders |
+ * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  *
  * A moved SCALE is still refused: the two numbers are not on one axis and no
  * label can rescue them. A moved TREATMENT is the experiment, so it is compared
@@ -26,6 +27,7 @@
  * `gitSha` and `ts` are deliberately NOT guarded: a changed engine commit is
  * precisely the thing a delta is supposed to measure.
  */
+import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { HistoryRow } from './report.js';
 
 const DELTA_DIGITS = 4;
@@ -44,6 +46,7 @@ export const TREATMENT_FIELDS = [
   'rerank',
   'rerankProfile',
   'rerankWeight',
+  'analyzer',
 ] as const;
 
 export type ScaleField = (typeof SCALE_FIELDS)[number];
@@ -125,14 +128,27 @@ export type Comparison =
   | ComparisonRefused
   | ComparisonMissing;
 
+/**
+ * What an ABSENT field means, for the fields where absence is not "unknown" but
+ * a known older value. A row recorded before the analyzer was selectable was
+ * built by `DEFAULT_ANALYZER` — the only chain that ever built one — so reading
+ * it as unset would label every first comparison after this landed an ARM
+ * COMPARISON against an arm that was never run. The engine's fts5 stamp resolves
+ * an unstamped index by exactly this rule.
+ */
+const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string>> = { analyzer: DEFAULT_ANALYZER };
+
+const valueOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>
+  row[field] === undefined ? FIELD_DEFAULTS[field] : row[field];
+
 const changedField = (
   previous: HistoryRow,
   latest: HistoryRow,
   field: ProvenanceField
 ): ProvenanceChange | undefined =>
-  previous[field] === latest[field]
+  valueOf(previous, field) === valueOf(latest, field)
     ? undefined
-    : { field, previous: previous[field], latest: latest[field] };
+    : { field, previous: valueOf(previous, field), latest: valueOf(latest, field) };
 
 const isChange = (change: ProvenanceChange | undefined): change is ProvenanceChange =>
   change !== undefined;

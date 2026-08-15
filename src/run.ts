@@ -41,6 +41,7 @@ import {
   RERANK_K_INIT,
   type RerankFusion } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
+import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
 import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
 import { compareAll, type Comparison, formatComparison } from './compare.js';
@@ -117,6 +118,11 @@ export interface CliOptions {
   readonly rerankWeight: number | undefined;
   /** The engine's resolution of that name, resolved ONCE so a bad one fails before any dataset. */
   readonly rerankFusion: RerankFusion;
+  /**
+   * The analysis chain the index is BUILT with — a treatment, recorded on every
+   * row, because every run has one whether or not it named it.
+   */
+  readonly analyzer: AnalyzerId;
 }
 
 /** A scorable query: judged by the qrels, so it can contribute a non-zero mean. */
@@ -159,6 +165,41 @@ const parseLayer = (value: string | undefined): LayerName | undefined => {
   return layer;
 };
 
+const ANALYZER_IDS: readonly string[] = Object.keys(ANALYZERS);
+
+const isAnalyzerId = (value: string): value is AnalyzerId => ANALYZER_IDS.includes(value);
+
+/**
+ * An unknown `--analyzer` THROWS, naming the valid chains, for the reason
+ * `--adapter` does: the chain is not recoverable from the numbers afterwards, so
+ * a silent fallback would publish a run under an analyzer label it never used.
+ */
+const parseAnalyzer = (value: string | undefined): AnalyzerId => {
+  if (value === undefined) return DEFAULT_ANALYZER;
+  if (isAnalyzerId(value)) return value;
+  throw new Error(
+    `dp-gnosis-bench: unknown --analyzer "${value}" — use ${ANALYZER_IDS.join(', ')}`
+  );
+};
+
+/** The ONE adapter whose index build takes the named chain (`prepareDataset`). */
+const ANALYZER_AWARE_ADAPTER: AdapterName = 'fts5';
+
+/**
+ * A named `--analyzer` on any other adapter REFUSES, before a dataset is
+ * prepared. Those adapters analyse with their own hard-coded chain, so the run
+ * would record `analyzer` — a TREATMENT field `compare.ts` labels an arm — under
+ * a chain it never used. Only an EXPLICIT non-default value refuses: the default
+ * describes what every adapter already does, so every legacy invocation stands.
+ */
+const checkAnalyzerAdapter = (adapter: AdapterName, analyzer: AnalyzerId): AnalyzerId => {
+  if (analyzer === DEFAULT_ANALYZER || adapter === ANALYZER_AWARE_ADAPTER) return analyzer;
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour --analyzer "${analyzer}" — ` +
+      `only "${ANALYZER_AWARE_ADAPTER}" builds its index with the named chain`
+  );
+};
+
 /** A weight that is not a number would be measured as `NaN` and recorded as a run. */
 const parseRerankWeight = (value: string | undefined): number | undefined => {
   if (value === undefined) return undefined;
@@ -185,16 +226,18 @@ const parseRerankFusion = (profile: string, rerankWeight: number | undefined): R
 export const parseArgs = (argv: readonly string[]): CliOptions => {
   const rerankProfile = flagValue(argv, '--rerank-profile') ?? DEFAULT_RERANK_PRESET;
   const rerankWeight = parseRerankWeight(flagValue(argv, '--rerank-weight'));
+  const adapter = parseAdapter(flagValue(argv, '--adapter'));
   return {
     only: csv(flagValue(argv, '--only')),
     layer: parseLayer(flagValue(argv, '--layer')),
     depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
     rerank: argv.includes('--rerank'),
     compare: argv.includes('--compare'),
-    adapter: parseAdapter(flagValue(argv, '--adapter')),
+    adapter,
     rerankProfile,
     rerankWeight,
     rerankFusion: parseRerankFusion(rerankProfile, rerankWeight),
+    analyzer: checkAnalyzerAdapter(adapter, parseAnalyzer(flagValue(argv, '--analyzer'))),
   };
 };
 
@@ -384,29 +427,41 @@ const measurementsOf = (
   rankings: queried.rankings,
 });
 
+/** The treatments that decide what gets BUILT, as opposed to how it is queried. */
+export interface PrepareArm {
+  readonly adapter: AdapterName;
+  /** Absent means the engine default — the chain `sweep.ts` and every legacy run used. */
+  readonly analyzer?: AnalyzerId | undefined;
+}
+
 /**
  * The arm is passed DOWN, not assumed: `prepareDataset` builds the index that
  * arm reads, so an adapter can never be measured over an index another adapter
- * built. `sweep.ts` passes its own fixed `linear`.
+ * built, nor an analyzer over an index another chain stamped. `sweep.ts` passes
+ * its own fixed `linear`.
  */
 export const prepareOf = (
   entry: DatasetEntry,
   dir: string,
-  adapter: AdapterName
+  arm: PrepareArm
 ): Promise<PreparedDataset> =>
   prepareDataset({
     id: entry.id,
     docs: readCorpus(dir),
     workRoot: WORK_ROOT,
     atomMaxChars: entry.atomMaxChars,
-    adapter,
+    adapter: arm.adapter,
+    analyzer: arm.analyzer,
   });
 
 const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
   const dir = await ensureDataset(entry);
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
   const topics = topicsOf(readQueries(dir), qrels);
-  const prepared = await prepareOf(entry, dir, options.adapter);
+  const prepared = await prepareOf(entry, dir, {
+    adapter: options.adapter,
+    analyzer: options.analyzer,
+  });
   const port = openPort(prepared, { adapter: options.adapter });
   const context = { port, options, excluded: readExcluded(dir) };
   const queried = await queryDataset(context, topics).finally(() => port.close?.());
@@ -570,6 +625,7 @@ const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
   rerank: options.rerank,
   rerankProfile: options.rerank ? options.rerankProfile : undefined,
   rerankWeight: options.rerank ? options.rerankWeight : undefined,
+  analyzer: options.analyzer,
 });
 
 /** The headline; the other three metrics are read off the delta line above it. */

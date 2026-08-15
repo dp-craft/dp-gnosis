@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   type DatasetResult,
   HISTORY_FILE,
@@ -50,6 +51,7 @@ const provenance: RunProvenance = {
   adapter: 'fts5',
   depth: 100,
   rerank: false,
+  analyzer: DEFAULT_ANALYZER,
 };
 
 const result: DatasetResult = {
@@ -131,6 +133,7 @@ describe('writeRunReport', () => {
     expect(Object.keys(rows[0] ?? {}).sort()).toEqual(
       [
         'adapter',
+        'analyzer',
         'atomCount',
         'atomMaxChars',
         'corpusBytes',
@@ -165,6 +168,22 @@ describe('writeRunReport', () => {
     expect(rows[0]?.corpusBytes).toBe(4096);
     expect(rows[0]?.ndcg10).toBeCloseTo(0.6863, 12);
     expect(rows[0]?.rerank).toBe(false);
+  });
+
+  it('records the analysis chain on the row, so --compare can see an analyzer change', () => {
+    const dir = tempResultsDir();
+    writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    expect(readHistory(resolve(dir, HISTORY_FILE))[0]?.analyzer).toBe(DEFAULT_ANALYZER);
+  });
+
+  it('records a NON-default analysis chain under its own name', () => {
+    const dir = tempResultsDir();
+    writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, analyzer: 'nostem-fold' },
+      results: [result],
+    });
+    expect(readHistory(resolve(dir, HISTORY_FILE))[0]?.analyzer).toBe('nostem-fold');
   });
 
   it('records the rerank protocol on the row, so --compare can see a fusion change', () => {
@@ -220,6 +239,16 @@ describe('writeRunReport', () => {
     expect(markdown).toContain('abstract');
     expect(written.perTopicPaths).toHaveLength(1);
     expect(readFileSync(written.perTopicPaths[0] ?? '', 'utf8')).toContain('q1');
+  });
+
+  it('names the analysis chain in the markdown header, so an arm cannot read as the baseline', () => {
+    const dir = tempResultsDir();
+    const written = writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, analyzer: 'nostem-fold' },
+      results: [result],
+    });
+    expect(readFileSync(written.markdownPath, 'utf8')).toContain('analyzer: `nostem-fold`');
   });
 
   it('records on the row the per-topic file it just wrote, keyed by adapter and instant', () => {

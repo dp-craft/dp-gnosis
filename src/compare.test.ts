@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   compareAll,
   compareLastTwo,
@@ -116,6 +117,41 @@ describe('compareLastTwo', () => {
     expect(TREATMENT_FIELDS).toContain('rerankProfile');
     expect(TREATMENT_FIELDS).toContain('rerankWeight');
     expect(PROVENANCE_FIELDS).toEqual([...SCALE_FIELDS, ...TREATMENT_FIELDS]);
+  });
+
+  it('guards the analyzer as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('analyzer');
+    expect(SCALE_FIELDS).not.toContain('analyzer');
+  });
+
+  it('COMPARES an analyzer change as an arm comparison, never subtracting it silently', () => {
+    const result = compareLastTwo(
+      [
+        row({ analyzer: 'porter-fold' }),
+        row({ gitSha: 'bbb2222', analyzer: 'nostem-fold', ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['analyzer']);
+    const line = formatComparison(result);
+    expect(line).toContain('ARM COMPARISON');
+    expect(line).toContain('analyzer');
+    expect(line).toContain('nostem-fold');
+  });
+
+  /**
+   * Every row recorded before the chain was selectable was built by
+   * `DEFAULT_ANALYZER`; reading its absence as a treatment move would label the
+   * first comparison after this landed an arm comparison against an arm nobody ran.
+   */
+  it('reads an ABSENT analyzer as the default chain, not as a changed treatment', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', analyzer: DEFAULT_ANALYZER, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
   });
 
   it('COMPARES a rerank change as an arm comparison — that IS the experiment', () => {

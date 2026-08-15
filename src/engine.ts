@@ -50,6 +50,7 @@ import type { RerankFusion } from '../../dp-gnosis/src/config.js';
 import { ingest } from '../../dp-gnosis/src/ingest.js';
 import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
+import type { AnalyzerId } from '../../dp-gnosis/src/query.js';
 import { rerankAtoms } from '../../dp-gnosis/src/rerank.js';
 import type { BeirDoc } from './beir.js';
 import { buildProfile, materializeCorpus, type MaterializedCorpus } from './corpus.js';
@@ -100,6 +101,14 @@ export interface PrepareDatasetOptions {
    * prepared dataset carries it so `openPort` can refuse a foreign one.
    */
   readonly adapter?: AdapterName | undefined;
+  /**
+   * The analysis chain the fts5 index is BUILT with, stamped into it. Absent
+   * means the engine's `DEFAULT_ANALYZER`, which is the chain every recorded run
+   * was measured on. There is no query-side counterpart on purpose: the fts5
+   * adapter reads the chain back off the stamp, so the index is the only place a
+   * run can be told which analyzer produced it.
+   */
+  readonly analyzer?: AnalyzerId | undefined;
 }
 
 /** What one dataset's ingest+index produced, and what querying it needs. */
@@ -249,8 +258,17 @@ const datasetPaths = (options: PrepareDatasetOptions): DatasetPaths => {
  * proves, that ingest survived the frozen `ATOM_DOMAINS` narrowing with enough
  * document coverage, is a property of the INGEST, which every arm shares. Two
  * arms are therefore comparable on `atomCount` as well as on their metrics.
+ *
+ * `analyzer` is passed to the BUILD, which is wholesale (`buildFts5Index` removes
+ * the file first): two analyzers over one dataset id therefore produce two
+ * indexes in sequence, never a reused one. Nothing here may skip the build on an
+ * existing file — a cached index carries the earlier chain's stamp, and the query
+ * side would then analyze against a chain the run does not claim.
  */
-const ingestAndProbe = async (paths: DatasetPaths): Promise<number> => {
+const ingestAndProbe = async (
+  paths: DatasetPaths,
+  analyzer: AnalyzerId | undefined
+): Promise<number> => {
   const startedAt = Date.now();
   await ingest({
     corpusRoots: paths.profile.corpusRoots,
@@ -258,7 +276,11 @@ const ingestAndProbe = async (paths: DatasetPaths): Promise<number> => {
     repoRoot: paths.workDir,
     profile: paths.profile,
   });
-  buildFts5Index({ atomsDir: paths.atomsDir, indexPath: paths.indexPath });
+  buildFts5Index({
+    atomsDir: paths.atomsDir,
+    indexPath: paths.indexPath,
+    ...(analyzer === undefined ? {} : { analyzer }),
+  });
   return Date.now() - startedAt;
 };
 
@@ -370,7 +392,7 @@ export const prepareDataset = async (
   const adapter = options.adapter ?? ADAPTER;
   const paths = datasetPaths(options);
   const corpus = materializeChecked(options, paths);
-  const probeMs = await ingestAndProbe(paths);
+  const probeMs = await ingestAndProbe(paths, options.analyzer);
   const indexed = indexedAtomPaths(paths.indexPath);
   assertIngestSound({
     datasetId: options.id,
