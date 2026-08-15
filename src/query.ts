@@ -97,6 +97,67 @@ export const stemTerm: TermProcessor = term => stemmer(term);
  */
 export const stemText = (text: string): string => tokenize(text).map(stemTerm).join(' ');
 
+/**
+ * One analysis step: tokens in, tokens out.
+ *
+ * Every stage has the SAME shape so a chain is data (an ordered array) rather
+ * than a hand-written function body — which is what makes the analyzer
+ * nameable, reorderable and comparable in a benchmark. Text enters a chain as
+ * the single-element token list `[text]`.
+ */
+export type Stage = (tokens: readonly string[]) => readonly string[];
+
+const nonEmpty = (token: string): boolean => token.length > 0;
+
+/**
+ * Split every input token on runs of non-letter/non-digit characters.
+ *
+ * The class also admits combining marks (`\p{M}`). `tokenize` folds marks away
+ * BEFORE it splits, so a mark never reaches its split; a chain splits FIRST, so
+ * keeping marks attached to their base letter here is exactly what makes
+ * split-then-fold reproduce today's fold-then-split token for token — otherwise
+ * a decomposed `café` (e + U+0301) would break into `cafe` and `s`-style
+ * fragments where the precomposed spelling stays whole. Marks left stranded by
+ * folding are dropped by `foldTokens`, never emitted as empty tokens.
+ */
+const NON_WORD_SPLIT_RE = /[^\p{L}\p{N}\p{M}]+/u;
+
+export const splitTokens: Stage = tokens =>
+  tokens.flatMap(token => token.split(NON_WORD_SPLIT_RE)).filter(nonEmpty);
+
+export const lowercaseTokens: Stage = tokens => tokens.map(token => token.toLowerCase());
+
+export const foldTokens: Stage = tokens => tokens.map(foldDiacritics).filter(nonEmpty);
+
+export const stemTokens: Stage = tokens => tokens.map(stemTerm);
+
+/**
+ * The named analyzers. `porter-fold` IS today's behaviour — `analyze(text)`
+ * reproduces `tokenize(text).map(stemTerm)` token for token — and the other
+ * three exist so folding and stemming can be switched off INDEPENDENTLY, which
+ * is what a non-English corpus needs to be measured against.
+ */
+export const ANALYZERS = {
+  'porter-fold': [splitTokens, lowercaseTokens, foldTokens, stemTokens],
+  'porter-nofold': [splitTokens, lowercaseTokens, stemTokens],
+  'nostem-fold': [splitTokens, lowercaseTokens, foldTokens],
+  'nostem-nofold': [splitTokens, lowercaseTokens],
+} as const satisfies Readonly<Record<string, readonly Stage[]>>;
+
+/** The name of a chain in `ANALYZERS`. */
+export type AnalyzerId = keyof typeof ANALYZERS;
+
+/** Today's chain: the default everywhere, so nothing changes until a caller opts out. */
+export const DEFAULT_ANALYZER: AnalyzerId = 'porter-fold';
+
+/** Run `text` through the named chain: enter as `[text]`, reduce the stages in order. */
+export const analyze = (text: string, id: AnalyzerId = DEFAULT_ANALYZER): readonly string[] =>
+  ANALYZERS[id].reduce<readonly string[]>((tokens, stage) => stage(tokens), [text]);
+
+/** `analyze` for an adapter that hands TEXT, not terms, to its engine. */
+export const analyzeToText = (text: string, id: AnalyzerId = DEFAULT_ANALYZER): string =>
+  analyze(text, id).join(' ');
+
 /** One term with its inverse-document-frequency weight. */
 interface ScoredTerm {
   readonly term: string;
