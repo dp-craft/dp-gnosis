@@ -22,6 +22,30 @@ describe('toMarkdown', () => {
   });
 });
 
+/** What `emptyBodyReasons` inspects: everything after the heading line. */
+const bodyAfterHeading = (markdown: string): string =>
+  markdown.split('\n').slice(1).join('\n').trim();
+
+describe('toMarkdown on a title-only record', () => {
+  const titleOnly: BeirDoc = { id: 'ug7v899j', title: 'Clinical features of culture', text: '' };
+
+  it('leaves a non-empty body after the heading line', () => {
+    expect(bodyAfterHeading(toMarkdown(titleOnly))).not.toBe('');
+  });
+
+  it('carries the title terms into that body', () => {
+    expect(bodyAfterHeading(toMarkdown(titleOnly))).toContain('culture');
+  });
+
+  it('leaves a record that has text byte-identical to today output', () => {
+    expect(toMarkdown(docs[1]!)).toBe('# Beta\n\nsecond body\n');
+  });
+
+  it('still yields an empty body when title and text are both empty', () => {
+    expect(bodyAfterHeading(toMarkdown({ id: 'blank', title: '', text: '' }))).toBe('');
+  });
+});
+
 describe('materializeCorpus', () => {
   const target = resolve(root, 'corpus-md');
   const written = materializeCorpus(docs, target);

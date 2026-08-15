@@ -66,8 +66,27 @@ export interface ProfileSpec {
   readonly atomMaxChars?: number | undefined;
 }
 
-/** Title as the single H1, text as the body — the shape a BEIR doc actually has. */
-export const toMarkdown = (doc: BeirDoc): string => `# ${doc.title}\n\n${doc.text}\n`;
+/**
+ * Title as the single H1, text as the body — the shape a BEIR doc actually has.
+ *
+ * A record whose `text` is empty repeats its title as body prose, because
+ * `emptyBodyReasons` (`dp-gnosis/src/ingest.ts:498-510`) discards an atom whose
+ * HEADING-STRIPPED chunk body is empty — a different string from the one the
+ * index reads. Measured: fts5 returns scifact doc `4983` for "newborn", a term
+ * carried only by its title, so those records ARE retrievable; the gate drops
+ * them anyway. TREC-COVID has 42,139 such records (the CORD-19 metadata-only
+ * population), enough to fail `assertIngestSound`'s 90 % coverage gate and to
+ * make 3,135 relevant judgments (12.71 %, all 50 topics) unreachable.
+ *
+ * A record that HAS text is byte-identical to what this produced before — the
+ * whole difference from the rejected title-weight-2 experiment, which repeated
+ * the title on every record and moved every dataset the wrong way. Empty in both
+ * fields stays empty: nothing to index is nothing to emit, not a bare heading.
+ */
+export const toMarkdown = (doc: BeirDoc): string => {
+  const body = doc.text.trim() === '' ? doc.title : doc.text;
+  return `# ${doc.title}\n\n${body}\n`;
+};
 
 /** The basename an atom's `originPaths` will carry for this document. */
 export const fileNameFor = (docId: string): string => {
