@@ -165,23 +165,35 @@ export type RerankOutcome =
   | { readonly ok: true; readonly atoms: readonly RetrievedAtom[] }
   | { readonly ok: false; readonly error: string };
 
-const REQUEST = `retrieve --rerank: reranker model "${RERANK_MODEL_ID}" was requested`;
+/**
+ * Where to score, and under which id. The model travels WITH the URL because
+ * every refusal message names both: a message that named the shipped id while
+ * another was requested would send the reader to fix the wrong entry.
+ */
+interface Endpoint {
+  readonly baseUrl: string;
+  readonly model: string;
+}
 
-const REQUIREMENT = ` — llama-swap MUST serve a reranker under the id "${RERANK_MODEL_ID}"; `;
+const request = (model: string): string =>
+  `retrieve --rerank: reranker model "${model}" was requested`;
+
+const requirement = (model: string): string =>
+  ` — llama-swap MUST serve a reranker under the id "${model}"; `;
 
 const DROP = ', or drop --rerank to retrieve without reranking.';
 
 /** Server DOWN: the catalogue call itself did not complete. */
-const unreachableMessage = (baseUrl: string, cause: string): string =>
-  `${REQUEST}; the server at ${baseUrl} did not answer GET ${MODELS_PATH} (server down: ${cause})${REQUIREMENT}start llama-swap on that address, or point ${RERANK_URL_ENV_VAR} at the host that serves it, then re-run${DROP}`;
+const unreachableMessage = (endpoint: Endpoint, cause: string): string =>
+  `${request(endpoint.model)}; the server at ${endpoint.baseUrl} did not answer GET ${MODELS_PATH} (server down: ${cause})${requirement(endpoint.model)}start llama-swap on that address, or point ${RERANK_URL_ENV_VAR} at the host that serves it, then re-run${DROP}`;
 
 /** Server UP, model absent: the catalogue answered and does not list the id. */
-const notServedMessage = (baseUrl: string, served: readonly string[]): string =>
-  `${REQUEST}; the server at ${baseUrl} answered GET ${MODELS_PATH} but does not serve it (model not served; it serves: ${served.join(', ') || 'nothing'})${REQUIREMENT}add that model to the llama-swap config under exactly that id, then re-run${DROP}`;
+const notServedMessage = (endpoint: Endpoint, served: readonly string[]): string =>
+  `${request(endpoint.model)}; the server at ${endpoint.baseUrl} answered GET ${MODELS_PATH} but does not serve it (model not served; it serves: ${served.join(', ') || 'nothing'})${requirement(endpoint.model)}add that model to the llama-swap config under exactly that id, then re-run${DROP}`;
 
 /** The rerank call failed after the catalogue passed — still a refusal. */
-const callFailedMessage = (baseUrl: string, cause: string): string =>
-  `${REQUEST}; the server at ${baseUrl} accepted GET ${MODELS_PATH} but the rerank call failed (${cause})${REQUIREMENT}check that the id names a RERANKER (a chat model answers /v1/models but not /v1/rerank), then re-run${DROP}`;
+const callFailedMessage = (endpoint: Endpoint, cause: string): string =>
+  `${request(endpoint.model)}; the server at ${endpoint.baseUrl} accepted GET ${MODELS_PATH} but the rerank call failed (${cause})${requirement(endpoint.model)}check that the id names a RERANKER (a chat model answers /v1/models but not /v1/rerank), then re-run${DROP}`;
 
 const causeOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -212,12 +224,12 @@ const fetchCatalogue = async (baseUrl: string): Promise<Catalogue> => {
 };
 
 /** `undefined` when the model is served; otherwise the message to refuse with. */
-const catalogueRefusal = async (baseUrl: string): Promise<string | undefined> => {
-  const catalogue = await fetchCatalogue(baseUrl);
-  if (!catalogue.ok) return unreachableMessage(baseUrl, catalogue.cause);
-  return catalogue.models.includes(RERANK_MODEL_ID)
+const catalogueRefusal = async (endpoint: Endpoint): Promise<string | undefined> => {
+  const catalogue = await fetchCatalogue(endpoint.baseUrl);
+  if (!catalogue.ok) return unreachableMessage(endpoint, catalogue.cause);
+  return catalogue.models.includes(endpoint.model)
     ? undefined
-    : notServedMessage(baseUrl, catalogue.models);
+    : notServedMessage(endpoint, catalogue.models);
 };
 
 type ScoreResult =
@@ -225,18 +237,23 @@ type ScoreResult =
   | { readonly ok: false; readonly error: string };
 
 const scoreDocuments = async (
-  baseUrl: string,
+  endpoint: Endpoint,
   query: string,
   atoms: readonly RetrievedAtom[]
 ): Promise<ScoreResult> => {
-  const client = createRerankerClient(baseUrl, RERANK_MODEL_ID, TIMEOUT_MS, MAX_BATCH_TOKENS);
+  const client = createRerankerClient(
+    endpoint.baseUrl,
+    endpoint.model,
+    TIMEOUT_MS,
+    MAX_BATCH_TOKENS
+  );
   const documents = atoms.map(atom =>
     extractDoc(atom.body, EXTRACT_STRATEGY, RERANK_DOC_MAX_CHARS)
   );
   try {
     return { ok: true, results: await client.rerank(query, documents) };
   } catch (error) {
-    return { ok: false, error: callFailedMessage(baseUrl, causeOf(error)) };
+    return { ok: false, error: callFailedMessage(endpoint, causeOf(error)) };
   }
 };
 
@@ -244,18 +261,26 @@ const bestFirst = (results: readonly RerankResult[]): readonly number[] =>
   [...results].sort((left, right) => right.relevanceScore - left.relevanceScore).map(r => r.index);
 
 /**
- * What a caller may vary. Both are omissible and both default to what the CLI
- * has always done, so an existing two-argument call is unchanged.
+ * What a caller may vary. All three are omissible and each defaults to what the
+ * CLI has always done, so an existing two-argument call is unchanged.
+ *
+ * `model` names the cross-encoder to score with. A caller measuring a second
+ * reranker MUST pass it AND record it: two models produce two different
+ * rankings, and a run that does not carry the id cannot be told from one that
+ * used another model. An unserved id still REFUSES — a wrong model must never
+ * degrade into the first-pass order.
  */
 export interface RerankOptions {
   readonly baseUrl?: string;
   readonly fusion?: RerankFusion;
+  readonly model?: string;
 }
 
-/** The env-resolved URL and the shipped preset are what an omission means. */
+/** The env-resolved URL, the shipped preset and the shipped model id. */
 const resolved = (options: RerankOptions): Required<RerankOptions> => ({
   baseUrl: options.baseUrl ?? resolveRerankUrl(),
   fusion: options.fusion ?? RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
+  model: options.model ?? RERANK_MODEL_ID,
 });
 
 /**
@@ -267,10 +292,11 @@ export const rerankAtoms = async (
   atoms: readonly RetrievedAtom[],
   options: RerankOptions = {}
 ): Promise<RerankOutcome> => {
-  const { baseUrl, fusion } = resolved(options);
-  const refusal = await catalogueRefusal(baseUrl);
+  const { baseUrl, fusion, model } = resolved(options);
+  const endpoint: Endpoint = { baseUrl, model };
+  const refusal = await catalogueRefusal(endpoint);
   if (refusal !== undefined) return { ok: false, error: refusal };
-  const scored = await scoreDocuments(baseUrl, query, atoms);
+  const scored = await scoreDocuments(endpoint, query, atoms);
   if (!scored.ok) return { ok: false, error: scored.error };
   const fused = fuseRanking(atoms, bestFirst(scored.results), fusion);
   return { ok: true, atoms: fused.map(entry => ({ ...entry.item, score: entry.score })) };
