@@ -13,6 +13,8 @@ stay comparable across a chunker change.
 ./bench.sh --only nfcorpus      # one dataset (csv for several)
 ./bench.sh --depth 20           # retrieval depth; R@100 needs depth 100
 ./bench.sh --rerank             # add the reranker arm (see the caveat below)
+./bench.sh --rerank-model <id>  # which cross-encoder to call; requires --rerank
+./bench.sh --analyzer <id>      # which analysis chain builds AND queries; fts5 only
 ./bench.sh --compare            # print the delta against the previous run
 ./bench.sh --per-topic          # also write per-topic TSVs for a paired test
 ```
