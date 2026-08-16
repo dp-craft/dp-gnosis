@@ -15,6 +15,7 @@
  *    `ATOMS_DIR`. A markdown file sitting in `PROPOSALS_DIR` is structurally
  *    unreachable — it is never opened, not filtered out after the fact.
  */
+import { createHash } from 'node:crypto';
 import type { Dirent } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -45,9 +46,14 @@ const MARKDOWN_EXT = '.md';
  * BM25 term-frequency saturation and length-normalization parameters, at the
  * values Robertson & Zaragoza give as the standard operating point ("The
  * Probabilistic Relevance Framework: BM25 and Beyond", 2009, §3.2: k1 in
- * 1.2–2.0, b = 0.75). They are also what SQLite FTS5's `bm25()` uses, which
- * keeps this reference adapter comparable with the indexed one rather than
- * differing by a tuning choice nobody made deliberately.
+ * 1.2–2.0, b = 0.75).
+ *
+ * These values do NOT make this adapter directly comparable with the `fts5`
+ * one, and MUST NOT be read as doing so: `fts5Adapter.ts` indexes `entry.body`
+ * ALONE (`INSERT INTO atom_fts(rowid, body)`) while this adapter indexes title
+ * plus body, and this file computes its own `idf` where fts5 uses SQLite's
+ * built-in `bm25()`. Different indexed text and a different IDF formula mean
+ * the two scores are not on one scale whatever k1 and b are set to.
  */
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
@@ -99,8 +105,9 @@ export interface LinearScanOptions {
    * which makes it a BENCHMARK affordance (`dp-gnosis-bench` `sweep.ts`, where
    * the corpus is fixed across a grid), not a production knob. Two consequences
    * a caller accepts with it: an on-disk edit that leaves the corpus signature
-   * — file count plus newest mtime under `atomsDir` — untouched is not seen,
-   * and the `stale_after`/`deprecated` retrievability cutoff is frozen at the
+   * — a hash over the `(relPath, size, mtimeMs)` stat manifest under `atomsDir`;
+   * see `CorpusSignature` — untouched is not seen, and the
+   * `stale_after`/`deprecated` retrievability cutoff is frozen at the
    * `now` of the call that filled the cache rather than re-evaluated per call.
    */
   readonly cacheCorpusScan?: boolean;
@@ -253,27 +260,57 @@ const readScan = async (context: ScanContext, files: readonly string[]): Promise
 };
 
 /**
- * The cheap corpus fingerprint: how many atom files there are, and the newest
- * mtime among them. One `stat` pass, no bodies read — it must stay far cheaper
- * than the scan it guards, or caching buys nothing.
+ * The cheap corpus fingerprint: a hash over the stat manifest — every atom
+ * file's `(relPath, size, mtimeMs)`, sorted by `relPath` so `listAtomFiles`
+ * order cannot reach the digest. One `stat` pass, no bodies read: this check
+ * runs on EVERY retrieve, so reading atom bodies here would cost more than the
+ * scan it guards.
+ *
+ * Because every file is named individually, it catches what a count-plus-newest
+ * -mtime pair missed: a count-preserving swap (one file replaced by another),
+ * the restore of an OLDER file (the maximum mtime does not move), a rename, and
+ * any edit that changes a file's size.
+ *
+ * ONE residual hole is accepted: an edit that rewrites a file to EXACTLY its
+ * previous size within the same mtime tick is indistinguishable from no edit.
+ * Closing it would require reading bodies, which the cost rule above forbids.
  */
 interface CorpusSignature {
-  readonly count: number;
-  readonly newestMtimeMs: number;
+  readonly digest: string;
 }
 
 const NO_MTIME = 0;
+/** Paired with `NO_MTIME`: an unstattable file still contributes a fixed entry. */
+const NO_SIZE = -1;
+const MANIFEST_SEPARATOR = ' ';
+const SIGNATURE_ALGORITHM = 'sha256';
 
-/** An unstattable file contributes `NO_MTIME`; `count` still moves if it vanishes. */
-const mtimeOf = async (path: string): Promise<number> =>
-  await stat(path).then(stats => stats.mtimeMs, () => NO_MTIME);
+/** One manifest row: identity, size and mtime of a single atom file. */
+interface FileStat {
+  readonly relPath: string;
+  readonly size: number;
+  readonly mtimeMs: number;
+}
+
+/** An unstattable file yields a deterministic sentinel row rather than throwing. */
+const statOf = async (dir: string, relPath: string): Promise<FileStat> =>
+  await stat(join(dir, relPath)).then(
+    stats => ({ relPath, size: stats.size, mtimeMs: stats.mtimeMs }),
+    () => ({ relPath, size: NO_SIZE, mtimeMs: NO_MTIME })
+  );
+
+const byRelPath = (a: FileStat, b: FileStat): number => compareStrings(a.relPath, b.relPath);
+
+const manifestRow = (entry: FileStat): string =>
+  [entry.relPath, entry.size, entry.mtimeMs].join(MANIFEST_SEPARATOR);
 
 const signatureOf = async (
   dir: string,
   files: readonly string[]
 ): Promise<CorpusSignature> => {
-  const times = await Promise.all(files.map(file => mtimeOf(join(dir, file))));
-  return { count: files.length, newestMtimeMs: times.reduce((max, ms) => Math.max(max, ms), NO_MTIME) };
+  const stats = await Promise.all(files.map(file => statOf(dir, file)));
+  const manifest = [...stats].sort(byRelPath).map(manifestRow).join('\n');
+  return { digest: createHash(SIGNATURE_ALGORITHM).update(manifest).digest('hex') };
 };
 
 /**
@@ -292,9 +329,7 @@ interface CacheEntry {
 const scanCache = new Map<string, CacheEntry>();
 
 const isFresh = (entry: CacheEntry, context: ScanContext, signature: CorpusSignature): boolean =>
-  entry.processTerm === context.processTerm &&
-  entry.signature.count === signature.count &&
-  entry.signature.newestMtimeMs === signature.newestMtimeMs;
+  entry.processTerm === context.processTerm && entry.signature.digest === signature.digest;
 
 const cachedScan = async (context: ScanContext, files: readonly string[]): Promise<CorpusScan> => {
   const signature = await signatureOf(context.dir, files);

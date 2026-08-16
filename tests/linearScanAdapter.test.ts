@@ -481,7 +481,7 @@ describe('createLinearScanAdapter', () => {
       expect(ids(flat)).toEqual(['long', 'short']);
     });
 
-    it('reuses the scan when the signature is unchanged, so an mtime-preserving edit is not seen', async () => {
+    it('reuses the scan when the signature is unchanged, so a size- and mtime-preserving edit is not seen', async () => {
       const dir = await atomsDir();
       const stamp = new Date(2026, 0, 1);
       await writeAll(dir, [{ file: 'a.md', id: 'a', body: 'bm25 tuning' }]);
@@ -489,10 +489,51 @@ describe('createLinearScanAdapter', () => {
       const port = createLinearScanAdapter(dir, { now: NOW, cacheCorpusScan: true });
       await port.retrieve('bm25', { k: 5 });
 
-      await writeAtom(dir, { file: 'a.md', id: 'a', body: 'zustand selector stability' });
+      await writeAtom(dir, { file: 'a.md', id: 'a', body: 'zustand xyz' });
       await utimes(join(dir, 'a.md'), stamp, stamp);
 
       expect(ids(await port.retrieve('zustand', { k: 5 }))).toEqual([]);
+    });
+
+    it('invalidates the cache on a count-preserving swap at an unchanged newest mtime', async () => {
+      const dir = await atomsDir();
+      const stamp = new Date(2026, 0, 1);
+      await writeAll(dir, [
+        { file: 'a.md', id: 'a', body: 'bm25 tuning' },
+        { file: 'b.md', id: 'b', body: 'bm25 tuning' },
+      ]);
+      await utimes(join(dir, 'a.md'), stamp, stamp);
+      await utimes(join(dir, 'b.md'), stamp, stamp);
+      const port = createLinearScanAdapter(dir, { now: NOW, cacheCorpusScan: true });
+
+      const before = await port.retrieve('zustand', { k: 5 });
+      await rm(join(dir, 'b.md'));
+      await writeAtom(dir, { file: 'c.md', id: 'c', body: 'zustand xyz' });
+      await utimes(join(dir, 'c.md'), stamp, stamp);
+      const after = await port.retrieve('zustand', { k: 5 });
+
+      expect(ids(before)).toEqual([]);
+      expect(ids(after)).toEqual(['c']);
+    });
+
+    it('invalidates the cache when a file is restored to an OLDER mtime', async () => {
+      const dir = await atomsDir();
+      const stamp = new Date(2026, 0, 1);
+      await writeAll(dir, [
+        { file: 'a.md', id: 'a', body: 'bm25 tuning' },
+        { file: 'b.md', id: 'b', body: 'bm25 tuning' },
+      ]);
+      await utimes(join(dir, 'a.md'), stamp, stamp);
+      const port = createLinearScanAdapter(dir, { now: NOW, cacheCorpusScan: true });
+
+      const before = await port.retrieve('zustand', { k: 5 });
+      await writeAtom(dir, { file: 'a.md', id: 'a', body: 'zustand selector stability' });
+      const older = new Date(2025, 0, 1);
+      await utimes(join(dir, 'a.md'), older, older);
+      const after = await port.retrieve('zustand', { k: 5 });
+
+      expect(ids(before)).toEqual([]);
+      expect(ids(after)).toEqual(['a']);
     });
 
     it('invalidates the cache when the corpus file count changes', async () => {
