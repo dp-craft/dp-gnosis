@@ -1,0 +1,132 @@
+/**
+ * Offline decomposition of an ALREADY-RECORDED run: for one topic, how much of
+ * the nDCG deficit is ORDERING (the relevant document was retrieved and ranked
+ * badly) and how much is RECALL (it was never retrieved at all).
+ *
+ * This module runs no retrieval and starts no benchmark — it reads the persisted
+ * TREC run files (`results/runs/*.trec`) and re-scores them.
+ *
+ * Every score comes from `metrics.ts`, which is externally attested against
+ * `pytrec_eval`. The oracle is expressed as `ndcgAt` over a REORDERED ranking
+ * rather than as a second DCG implementation, so the two can never drift.
+ */
+
+import { mapNonEmptyLines } from './lines.js';
+import { ndcgAt, type Qrel, recallAt } from './metrics.js';
+
+/** How many relevant documents the topic has, at any grade above 0. */
+const relevantCountOf = (qrel: Qrel): number =>
+  [...qrel.values()].filter(grade => grade > 0).length;
+
+const gradeOf = (qrel: Qrel, docId: string): number => qrel.get(docId) ?? 0;
+
+const retrievedRelevantOf = (ranking: readonly string[], qrel: Qrel): number =>
+  ranking.filter(docId => gradeOf(qrel, docId) > 0).length;
+
+/** Relevant documents in the top `k`, over `k` — unretrieved ranks count against it. */
+export const precisionAt = (ranking: readonly string[], qrel: Qrel, k: number): number =>
+  k <= 0 ? 0 : retrievedRelevantOf(ranking.slice(0, k), qrel) / k;
+
+/**
+ * The best nDCG@k reachable by REORDERING what this ranking actually retrieved —
+ * the whole ranking, not just its top `k`. The IDCG denominator is unchanged, so
+ * the score stays below 1 exactly when a relevant document is missing entirely.
+ */
+export const oracleNdcgAt = (ranking: readonly string[], qrel: Qrel, k: number): number =>
+  ndcgAt(
+    [...ranking].sort((a, b) => gradeOf(qrel, b) - gradeOf(qrel, a)),
+    qrel,
+    k
+  );
+
+/** 1-based rank of the first relevant document; `undefined` when none was retrieved. */
+export const firstRelevantRank = (
+  ranking: readonly string[],
+  qrel: Qrel
+): number | undefined => {
+  const index = ranking.findIndex(docId => gradeOf(qrel, docId) > 0);
+  return index === -1 ? undefined : index + 1;
+};
+
+/**
+ * True when the ranking holds FEWER than `min(k, relevantCount)` relevant
+ * documents — nDCG@k then cannot reach 1 however the ranking is reordered, so the
+ * deficit is not the ordering's fault.
+ */
+export const isRecallLimited = (ranking: readonly string[], qrel: Qrel, k: number): boolean =>
+  retrievedRelevantOf(ranking, qrel) < Math.min(k, relevantCountOf(qrel));
+
+/**
+ * One topic's deficit, split. `ndcg + orderingLoss + recallLoss === 1` by
+ * construction: the oracle is the boundary between the two causes.
+ */
+export interface TopicForensics {
+  readonly relevantCount: number;
+  readonly retrievedRelevant: number;
+  readonly ndcg: number;
+  readonly oracleNdcg: number;
+  readonly precision: number;
+  readonly recall: number;
+  readonly firstRelevantRank: number | undefined;
+  readonly recallLimited: boolean;
+  /** What a perfect reordering of the SAME retrieved set would recover. */
+  readonly orderingLoss: number;
+  /** What no reordering can recover — the documents that were never retrieved. */
+  readonly recallLoss: number;
+}
+
+export const topicForensics = (
+  ranking: readonly string[],
+  qrel: Qrel,
+  k: number
+): TopicForensics => {
+  const ndcg = ndcgAt(ranking, qrel, k);
+  const oracleNdcg = oracleNdcgAt(ranking, qrel, k);
+  return {
+    relevantCount: relevantCountOf(qrel),
+    retrievedRelevant: retrievedRelevantOf(ranking, qrel),
+    ndcg,
+    oracleNdcg,
+    precision: precisionAt(ranking, qrel, k),
+    recall: recallAt(ranking, qrel, k),
+    firstRelevantRank: firstRelevantRank(ranking, qrel),
+    recallLimited: isRecallLimited(ranking, qrel, k),
+    orderingLoss: oracleNdcg - ndcg,
+    recallLoss: 1 - oracleNdcg,
+  };
+};
+
+/** One TREC run line, reduced to the two fields a ranking needs. */
+interface RunPosting {
+  readonly queryId: string;
+  readonly docId: string;
+}
+
+/**
+ * `qid Q0 docid rank score tag`, whitespace-separated. A line short of the docid
+ * column is dropped rather than read as an `undefined` document — a truncated
+ * write must not enter a ranking as data.
+ */
+const parseRunLine = (line: string): RunPosting | undefined => {
+  const [queryId, , docId] = line.trim().split(/\s+/);
+  return queryId === undefined || docId === undefined ? undefined : { queryId, docId };
+};
+
+const isPosting = (posting: RunPosting | undefined): posting is RunPosting =>
+  posting !== undefined;
+
+const appendPosting = (
+  run: Map<string, readonly string[]>,
+  posting: RunPosting
+): Map<string, readonly string[]> =>
+  run.set(posting.queryId, [...(run.get(posting.queryId) ?? []), posting.docId]);
+
+/**
+ * A persisted run file as `qid -> docids in FILE ORDER`. The file is already
+ * written in descending-score order, so no re-sort happens here — re-sorting is
+ * how `trec_eval` silently substitutes an alphabetical ranking.
+ */
+export const readRunFile = (absPath: string): ReadonlyMap<string, readonly string[]> =>
+  mapNonEmptyLines(absPath, parseRunLine)
+    .filter(isPosting)
+    .reduce(appendPosting, new Map<string, readonly string[]>());
