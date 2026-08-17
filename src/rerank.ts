@@ -76,15 +76,25 @@ type RrfFusion = Extract<RerankFusion, { readonly kind: 'rrf' }>;
 const rrfTerm = (rrfK: number, weight: number, rank: number | undefined): number =>
   rank === undefined ? 0 : weight / (rrfK + rank);
 
+/**
+ * The two 1-based ranks RRF scores. BOTH are optional because a two-leg fusion
+ * has candidates that only one leg returned; the rerank path simply never
+ * passes `undefined` for `firstPass`, since every candidate came from it.
+ */
+interface RrfRanks {
+  readonly rerank: number | undefined;
+  readonly firstPass: number | undefined;
+}
+
 /** One candidate's two 1-based ranks, plus how many the reranker returned. */
-interface Ranks {
+interface Ranks extends RrfRanks {
   /** `undefined` when the reranker did not return this candidate. */
   readonly rerank: number | undefined;
   readonly firstPass: number;
   readonly returned: number;
 }
 
-const rrfScore = (fusion: RrfFusion, ranks: Ranks): number =>
+const rrfScore = (fusion: RrfFusion, ranks: RrfRanks): number =>
   rrfTerm(fusion.rrfK, fusion.rerankWeight, ranks.rerank) +
   rrfTerm(fusion.rrfK, 1 - fusion.rerankWeight, ranks.firstPass);
 
@@ -122,6 +132,53 @@ export const fuseRanking = <T>(
       firstPass: index + 1,
       returned: rerankOrder.length,
     }),
+  }));
+  return [...scored].sort((left, right) => right.score - left.score);
+};
+
+/**
+ * Two ranked orders over ONE pool: `items` is the union, and each leg lists the
+ * indices into it that IT returned, best-first. An index a leg did not return
+ * contributes nothing from that leg — which is what makes this a union fusion
+ * rather than a reordering of one list.
+ */
+export interface RankedLegs<T> {
+  readonly items: readonly T[];
+  /** The leg carrying `1 - rerankWeight` — the lexical leg for the hybrid route. */
+  readonly primary: readonly number[];
+  /** The leg carrying `rerankWeight` — the dense leg for the hybrid route. */
+  readonly secondary: readonly number[];
+}
+
+const rrfOrRefuse = (fusion: RerankFusion): RrfFusion => {
+  if (fusion.kind !== 'rrf') {
+    throw new Error(
+      'rerank fusion: two-leg fusion is defined for an RRF preset only; a replacement preset ' +
+        'would discard one leg entirely, which is not a hybrid.'
+    );
+  }
+  return fusion;
+};
+
+const rankOf = (order: readonly number[]): ReadonlyMap<number, number> =>
+  new Map(order.map((index, position) => [index, position + 1]));
+
+/**
+ * Fuses TWO ranked legs under the same RRF arithmetic `fuseRanking` uses — the
+ * hybrid route reuses this file's scoring rather than owning a second fusion.
+ * `fuseRanking` is the reranker↔first-pass form, where every candidate is in the
+ * first pass by construction; this is the union form, where neither leg is.
+ */
+export const fuseLegs = <T>(
+  legs: RankedLegs<T>,
+  fusion: RerankFusion
+): readonly FusedItem<T>[] => {
+  const rrf = rrfOrRefuse(fusion);
+  const primary = rankOf(legs.primary);
+  const secondary = rankOf(legs.secondary);
+  const scored = legs.items.map((item, index) => ({
+    item,
+    score: rrfScore(rrf, { rerank: secondary.get(index), firstPass: primary.get(index) }),
   }));
   return [...scored].sort((left, right) => right.score - left.score);
 };

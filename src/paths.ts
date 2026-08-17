@@ -56,6 +56,18 @@ export const MINISEARCH_INDEX_PATH: string = resolve(INDEX_DIR, 'atoms-minisearc
 export const LANCEDB_INDEX_DIR: string = resolve(INDEX_DIR, 'atoms-lancedb');
 
 /**
+ * The two DENSE LanceDB routes' dataset directories. Each is its OWN tree: the
+ * schemas differ (they carry a vector column the frozen route has not), the
+ * `hybrid` tree additionally carries a BM25 index, and every LanceDB build
+ * REMOVES its directory first — so a shared path would delete another route's
+ * index and silently serve a third route's schema.
+ */
+export const LANCEDB_VEC_INDEX_DIR: string = resolve(INDEX_DIR, 'atoms-lancedb-vec');
+
+/** See {@link LANCEDB_VEC_INDEX_DIR} — one directory per route, never shared. */
+export const LANCEDB_HYBRID_INDEX_DIR: string = resolve(INDEX_DIR, 'atoms-lancedb-hybrid');
+
+/**
  * Stated index location for an adapter that keeps no index. It is never created
  * nor read; it exists so every adapter has its OWN location and the scan adapter
  * cannot silently inherit another adapter's index file.

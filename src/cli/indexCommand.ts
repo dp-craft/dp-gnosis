@@ -14,6 +14,10 @@
  */
 import { buildFts5Index } from '../adapters/fts5Adapter.js';
 import { buildLanceDbIndex, lanceDbAvailability } from '../adapters/lanceDbAdapter.js';
+import {
+  buildLanceDbDenseIndex,
+  type DenseRoute
+} from '../adapters/lanceDbDenseAdapter.js';
 import { buildMiniSearchIndex, miniSearchAvailability } from '../adapters/miniSearchAdapter.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
@@ -59,6 +63,23 @@ const buildLanceDb = async (context: CommandContext): Promise<string | undefined
 };
 
 /**
+ * The dense routes embed their corpus, so a build here REFUSES loudly (the
+ * embedding client throws its own named cause) rather than reporting a skip:
+ * an unavailable optional dependency means this leg cannot be built, while a
+ * refused embedding means it would be built WRONG.
+ */
+const buildDense =
+  (route: DenseRoute) =>
+    async (context: CommandContext): Promise<string | undefined> => {
+      const built = await buildLanceDbDenseIndex({
+        atomsDir: context.atomsDir,
+        indexDir: context.indexPath,
+        route,
+      });
+      return built ? undefined : skipReason(`lancedb-${route}`, await lanceDbAvailability());
+    };
+
+/**
  * One builder per index-bearing adapter. `linear` is absent by construction:
  * `hasPersistentIndex` routes it to the stated no-op before this map is read.
  */
@@ -66,6 +87,8 @@ const BUILDERS: Readonly<Partial<Record<AdapterName, Builder>>> = {
   fts5: buildFts5,
   minisearch: buildMiniSearch,
   lancedb: buildLanceDb,
+  'lancedb-vec': buildDense('vec'),
+  'lancedb-hybrid': buildDense('hybrid'),
 };
 
 const noOp = (context: CommandContext): CommandOutcome => ({

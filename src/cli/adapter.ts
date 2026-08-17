@@ -9,18 +9,32 @@
  */
 import { createFts5Adapter } from '../adapters/fts5Adapter.js';
 import { createLanceDbAdapter } from '../adapters/lanceDbAdapter.js';
+import { createLanceDbDenseAdapter } from '../adapters/lanceDbDenseAdapter.js';
 import { createLinearScanAdapter } from '../adapters/linearScanAdapter.js';
 import { createMiniSearchAdapter } from '../adapters/miniSearchAdapter.js';
 import {
   FTS5_INDEX_PATH,
+  LANCEDB_HYBRID_INDEX_DIR,
   LANCEDB_INDEX_DIR,
+  LANCEDB_VEC_INDEX_DIR,
   MINISEARCH_INDEX_PATH,
   NO_INDEX_PATH
 } from '../paths.js';
 import type { KnowledgePort } from '../port.js';
 
-/** The closed adapter vocabulary. */
-export const ADAPTER_NAMES = ['linear', 'fts5', 'minisearch', 'lancedb'] as const;
+/**
+ * The closed adapter vocabulary. It grows ADDITIVELY: `lancedb` is the FROZEN
+ * lexical route, and the two dense routes are separate NAMES rather than a flag
+ * on it, so the recorded `adapter` field carries the treatment on its own.
+ */
+export const ADAPTER_NAMES = [
+  'linear',
+  'fts5',
+  'minisearch',
+  'lancedb',
+  'lancedb-vec',
+  'lancedb-hybrid',
+] as const;
 
 export type AdapterName = (typeof ADAPTER_NAMES)[number];
 
@@ -47,6 +61,8 @@ const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, string>> = {
   fts5: FTS5_INDEX_PATH,
   minisearch: MINISEARCH_INDEX_PATH,
   lancedb: LANCEDB_INDEX_DIR,
+  'lancedb-vec': LANCEDB_VEC_INDEX_DIR,
+  'lancedb-hybrid': LANCEDB_HYBRID_INDEX_DIR,
 };
 
 export const defaultIndexPath = (adapter: AdapterName): string => DEFAULT_INDEX_PATHS[adapter];
@@ -70,6 +86,20 @@ const PORT_FACTORIES: Readonly<Record<AdapterName, (location: PortLocation) => K
     createLanceDbAdapter({
       atomsDir: location.atomsDir,
       indexDir: location.indexPath,
+      now: new Date(),
+    }),
+  'lancedb-vec': location =>
+    createLanceDbDenseAdapter({
+      atomsDir: location.atomsDir,
+      indexDir: location.indexPath,
+      route: 'vec',
+      now: new Date(),
+    }),
+  'lancedb-hybrid': location =>
+    createLanceDbDenseAdapter({
+      atomsDir: location.atomsDir,
+      indexDir: location.indexPath,
+      route: 'hybrid',
       now: new Date(),
     }),
 };

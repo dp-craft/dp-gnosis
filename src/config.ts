@@ -233,6 +233,29 @@ export const EMBED_DEFAULT_URL = 'http://127.0.0.1:9292';
 export const EMBED_URL_ENV_VAR = 'DP_GNOSIS_EMBED_URL';
 
 /**
+ * How many texts one `/v1/embeddings` request carries. A corpus is embedded in
+ * batches because a single request holding every atom is refused on the wire,
+ * and a refusal there costs the whole build rather than one batch.
+ */
+export const EMBED_BATCH_SIZE = 32;
+
+/**
+ * The hybrid route's fusion: RRF over the DENSE and LEXICAL legs of one
+ * adapter, at the constants the rerank fusion already uses — the two legs are
+ * two ranked orders over one pool, exactly the shape `fuseRanking` scores, so
+ * the hybrid route reuses that arithmetic rather than introducing a second one.
+ *
+ * `rerankWeight` names the slot, not the leg: here it is the DENSE leg's weight
+ * and the lexical leg carries `1 - weight`. The two legs are weighted EQUALLY
+ * because nothing has measured them yet; a measured value replaces this one.
+ */
+export const HYBRID_FUSION: RerankFusion = {
+  kind: 'rrf',
+  rrfK: RERANK_RRF_K,
+  rerankWeight: RERANK_RRF_WEIGHT,
+};
+
+/**
  * Hard cap on how many terms a constructed retrieval query may carry.
  *
  * A task's targets, test contract and spec excerpts together run to thousands

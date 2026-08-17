@@ -16,8 +16,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
-import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
-import { fuseRanking, resolveRerankFusion } from '../src/rerank.js';
+import { HYBRID_FUSION, RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
+import { fuseLegs, fuseRanking, resolveRerankFusion } from '../src/rerank.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Echo', 'Gamma', 'Hotel'] as const;
 
@@ -162,5 +162,30 @@ describe('fuseRanking under beir-ce', () => {
     const shipped = fuseRanking(['a', 'b', 'c', 'd'], [3, 1, 0, 2], RERANK_FUSION_PRESETS.shipped);
 
     expect(shipped.map(entry => entry.item)).not.toEqual(['d', 'b', 'a', 'c']);
+  });
+});
+
+/**
+ * The TWO-LEG form of the same fusion. It exists so the hybrid route reuses this
+ * arithmetic instead of cloning it; the extension is deliberately additive —
+ * `fuseRanking`'s own signature is untouched, and both share `rrfTerm`.
+ */
+describe('fuseLegs', () => {
+  it('scores an item absent from a leg from the other leg ALONE', () => {
+    const fused = fuseLegs(
+      { items: ['a', 'b', 'c'], primary: [0], secondary: [2, 0, 1] },
+      HYBRID_FUSION
+    );
+
+    expect(fused.map(entry => entry.item)).toEqual(['a', 'c', 'b']);
+    expect(fused[0]?.score).toBeCloseTo(0.5 / 21 + 0.5 / 22, 12);
+    expect(fused[1]?.score).toBeCloseTo(0.5 / 21, 12);
+    expect(fused[2]?.score).toBeCloseTo(0.5 / 23, 12);
+  });
+
+  it('refuses a replacement preset — a hybrid leg cannot REPLACE the other', () => {
+    expect(() =>
+      fuseLegs({ items: ['a'], primary: [0], secondary: [0] }, RERANK_FUSION_PRESETS['beir-ce'])
+    ).toThrow(/two-leg fusion/);
   });
 });
