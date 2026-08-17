@@ -82,6 +82,22 @@ export interface RetrievalResult {
   /** Names which legs ran (e.g. the lexical/vector combination used). */
   readonly mode: string;
   readonly indexState: IndexState;
+  /**
+   * The UN-TRUNCATED candidate pool `atoms` was cut from, best-first, for a
+   * route whose whole point is that the cut throws information away: merging two
+   * legs raises recall, and capping the merged order back to `k` gives most of
+   * that gain straight back. `atoms` is still at most `k` — this is a SECOND
+   * reading of the same call, never a wider answer to it, so `atoms` remains the
+   * port's contract and every existing caller is unaffected.
+   *
+   * ABSENT on every route that has no such pool, which is all of them but
+   * `lancedb-hybrid-full`. Its LENGTH is the realised pool size, which varies
+   * with the query and with how much the two legs overlapped: a caller that
+   * reports the pool reports `poolAtoms.length` rather than assuming a bound.
+   * It cannot exceed `2 * k` — the pool is the union of two top-`k` lists — and
+   * lands near `1.55 * k` on the real corpora, where the legs overlap heavily.
+   */
+  readonly poolAtoms?: readonly RetrievedAtom[];
 }
 
 /**

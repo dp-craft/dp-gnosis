@@ -9,7 +9,10 @@
  */
 import { createFts5Adapter } from '../adapters/fts5Adapter.js';
 import { createLanceDbAdapter } from '../adapters/lanceDbAdapter.js';
-import { createLanceDbDenseAdapter } from '../adapters/lanceDbDenseAdapter.js';
+import {
+  createLanceDbDenseAdapter,
+  type DenseRoute
+} from '../adapters/lanceDbDenseAdapter.js';
 import { createLinearScanAdapter } from '../adapters/linearScanAdapter.js';
 import { createMiniSearchAdapter } from '../adapters/miniSearchAdapter.js';
 import {
@@ -34,6 +37,7 @@ export const ADAPTER_NAMES = [
   'lancedb',
   'lancedb-vec',
   'lancedb-hybrid',
+  'lancedb-hybrid-full',
 ] as const;
 
 export type AdapterName = (typeof ADAPTER_NAMES)[number];
@@ -48,6 +52,28 @@ export const resolveAdapter = (value: string): AdapterName | undefined =>
 export const adapterError = (value: string): string =>
   `unknown adapter "${value}" — pass --adapter with one of: ${ADAPTER_NAMES.join(', ')}`;
 
+/**
+ * Adapter name → the dense LEG it opens. The ONE owner of that mapping: the port
+ * factories below read it, and so does any caller that must construct a dense
+ * adapter with a tuning parameter attached (the benchmark's leg-weight sweep) —
+ * a second copy is how a name ends up measuring another route.
+ */
+export const DENSE_ROUTES = {
+  'lancedb-vec': 'vec',
+  'lancedb-hybrid': 'hybrid',
+  'lancedb-hybrid-full': 'hybrid-full',
+} as const satisfies Readonly<Partial<Record<AdapterName, DenseRoute>>>;
+
+/** The adapter names that open a dense leg — the keys of {@link DENSE_ROUTES}. */
+export type DenseAdapterName = keyof typeof DENSE_ROUTES;
+
+/** The same table, widened over the vocabulary so a lookup needs no cast. */
+const DENSE_ROUTE_BY_NAME: Readonly<Partial<Record<AdapterName, DenseRoute>>> = DENSE_ROUTES;
+
+/** The leg `adapter` opens, or `undefined` when it opens no dense leg at all. */
+export const denseRouteOf = (adapter: AdapterName): DenseRoute | undefined =>
+  DENSE_ROUTE_BY_NAME[adapter];
+
 /** Adapters that persist an index; the rest treat `index` as an explicit no-op. */
 export const hasPersistentIndex = (adapter: AdapterName): boolean => adapter !== 'linear';
 
@@ -55,6 +81,12 @@ export const hasPersistentIndex = (adapter: AdapterName): boolean => adapter !==
  * Where each adapter's index lives when `--index-path` is not given. The record
  * is TOTAL over the vocabulary, so a new adapter cannot be added without stating
  * its own location — two adapters sharing one would corrupt each other.
+ *
+ * The ONE stated exception: `lancedb-hybrid-full` builds and reads BYTE-IDENTICAL
+ * content to `lancedb-hybrid` — same schema, same vectors, same BM25 index — and
+ * differs only in what it does with the fused order at retrieve time. Two names
+ * over one tree is therefore safe here, and it is what keeps the expensive
+ * embedding sidecar (`<indexDir>.embed-cache`) warm across the pair.
  */
 const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, string>> = {
   linear: NO_INDEX_PATH,
@@ -63,6 +95,7 @@ const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, string>> = {
   lancedb: LANCEDB_INDEX_DIR,
   'lancedb-vec': LANCEDB_VEC_INDEX_DIR,
   'lancedb-hybrid': LANCEDB_HYBRID_INDEX_DIR,
+  'lancedb-hybrid-full': LANCEDB_HYBRID_INDEX_DIR,
 };
 
 export const defaultIndexPath = (adapter: AdapterName): string => DEFAULT_INDEX_PATHS[adapter];
@@ -78,6 +111,16 @@ interface PortLocation {
  * in exactly one place, and adding one is a compile error until it is listed.
  * `indexPath` is a DIRECTORY for LanceDB, which writes a tree rather than a file.
  */
+const denseFactory =
+  (route: DenseRoute) =>
+    (location: PortLocation): KnowledgePort =>
+      createLanceDbDenseAdapter({
+        atomsDir: location.atomsDir,
+        indexDir: location.indexPath,
+        route,
+        now: new Date(),
+      });
+
 const PORT_FACTORIES: Readonly<Record<AdapterName, (location: PortLocation) => KnowledgePort>> = {
   linear: location => createLinearScanAdapter(location.atomsDir),
   fts5: location => createFts5Adapter({ ...location, now: new Date() }),
@@ -88,20 +131,9 @@ const PORT_FACTORIES: Readonly<Record<AdapterName, (location: PortLocation) => K
       indexDir: location.indexPath,
       now: new Date(),
     }),
-  'lancedb-vec': location =>
-    createLanceDbDenseAdapter({
-      atomsDir: location.atomsDir,
-      indexDir: location.indexPath,
-      route: 'vec',
-      now: new Date(),
-    }),
-  'lancedb-hybrid': location =>
-    createLanceDbDenseAdapter({
-      atomsDir: location.atomsDir,
-      indexDir: location.indexPath,
-      route: 'hybrid',
-      now: new Date(),
-    }),
+  'lancedb-vec': denseFactory(DENSE_ROUTES['lancedb-vec']),
+  'lancedb-hybrid': denseFactory(DENSE_ROUTES['lancedb-hybrid']),
+  'lancedb-hybrid-full': denseFactory(DENSE_ROUTES['lancedb-hybrid-full']),
 };
 
 export const createPort = (

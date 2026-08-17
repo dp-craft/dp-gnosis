@@ -89,6 +89,7 @@ const BUILDERS: Readonly<Partial<Record<AdapterName, Builder>>> = {
   lancedb: buildLanceDb,
   'lancedb-vec': buildDense('vec'),
   'lancedb-hybrid': buildDense('hybrid'),
+  'lancedb-hybrid-full': buildDense('hybrid-full'),
 };
 
 const noOp = (context: CommandContext): CommandOutcome => ({

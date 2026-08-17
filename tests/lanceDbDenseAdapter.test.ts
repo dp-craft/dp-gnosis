@@ -24,11 +24,12 @@ import { connect } from '@lancedb/lancedb';
 import { buildLanceDbIndex, createLanceDbAdapter } from '../src/adapters/lanceDbAdapter.js';
 import {
   buildLanceDbDenseIndex,
-  createLanceDbDenseAdapter
+  createLanceDbDenseAdapter,
+  type DenseRoute
 } from '../src/adapters/lanceDbDenseAdapter.js';
 import { ADAPTER_NAMES, createPort, defaultIndexPath } from '../src/cli/adapter.js';
 import { EMBED_MODEL_ID } from '../src/config.js';
-import type { KnowledgePort, RetrievedAtom } from '../src/port.js';
+import type { KnowledgePort, RetrievalResult, RetrievedAtom } from '../src/port.js';
 
 const NOW = new Date('2026-08-08T00:00:00.000Z');
 
@@ -135,13 +136,36 @@ const stubDownServer = (): void => {
   });
 };
 
-const buildDense = (route: 'vec' | 'hybrid'): Promise<boolean> =>
+const buildDense = (route: DenseRoute): Promise<boolean> =>
   buildLanceDbDenseIndex({ atomsDir, indexDir, route });
 
-const densePort = (route: 'vec' | 'hybrid'): KnowledgePort =>
-  createLanceDbDenseAdapter({ atomsDir, indexDir, route, now: NOW });
+const densePort = (route: DenseRoute, hybridWeight?: number): KnowledgePort =>
+  createLanceDbDenseAdapter({
+    atomsDir,
+    indexDir,
+    route,
+    now: NOW,
+    ...(hybridWeight === undefined ? {} : { hybridWeight }),
+  });
 
 const ids = (atoms: readonly RetrievedAtom[]): readonly string[] => atoms.map(atom => atom.id);
+
+const scores = (atoms: readonly RetrievedAtom[]): readonly number[] =>
+  atoms.map(atom => atom.score);
+
+/** One retrieval over an already-built index, with the port closed afterwards. */
+const retrieveWith = async (
+  route: DenseRoute,
+  k: number,
+  hybridWeight?: number
+): Promise<RetrievalResult> => {
+  const instance = densePort(route, hybridWeight);
+  try {
+    return await instance.retrieve(HYBRID_QUERY, { k });
+  } finally {
+    instance.close?.();
+  }
+};
 
 beforeEach(() => {
   root = mkdtempSync(resolve(tmpdir(), 'dp-gnosis-lancedb-dense-'));
@@ -217,6 +241,91 @@ describe('the dense LanceDB routes', () => {
       expect(ids(result.atoms)).toEqual(['atom-alpha', 'atom-charlie', 'atom-bravo']);
       expect(result.atoms[0]?.score).toBeCloseTo(0.5 / 21 + 0.5 / 22, 12);
       expect(result.atoms[1]?.score).toBeCloseTo(0.5 / 21, 12);
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  it('adds lancedb-hybrid-full over the SAME index tree — the content is identical', () => {
+    expect(ADAPTER_NAMES).toContain('lancedb-hybrid-full');
+    expect(defaultIndexPath('lancedb-hybrid-full')).toBe(defaultIndexPath('lancedb-hybrid'));
+    expect(createPort('lancedb-hybrid-full', atomsDir, indexDir).name).toBe('lancedb-hybrid-full');
+  });
+
+  /**
+   * The pool is the union of the two legs' TOP-k, never the union of their
+   * overfetched scans: at k=1 the lexical leg offers `alpha` and the dense leg
+   * `charlie`, so `bravo` — which neither leg ranked first — is NOT in the pool
+   * even though both legs fetched it.
+   */
+  it(
+    'offers the union of each leg\'s top-k on lancedb-hybrid-full, while retrieve returns k',
+    async () => {
+      await buildDense('hybrid-full');
+
+      const result = await retrieveWith('hybrid-full', 1);
+
+      expect(result.mode).toBe('lancedb-hybrid-full');
+      expect(ids(result.atoms)).toEqual(['atom-alpha']);
+      expect(ids(result.poolAtoms ?? [])).toEqual(['atom-alpha', 'atom-charlie']);
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  /**
+   * The BOUND is what makes the arm affordable: two top-k lists can hold at most
+   * 2k documents between them, so a reranker arm costs ~1.5x a plain one rather
+   * than the ~16x an overfetched union (2 * k * OVERFETCH_FACTOR) would.
+   */
+  it(
+    'bounds the realised pool at 2 * k, whatever the legs fetched',
+    async () => {
+      await buildDense('hybrid-full');
+
+      const found = await Promise.all([
+        retrieveWith('hybrid-full', 1),
+        retrieveWith('hybrid-full', 2),
+        retrieveWith('hybrid-full', 3),
+      ]);
+
+      found.forEach((result, index) => {
+        const k = index + 1;
+        expect(result.poolAtoms?.length ?? 0).toBeLessThanOrEqual(2 * k);
+        expect(result.atoms.length).toBeLessThanOrEqual(k);
+      });
+      expect(found[0]?.poolAtoms?.length).toBe(2);
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  it(
+    'leaves lancedb-hybrid truncated at k and carrying NO pool',
+    async () => {
+      await buildDense('hybrid');
+
+      const result = await retrieveWith('hybrid', 1);
+
+      expect(ids(result.atoms)).toEqual(['atom-alpha']);
+      expect(result.poolAtoms).toBeUndefined();
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  it(
+    'weights the LEG fusion by hybridWeight, and 0.5 reproduces the default exactly',
+    async () => {
+      await buildDense('hybrid');
+
+      const base = await retrieveWith('hybrid', 3);
+      const explicit = await retrieveWith('hybrid', 3, 0.5);
+      const dense = await retrieveWith('hybrid', 3, 1);
+      const lexical = await retrieveWith('hybrid', 3, 0);
+
+      expect(scores(explicit.atoms)).toEqual(scores(base.atoms));
+      expect(ids(explicit.atoms)).toEqual(ids(base.atoms));
+      expect(ids(dense.atoms)).toEqual(['atom-charlie', 'atom-alpha', 'atom-bravo']);
+      expect(dense.atoms[0]?.score).toBeCloseTo(1 / 21, 12);
+      expect(ids(lexical.atoms)).toEqual(['atom-alpha', 'atom-bravo', 'atom-charlie']);
+      expect(lexical.atoms[0]?.score).toBeCloseTo(1 / 21, 12);
     },
     CASE_TIMEOUT_MS
   );

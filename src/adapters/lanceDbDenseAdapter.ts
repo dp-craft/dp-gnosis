@@ -1,10 +1,17 @@
 /**
- * The two DENSE LanceDB routes, as a `KnowledgePort` each:
+ * The DENSE LanceDB routes, as a `KnowledgePort` each:
  *
  * - `lancedb-vec` — dense ONLY, the control. Cosine similarity over the vector
  *   column and nothing else.
  * - `lancedb-hybrid` — the dense leg fused with the LEXICAL (BM25) leg of the
- *   same table.
+ *   same table, cut to `k`.
+ * - `lancedb-hybrid-full` — the same fusion, offering the union of the two legs'
+ *   TOP-`k` as a reranking pool instead of cutting that union back to `k`.
+ *   Merging two legs raises recall, and the cut hands most of that gain straight
+ *   back (measured on `vault`: union recall +0.0161, +0.0042 once capped at 100;
+ *   on `vault-hu` the capped gain is exactly 0.0000). It still ANSWERS with at
+ *   most `k` atoms — the pool is a second reading of the same call, never a
+ *   wider answer to it.
  *
  * Two NAMES rather than one adapter with a sub-flag: `adapter` is already a
  * recorded provenance field, so separate names make the treatment travel with
@@ -60,7 +67,8 @@ import {
   DEFAULT_ATOM_TYPE,
   EMBED_BATCH_SIZE,
   EMBED_MODEL_ID,
-  HYBRID_FUSION
+  HYBRID_FUSION,
+  type RerankFusion
 } from '../config.js';
 import { embedTexts } from '../embed.js';
 import { createEmbeddingCache, type EmbeddingCache } from '../embedCache.js';
@@ -76,14 +84,33 @@ import { stemText } from '../query.js';
 import { fuseLegs } from '../rerank.js';
 import { isRetrievable } from '../retrievability.js';
 
-/** Which legs a route reads. It names the TREATMENT, and it is the port's name. */
-export type DenseRoute = 'vec' | 'hybrid';
+/**
+ * Which legs a route reads, and what it does with their union. It names the
+ * TREATMENT, and it is the port's name.
+ *
+ * `hybrid-full` differs from `hybrid` in EXACTLY one step: the fused union is
+ * not cut to `k` before it is offered as a reranking pool. Same table, same
+ * legs, same fetch depth, same fusion — so the two are a clean pair.
+ */
+export type DenseRoute = 'vec' | 'hybrid' | 'hybrid-full';
 
 /** `mode`/`name` reported per route — the adapter name, so a row carries the leg. */
 const ROUTE_MODES: Readonly<Record<DenseRoute, string>> = {
   vec: 'lancedb-vec',
   hybrid: 'lancedb-hybrid',
+  'hybrid-full': 'lancedb-hybrid-full',
 };
+
+/**
+ * Whether a route fuses two legs — every route but `vec`, which reads the dense
+ * leg alone. Exported because it decides where a leg-fusion PARAMETER may be
+ * applied at all, and a caller deriving that from a name list of its own is how
+ * a weight ends up recorded on an arm that fused nothing.
+ */
+export const fusesLegs = (route: DenseRoute): boolean => route !== 'vec';
+
+/** The route that reports its whole pool — the un-truncated arm, and only it. */
+const reportsPool = (route: DenseRoute): boolean => route === 'hybrid-full';
 
 const MARKDOWN_EXT = '.md';
 
@@ -139,7 +166,7 @@ export interface BuildLanceDbDenseIndexOptions {
   readonly atomsDir: string;
   /** Destination dataset DIRECTORY, replaced wholesale on every build. */
   readonly indexDir: string;
-  /** `hybrid` additionally builds the BM25 index the lexical leg reads. */
+  /** A fused route additionally builds the BM25 index its lexical leg reads. */
   readonly route: DenseRoute;
 }
 
@@ -147,6 +174,16 @@ export interface BuildLanceDbDenseIndexOptions {
 export interface LanceDbDenseAdapterOptions extends BuildLanceDbDenseIndexOptions {
   /** Injected clock for `isRetrievable`; never read from inside. */
   readonly now: Date;
+  /**
+   * The DENSE leg's weight in the leg fusion, `0` = pure lexical and `1` = pure
+   * dense; the lexical leg carries `1 - weight`. Absent means `HYBRID_FUSION`
+   * itself, which is what every recorded hybrid run was measured under.
+   *
+   * The RANGE is the caller's to enforce, at the flag that names it: this is the
+   * one place a value arrives, and a second refusal here would report the defect
+   * without naming the flag that carries it.
+   */
+  readonly hybridWeight?: number | undefined;
 }
 
 type LanceModule = typeof Lance;
@@ -265,13 +302,13 @@ const purgePlaceholder = async (table: Table, count: number): Promise<void> => {
   await (count === 0 ? table.delete(PLACEHOLDER_PREDICATE) : Promise.resolve());
 };
 
-/** Only `hybrid` reads the BM25 column, so only `hybrid` pays to index it. */
+/** Only a fused route reads the BM25 column, so only a fused route pays to index it. */
 const indexLexical = async (
   lance: LanceModule,
   table: Table,
   route: DenseRoute
 ): Promise<void> => {
-  if (route !== 'hybrid') return;
+  if (!fusesLegs(route)) return;
   await table.createIndex(BODY_FIELD, { config: lance.Index.fts(FTS_INDEX_OPTIONS) });
 };
 
@@ -306,6 +343,16 @@ export const buildLanceDbDenseIndex = async (
   const loaded = await loadLance();
   return loaded.ok ? await writeIndex(loaded.lance, options) : false;
 };
+
+/**
+ * The leg fusion this instance runs. An absent weight yields `HYBRID_FUSION`
+ * ITSELF — the same object every recorded hybrid run fused with, so the default
+ * is bit-identical rather than merely equal.
+ */
+const fusionOf = (options: LanceDbDenseAdapterOptions): RerankFusion =>
+  options.hybridWeight === undefined
+    ? HYBRID_FUSION
+    : { ...HYBRID_FUSION, rerankWeight: options.hybridWeight };
 
 /** QUERY SIDE of the shared stemmer, for the LEXICAL leg only. */
 const toMatchExpression = (query: string): string | undefined => {
@@ -408,7 +455,12 @@ const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boole
 const matchType = (atom: RetrievedAtom, types: readonly AtomType[] | undefined): boolean =>
   types === undefined || types.includes(atom.type);
 
-const selectAtoms = (
+/**
+ * Every candidate that survived retrievability and the request's filters, in
+ * fused order and NOT cut to `k` — the pool `selectAtoms` takes its head from,
+ * so the two can never disagree about the order they report.
+ */
+const selectCandidates = (
   options: LanceDbDenseAdapterOptions,
   hits: readonly SearchHit[],
   opts: RetrieveOptions
@@ -418,8 +470,19 @@ const selectAtoms = (
     .filter(isDefined)
     .filter(atom => matchDomain(atom, opts.domain))
     .filter(atom => matchType(atom, opts.types))
-    .sort(byScoreThenId)
-    .slice(0, opts.k);
+    .sort(byScoreThenId);
+
+/** What one retrieval produced: the whole pool, and the `k` the port answers with. */
+interface Candidates {
+  readonly pool: readonly RetrievedAtom[];
+  readonly atoms: readonly RetrievedAtom[];
+}
+
+/** The cut, in ONE place: `atoms` is always the pool's head, never a second order. */
+const cutToK = (pool: readonly RetrievedAtom[], opts: RetrieveOptions): Candidates => ({
+  pool,
+  atoms: pool.slice(0, opts.k),
+});
 
 /** One open dataset: the connection, the table, and which tree they came from. */
 interface OpenIndex {
@@ -537,6 +600,8 @@ interface Probe {
   readonly query: string;
   readonly vector: readonly number[];
   readonly opts: RetrieveOptions;
+  /** The leg fusion this instance runs — `HYBRID_FUSION` unless a weight was named. */
+  readonly fusion: RerankFusion;
 }
 
 /** Exhaustive cosine — `bypassVectorIndex` is what makes the ranking EXACT. */
@@ -567,16 +632,17 @@ interface Pool {
  * returned is kept and scored from that leg alone — dropping it would make the
  * hybrid strictly worse than either leg it is built from.
  */
-const fuseHits = (lexical: readonly SearchHit[], dense: readonly SearchHit[]): readonly SearchHit[] => {
+const fuseHits = (
+  lexical: readonly SearchHit[],
+  dense: readonly SearchHit[],
+  fusion: RerankFusion
+): readonly SearchHit[] => {
   const lexicalIds = new Set(lexical.map(hit => hit.id));
   const items = [...lexical, ...dense.filter(hit => !lexicalIds.has(hit.id))];
   const position = new Map(items.map((hit, index) => [hit.id, index]));
   const orderOf = (leg: readonly SearchHit[]): readonly number[] =>
     leg.map(hit => position.get(hit.id)).filter(isDefined);
-  const fused = fuseLegs(
-    { items, primary: orderOf(lexical), secondary: orderOf(dense) },
-    HYBRID_FUSION
-  );
+  const fused = fuseLegs({ items, primary: orderOf(lexical), secondary: orderOf(dense) }, fusion);
   return fused.map(entry => ({ ...entry.item, score: entry.score }));
 };
 
@@ -585,6 +651,32 @@ const densePool = async (probe: Probe, limit: number): Promise<Pool> => {
   return { hits: rows.map(toDenseHit).filter(isDefined), exhausted: rows.length < limit };
 };
 
+/**
+ * How many candidates each leg CONTRIBUTES to a fused union — its own top-`k`,
+ * recovered from the fetch limit the overfetch was derived from.
+ *
+ * The legs still FETCH `limit`: the overfetch exists so that `k` candidates
+ * SURVIVE retrievability and the request's filters, and that is unchanged. What
+ * a leg OFFERS is its head, so the union is the union of two top-`k` result
+ * lists — near 1.55×`k` unique on the real corpora and never above 2×`k`. The
+ * union of the two overfetched SCANS would be up to 2×`k`×`OVERFETCH_FACTOR`
+ * (~1600 documents at `k`=100), which is not the treatment the offline
+ * `.trec`-file analysis measured AND is a reranking cost nothing can pay
+ * (~15 s/query at ~100 documents on qwen3-4b, so ~4 h for one `vault` arm).
+ *
+ * It scales WITH the widening: a filtered request that starved doubles `limit`,
+ * and each leg then offers twice as much, or the escalation could not converge.
+ */
+const legContribution = (limit: number): number => Math.ceil(limit / OVERFETCH_FACTOR);
+
+/** `hybrid-full` offers each leg's head; `hybrid` cuts the fused order instead. */
+const offered = (
+  probe: Probe,
+  leg: readonly SearchHit[],
+  limit: number
+): readonly SearchHit[] =>
+  reportsPool(probe.route) ? leg.slice(0, legContribution(limit)) : leg;
+
 const hybridPool = async (probe: Probe, limit: number): Promise<Pool> => {
   const [dense, lexicalRaw] = await Promise.all([
     densePool(probe, limit),
@@ -592,13 +684,17 @@ const hybridPool = async (probe: Probe, limit: number): Promise<Pool> => {
   ]);
   const lexical = lexicalRaw.map(toLexicalHit).filter(isDefined);
   return {
-    hits: fuseHits(lexical, dense.hits),
+    hits: fuseHits(
+      offered(probe, lexical, limit),
+      offered(probe, dense.hits, limit),
+      probe.fusion
+    ),
     exhausted: dense.exhausted && lexicalRaw.length < limit,
   };
 };
 
 const poolFor = async (probe: Probe, limit: number): Promise<Pool> =>
-  probe.route === 'hybrid' ? await hybridPool(probe, limit) : await densePool(probe, limit);
+  fusesLegs(probe.route) ? await hybridPool(probe, limit) : await densePool(probe, limit);
 
 /** The candidate pool ONE fetch asks each leg for. */
 const poolSize = (opts: RetrieveOptions): number => opts.k * OVERFETCH_FACTOR;
@@ -615,25 +711,33 @@ const readUntilSettled = async (
   options: LanceDbDenseAdapterOptions,
   probe: Probe,
   limit: number
-): Promise<readonly RetrievedAtom[]> => {
-  const pool = await poolFor(probe, limit);
-  const atoms = selectAtoms(options, pool.hits, probe.opts);
-  return atoms.length >= probe.opts.k || pool.exhausted
-    ? atoms
+): Promise<Candidates> => {
+  const found = await poolFor(probe, limit);
+  const candidates = cutToK(selectCandidates(options, found.hits, probe.opts), probe.opts);
+  return candidates.atoms.length >= probe.opts.k || found.exhausted
+    ? candidates
     : await readUntilSettled(options, probe, limit * 2);
+};
+
+const readOnce = async (
+  options: LanceDbDenseAdapterOptions,
+  probe: Probe
+): Promise<Candidates> => {
+  const found = await poolFor(probe, poolSize(probe.opts));
+  return cutToK(selectCandidates(options, found.hits, probe.opts), probe.opts);
 };
 
 const selectFromIndex = async (
   options: LanceDbDenseAdapterOptions,
   probe: Probe
-): Promise<readonly RetrievedAtom[]> =>
+): Promise<Candidates> =>
   isFiltered(probe.opts)
     ? await readUntilSettled(options, probe, poolSize(probe.opts))
-    : selectAtoms(options, (await poolFor(probe, poolSize(probe.opts))).hits, probe.opts);
+    : await readOnce(options, probe);
 
 interface IndexSnapshot {
   readonly count: number;
-  readonly atoms: readonly RetrievedAtom[];
+  readonly candidates: Candidates;
 }
 
 /** One retrieval call's inputs, kept together so no helper takes four arguments. */
@@ -655,10 +759,16 @@ const snapshotOf = async (
   request: SearchRequest
 ): Promise<IndexSnapshot> => {
   const count = await index.table.countRows();
-  if (count === 0) return { count, atoms: [] };
+  if (count === 0) return { count, candidates: { pool: [], atoms: [] } };
   const vector = await embedQuery(request.query);
-  const probe: Probe = { ...request, table: index.table, route: options.route, vector };
-  return { count, atoms: await selectFromIndex(options, probe) };
+  const probe: Probe = {
+    ...request,
+    table: index.table,
+    route: options.route,
+    vector,
+    fusion: fusionOf(options),
+  };
+  return { count, candidates: await selectFromIndex(options, probe) };
 };
 
 /**
@@ -679,10 +789,16 @@ interface DenseInstance {
   readonly corpus: CorpusCell;
 }
 
+/**
+ * The pool is reported ONLY by the route that exists to report it, so every
+ * other route's result is the object it has always been — a caller reading
+ * `poolAtoms` on `lancedb-hybrid` still gets nothing, by construction.
+ */
 const describeResult = (self: DenseInstance, snapshot: IndexSnapshot): RetrievalResult => ({
-  atoms: snapshot.atoms,
+  atoms: snapshot.candidates.atoms,
   mode: ROUTE_MODES[self.options.route],
   indexState: resolveState(self, snapshot.count),
+  ...(reportsPool(self.options.route) ? { poolAtoms: snapshot.candidates.pool } : {}),
 });
 
 const search = async (

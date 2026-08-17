@@ -248,12 +248,17 @@ export const EMBED_BATCH_SIZE = 32;
  * `rerankWeight` names the slot, not the leg: here it is the DENSE leg's weight
  * and the lexical leg carries `1 - weight`. The two legs are weighted EQUALLY
  * because nothing has measured them yet; a measured value replaces this one.
+ *
+ * The DEFAULT, not the only value: a caller sweeping the leg weight passes its
+ * own (`LanceDbDenseAdapterOptions.hybridWeight`), which is recorded as a
+ * treatment. Typed as the RRF member rather than the union so an override can
+ * restate the weight alone — a two-leg fusion is defined for RRF only.
  */
-export const HYBRID_FUSION: RerankFusion = {
+export const HYBRID_FUSION = {
   kind: 'rrf',
   rrfK: RERANK_RRF_K,
   rerankWeight: RERANK_RRF_WEIGHT,
-};
+} as const satisfies RerankFusion;
 
 /**
  * Hard cap on how many terms a constructed retrieval query may carry.
