@@ -11,12 +11,19 @@
  * No live server: `fetch` is stubbed, so both llama-swap calls are answered
  * in-process and an offline run still passes.
  */
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { runCli } from '../src/cli/cli.js';
-import { HYBRID_FUSION, RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
+import {
+  HYBRID_DENSE_LEG_WEIGHT,
+  HYBRID_FUSION,
+  RERANK_FUSION_PRESETS,
+  RERANK_MODEL_ID,
+  RERANK_RRF_WEIGHT
+} from '../src/config.js';
 import { fuseLegs, fuseRanking, resolveRerankFusion } from '../src/rerank.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Echo', 'Gamma', 'Hotel'] as const;
@@ -187,5 +194,45 @@ describe('fuseLegs', () => {
     expect(() =>
       fuseLegs({ items: ['a'], primary: [0], secondary: [0] }, RERANK_FUSION_PRESETS['beir-ce'])
     ).toThrow(/two-leg fusion/);
+  });
+});
+
+/**
+ * The dense leg's fusion weight is its OWN parameter. It once read
+ * `RERANK_RRF_WEIGHT` by code reuse, which coupled two independently measured
+ * numbers: tuning the reranker moved the hybrid route as a side effect, and
+ * that inheritance published a wrong Phase D conclusion.
+ */
+describe('HYBRID_DENSE_LEG_WEIGHT', () => {
+  const configSource = async (): Promise<string> =>
+    await readFile(fileURLToPath(new URL('../src/config.ts', import.meta.url)), 'utf8');
+
+  it('resolves the dense-leg fusion default to 0.5 when no hybrid weight is named', () => {
+    expect(HYBRID_DENSE_LEG_WEIGHT).toBe(0.5);
+    expect(HYBRID_FUSION.rerankWeight).toBe(HYBRID_DENSE_LEG_WEIGHT);
+
+    const fused = fuseLegs({ items: ['a', 'b'], primary: [0, 1], secondary: [1, 0] }, HYBRID_FUSION);
+
+    expect(fused[0]?.score).toBeCloseTo(0.5 / 21 + 0.5 / 22, 12);
+  });
+
+  it('lets an explicitly named hybrid weight override the default', () => {
+    const overridden = { ...HYBRID_FUSION, rerankWeight: 0.25 };
+
+    const fused = fuseLegs({ items: ['a', 'b'], primary: [0, 1], secondary: [1, 0] }, overridden);
+
+    expect(overridden.rerankWeight).not.toBe(HYBRID_DENSE_LEG_WEIGHT);
+    expect(fused[0]?.item).toBe('a');
+    expect(fused[0]?.score).toBeCloseTo(0.25 / 22 + 0.75 / 21, 12);
+  });
+
+  it('is a SEPARATE binding from RERANK_RRF_WEIGHT, not derived from it', async () => {
+    const source = await configSource();
+    const declaration = source.slice(source.indexOf('export const HYBRID_FUSION'));
+
+    expect(source).toMatch(/export const HYBRID_DENSE_LEG_WEIGHT\s*=\s*0\.5/);
+    expect(declaration).toContain('HYBRID_DENSE_LEG_WEIGHT');
+    expect(declaration.slice(0, declaration.indexOf('}'))).not.toContain('RERANK_RRF_WEIGHT');
+    expect(RERANK_RRF_WEIGHT).toBe(0.5);
   });
 });

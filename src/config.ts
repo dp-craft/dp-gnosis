@@ -240,14 +240,27 @@ export const EMBED_URL_ENV_VAR = 'DP_GNOSIS_EMBED_URL';
 export const EMBED_BATCH_SIZE = 32;
 
 /**
- * The hybrid route's fusion: RRF over the DENSE and LEXICAL legs of one
- * adapter, at the constants the rerank fusion already uses — the two legs are
- * two ranked orders over one pool, exactly the shape `fuseRanking` scores, so
- * the hybrid route reuses that arithmetic rather than introducing a second one.
+ * The DENSE leg's weight in the hybrid fusion; the lexical leg carries
+ * `1 - weight`. Its OWN parameter, deliberately not {@link RERANK_RRF_WEIGHT}:
+ * the two happen to share a value but are measured independently, and reading
+ * one from the other made tuning the reranker move the hybrid route silently.
  *
- * `rerankWeight` names the slot, not the leg: here it is the DENSE leg's weight
- * and the lexical leg carries `1 - weight`. The two legs are weighted EQUALLY
- * because nothing has measured them yet; a measured value replaces this one.
+ * 0.5 is the value EVERY recorded `lancedb-hybrid` row was measured at. A
+ * `--hybrid-weight` sweep measured 0.25 as BETTER on English (first stage
+ * +0.0545, p=0.0008; reranked +0.0324, p=0.0007) and flat over 0.25–0.75 on
+ * Hungarian. The default is deliberately NOT moved: the route is not shipped,
+ * and changing it would make new rows non-comparable with every recorded one.
+ */
+export const HYBRID_DENSE_LEG_WEIGHT = 0.5;
+
+/**
+ * The hybrid route's fusion: RRF over the DENSE and LEXICAL legs of one
+ * adapter — the two legs are two ranked orders over one pool, exactly the shape
+ * `fuseRanking` scores, so the hybrid route reuses that arithmetic rather than
+ * introducing a second one.
+ *
+ * `rerankWeight` names the slot, not the leg: here it carries
+ * {@link HYBRID_DENSE_LEG_WEIGHT}.
  *
  * The DEFAULT, not the only value: a caller sweeping the leg weight passes its
  * own (`LanceDbDenseAdapterOptions.hybridWeight`), which is recorded as a
@@ -257,7 +270,7 @@ export const EMBED_BATCH_SIZE = 32;
 export const HYBRID_FUSION = {
   kind: 'rrf',
   rrfK: RERANK_RRF_K,
-  rerankWeight: RERANK_RRF_WEIGHT,
+  rerankWeight: HYBRID_DENSE_LEG_WEIGHT,
 } as const satisfies RerankFusion;
 
 /**
