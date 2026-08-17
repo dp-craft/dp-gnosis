@@ -504,6 +504,45 @@ describe('createLanceDbAdapter', () => {
     CASE_TIMEOUT_MS
   );
 
+  /**
+   * MEASURED against `@lancedb/lancedb` 0.33.0 with this adapter's exact
+   * `FTS_INDEX_OPTIONS`: without an explicit `maxTokenLength` a 39-char token
+   * HITS while 40 / 41 / 64 / 128 / 734 / 900 all MISS — tantivy's default
+   * silently DROPS them. fts5, the production adapter, has no such cutoff, so
+   * the asymmetry was an unnamed confound in every cross-adapter comparison.
+   * The longest stemmed token measured in a real corpus is 734 (`vault`).
+   */
+  it(
+    'retrieves an atom by a token far longer than the default tantivy cutoff',
+    async () => {
+      const long = `lancedbcutoffprobe${'x'.repeat(78)}`;
+      const longest = `lancedblongestprobe${'y'.repeat(781)}`;
+      writeAtom({ file: 'a.md', id: 'atom-a', body: `alpha ${long} omega ${longest}` });
+      await build();
+
+      expect(long).toHaveLength(96);
+      expect(longest).toHaveLength(800);
+      expect(ids((await port().retrieve(long, { k: 5 })).atoms)).toEqual(['atom-a']);
+      expect(ids((await port().retrieve(longest, { k: 5 })).atoms)).toEqual(['atom-a']);
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  /** Raising the cutoff is ADDITIVE: an ordinary short token is unaffected. */
+  it(
+    'still retrieves ordinary short tokens alongside an over-long one',
+    async () => {
+      const long = `lancedbcutoffprobe${'x'.repeat(78)}`;
+      writeAtom({ file: 'a.md', id: 'atom-a', body: `zustand selector ${long}` });
+      writeAtom({ file: 'b.md', id: 'atom-b', body: 'sqlite fts5 bm25 ranking notes' });
+      await build();
+
+      expect(ids((await port().retrieve('zustand selector', { k: 5 })).atoms)).toEqual(['atom-a']);
+      expect(ids((await port().retrieve('bm25 ranking', { k: 5 })).atoms)).toEqual(['atom-b']);
+    },
+    CASE_TIMEOUT_MS
+  );
+
   it(
     'picks up an index built after the instance exists, so unavailable is not sticky',
     async () => {

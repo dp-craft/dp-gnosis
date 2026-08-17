@@ -98,6 +98,27 @@ const PLACEHOLDER_ROW: Readonly<Record<string, unknown>> = {
 const PLACEHOLDER_PREDICATE = `${ID_FIELD} = ''`;
 
 /**
+ * The one index switch turned ON, and for the OPPOSITE reason to the ones below:
+ * left unset, tantivy's default silently DROPS every token past its cutoff, and
+ * fts5 — the production adapter — has no such cutoff, so the asymmetry is an
+ * unnamed confound in any cross-adapter comparison rather than a normalization
+ * difference.
+ *
+ * DERIVED FROM MEASUREMENT, not chosen. Probed 2026-08-16 against the installed
+ * `@lancedb/lancedb` 0.33.0 with this exact option set: a 39-char token HITS
+ * while 40 / 41 / 64 / 128 / 734 / 900 all MISS; with this value every one HITS.
+ * Longest stemmed token per corpus (`stemText(atom.body)`, whitespace-split,
+ * over the ingested atoms): `vault` 734 (85 tokens ≥40, 10 ≥64, 4 ≥128 — the
+ * longest is an embedded base64 blob), `vault-hu` 26 (ZERO ≥40), `scifact` 40,
+ * `arguana` 40, `nfcorpus` 31. 1024 is the smallest power of two above 734.
+ *
+ * The one recorded `lancedb` baseline survives BY CONSTRUCTION: it is
+ * `vault-hu`, which holds zero tokens of ≥40 characters, so this is a no-op
+ * there. It changes only `vault`, which has no LanceDB baseline to break.
+ */
+const FTS_MAX_TOKEN_LENGTH = 1024;
+
+/**
  * LanceDB's tokenizer is left at `simple` and its OWN normalization is turned
  * off: the text reaching it is already tokenized, diacritic-folded, lowercased
  * and stemmed by `query.ts`, so every switch here would be a SECOND, divergent
@@ -110,6 +131,7 @@ const FTS_INDEX_OPTIONS = {
   removeStopWords: false,
   asciiFolding: false,
   withPosition: true,
+  maxTokenLength: FTS_MAX_TOKEN_LENGTH,
 } as const;
 
 /**
