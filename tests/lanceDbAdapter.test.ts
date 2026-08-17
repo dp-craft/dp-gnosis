@@ -348,6 +348,69 @@ describe('createLanceDbAdapter', () => {
     CASE_TIMEOUT_MS
   );
 
+  /**
+   * The engine is asked for a FIXED pool of `k * FTS_OVERFETCH_FACTOR` rows, so a
+   * filter applied AFTER that truncation starves when every survivor ranks below
+   * the window: here 24 higher-scoring `runner` atoms fill the whole pool and the
+   * two `standards` atoms that the query asks for never enter it.
+   */
+  const starvedPoolCorpus = (): void => {
+    const loud = 'widget widget widget widget widget widget widget widget';
+    const quiet = ['widget', ...Array.from({ length: 120 }, (_, n) => `filler${n}`)].join(' ');
+    Array.from({ length: 24 }, (_, n) => n).forEach(n => {
+      writeAtom({ file: `r${n}.md`, id: `atom-r${n}`, domain: 'runner', body: loud });
+    });
+    writeAtom({ file: 's0.md', id: 'atom-s0', domain: 'standards', type: 'adr', body: quiet });
+    writeAtom({ file: 's1.md', id: 'atom-s1', domain: 'standards', type: 'adr', body: quiet });
+  };
+
+  it(
+    'returns k domain-filtered atoms when every survivor ranks below the candidate pool',
+    async () => {
+      starvedPoolCorpus();
+      await build();
+
+      const result = await port().retrieve('widget', { k: 2, domain: 'standards' });
+
+      expect(ids(result.atoms)).toEqual(['atom-s0', 'atom-s1']);
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  it(
+    'returns k type-filtered atoms when every survivor ranks below the candidate pool',
+    async () => {
+      starvedPoolCorpus();
+      await build();
+
+      const result = await port().retrieve('widget', { k: 2, types: ['adr'] });
+
+      expect(ids(result.atoms)).toEqual(['atom-s0', 'atom-s1']);
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  /**
+   * The regression contract for the pool escalation: an UNFILTERED query is the
+   * only shape every recorded benchmark row uses, so it MUST keep asking the
+   * engine for one pool of the same size and rank its answer identically.
+   */
+  it(
+    'ranks an unfiltered query by score then id, unchanged by the filtered-pool escalation',
+    async () => {
+      writeAtom({ file: 'a.md', id: 'atom-a', body: 'widget widget widget' });
+      writeAtom({ file: 'b.md', id: 'atom-b', body: 'widget widget alpha' });
+      writeAtom({ file: 'c.md', id: 'atom-c', body: 'widget alpha beta' });
+      writeAtom({ file: 'd.md', id: 'atom-d', domain: 'standards', body: 'alpha beta gamma' });
+      await build();
+
+      const result = await port().retrieve('widget', { k: 3 });
+
+      expect(ids(result.atoms)).toEqual(['atom-a', 'atom-b', 'atom-c']);
+    },
+    CASE_TIMEOUT_MS
+  );
+
   it(
     'excludes foreign-type atoms when a type filter is set',
     async () => {
@@ -674,6 +737,77 @@ describe('createLanceDbAdapter', () => {
       expect(result.indexState).toBe('unavailable');
       expect(result.atoms).toEqual([]);
       expect(await reloaded.buildLanceDbIndex({ atomsDir, indexDir })).toBe(false);
+      vi.doUnmock('@lancedb/lancedb');
+      vi.resetModules();
+    },
+    CASE_TIMEOUT_MS
+  );
+
+  /**
+   * Two FIRST callers each find the handle cell empty and each enter the open
+   * path, whose `release` closes the connection its sibling is mid-use on. The
+   * open MUST be single-flight: one connect, and no close while a caller holds it.
+   * The dependency is faked so the connect/close counts are observable at all.
+   */
+  it(
+    'opens the dataset once when two first callers retrieve concurrently',
+    async () => {
+      writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selector stability' });
+      mkdirSync(indexDir, { recursive: true });
+      const calls = { connect: 0, close: 0 };
+      let openGate = (): void => undefined;
+      let announceEntry = (): void => undefined;
+      const gate = new Promise<void>(resolve => {
+        openGate = resolve;
+      });
+      const entered = new Promise<void>(resolve => {
+        announceEntry = resolve;
+      });
+      const table = {
+        countRows: (): Promise<number> => Promise.resolve(1),
+        query: (): unknown => ({
+          fullTextSearch: (): unknown => ({
+            limit: (): unknown => ({
+              toArray: (): Promise<readonly unknown[]> =>
+                Promise.resolve([{ id: 'atom-a', path: 'a.md', _score: 1 }]),
+            }),
+          }),
+        }),
+      };
+      vi.doMock('@lancedb/lancedb', () => ({
+        connect: async (): Promise<unknown> => {
+          calls.connect += 1;
+          announceEntry();
+          await gate;
+          return {
+            openTable: (): Promise<unknown> => Promise.resolve(table),
+            close: (): void => {
+              calls.close += 1;
+            },
+          };
+        },
+      }));
+      vi.resetModules();
+      const reloaded = await import('../src/adapters/lanceDbAdapter.js');
+      const instance = reloaded.createLanceDbAdapter({ atomsDir, indexDir, now: NOW });
+
+      // Deterministic interleaving: the second caller starts only once the first
+      // is provably suspended INSIDE the open, and a macrotask boundary then
+      // drains every pending microtask so the second has reached its own open
+      // attempt before either can complete.
+      const first = instance.retrieve('zustand', { k: 5 });
+      await entered;
+      const second = instance.retrieve('zustand', { k: 5 });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      openGate();
+      const results = await Promise.all([first, second]);
+
+      expect(calls.connect).toBe(1);
+      expect(results.map(result => ids(result.atoms))).toEqual([['atom-a'], ['atom-a']]);
+      instance.close?.();
+      // Every connection opened is one the port still holds and can close — a
+      // second, orphaned connection would leave this short.
+      expect(calls.close).toBe(calls.connect);
       vi.doUnmock('@lancedb/lancedb');
       vi.resetModules();
     },

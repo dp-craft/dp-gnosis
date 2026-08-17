@@ -251,6 +251,56 @@ describe('createMiniSearchAdapter', () => {
     expect(ids(result.atoms)).toEqual(['atom-b']);
   });
 
+  /**
+   * The same starved-pool shape the LanceDB adapter is asserted against: 24
+   * higher-scoring `runner` atoms ahead of the two `standards` atoms the query
+   * asks for. A filter applied after a truncated candidate pool would return
+   * nothing here.
+   */
+  const starvedPoolCorpus = (): void => {
+    const loud = 'widget widget widget widget widget widget widget widget';
+    const quiet = ['widget', ...Array.from({ length: 120 }, (_, n) => `filler${n}`)].join(' ');
+    Array.from({ length: 24 }, (_, n) => n).forEach(n => {
+      writeAtom({ file: `r${n}.md`, id: `atom-r${n}`, domain: 'runner', body: loud });
+    });
+    writeAtom({ file: 's0.md', id: 'atom-s0', domain: 'standards', type: 'adr', body: quiet });
+    writeAtom({ file: 's1.md', id: 'atom-s1', domain: 'standards', type: 'adr', body: quiet });
+  };
+
+  it('returns k domain-filtered atoms when every survivor ranks below the top hits', async () => {
+    starvedPoolCorpus();
+    await build();
+
+    const result = await port().retrieve('widget', { k: 2, domain: 'standards' });
+
+    expect(ids(result.atoms)).toEqual(['atom-s0', 'atom-s1']);
+  });
+
+  it('returns k type-filtered atoms when every survivor ranks below the top hits', async () => {
+    starvedPoolCorpus();
+    await build();
+
+    const result = await port().retrieve('widget', { k: 2, types: ['adr'] });
+
+    expect(ids(result.atoms)).toEqual(['atom-s0', 'atom-s1']);
+  });
+
+  /**
+   * The regression contract: an UNFILTERED query is the shape every recorded
+   * benchmark row uses, so its ranking MUST be unchanged by any survivor-walk.
+   */
+  it('ranks an unfiltered query by score then id, unchanged by the survivor walk', async () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'widget widget widget' });
+    writeAtom({ file: 'b.md', id: 'atom-b', body: 'widget widget alpha' });
+    writeAtom({ file: 'c.md', id: 'atom-c', body: 'widget alpha beta' });
+    writeAtom({ file: 'd.md', id: 'atom-d', domain: 'standards', body: 'alpha beta gamma' });
+    await build();
+
+    const result = await port().retrieve('widget', { k: 3 });
+
+    expect(ids(result.atoms)).toEqual(['atom-a', 'atom-b', 'atom-c']);
+  });
+
   it('excludes foreign-type atoms when a type filter is set', async () => {
     writeAtom({ file: 'a.md', id: 'atom-a', type: 'knowledge', body: 'shared token here' });
     writeAtom({ file: 'b.md', id: 'atom-b', type: 'adr', body: 'shared token here' });

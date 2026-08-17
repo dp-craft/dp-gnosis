@@ -474,9 +474,17 @@ const openIndex = async (lance: LanceModule, indexDir: string): Promise<OpenInde
  * calls. Connecting and opening the table is REAL per-call cost, and paying it
  * inside `retrieve` would make the benchmark's warm regime a second measurement
  * of the cold regime.
+ *
+ * `opening` is the SINGLE-FLIGHT guard. Without it, two callers arriving before
+ * the first open finished each saw an empty `open` and each entered `reopen`,
+ * whose `release` closes the connection its sibling is mid-use on — the loser's
+ * handle is orphaned and its query answers from a closed dataset. Every caller
+ * that arrives while an open is in flight now awaits that SAME promise, so the
+ * cell can hold at most one connection at a time.
  */
 interface HandleCell {
   open: OpenIndex | undefined;
+  opening: Promise<OpenIndex> | undefined;
 }
 
 const release = (cell: HandleCell): void => {
@@ -484,15 +492,36 @@ const release = (cell: HandleCell): void => {
   cell.open = undefined;
 };
 
-const reopen = async (
+/** The in-flight open landed: it becomes the cell's handle and stops being shared. */
+const settle = (cell: HandleCell, opened: OpenIndex): OpenIndex => {
+  cell.open = opened;
+  cell.opening = undefined;
+  return opened;
+};
+
+/** A failed open MUST NOT stay in flight, or every later caller inherits its failure. */
+const forget = (cell: HandleCell, error: unknown): never => {
+  cell.opening = undefined;
+  throw error;
+};
+
+/**
+ * Publishes the in-flight promise BEFORE it can settle — the assignment happens
+ * in the same synchronous turn as the `openIndex` call, so no caller can slip
+ * between the two and start a second open.
+ */
+const reopen = (
   cell: HandleCell,
   lance: LanceModule,
   indexDir: string
 ): Promise<OpenIndex> => {
   release(cell);
-  const opened = await openIndex(lance, indexDir);
-  cell.open = opened;
-  return opened;
+  const opening = openIndex(lance, indexDir).then(
+    opened => settle(cell, opened),
+    (error: unknown) => forget(cell, error)
+  );
+  cell.opening = opening;
+  return opening;
 };
 
 const acquire = (
@@ -503,7 +532,7 @@ const acquire = (
   const current = cell.open;
   return current !== undefined && current.identity === identityOf(indexDir)
     ? Promise.resolve(current)
-    : reopen(cell, lance, indexDir);
+    : cell.opening ?? reopen(cell, lance, indexDir);
 };
 
 /**
@@ -524,7 +553,7 @@ const openOrSkip = (
 
 interface IndexSnapshot {
   readonly count: number;
-  readonly rows: readonly unknown[];
+  readonly atoms: readonly RetrievedAtom[];
 }
 
 /** One retrieval call's inputs, kept together so no helper takes four arguments. */
@@ -533,20 +562,72 @@ interface SearchRequest {
   readonly opts: RetrieveOptions;
 }
 
-const queryRows = (table: Table, request: SearchRequest): Promise<readonly unknown[]> => {
+const queryRows = (
+  table: Table,
+  request: SearchRequest,
+  limit: number
+): Promise<readonly unknown[]> => {
   const match = toMatchExpression(request.query);
   return match === undefined
     ? Promise.resolve([])
-    : table
-        .query()
-        .fullTextSearch(match)
-        .limit(request.opts.k * FTS_OVERFETCH_FACTOR)
-        .toArray();
+    : table.query().fullTextSearch(match).limit(limit).toArray();
 };
 
-const snapshotOf = async (index: OpenIndex, request: SearchRequest): Promise<IndexSnapshot> => ({
+/** The candidate pool ONE fetch asks the engine for. */
+const poolSize = (opts: RetrieveOptions): number => opts.k * FTS_OVERFETCH_FACTOR;
+
+/**
+ * Whether the request narrows the pool AFTER the engine truncated it. That is
+ * the only shape that can starve — every domain/type survivor may rank below the
+ * first `k * FTS_OVERFETCH_FACTOR` rows — and therefore the only shape that
+ * escalates. An unfiltered query takes exactly one fetch of exactly the old
+ * size, so every recorded benchmark row re-runs byte-identically.
+ */
+const isFiltered = (opts: RetrieveOptions): boolean =>
+  opts.domain !== undefined || opts.types !== undefined;
+
+/**
+ * Widen the candidate pool until the answer is settled — `k` survivors are held,
+ * or the engine returned fewer rows than asked for and so has no more to give.
+ * Same contract as `readUntilSettled` in the FTS5 adapter, which walks rows
+ * instead of pools because SQLite hands it the whole ranked list at once; here
+ * the engine owns the truncation, so the pool is what grows.
+ */
+interface PoolWalk {
+  readonly index: OpenIndex;
+  readonly request: SearchRequest;
+  readonly limit: number;
+}
+
+const readUntilSettled = async (
+  options: LanceDbAdapterOptions,
+  walk: PoolWalk
+): Promise<readonly RetrievedAtom[]> => {
+  const rows = await queryRows(walk.index.table, walk.request, walk.limit);
+  const atoms = selectAtoms(options, rows, walk.request.opts);
+  return atoms.length >= walk.request.opts.k || rows.length < walk.limit
+    ? atoms
+    : readUntilSettled(options, { ...walk, limit: walk.limit * 2 });
+};
+
+const selectFromIndex = (
+  options: LanceDbAdapterOptions,
+  index: OpenIndex,
+  request: SearchRequest
+): Promise<readonly RetrievedAtom[]> =>
+  isFiltered(request.opts)
+    ? readUntilSettled(options, { index, request, limit: poolSize(request.opts) })
+    : queryRows(index.table, request, poolSize(request.opts)).then(rows =>
+        selectAtoms(options, rows, request.opts)
+      );
+
+const snapshotOf = async (
+  options: LanceDbAdapterOptions,
+  index: OpenIndex,
+  request: SearchRequest
+): Promise<IndexSnapshot> => ({
   count: await index.table.countRows(),
-  rows: await queryRows(index.table, request),
+  atoms: await selectFromIndex(options, index, request),
 });
 
 /**
@@ -568,12 +649,8 @@ interface LanceDbInstance {
   readonly corpus: CorpusCell;
 }
 
-const describeResult = (
-  self: LanceDbInstance,
-  snapshot: IndexSnapshot,
-  opts: RetrieveOptions
-): RetrievalResult => ({
-  atoms: selectAtoms(self.options, snapshot.rows, opts),
+const describeResult = (self: LanceDbInstance, snapshot: IndexSnapshot): RetrievalResult => ({
+  atoms: snapshot.atoms,
   mode: LANCEDB_MODE,
   indexState: resolveState(self, snapshot.count),
 });
@@ -586,7 +663,7 @@ const search = async (
   const index = await openOrSkip(self.cell, lance, self.options.indexDir);
   return index === undefined
     ? UNAVAILABLE
-    : describeResult(self, await snapshotOf(index, request), request.opts);
+    : describeResult(self, await snapshotOf(self.options, index, request));
 };
 
 const canSearch = (options: LanceDbAdapterOptions): boolean =>
@@ -615,7 +692,7 @@ const retrieveFrom = async (
 export const createLanceDbAdapter = (options: LanceDbAdapterOptions): KnowledgePort => {
   const self: LanceDbInstance = {
     options,
-    cell: { open: undefined },
+    cell: { open: undefined, opening: undefined },
     corpus: { newestMs: undefined },
   };
   return {
