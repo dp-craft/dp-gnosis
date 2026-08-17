@@ -15,6 +15,7 @@ stay comparable across a chunker change.
 ./bench.sh --rerank             # add the reranker arm (see the caveat below)
 ./bench.sh --rerank-model <id>  # which cross-encoder to call; requires --rerank
 ./bench.sh --analyzer <id>      # which analysis chain builds AND queries; fts5 only
+./bench.sh --adapter lancedb-hybrid --hybrid-weight 0.25   # dense leg's share of the LEG fusion
 ./bench.sh --compare            # print the delta against the previous run
 ./bench.sh --per-topic          # also write per-topic TSVs for a paired test
 ```
@@ -23,6 +24,10 @@ stay comparable across a chunker change.
 root. Exit 0 means every selected dataset ran and was recorded; non-zero means
 at least one failed — the rest are still recorded, because a partial run must
 never look complete.
+
+**`--hybrid-weight <w>`** applies to `lancedb-hybrid` / `lancedb-hybrid-full` only — `0` pure lexical, `1` pure dense. An out-of-range or non-numeric value FAILS loudly naming the range; it is never clamped. It is recorded as a **TREATMENT** field, so `--compare` labels a weight change `ARM COMPARISON` rather than subtracting it. It is **NOT** `--rerank-weight`: those are two different fusions (leg↔leg vs reranker↔first-pass), and conflating them confounds any sweep.
+
+**Its default (0.5) is measured-suboptimal on English** — `w=0.25` scored +0.0545 nDCG@10 first-stage (p=0.0008, selection-uncorrected) and +0.0324 reranked (p=0.0007). The default is deliberately unchanged because every recorded `lancedb-hybrid` row was measured at 0.5. Pass the flag explicitly. `GNOSIS-BASELINES.md` § Phase D addendum.
 
 A dataset is fetched on first use and never again: the fetchers key on
 `data/<id>/corpus.jsonl`, so re-running costs no network. Delete that directory
