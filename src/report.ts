@@ -66,6 +66,12 @@ export interface RunProvenance {
    */
   readonly rerankModel?: string | undefined;
   /**
+   * The DENSE leg's weight in the hybrid route's LEG fusion. Absent on a run
+   * that named none, which `compare.ts` reads as the shipped `HYBRID_FUSION`
+   * weight — the value every recorded hybrid row was measured under.
+   */
+  readonly hybridWeight?: number | undefined;
+  /**
    * The analysis chain the index was BUILT with. Required, unlike the rerank
    * fields: every run has an analyzer whether or not it named one, and a row that
    * omitted it could never be told apart from one measured on another chain.
@@ -174,6 +180,14 @@ export interface HistoryRow extends Metrics {
    * which is how `compare.ts` reads an absent one.
    */
   readonly rerankModel?: string;
+  /**
+   * The DENSE leg's weight this row's hybrid fusion ran at — TREATMENT
+   * provenance (`compare.ts`), so a swept weight is labelled an arm comparison
+   * instead of being subtracted. Absent on every row that named none; those all
+   * fused at the engine's shipped `HYBRID_FUSION` weight, which is how
+   * `compare.ts` reads an absent one.
+   */
+  readonly hybridWeight?: number;
   /**
    * The analysis chain this row was measured under — TREATMENT provenance
    * (`compare.ts`), so an analyzer change is labelled an arm comparison instead
@@ -344,6 +358,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   rerankProfile: provenance.rerankProfile,
   rerankWeight: provenance.rerankWeight,
   rerankModel: provenance.rerankModel,
+  hybridWeight: provenance.hybridWeight,
   analyzer: provenance.analyzer,
   ...descriptorFields(result),
   ...costFields(result),

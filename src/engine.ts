@@ -38,13 +38,20 @@ import Database from 'better-sqlite3';
 
 import { buildFts5Index } from '../../dp-gnosis/src/adapters/fts5Adapter.js';
 import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.js';
-import { buildLanceDbDenseIndex } from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
+import {
+  buildLanceDbDenseIndex,
+  createLanceDbDenseAdapter,
+  type DenseRoute
+} from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
 import { createLinearScanAdapter } from '../../dp-gnosis/src/adapters/linearScanAdapter.js';
 import { buildMiniSearchIndex } from '../../dp-gnosis/src/adapters/miniSearchAdapter.js';
 import { parseAtom } from '../../dp-gnosis/src/atom.js';
 import {
   type AdapterName,
   createPort,
+  DENSE_ROUTES,
+  type DenseAdapterName,
+  denseRouteOf,
   hasPersistentIndex
 } from '../../dp-gnosis/src/cli/adapter.js';
 import type { RerankFusion } from '../../dp-gnosis/src/config.js';
@@ -345,6 +352,11 @@ const INDEX_SUFFIXES: Readonly<Record<AdapterName, string>> = {
   lancedb: '-lancedb',
   'lancedb-vec': '-lancedb-vec',
   'lancedb-hybrid': '-lancedb-hybrid',
+  // The ONE shared stem, and the same exception `cli/adapter.ts` states: the two
+  // hybrid routes build byte-identical trees and differ only in what they do
+  // with the fused order, so sharing keeps the embedding sidecar warm across the
+  // pair instead of re-embedding the corpus for the second arm.
+  'lancedb-hybrid-full': '-lancedb-hybrid',
 };
 
 interface IndexLocation {
@@ -360,6 +372,23 @@ const buildRefusedMessage = (adapter: AdapterName, datasetId: string): string =>
 const requireBuilt = (built: boolean, adapter: AdapterName, datasetId: string): void => {
   if (!built) fail(buildRefusedMessage(adapter, datasetId), ADAPTER_INDEX_CAUSE);
 };
+
+/**
+ * One dense builder per NAME, with the leg taken from the engine's own
+ * `DENSE_ROUTES` — the bench never restates which leg a name opens.
+ */
+const buildDense =
+  (adapter: DenseAdapterName) =>
+    async (location: IndexLocation, datasetId: string): Promise<void> =>
+      requireBuilt(
+        await buildLanceDbDenseIndex({
+          atomsDir: location.atomsDir,
+          indexDir: location.indexPath,
+          route: DENSE_ROUTES[adapter],
+        }),
+        adapter,
+        datasetId
+      );
 
 /**
  * One builder per adapter, total over the vocabulary so a new adapter cannot be
@@ -379,26 +408,9 @@ const INDEX_BUILDERS: Readonly<
       'lancedb',
       datasetId
     ),
-  'lancedb-vec': async (location, datasetId): Promise<void> =>
-    requireBuilt(
-      await buildLanceDbDenseIndex({
-        atomsDir: location.atomsDir,
-        indexDir: location.indexPath,
-        route: 'vec',
-      }),
-      'lancedb-vec',
-      datasetId
-    ),
-  'lancedb-hybrid': async (location, datasetId): Promise<void> =>
-    requireBuilt(
-      await buildLanceDbDenseIndex({
-        atomsDir: location.atomsDir,
-        indexDir: location.indexPath,
-        route: 'hybrid',
-      }),
-      'lancedb-hybrid',
-      datasetId
-    ),
+  'lancedb-vec': buildDense('lancedb-vec'),
+  'lancedb-hybrid': buildDense('lancedb-hybrid'),
+  'lancedb-hybrid-full': buildDense('lancedb-hybrid-full'),
 };
 
 const missingArtefactMessage = (adapter: AdapterName, indexPath: string): string =>
@@ -499,6 +511,14 @@ export interface PortOptions {
    * `sweep.ts`, whose cells differ in nothing else.
    */
   readonly cacheCorpusScan?: boolean | undefined;
+  /**
+   * The DENSE leg's weight for a hybrid route, `0` = pure lexical and `1` = pure
+   * dense. Absent means the engine's `HYBRID_FUSION`, which is what every
+   * recorded hybrid row was measured under. Only a hybrid adapter reads it; the
+   * flag that carries it refuses on any other, so a row can never name a leg
+   * weight nothing fused with.
+   */
+  readonly hybridWeight?: number | undefined;
 }
 
 /** The default: the adapter under measurement in `run.ts`. */
@@ -543,14 +563,46 @@ const assertPreparedFor = (prepared: PreparedDataset, requested: AdapterName): v
  * so a port per query would pay that cost per topic. The caller closes it
  * (`port.close?.()`) when the dataset is done.
  */
+/**
+ * The dense counterpart of `openLinearPort`, and for the same reason: `createPort`
+ * takes no tuning arguments, so a measured leg weight reaches the adapter through
+ * the SAME factory `createPort` would use, with the parameter attached. The leg
+ * itself comes from the engine's `DENSE_ROUTES`, never from a local table.
+ */
+const openDensePort = (
+  prepared: PreparedDataset,
+  route: DenseRoute,
+  hybridWeight: number
+): KnowledgePort =>
+  createLanceDbDenseAdapter({
+    atomsDir: prepared.atomsDir,
+    indexDir: prepared.indexPath,
+    route,
+    now: new Date(),
+    hybridWeight,
+  });
+
+/** The ports that need a parameter attached; `undefined` means the plain path. */
+const openTunedPort = (
+  prepared: PreparedDataset,
+  options: PortOptions
+): KnowledgePort | undefined => {
+  if (options.adapter === 'linear') return openLinearPort(prepared, options);
+  const route = denseRouteOf(options.adapter);
+  return route === undefined || options.hybridWeight === undefined
+    ? undefined
+    : openDensePort(prepared, route, options.hybridWeight);
+};
+
 export const openPort = (
   prepared: PreparedDataset,
   options: PortOptions = DEFAULT_PORT_OPTIONS
 ): KnowledgePort => {
   assertPreparedFor(prepared, options.adapter);
-  return options.adapter === 'linear'
-    ? openLinearPort(prepared, options)
-    : createPort(options.adapter, prepared.atomsDir, prepared.indexPath);
+  return (
+    openTunedPort(prepared, options) ??
+    createPort(options.adapter, prepared.atomsDir, prepared.indexPath)
+  );
 };
 
 /** How many of the dataset's own topics the post-open probe asks the port. */
@@ -648,6 +700,16 @@ export const probePortSoundness = async (request: PortProbeRequest): Promise<voi
 /**
  * The measured call. `rawQueryText` is the dataset's query VERBATIM — the same
  * string `retrieveCommand` hands the port.
+ *
+ * A port that reports an un-truncated pool (`lancedb-hybrid-full`) is measured on
+ * THAT pool: it is the candidate set the arm exists to hand the reranker, and its
+ * head is `result.atoms` by construction, so a BM25-only arm over the same port
+ * scores exactly what it scored before. Every other port reports no pool and is
+ * read as it always was. The realised pool SIZE is `result.poolAtoms.length` —
+ * it varies with the query and with how much the two legs overlapped, is bounded
+ * by `2 * depth` (a union of two top-`depth` lists) and lands near `1.55 *
+ * depth` on the real corpora. A reranker arm therefore costs ~1.5× a plain one,
+ * not ~16×.
  */
 export const retrieveDocs = async (
   port: KnowledgePort,
@@ -655,7 +717,7 @@ export const retrieveDocs = async (
   depth: number
 ): Promise<readonly RetrievedAtom[]> => {
   const result = await port.retrieve(rawQueryText, { k: depth });
-  return result.atoms;
+  return result.poolAtoms ?? result.atoms;
 };
 
 /**

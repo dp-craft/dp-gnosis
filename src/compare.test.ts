@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import { HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   compareAll,
@@ -11,6 +11,9 @@ import {
   TREATMENT_FIELDS
 } from './compare.js';
 import type { HistoryRow } from './report.js';
+
+/** The shipped DENSE leg weight — what an absent `hybridWeight` on a row means. */
+const HYBRID_FUSION_WEIGHT: number = HYBRID_FUSION.rerankWeight;
 
 const row = (overrides: Partial<HistoryRow>): HistoryRow => ({
   ts: '2026-08-14T09:30:00.000Z',
@@ -118,6 +121,36 @@ describe('compareLastTwo', () => {
     expect(TREATMENT_FIELDS).toContain('rerankProfile');
     expect(TREATMENT_FIELDS).toContain('rerankWeight');
     expect(PROVENANCE_FIELDS).toEqual([...SCALE_FIELDS, ...TREATMENT_FIELDS]);
+  });
+
+  it('guards the HYBRID leg weight as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('hybridWeight');
+    expect(SCALE_FIELDS).not.toContain('hybridWeight');
+  });
+
+  it('COMPARES a hybrid leg weight change as an arm comparison', () => {
+    const result = compareLastTwo(
+      [
+        row({ adapter: 'lancedb-hybrid' }),
+        row({ gitSha: 'bbb2222', adapter: 'lancedb-hybrid', hybridWeight: 0.8 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['hybridWeight']);
+  });
+
+  /** An absent weight IS the shipped one, so naming it explicitly is not an arm. */
+  it('reads an ABSENT hybrid weight as the shipped leg weight', () => {
+    const result = compareLastTwo(
+      [
+        row({ adapter: 'lancedb-hybrid' }),
+        row({ gitSha: 'bbb2222', adapter: 'lancedb-hybrid', hybridWeight: HYBRID_FUSION_WEIGHT }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
   });
 
   it('guards the analyzer as a TREATMENT, never as a measuring scale', () => {

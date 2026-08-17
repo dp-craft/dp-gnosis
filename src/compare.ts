@@ -17,6 +17,7 @@
  * | treatment | `adapter` | a different engine path — the thing an A/B run exists to compare |
  * | treatment | `rerank` | a second-stage model in the loop, or not |
  * | treatment | `rerankProfile` / `rerankWeight` | a different FUSION rule over the same two orders |
+ * | treatment | `hybridWeight` | a different WEIGHT on the hybrid route's two LEGS — a second fusion |
  * | treatment | `rerankModel` | a different CROSS-ENCODER producing the reranked order |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  *
@@ -28,7 +29,7 @@
  * `gitSha` and `ts` are deliberately NOT guarded: a changed engine commit is
  * precisely the thing a delta is supposed to measure.
  */
-import { RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import { HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { HistoryRow } from './report.js';
 
@@ -49,6 +50,7 @@ export const TREATMENT_FIELDS = [
   'rerankProfile',
   'rerankWeight',
   'rerankModel',
+  'hybridWeight',
   'analyzer',
 ] as const;
 
@@ -141,10 +143,14 @@ export type Comparison =
  *
  * `rerankModel` follows it: every row recorded before the model was selectable
  * was scored by `RERANK_MODEL_ID`, the only reranker the engine ever called.
+ * `hybridWeight` likewise: every row recorded before the leg weight was
+ * settable fused at `HYBRID_FUSION`'s weight, and it applies to every row alike,
+ * so a non-hybrid pair still compares equal on it.
  */
-const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string>> = {
+const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number>> = {
   analyzer: DEFAULT_ANALYZER,
   rerankModel: RERANK_MODEL_ID,
+  hybridWeight: HYBRID_FUSION.rerankWeight,
 };
 
 const valueOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>

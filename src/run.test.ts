@@ -175,6 +175,59 @@ describe('parseArgs', () => {
       /beir-ce/
     );
   });
+
+  it('reads --hybrid-weight as the DENSE leg weight of the hybrid route fusion', () => {
+    expect(parseArgs(['--adapter', 'lancedb-hybrid', '--hybrid-weight', '0.8']).hybridWeight).toBe(
+      0.8
+    );
+    expect(
+      parseArgs(['--adapter', 'lancedb-hybrid-full', '--hybrid-weight', '0']).hybridWeight
+    ).toBe(0);
+  });
+
+  it('defaults --hybrid-weight to unset, which is the shipped leg fusion', () => {
+    expect(parseArgs([]).hybridWeight).toBeUndefined();
+    expect(parseArgs(['--adapter', 'lancedb-hybrid']).hybridWeight).toBeUndefined();
+  });
+
+  it('FAILS LOUDLY on an out-of-range --hybrid-weight, naming the flag and the range', () => {
+    const argv = ['--adapter', 'lancedb-hybrid', '--hybrid-weight', '1.5'];
+    expect(() => parseArgs(argv)).toThrow(/--hybrid-weight/);
+    expect(() => parseArgs(argv)).toThrow(/1\.5/);
+    expect(() => parseArgs(argv)).toThrow(/0.*1/);
+    expect(() => parseArgs(['--adapter', 'lancedb-hybrid', '--hybrid-weight', '-0.1'])).toThrow(
+      /--hybrid-weight/
+    );
+    expect(() => parseArgs(['--adapter', 'lancedb-hybrid', '--hybrid-weight', 'half'])).toThrow(
+      /half/
+    );
+  });
+
+  /**
+   * It is a TREATMENT field, so a row carrying it on an adapter that fuses no
+   * legs would label an arm the run never measured.
+   */
+  it('REFUSES --hybrid-weight on an adapter with no leg fusion, naming both', () => {
+    const argv = ['--adapter', 'fts5', '--hybrid-weight', '0.8'];
+    expect(() => parseArgs(argv)).toThrow(/--hybrid-weight/);
+    expect(() => parseArgs(argv)).toThrow(/fts5/);
+    expect(() => parseArgs(argv)).toThrow(/lancedb-hybrid/);
+  });
+
+  it('leaves the RERANK fusion weight untouched — two fusions, two flags', () => {
+    const options = parseArgs([
+      '--adapter',
+      'lancedb-hybrid',
+      '--hybrid-weight',
+      '0.8',
+      '--rerank',
+      '--rerank-weight',
+      '0.2',
+    ]);
+    expect(options.hybridWeight).toBe(0.8);
+    expect(options.rerankWeight).toBe(0.2);
+    expect(options.rerankFusion).toEqual({ kind: 'rrf', rrfK: RERANK_RRF_K, rerankWeight: 0.2 });
+  });
 });
 
 describe('percentileMs', () => {
@@ -310,6 +363,12 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
 
   it('records NO model on a run that did not rerank', () => {
     expect(provenanceOf(parseArgs([]), 'sha').rerankModel).toBeUndefined();
+  });
+
+  it('records the hybrid leg weight, so a swept weight is never silent', () => {
+    const argv = ['--adapter', 'lancedb-hybrid', '--hybrid-weight', '0.8'];
+    expect(provenanceOf(parseArgs(argv), 'sha').hybridWeight).toBe(0.8);
+    expect(provenanceOf(parseArgs([]), 'sha').hybridWeight).toBeUndefined();
   });
 });
 

@@ -30,9 +30,12 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { fusesLegs } from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
 import {
+  ADAPTER_NAMES,
   adapterError,
   type AdapterName,
+  denseRouteOf,
   resolveAdapter
 } from '../../dp-gnosis/src/cli/adapter.js';
 import {
@@ -119,6 +122,13 @@ export interface CliOptions {
   readonly rerankProfile: string;
   /** A raw weight override on the named preset; `undefined` means the preset's own. */
   readonly rerankWeight: number | undefined;
+  /**
+   * The DENSE leg's weight in the HYBRID route's leg fusion — a different fusion
+   * from `rerankWeight`'s, over different orders, so the two flags stay separate.
+   * `undefined` means the engine's shipped `HYBRID_FUSION`, which is what every
+   * recorded hybrid row was measured under.
+   */
+  readonly hybridWeight: number | undefined;
   /**
    * The cross-encoder MODEL the rerank arm scores with; `undefined` means the
    * engine's shipped `RERANK_MODEL_ID`, which every recorded run used. Recorded
@@ -209,6 +219,55 @@ const checkAnalyzerAdapter = (adapter: AdapterName, analyzer: AnalyzerId): Analy
   );
 };
 
+/**
+ * The adapters that fuse two legs, DERIVED from the engine's own route table and
+ * its own `fusesLegs` rule — the bench states no adapter list of its own.
+ */
+const HYBRID_ADAPTERS: readonly AdapterName[] = ADAPTER_NAMES.filter(name => {
+  const route = denseRouteOf(name);
+  return route !== undefined && fusesLegs(route);
+});
+
+/** The two ends of the leg-fusion weight: pure lexical, and pure dense. */
+const HYBRID_WEIGHT_MIN = 0;
+const HYBRID_WEIGHT_MAX = 1;
+
+const HYBRID_WEIGHT_FLAG = '--hybrid-weight';
+
+const hybridRangeText = `${HYBRID_WEIGHT_MIN} (pure lexical) to ${HYBRID_WEIGHT_MAX} (pure dense)`;
+
+/**
+ * A weight outside `0…1` is a usage error, NOT something to clamp: a clamped
+ * sweep point records the weight it was ASKED for while measuring another, so
+ * two cells of one sweep would carry the same number under different labels.
+ */
+const parseHybridWeight = (value: string | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  const weight = Number(value);
+  if (weight >= HYBRID_WEIGHT_MIN && weight <= HYBRID_WEIGHT_MAX) return weight;
+  throw new Error(
+    `dp-gnosis-bench: ${HYBRID_WEIGHT_FLAG} expects a number from ${hybridRangeText}, ` +
+      `got "${value}"`
+  );
+};
+
+/**
+ * `--hybrid-weight` on an adapter that fuses no legs REFUSES, exactly as
+ * `--analyzer` does off `fts5`: it is a TREATMENT field, so the row would name a
+ * leg weight nothing ever fused with.
+ */
+const checkHybridWeightAdapter = (
+  adapter: AdapterName,
+  weight: number | undefined
+): number | undefined => {
+  if (weight === undefined || HYBRID_ADAPTERS.includes(adapter)) return weight;
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" fuses no legs, so ${HYBRID_WEIGHT_FLAG} ` +
+      `"${String(weight)}" would be recorded as a treatment it never applied — ` +
+      `use ${HYBRID_ADAPTERS.join(' or ')}`
+  );
+};
+
 /** A weight that is not a number would be measured as `NaN` and recorded as a run. */
 const parseRerankWeight = (value: string | undefined): number | undefined => {
   if (value === undefined) return undefined;
@@ -263,6 +322,10 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     rerankWeight,
     rerankModel: parseRerankModel(flagValue(argv, '--rerank-model'), rerank),
     rerankFusion: parseRerankFusion(rerankProfile, rerankWeight),
+    hybridWeight: checkHybridWeightAdapter(
+      adapter,
+      parseHybridWeight(flagValue(argv, HYBRID_WEIGHT_FLAG))
+    ),
     analyzer: checkAnalyzerAdapter(adapter, parseAnalyzer(flagValue(argv, '--analyzer'))),
   };
 };
@@ -514,7 +577,10 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
   // Before the dataset's FIRST rerank call, and before the port exists — a
   // refusal here has nothing to close. It doubles as the cold-load warm-up.
   if (options.rerank) await assertRerankDiscriminates({ model: options.rerankModel });
-  const port = openPort(prepared, { adapter: options.adapter });
+  const port = openPort(prepared, {
+    adapter: options.adapter,
+    hybridWeight: options.hybridWeight,
+  });
   const context = { port, options, excluded: readExcluded(dir) };
   const queried = await probeThenQuery(context, entry.id, topics);
   return {
@@ -687,6 +753,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   rerankProfile: options.rerank ? options.rerankProfile : undefined,
   rerankWeight: options.rerank ? options.rerankWeight : undefined,
   rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
+  hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
 });
 

@@ -235,6 +235,18 @@ describe('openPort — foreign index refusal', () => {
     expect(linear.name).toBe('linear-scan');
     linear.close?.();
   });
+
+  /**
+   * A tuned leg weight reaches the adapter the way `k1`/`b` reach `linear` — the
+   * engine's own factory, with the parameter attached. The dataset is opened
+   * lazily, so no dense index has to exist for the wiring to be observable.
+   */
+  it('opens a hybrid route with the leg weight attached', () => {
+    const hybrid: PreparedDataset = { ...prepared, adapter: 'lancedb-hybrid-full' };
+    const tuned = openPort(hybrid, { adapter: 'lancedb-hybrid-full', hybridWeight: 0.8 });
+    expect(tuned.name).toBe('lancedb-hybrid-full');
+    tuned.close?.();
+  });
 });
 
 describe('assertIngestSound', () => {
@@ -426,6 +438,45 @@ describe('retrieveDocs', () => {
     );
     const tops = rankings.map(atoms => basename(atoms[0]?.originPaths[0] ?? '', '.md'));
     expect(tops).toEqual(['d1', 'd2', 'd3']);
+  });
+
+  /**
+   * The un-truncated route hands the reranker the whole union; the port's own
+   * `atoms` stays capped at `k`. A route that reports no pool is unaffected.
+   */
+  it('hands the reranker the POOL when the port reports one, its atoms otherwise', async () => {
+    const atom = (id: string): RetrievedAtom => ({
+      id,
+      title: id,
+      domain: 'docs',
+      type: DEFAULT_ATOM_TYPE,
+      body: id,
+      score: 1,
+      sourcePath: `${id}.md`,
+      originPaths: [`docs/${id}.md`],
+    });
+    const pooled: KnowledgePort = {
+      name: 'lancedb-hybrid-full',
+      retrieve: async () =>
+        await Promise.resolve({
+          atoms: [atom('a')],
+          poolAtoms: [atom('a'), atom('b'), atom('c')],
+          mode: 'lancedb-hybrid-full',
+          indexState: 'ready' as IndexState,
+        }),
+    };
+    const plain: KnowledgePort = {
+      name: 'lancedb-hybrid',
+      retrieve: async () =>
+        await Promise.resolve({
+          atoms: [atom('a')],
+          mode: 'lancedb-hybrid',
+          indexState: 'ready' as IndexState,
+        }),
+    };
+
+    expect((await retrieveDocs(pooled, 'q', 1)).map(a => a.id)).toEqual(['a', 'b', 'c']);
+    expect((await retrieveDocs(plain, 'q', 1)).map(a => a.id)).toEqual(['a']);
   });
 });
 
