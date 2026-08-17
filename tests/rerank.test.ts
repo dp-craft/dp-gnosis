@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { estimateTokens } from '../src/budget.js';
 import { runCli } from '../src/cli/cli.js';
 import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
-import { fuseRanking } from '../src/rerank.js';
+import { fuseRanking, probeRerankDiscrimination } from '../src/rerank.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Gamma'] as const;
 
@@ -208,5 +208,93 @@ describe('retrieve --rerank', () => {
     const error = parsePayload((await retrieve(fixture, ['--rerank'])).stdout).error ?? '';
 
     expect(error).toContain('http://127.0.0.1:9999');
+  });
+});
+
+/**
+ * The two-document discrimination probe. A reranker whose rank head this
+ * llama.cpp build does not support answers HTTP 200 with well-formed scores, so
+ * a broken model is invisible to every assertion downstream of it. The two
+ * observed break signatures diagnose differently and are reported as such:
+ * CONSTANT (mxbai-rerank-large-v2 — the SAME score to 16 decimals whatever the
+ * document) and INVERTED (jina-reranker-v3 — the irrelevant document wins).
+ */
+describe('probeRerankDiscrimination', () => {
+  /** The score mxbai-rerank-large-v2 returned for BOTH documents, measured live. */
+  const MXBAI_CONSTANT_SCORE = 0.11378549039363861;
+
+  /** Answers both endpoints; `scores` is indexed by probe document position. */
+  const stubProbeServer = (models: readonly string[], scores: readonly number[]): void => {
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+      if (url.endsWith('/v1/models')) {
+        return okResponse({ data: models.map(id => ({ id })) });
+      }
+      return okResponse({
+        results: scores.map((relevance_score, index) => ({ index, relevance_score })),
+      });
+    });
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('REFUSES a CONSTANT scorer, quoting both raw scores and the model', async () => {
+    stubProbeServer([RERANK_MODEL_ID], [MXBAI_CONSTANT_SCORE, MXBAI_CONSTANT_SCORE]);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome.ok).toBe(false);
+    const error = outcome.ok ? '' : outcome.error;
+    expect(error).toContain('CONSTANT');
+    expect(error).not.toContain('INVERTED');
+    expect(error).toContain(String(MXBAI_CONSTANT_SCORE));
+    expect(error).toContain(`"${RERANK_MODEL_ID}"`);
+  });
+
+  it('REFUSES an INVERTED scorer, distinctly from a constant one', async () => {
+    stubProbeServer([RERANK_MODEL_ID], [1.96e-7, 2.94e-7]);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome.ok).toBe(false);
+    const error = outcome.ok ? '' : outcome.error;
+    expect(error).toContain('INVERTED');
+    expect(error).not.toContain('CONSTANT');
+    expect(error).toContain(String(1.96e-7));
+    expect(error).toContain(String(2.94e-7));
+  });
+
+  it('PASSES a model that ranks the relevant passage above the irrelevant one', async () => {
+    stubProbeServer([RERANK_MODEL_ID], [2.07, -11]);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome).toEqual({ ok: true, relevantScore: 2.07, irrelevantScore: -11 });
+  });
+
+  it('carries the server-down refusal through unchanged', async () => {
+    vi.stubGlobal('fetch', async (): Promise<unknown> => {
+      throw new TypeError('fetch failed');
+    });
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome.ok).toBe(false);
+    const error = outcome.ok ? '' : outcome.error;
+    expect(error).toContain('server down');
+    expect(error).toContain(`"${RERANK_MODEL_ID}"`);
+  });
+
+  it('carries the model-not-served refusal through unchanged', async () => {
+    stubProbeServer(['some-chat-model'], []);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome.ok).toBe(false);
+    const error = outcome.ok ? '' : outcome.error;
+    expect(error).toContain('model not served');
+    expect(error).toContain('some-chat-model');
+    expect(error).not.toContain('server down');
   });
 });

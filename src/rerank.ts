@@ -45,6 +45,15 @@ const MAX_BATCH_TOKENS = 8000;
 /** One HTTP call's ceiling. A reranker pass is a foreground CLI wait. */
 const TIMEOUT_MS = 60000;
 
+/**
+ * The DISCRIMINATION PROBE's own ceiling, deliberately far above `TIMEOUT_MS`.
+ * llama-swap loads a model on demand and the first `/v1/rerank` call after an
+ * eviction was MEASURED at 1 m 59 s — past the 60 s abort (GNOSIS-GUIDE.md
+ * § Landmines, the cold-reranker row). The probe IS the warm-up that landmine
+ * requires before an arm, so it MUST NOT itself time out on a cold load.
+ */
+const PROBE_TIMEOUT_MS = 300000;
+
 /** The llama-swap model catalogue, per the OpenAI-compatible API. */
 const MODELS_PATH = '/v1/models';
 
@@ -236,26 +245,39 @@ type ScoreResult =
   | { readonly ok: true; readonly results: readonly RerankResult[] }
   | { readonly ok: false; readonly error: string };
 
-const scoreDocuments = async (
-  endpoint: Endpoint,
-  query: string,
-  atoms: readonly RetrievedAtom[]
-): Promise<ScoreResult> => {
+/** One scoring call: already-extracted text, and how long it may take. */
+interface ScoreRequest {
+  readonly query: string;
+  readonly documents: readonly string[];
+  /** The probe passes `PROBE_TIMEOUT_MS`; a served pass passes `TIMEOUT_MS`. */
+  readonly timeoutMs: number;
+}
+
+/** The one wire path to `/v1/rerank`: one client construction, one refusal shape. */
+const scoreTexts = async (endpoint: Endpoint, request: ScoreRequest): Promise<ScoreResult> => {
   const client = createRerankerClient(
     endpoint.baseUrl,
     endpoint.model,
-    TIMEOUT_MS,
+    request.timeoutMs,
     MAX_BATCH_TOKENS
   );
-  const documents = atoms.map(atom =>
-    extractDoc(atom.body, EXTRACT_STRATEGY, RERANK_DOC_MAX_CHARS)
-  );
   try {
-    return { ok: true, results: await client.rerank(query, documents) };
+    return { ok: true, results: await client.rerank(request.query, request.documents) };
   } catch (error) {
     return { ok: false, error: callFailedMessage(endpoint, causeOf(error)) };
   }
 };
+
+const scoreDocuments = async (
+  endpoint: Endpoint,
+  query: string,
+  atoms: readonly RetrievedAtom[]
+): Promise<ScoreResult> =>
+  await scoreTexts(endpoint, {
+    query,
+    documents: atoms.map(atom => extractDoc(atom.body, EXTRACT_STRATEGY, RERANK_DOC_MAX_CHARS)),
+    timeoutMs: TIMEOUT_MS,
+  });
 
 const bestFirst = (results: readonly RerankResult[]): readonly number[] =>
   [...results].sort((left, right) => right.relevanceScore - left.relevanceScore).map(r => r.index);
@@ -300,4 +322,125 @@ export const rerankAtoms = async (
   if (!scored.ok) return { ok: false, error: scored.error };
   const fused = fuseRanking(atoms, bestFirst(scored.results), fusion);
   return { ok: true, atoms: fused.map(entry => ({ ...entry.item, score: entry.score })) };
+};
+
+/**
+ * The two-document discrimination probe, fixed so every model is judged on the
+ * SAME pair. A retrieval question, one passage that answers it, and one that
+ * could not be less related — the shape the manual probes used (the chocolate
+ * cake recipe) when they caught jina v3/v3.5 and mxbai.
+ */
+const PROBE_QUERY = 'how does BM25 rank documents by term frequency and document length';
+
+const PROBE_RELEVANT_DOC =
+  'BM25 scores a document by summing, over the query terms it contains, an inverse ' +
+  'document frequency weight times a saturating term-frequency factor normalised by ' +
+  'document length against the average length of the collection.';
+
+const PROBE_IRRELEVANT_DOC =
+  'Chocolate cake: cream the butter with the sugar, beat in the eggs one at a time, ' +
+  'fold in the cocoa and flour, and bake for forty minutes at 180 degrees Celsius.';
+
+/** Relevant FIRST, so a model that ignores the document also ignores the order. */
+const PROBE_DOCUMENTS: readonly string[] = [PROBE_RELEVANT_DOC, PROBE_IRRELEVANT_DOC];
+
+const PROBE_RELEVANT_INDEX = 0;
+const PROBE_IRRELEVANT_INDEX = 1;
+
+/** Both raw probe scores, verbatim as the server returned them. */
+interface ProbeScores {
+  readonly relevant: number;
+  readonly irrelevant: number;
+}
+
+/**
+ * The two BROKEN signatures seen on llama.cpp b10375. They diagnose
+ * differently, so the refusal names which one fired.
+ */
+type ProbeSignature = 'CONSTANT' | 'INVERTED';
+
+const SIGNATURE_DIAGNOSIS: Readonly<Record<ProbeSignature, string>> = {
+  CONSTANT:
+    'CONSTANT — the two scores are IDENTICAL, so the score is invariant to the DOCUMENT ' +
+    '(the mxbai-rerank-large-v2 signature). Equal scores leave the first-pass order ' +
+    'essentially intact, so a run would report a plausible "reranking barely helped" ' +
+    'number instead of failing',
+  INVERTED:
+    'INVERTED — the IRRELEVANT passage outranked the relevant one (the jina-reranker-v3 ' +
+    'signature: an architecture whose rank head this llama.cpp build does not support ' +
+    'still answers HTTP 200, with noise)',
+};
+
+/** `undefined` when the model discriminates: relevant strictly above irrelevant. */
+const probeSignature = (scores: ProbeScores): ProbeSignature | undefined => {
+  if (scores.relevant > scores.irrelevant) return undefined;
+  return scores.relevant === scores.irrelevant ? 'CONSTANT' : 'INVERTED';
+};
+
+/** Quotes both raw scores verbatim — the reader diagnoses from the numbers. */
+const probeFailedMessage = (
+  endpoint: Endpoint,
+  signature: ProbeSignature,
+  scores: ProbeScores
+): string =>
+  `${request(endpoint.model)}; it failed the two-document discrimination probe at ` +
+  `${endpoint.baseUrl} (${SIGNATURE_DIAGNOSIS[signature]}). It scored the RELEVANT passage ` +
+  `${String(scores.relevant)} and the IRRELEVANT passage ${String(scores.irrelevant)}` +
+  `${requirement(endpoint.model)}serve a reranker whose rank head this build supports, ` +
+  `then re-run${DROP}`;
+
+const INCOMPLETE_PROBE = 'the response did not score both probe documents';
+
+const scoreAt = (results: readonly RerankResult[], index: number): number | undefined =>
+  results.find(result => result.index === index)?.relevanceScore;
+
+/** `undefined` when the server did not return a score for both documents. */
+const probeScoresOf = (results: readonly RerankResult[]): ProbeScores | undefined => {
+  const relevant = scoreAt(results, PROBE_RELEVANT_INDEX);
+  const irrelevant = scoreAt(results, PROBE_IRRELEVANT_INDEX);
+  return relevant === undefined || irrelevant === undefined ? undefined : { relevant, irrelevant };
+};
+
+/** The probe's verdict: the scores when it discriminates, else the refusal. */
+export type RerankProbeOutcome =
+  | { readonly ok: true; readonly relevantScore: number; readonly irrelevantScore: number }
+  | { readonly ok: false; readonly error: string };
+
+/** The refusal, or the verdict — a call that returned unusable results is a refusal too. */
+const probeOutcomeOf = (endpoint: Endpoint, scored: ScoreResult): RerankProbeOutcome => {
+  if (!scored.ok) return { ok: false, error: scored.error };
+  const scores = probeScoresOf(scored.results);
+  return scores === undefined
+    ? { ok: false, error: callFailedMessage(endpoint, INCOMPLETE_PROBE) }
+    : probeVerdict(endpoint, scores);
+};
+
+const probeVerdict = (endpoint: Endpoint, scores: ProbeScores): RerankProbeOutcome => {
+  const signature = probeSignature(scores);
+  return signature === undefined
+    ? { ok: true, relevantScore: scores.relevant, irrelevantScore: scores.irrelevant }
+    : { ok: false, error: probeFailedMessage(endpoint, signature, scores) };
+};
+
+/**
+ * Scores the fixed relevant/irrelevant pair and reports whether the model
+ * DISCRIMINATES at all: the scores must DIFFER and the relevant one must win.
+ * There is deliberately no minimum gap — the verdict is directional only.
+ *
+ * A caller runs this once before trusting an arm. A model that fails it returns
+ * HTTP 200 and well-formed numbers, so nothing downstream can notice.
+ */
+export const probeRerankDiscrimination = async (
+  options: RerankOptions = {}
+): Promise<RerankProbeOutcome> => {
+  const { baseUrl, model } = resolved(options);
+  const endpoint: Endpoint = { baseUrl, model };
+  const refusal = await catalogueRefusal(endpoint);
+  if (refusal !== undefined) return { ok: false, error: refusal };
+  const scored = await scoreTexts(endpoint, {
+    query: PROBE_QUERY,
+    documents: PROBE_DOCUMENTS,
+    timeoutMs: PROBE_TIMEOUT_MS,
+  });
+  return probeOutcomeOf(endpoint, scored);
 };
