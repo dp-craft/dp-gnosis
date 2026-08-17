@@ -47,9 +47,14 @@ Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried bl
 
 | Flag | Value | Default |
 |---|---|---|
-| `--adapter` | `linear\|fts5\|minisearch\|lancedb` | `linear` |
+| `--adapter` | `linear\|fts5\|minisearch\|lancedb\|lancedb-vec\|lancedb-hybrid\|lancedb-hybrid-full` | `linear` |
 | `--atoms-dir` | dir | `dp-gnosis/vault/atoms` |
-| `--index-path` | file for `fts5`/`minisearch`, **directory** for `lancedb` | per-adapter path under `dp-gnosis/cache/index/` |
+| `--index-path` | file for `fts5`/`minisearch`, **directory** for every `lancedb*` route | per-adapter path under `dp-gnosis/cache/index/` |
+| `--hybrid-weight` | `0`…`1` — the DENSE leg's share of the leg fusion, `lancedb-hybrid` / `-full` only. Out-of-range FAILS loudly, never clamps | `0.5` — **measured-mistuned on English; 0.25 scored better. Not changed, see below** |
+
+**The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `GNOSIS-BASELINES.md` § Phase D.
+
+**`--hybrid-weight`'s default is known to be suboptimal on English and has deliberately NOT been changed** — it is a quality-affecting parameter, and every recorded `lancedb-hybrid` row was measured at 0.5. Pass the flag explicitly rather than relying on the default.
 | `--repo-root` | dir | repo root |
 | `--golden-set` | file | `tools/dp-gnosis/golden/golden-set.v1.json` |
 | `-k` | positive integer | `5` |
