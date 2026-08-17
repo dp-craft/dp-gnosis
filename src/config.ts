@@ -219,6 +219,20 @@ export const RERANK_PRESET_NAMES = Object.keys(RERANK_FUSION_PRESETS) as readonl
 export const DEFAULT_RERANK_PRESET: RerankPresetName = 'shipped';
 
 /**
+ * The embedding model the dense leg calls, served by llama-swap under this id.
+ * One id, one model: vectors from two encoders are not comparable, and the
+ * embedding cache keys on this id so a change MISSES rather than serving one
+ * model's vectors under another's name.
+ */
+export const EMBED_MODEL_ID = 'bge-m3';
+
+/** llama-swap's OpenAI-compatible base URL, overridden by {@link EMBED_URL_ENV_VAR}. */
+export const EMBED_DEFAULT_URL = 'http://127.0.0.1:9292';
+
+/** Environment override for {@link EMBED_DEFAULT_URL}, read in `resolveEmbedUrl` alone. */
+export const EMBED_URL_ENV_VAR = 'DP_GNOSIS_EMBED_URL';
+
+/**
  * Hard cap on how many terms a constructed retrieval query may carry.
  *
  * A task's targets, test contract and spec excerpts together run to thousands
