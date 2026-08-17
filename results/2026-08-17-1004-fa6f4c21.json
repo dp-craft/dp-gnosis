@@ -1,0 +1,354 @@
+{
+  "provenance": {
+    "ts": "2026-08-17T10:04:48.759Z",
+    "gitSha": "fa6f4c21",
+    "adapter": "lancedb-hybrid-full",
+    "depth": 100,
+    "rerank": false,
+    "analyzer": "porter-fold"
+  },
+  "results": [
+    {
+      "dataset": "vault-hu",
+      "domain": "project-vault-hu",
+      "docShape": "atom",
+      "queryShape": "hungarian-question",
+      "corpusBytes": 663448,
+      "corpusLines": 454,
+      "atomMaxChars": 4000,
+      "topics": 31,
+      "docCount": 454,
+      "atomCount": 455,
+      "ingestMs": 460,
+      "queryMs": 1065,
+      "queryP50Ms": 34,
+      "queryP95Ms": 41,
+      "metrics": {
+        "ndcg10": 0.6203508947673404,
+        "recall10": 0.660752688172043,
+        "recall20": 0.7838709677419355,
+        "recall100": 0.9612903225806452,
+        "mrr10": 0.7672043010752688
+      },
+      "metricsSd": {
+        "ndcg10": 0.30333496348851446,
+        "recall10": 0.3037283260701044,
+        "recall20": 0.2692748792098451,
+        "recall100": 0.09010149593593039,
+        "mrr10": 0.38104349588814895
+      },
+      "perTopic": [
+        {
+          "queryId": "hu-001",
+          "metrics": {
+            "ndcg10": 0.298254219601818,
+            "recall10": 0.5,
+            "recall20": 0.75,
+            "recall100": 0.75,
+            "mrr10": 0.25
+          }
+        },
+        {
+          "queryId": "hu-002",
+          "metrics": {
+            "ndcg10": 0.9674679834891693,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-003",
+          "metrics": {
+            "ndcg10": 0.8048099750039491,
+            "recall10": 0.75,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-004",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0.5,
+            "recall100": 1,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "hu-005",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0,
+            "recall100": 0.75,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "hu-006",
+          "metrics": {
+            "ndcg10": 0.31834121936641585,
+            "recall10": 0.5,
+            "recall20": 0.75,
+            "recall100": 0.75,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "hu-007",
+          "metrics": {
+            "ndcg10": 0.787702056960637,
+            "recall10": 0.75,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-008",
+          "metrics": {
+            "ndcg10": 0.8539316501572937,
+            "recall10": 0.8,
+            "recall20": 0.8,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-009",
+          "metrics": {
+            "ndcg10": 0.5205067333228022,
+            "recall10": 0.5,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-010",
+          "metrics": {
+            "ndcg10": 0.5135312443624667,
+            "recall10": 0.5,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-011",
+          "metrics": {
+            "ndcg10": 0.4415801103577823,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.2
+          }
+        },
+        {
+          "queryId": "hu-012",
+          "metrics": {
+            "ndcg10": 0.7809509050749017,
+            "recall10": 0.8,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-013",
+          "metrics": {
+            "ndcg10": 0.16716045496620227,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.6666666666666666,
+            "recall100": 1,
+            "mrr10": 0.16666666666666666
+          }
+        },
+        {
+          "queryId": "hu-014",
+          "metrics": {
+            "ndcg10": 0.7668878296761483,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.5
+          }
+        },
+        {
+          "queryId": "hu-015",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-016",
+          "metrics": {
+            "ndcg10": 0.9197207891481876,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-017",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-018",
+          "metrics": {
+            "ndcg10": 0.628321632327559,
+            "recall10": 0.6666666666666666,
+            "recall20": 0.6666666666666666,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-019",
+          "metrics": {
+            "ndcg10": 0.8539316501572937,
+            "recall10": 0.8,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-020",
+          "metrics": {
+            "ndcg10": 0.6713860725233041,
+            "recall10": 0.6666666666666666,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-021",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-022",
+          "metrics": {
+            "ndcg10": 0.8318724637288826,
+            "recall10": 0.75,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-023",
+          "metrics": {
+            "ndcg10": 0.5135312443624667,
+            "recall10": 0.5,
+            "recall20": 0.5,
+            "recall100": 0.75,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-024",
+          "metrics": {
+            "ndcg10": 0.3903800499921017,
+            "recall10": 0.25,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-025",
+          "metrics": {
+            "ndcg10": 0.9197207891481876,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-026",
+          "metrics": {
+            "ndcg10": 0.6366824387328317,
+            "recall10": 0.5,
+            "recall20": 0.5,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-027",
+          "metrics": {
+            "ndcg10": 0.41618115554873086,
+            "recall10": 0.6666666666666666,
+            "recall20": 0.6666666666666666,
+            "recall100": 1,
+            "mrr10": 0.3333333333333333
+          }
+        },
+        {
+          "queryId": "hu-028",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0,
+            "recall100": 0.8,
+            "mrr10": 0
+          }
+        },
+        {
+          "queryId": "hu-029",
+          "metrics": {
+            "ndcg10": 0.715696758318853,
+            "recall10": 0.75,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-030",
+          "metrics": {
+            "ndcg10": 0.7246262544989281,
+            "recall10": 0.75,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        },
+        {
+          "queryId": "hu-031",
+          "metrics": {
+            "ndcg10": 0.787702056960637,
+            "recall10": 0.75,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1
+          }
+        }
+      ]
+    }
+  ]
+}
