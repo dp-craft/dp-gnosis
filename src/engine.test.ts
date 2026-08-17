@@ -17,6 +17,7 @@ import {
   assertIngestSound,
   assertPortSound,
   assertRerankDiscriminates,
+  attributedIngestMs,
   CORPUS_MISMATCH_CAUSE,
   EMPTY_INDEX_CAUSE,
   LOW_COVERAGE_CAUSE,
@@ -126,6 +127,46 @@ describe('prepareDataset — per-adapter index', () => {
   it('builds the lancedb dataset its own port reads', async () => {
     expect(await atomsFor('lancedb')).toBeGreaterThan(0);
   }, 180_000);
+});
+
+/**
+ * COST ATTRIBUTION. The fts5 soundness probe is built on EVERY arm, so charging
+ * it to `ingestMs` made a lancedb row read as "lancedb build + an unrelated fts5
+ * build" — the one column whose whole purpose is per-adapter attribution. The
+ * probe still runs and still gates; only what is REPORTED moves.
+ */
+describe('attributedIngestMs', () => {
+  const cost = { ingestMs: 100, probeMs: 50, adapterBuildMs: 7 };
+
+  it('excludes the fts5 probe build from an arm that does not use that index', () => {
+    expect(attributedIngestMs({ adapter: 'lancedb', ...cost })).toBe(107);
+    expect(attributedIngestMs({ adapter: 'minisearch', ...cost })).toBe(107);
+  });
+
+  it('counts the probe for the fts5 arm, whose own index the probe IS', () => {
+    expect(attributedIngestMs({ adapter: 'fts5', ...cost })).toBe(157);
+  });
+
+  it('charges the index-free linear arm its ingest alone', () => {
+    expect(attributedIngestMs({ adapter: 'linear', ...cost, adapterBuildMs: 0 })).toBe(100);
+  });
+});
+
+describe('prepareDataset — cost attribution', () => {
+  it('reports the probe build as its own number rather than discarding it', () => {
+    expect(prepared.probeMs).toBeGreaterThanOrEqual(0);
+    expect(prepared.ingestMs).toBeGreaterThanOrEqual(prepared.probeMs);
+  });
+
+  it('changes no quality-bearing output — a re-prepared arm indexes and ranks identically', async () => {
+    const again = await prepareDataset({ id: `${DATASET_ID}-again`, docs, workRoot: root });
+    expect(again.atomCount).toBe(prepared.atomCount);
+    expect(again.docCount).toBe(prepared.docCount);
+    const againPort = openPort(again);
+    const ranking = atomIds(await retrieveDocs(againPort, queries[0]!, DEPTH));
+    againPort.close?.();
+    expect(ranking).toEqual(atomIds(await retrieveDocs(port, queries[0]!, DEPTH)));
+  });
 });
 
 /**
@@ -321,6 +362,7 @@ describe('probePortSoundness', () => {
       atomCount: 0,
       docCount: 0,
       ingestMs: 0,
+      probeMs: 0,
     };
     const emptyPort = openPort(empty, { adapter: 'lancedb' });
     await expect(

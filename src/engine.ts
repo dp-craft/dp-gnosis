@@ -134,8 +134,40 @@ export interface PreparedDataset {
   /** Atoms actually present in the index — not atoms written to disk. */
   readonly atomCount: number;
   readonly docCount: number;
+  /**
+   * Ingest plus the MEASURED adapter's own index build — the cost of the arm the
+   * row reports. The fts5 soundness probe is charged here only when the measured
+   * arm IS fts5, whose index that probe is; see `attributedIngestMs`.
+   */
   readonly ingestMs: number;
+  /**
+   * The fts5 soundness-probe index build, paid on every arm. Reported beside
+   * `ingestMs` rather than folded into it: the probe is a gate, not a cost of the
+   * adapter under measurement, and dropping the number would hide a real cost.
+   */
+  readonly probeMs: number;
 }
+
+/** The wall-time parts of one dataset's preparation, before attribution. */
+export interface PreparationCost {
+  readonly adapter: AdapterName;
+  /** Corpus → atoms. Every arm pays it, identically. */
+  readonly ingestMs: number;
+  /** The fts5 probe index build. Every arm pays it, only fts5 uses it. */
+  readonly probeMs: number;
+  /** The measured adapter's own index build; zero for the index-free arms. */
+  readonly adapterBuildMs: number;
+}
+
+/**
+ * What `ingestMs` reports. Folding the probe in charged a `lancedb` row for an
+ * fts5 build it never queries, which makes the one column whose purpose is
+ * per-adapter attribution wrong for exactly the adapters whose cost differs.
+ * The fts5 arm still counts it, because `INDEX_BUILDERS.fts5` is a no-op that
+ * reads the probe — for that arm the probe IS the measured index.
+ */
+export const attributedIngestMs = (cost: PreparationCost): number =>
+  cost.ingestMs + (cost.adapter === ADAPTER ? cost.probeMs : 0) + cost.adapterBuildMs;
 
 /** The facts the soundness assert judges, separated so it can be tested alone. */
 export interface IngestSoundness {
@@ -282,7 +314,7 @@ const datasetPaths = (options: PrepareDatasetOptions): DatasetPaths => {
 const ingestAndProbe = async (
   paths: DatasetPaths,
   analyzer: AnalyzerId | undefined
-): Promise<number> => {
+): Promise<Omit<PreparationCost, 'adapter' | 'adapterBuildMs'>> => {
   const startedAt = Date.now();
   await ingest({
     corpusRoots: paths.profile.corpusRoots,
@@ -290,12 +322,13 @@ const ingestAndProbe = async (
     repoRoot: paths.workDir,
     profile: paths.profile,
   });
+  const ingestedAt = Date.now();
   buildFts5Index({
     atomsDir: paths.atomsDir,
     indexPath: paths.indexPath,
     ...(analyzer === undefined ? {} : { analyzer }),
   });
-  return Date.now() - startedAt;
+  return { ingestMs: ingestedAt - startedAt, probeMs: Date.now() - ingestedAt };
 };
 
 /**
@@ -397,8 +430,9 @@ const materializeChecked = (
  * Materialize, ingest, index, verify. Every path handed to the engine is
  * ABSOLUTE and the profile is the in-memory object — nothing is read from the
  * process's working directory and nothing is written outside `workRoot/<id>`.
- * The index BUILT is the requested arm's own; `ingestMs` covers ingest, the
- * probe and that build, so an arm's index cost is never hidden.
+ * The index BUILT is the requested arm's own, and `ingestMs` covers ingest plus
+ * that build (`attributedIngestMs`); the always-built fts5 probe is reported
+ * separately as `probeMs`, so no arm's cost is hidden and none is misattributed.
  */
 export const prepareDataset = async (
   options: PrepareDatasetOptions
@@ -406,7 +440,7 @@ export const prepareDataset = async (
   const adapter = options.adapter ?? ADAPTER;
   const paths = datasetPaths(options);
   const corpus = materializeChecked(options, paths);
-  const probeMs = await ingestAndProbe(paths, options.analyzer);
+  const probed = await ingestAndProbe(paths, options.analyzer);
   const indexed = indexedAtomPaths(paths.indexPath);
   assertIngestSound({
     datasetId: options.id,
@@ -421,7 +455,8 @@ export const prepareDataset = async (
     adapter,
     atomCount: indexed.length,
     docCount: corpus.docCount,
-    ingestMs: probeMs + built.ms,
+    ingestMs: attributedIngestMs({ adapter, ...probed, adapterBuildMs: built.ms }),
+    probeMs: probed.probeMs,
   };
 };
 
