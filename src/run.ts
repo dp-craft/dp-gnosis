@@ -47,9 +47,11 @@ import { resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
 import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
 import { compareAll, type Comparison, formatComparison } from './compare.js';
 import {
+  assertRerankDiscriminates,
   openPort,
   prepareDataset,
   type PreparedDataset,
+  probePortSoundness,
   rerankIfRequested,
   retrieveDocs
 } from './engine.js';
@@ -476,6 +478,31 @@ export const prepareOf = (
     analyzer: arm.analyzer,
   });
 
+/**
+ * The post-open gate, then the measured loop, under ONE port lifetime. The probe
+ * is inside the `finally` because a refusal must still close the port: the
+ * previous form wrapped `queryDataset` alone, so anything failing before it
+ * leaked the handle.
+ */
+const probeThenQuery = async (
+  context: RankContext,
+  datasetId: string,
+  topics: readonly Topic[]
+): Promise<QueryOutcome> => {
+  const { port, options } = context;
+  try {
+    await probePortSoundness({
+      port,
+      datasetId,
+      adapter: options.adapter,
+      topicTexts: topics.map(topic => topic.text),
+    });
+    return await queryDataset(context, topics);
+  } finally {
+    port.close?.();
+  }
+};
+
 const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
   const dir = await ensureDataset(entry);
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
@@ -484,9 +511,12 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
     adapter: options.adapter,
     analyzer: options.analyzer,
   });
+  // Before the dataset's FIRST rerank call, and before the port exists — a
+  // refusal here has nothing to close. It doubles as the cold-load warm-up.
+  if (options.rerank) await assertRerankDiscriminates({ model: options.rerankModel });
   const port = openPort(prepared, { adapter: options.adapter });
   const context = { port, options, excluded: readExcluded(dir) };
-  const queried = await queryDataset(context, topics).finally(() => port.close?.());
+  const queried = await probeThenQuery(context, entry.id, topics);
   return {
     ...descriptorOf(entry, dir),
     topics: topics.length,

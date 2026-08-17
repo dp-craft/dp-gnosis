@@ -1,25 +1,32 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.js';
 import type { AdapterName } from '../../dp-gnosis/src/cli/adapter.js';
 import { runCli } from '../../dp-gnosis/src/cli/cli.js';
 import { DEFAULT_ATOM_TYPE, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
-import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
+import type { IndexState, KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { type AnalyzerId, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { BeirDoc } from './beir.js';
 import {
   assertCorpusMaterialized,
   assertIngestSound,
+  assertPortSound,
+  assertRerankDiscriminates,
   CORPUS_MISMATCH_CAUSE,
   EMPTY_INDEX_CAUSE,
   LOW_COVERAGE_CAUSE,
   openPort,
+  PORT_INDEX_STATE_CAUSE,
+  PORT_SILENT_CAUSE,
   prepareDataset,
   type PreparedDataset,
+  probePortSoundness,
+  RERANK_PROBE_CAUSE,
   rerankIfRequested,
   retrieveDocs
 } from './engine.js';
@@ -251,6 +258,117 @@ describe('assertCorpusMaterialized', () => {
   });
 });
 
+/**
+ * THE ADAPTER-BLIND GATE. `assertIngestSound` reads the fts5 PROBE index at the
+ * unsuffixed stem whatever adapter is under measurement, so a `lancedb` /
+ * `minisearch` index that indexed NOTHING passed it and recorded all-zero
+ * metrics as data. This assert judges the port that actually answers the
+ * queries, and only that.
+ */
+describe('assertPortSound', () => {
+  const facts = (over: Partial<Parameters<typeof assertPortSound>[0]>): void =>
+    assertPortSound({
+      datasetId: 'vault-hu',
+      adapter: 'lancedb',
+      indexStates: ['ready', 'ready'],
+      probedTopicCount: 2,
+      totalAtomCount: 7,
+      ...over,
+    });
+
+  const notReady: readonly IndexState[] = ['unavailable', 'empty', 'stale'];
+
+  it.each(notReady)('throws with the state cause when a probe reported "%s"', state => {
+    const act = (): void => facts({ indexStates: ['ready', state] });
+    expect(act).toThrow(new RegExp(`reported "${state}"`));
+    expect(act).toThrow(expect.objectContaining({ cause: PORT_INDEX_STATE_CAUSE }));
+  });
+
+  /** A DIFFERENT diagnosis: the index exists and is current, and holds nothing reachable. */
+  it('throws with the silent cause when a ready port returned nothing at all', () => {
+    const act = (): void => facts({ totalAtomCount: 0 });
+    expect(act).toThrow(/ready index, yet 2 of the dataset's own judged topics returned ZERO/);
+    expect(act).toThrow(expect.objectContaining({ cause: PORT_SILENT_CAUSE }));
+  });
+
+  /** The TOTAL is judged, never a topic: one topic matching nothing is not a defect. */
+  it('accepts a sample whose atoms all came from one topic', () => {
+    expect(() => facts({ probedTopicCount: 3, indexStates: ['ready', 'ready', 'ready'] })).not
+      .toThrow();
+  });
+
+  it('passes trivially when there was nothing to probe', () => {
+    expect(() => facts({ indexStates: [], probedTopicCount: 0, totalAtomCount: 0 })).not.toThrow();
+  });
+});
+
+/**
+ * The end-to-end form of the gate, on the adapter that motivated it. The empty
+ * index is built DELIBERATELY — `prepareDataset` would refuse this corpus at
+ * `assertIngestSound` long before a port opened, which is exactly why the port
+ * gate has to exist separately.
+ */
+describe('probePortSoundness', () => {
+  it('REFUSES a lancedb port opened over an index that indexed nothing', async () => {
+    const atomsDir = resolve(root, 'empty-lancedb', 'atoms');
+    const indexPath = resolve(root, 'empty-lancedb', 'index-lancedb');
+    mkdirSync(atomsDir, { recursive: true });
+    expect(await buildLanceDbIndex({ atomsDir, indexDir: indexPath })).toBe(true);
+    const empty: PreparedDataset = {
+      atomsDir,
+      indexPath,
+      adapter: 'lancedb',
+      atomCount: 0,
+      docCount: 0,
+      ingestMs: 0,
+    };
+    const emptyPort = openPort(empty, { adapter: 'lancedb' });
+    await expect(
+      probePortSoundness({
+        port: emptyPort,
+        datasetId: 'empty-lancedb',
+        adapter: 'lancedb',
+        topicTexts: queries,
+      })
+    ).rejects.toThrow(expect.objectContaining({ cause: PORT_INDEX_STATE_CAUSE }));
+    emptyPort.close?.();
+  }, 180_000);
+
+  /** The regression side: the healthy fts5 arm every recorded run measured still passes. */
+  it('accepts the healthy fts5 dataset', async () => {
+    await expect(
+      probePortSoundness({ port, datasetId: DATASET_ID, adapter: 'fts5', topicTexts: queries })
+    ).resolves.toBeUndefined();
+  });
+
+  /**
+   * The concurrency regression: the adapters cache their handle in an unguarded
+   * mutable cell, so two probes in flight at once can close each other's
+   * connection. The probe must never have more than one retrieve outstanding.
+   */
+  it('never has two retrieves in flight at once', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const serialPort: KnowledgePort = {
+      name: 'serial-probe',
+      retrieve: async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise(done => setTimeout(done, 1));
+        inFlight -= 1;
+        return { atoms: [], mode: 'stub', indexState: 'ready' };
+      },
+    };
+    await probePortSoundness({
+      port: serialPort,
+      datasetId: 'serial-probe',
+      adapter: 'fts5',
+      topicTexts: ['a', 'b', 'c'],
+    }).catch(() => undefined);
+    expect(maxInFlight).toBe(1);
+  });
+});
+
 describe('retrieveDocs', () => {
   it('returns atoms whose first origin path names a fixture document', async () => {
     const atoms = await retrieveDocs(port, queries[0]!, DEPTH);
@@ -442,5 +560,48 @@ describe('rerankIfRequested — the model reaches the reranker', () => {
     await expect(rerankIfRequested('algae', [atom], true, { model: OTHER_MODEL })).rejects.toThrow(
       new RegExp(OTHER_MODEL)
     );
+  });
+});
+
+/**
+ * The arm's entry gate. `mxbai-rerank-large-v2` returns HTTP 200 with a score
+ * invariant to the DOCUMENT, so equal scores leave the first-pass order
+ * essentially intact and the arm would record a plausible number. The gate turns
+ * that into a named failure before any topic is scored.
+ */
+describe('assertRerankDiscriminates', () => {
+  /** Answers both endpoints; `scores` is indexed by probe document position. */
+  const stubProbe = (scores: readonly number[]): void => {
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+      const payload = url.endsWith('/v1/models')
+        ? { data: [{ id: OTHER_MODEL }] }
+        : { results: scores.map((relevance_score, index) => ({ index, relevance_score })) };
+      return {
+        ok: true,
+        status: 200,
+        text: async (): Promise<string> => JSON.stringify(payload),
+      };
+    });
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('FAILS the arm on constant scores, under its own cause', async () => {
+    stubProbe([0.11378549039363861, 0.11378549039363861]);
+
+    await expect(assertRerankDiscriminates({ model: OTHER_MODEL })).rejects.toThrow(
+      new RegExp(OTHER_MODEL)
+    );
+    await expect(assertRerankDiscriminates({ model: OTHER_MODEL })).rejects.toMatchObject({
+      cause: RERANK_PROBE_CAUSE,
+    });
+  });
+
+  it('passes a reranker that discriminates', async () => {
+    stubProbe([2.07, -11]);
+
+    await expect(assertRerankDiscriminates({ model: OTHER_MODEL })).resolves.toBeUndefined();
   });
 });

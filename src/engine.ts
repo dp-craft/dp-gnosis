@@ -49,9 +49,14 @@ import {
 import type { RerankFusion } from '../../dp-gnosis/src/config.js';
 import { ingest } from '../../dp-gnosis/src/ingest.js';
 import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
-import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
+import type {
+  IndexState,
+  KnowledgePort,
+  RetrievalResult,
+  RetrievedAtom
+} from '../../dp-gnosis/src/port.js';
 import type { AnalyzerId } from '../../dp-gnosis/src/query.js';
-import { rerankAtoms } from '../../dp-gnosis/src/rerank.js';
+import { probeRerankDiscrimination, rerankAtoms } from '../../dp-gnosis/src/rerank.js';
 import type { BeirDoc } from './beir.js';
 import { buildProfile, materializeCorpus, type MaterializedCorpus } from './corpus.js';
 
@@ -78,6 +83,9 @@ export const LOW_COVERAGE_CAUSE = 'dp-gnosis-bench/low-document-coverage';
 /** `error.cause` when `--rerank` was asked for and the reranker refused. */
 export const RERANK_REFUSED_CAUSE = 'dp-gnosis-bench/rerank-refused';
 
+/** `error.cause` when the arm's reranker failed the two-document discrimination probe. */
+export const RERANK_PROBE_CAUSE = 'dp-gnosis-bench/rerank-probe-failed';
+
 /** `error.cause` when the requested adapter's own index could not be produced. */
 export const ADAPTER_INDEX_CAUSE = 'dp-gnosis-bench/adapter-index-unavailable';
 
@@ -86,6 +94,12 @@ export const FOREIGN_INDEX_CAUSE = 'dp-gnosis-bench/foreign-index';
 
 /** `error.cause` when the directory about to be ingested is not exactly the corpus. */
 export const CORPUS_MISMATCH_CAUSE = 'dp-gnosis-bench/corpus-materialization-mismatch';
+
+/** `error.cause` when the MEASURED adapter's own port reported no usable index. */
+export const PORT_INDEX_STATE_CAUSE = 'dp-gnosis-bench/port-index-not-ready';
+
+/** `error.cause` when a ready port answered nothing to every topic it was probed with. */
+export const PORT_SILENT_CAUSE = 'dp-gnosis-bench/port-retrieved-nothing';
 
 /** One dataset's corpus, in memory, plus where it may write. */
 export interface PrepareDatasetOptions {
@@ -481,6 +495,98 @@ export const openPort = (
     : createPort(options.adapter, prepared.atomsDir, prepared.indexPath);
 };
 
+/** How many of the dataset's own topics the post-open probe asks the port. */
+export const PORT_PROBE_TOPICS = 5;
+
+/** The probe asks only "is there ANY atom at all", so one is the whole question. */
+const PROBE_K = 1;
+
+/** What the port-soundness assert judges, separated so it can be tested alone. */
+export interface PortSoundness {
+  readonly datasetId: string;
+  /** The adapter actually OPENED — the one whose index the numbers come from. */
+  readonly adapter: AdapterName;
+  /** The state each probed topic's retrieval reported, in probe order. */
+  readonly indexStates: readonly IndexState[];
+  readonly probedTopicCount: number;
+  /** Atoms returned across the WHOLE sample — never per topic. */
+  readonly totalAtomCount: number;
+}
+
+const portStateMessage = (facts: PortSoundness, state: IndexState): string =>
+  `dp-gnosis-bench: dataset "${facts.datasetId}" opened its "${facts.adapter}" port and probed ` +
+  `${facts.probedTopicCount} of its own judged topics, but the index reported "${state}" rather ` +
+  'than "ready" — no search ran against a current index of this corpus, so every metric would be ' +
+  'recorded as 0.0 as if it were a quality finding. The ingest assert cannot see this: it ' +
+  'inspects the fts5 PROBE index at the unsuffixed stem, never the index this arm measures.';
+
+const portSilentMessage = (facts: PortSoundness): string =>
+  `dp-gnosis-bench: dataset "${facts.datasetId}" opened its "${facts.adapter}" port, which ` +
+  `reported a ready index, yet ${facts.probedTopicCount} of the dataset's own judged topics ` +
+  'returned ZERO atoms between them. A ready index that answers nothing to the queries it was ' +
+  'built to serve is not a null result — the row would be all-zero and recorded as data.';
+
+/**
+ * Refuse a run whose MEASURED adapter retrieved nothing, whatever the fts5 probe
+ * says. State is checked FIRST because the two diagnose differently: a non-ready
+ * state names a missing or lagging index, while a ready port returning nothing
+ * names an index that was built and holds no reachable atom.
+ *
+ * The atom count is judged over the WHOLE sample — one topic legitimately
+ * matching nothing is not a defect. A dataset with zero scorable topics probes
+ * nothing and passes trivially: nothing was asked, so nothing was detected.
+ */
+export const assertPortSound = (facts: PortSoundness): void => {
+  if (facts.probedTopicCount === 0) return;
+  const notReady = facts.indexStates.find(state => state !== 'ready');
+  if (notReady !== undefined) fail(portStateMessage(facts, notReady), PORT_INDEX_STATE_CAUSE);
+  if (facts.totalAtomCount === 0) fail(portSilentMessage(facts), PORT_SILENT_CAUSE);
+};
+
+/** The port to probe, who it belongs to, and the dataset's own query texts. */
+export interface PortProbeRequest {
+  readonly port: KnowledgePort;
+  readonly datasetId: string;
+  readonly adapter: AdapterName;
+  /** Scorable query texts in dataset order; at most `PORT_PROBE_TOPICS` are asked. */
+  readonly topicTexts: readonly string[];
+}
+
+/**
+ * Collect the facts by calling `port.retrieve` DIRECTLY — `retrieveDocs` drops
+ * `indexState`, which is half of what this gate reads.
+ *
+ * It changes what a run REFUSES, never what it MEASURES: the probe is its own
+ * `k=1` call and no result of it reaches scoring. Its one measurable effect is
+ * on ATTRIBUTION of cost — the port's one-time cold work (the corpus-mtime
+ * sweep, the index open) is now paid here instead of landing on topic 1's
+ * `queryMs`, so the p50/p95 medians the suite reports are unmoved.
+ *
+ * Sequential by design, exactly like the measured loop (`rankAllTopics`): one
+ * port, one index, one query at a time. Concurrent probes are not merely
+ * redundant here, they are unsafe — the adapters cache their handle in a plain
+ * mutable cell with no single-flight guard, so simultaneous first-calls all see
+ * an empty cell, all reopen, and each reopen releases the connection a sibling
+ * probe is about to read.
+ */
+export const probePortSoundness = async (request: PortProbeRequest): Promise<void> => {
+  const sample = request.topicTexts.slice(0, PORT_PROBE_TOPICS);
+  const results = await sample.reduce<Promise<readonly RetrievalResult[]>>(
+    async (pending, text) => [
+      ...(await pending),
+      await request.port.retrieve(text, { k: PROBE_K }),
+    ],
+    Promise.resolve([])
+  );
+  assertPortSound({
+    datasetId: request.datasetId,
+    adapter: request.adapter,
+    indexStates: results.map(result => result.indexState),
+    probedTopicCount: sample.length,
+    totalAtomCount: results.reduce((total, result) => total + result.atoms.length, 0),
+  });
+};
+
 /**
  * The measured call. `rawQueryText` is the dataset's query VERBATIM — the same
  * string `retrieveCommand` hands the port.
@@ -523,4 +629,22 @@ export const rerankIfRequested = async (
   return outcome.ok
     ? outcome.atoms
     : fail(`dp-gnosis-bench: rerank refused — ${outcome.error}`, RERANK_REFUSED_CAUSE);
+};
+
+/**
+ * The rerank arm's ENTRY GATE, run once per dataset before its first rerank
+ * call. A reranker whose rank head this llama.cpp build does not support answers
+ * HTTP 200 with well-formed scores that do not depend on the document; the arm
+ * then completes and records "reranking barely helped" — a plausible number, the
+ * project's worst failure class. Nothing downstream of `rerankAtoms` can see it,
+ * so it is asserted HERE, on a fixed pair, before any topic is scored.
+ *
+ * The engine owns the probe and its message; this carries the message through
+ * verbatim, exactly as `rerankIfRequested` carries a refusal.
+ */
+export const assertRerankDiscriminates = async (arm: RerankArm = {}): Promise<void> => {
+  const outcome = await probeRerankDiscrimination(arm);
+  if (!outcome.ok) {
+    fail(`dp-gnosis-bench: rerank discrimination probe FAILED — ${outcome.error}`, RERANK_PROBE_CAUSE);
+  }
 };
