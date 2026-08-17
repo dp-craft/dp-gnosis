@@ -38,6 +38,7 @@ import Database from 'better-sqlite3';
 
 import { buildFts5Index } from '../../dp-gnosis/src/adapters/fts5Adapter.js';
 import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.js';
+import { buildLanceDbDenseIndex } from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
 import { createLinearScanAdapter } from '../../dp-gnosis/src/adapters/linearScanAdapter.js';
 import { buildMiniSearchIndex } from '../../dp-gnosis/src/adapters/miniSearchAdapter.js';
 import { parseAtom } from '../../dp-gnosis/src/atom.js';
@@ -342,6 +343,8 @@ const INDEX_SUFFIXES: Readonly<Record<AdapterName, string>> = {
   fts5: '',
   minisearch: '-minisearch.json',
   lancedb: '-lancedb',
+  'lancedb-vec': '-lancedb-vec',
+  'lancedb-hybrid': '-lancedb-hybrid',
 };
 
 interface IndexLocation {
@@ -374,6 +377,26 @@ const INDEX_BUILDERS: Readonly<
     requireBuilt(
       await buildLanceDbIndex({ atomsDir: location.atomsDir, indexDir: location.indexPath }),
       'lancedb',
+      datasetId
+    ),
+  'lancedb-vec': async (location, datasetId): Promise<void> =>
+    requireBuilt(
+      await buildLanceDbDenseIndex({
+        atomsDir: location.atomsDir,
+        indexDir: location.indexPath,
+        route: 'vec',
+      }),
+      'lancedb-vec',
+      datasetId
+    ),
+  'lancedb-hybrid': async (location, datasetId): Promise<void> =>
+    requireBuilt(
+      await buildLanceDbDenseIndex({
+        atomsDir: location.atomsDir,
+        indexDir: location.indexPath,
+        route: 'hybrid',
+      }),
+      'lancedb-hybrid',
       datasetId
     ),
 };
