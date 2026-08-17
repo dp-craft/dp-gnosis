@@ -14,6 +14,7 @@ import {
 } from '../../dp-gnosis/src/config.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
+import type { Qrel } from './metrics.js';
 import {
   type DatasetResult,
   HISTORY_FILE,
@@ -23,6 +24,8 @@ import {
 } from './report.js';
 import {
   BENCH_DEFAULT_ADAPTER,
+  COLLAPSING_TOPICS_WARNING,
+  collapsingTopicGroups,
   effectiveAtomMaxChars,
   firstPassDepth,
   main,
@@ -32,7 +35,8 @@ import {
   percentileMs,
   provenanceOf,
   selectDatasets,
-  selectionError
+  selectionError,
+  warnCollapsingTopics
 } from './run.js';
 
 /** A second reranker id — any id the shipped constant is not. */
@@ -472,5 +476,153 @@ describe('measureAndRecordAll', () => {
     expect(results.map(result => result.dataset)).toEqual([entries[0]?.id, entries[1]?.id]);
     expect(rows.every(row => existsSync(resolve(dir, row.perTopicPath ?? '')))).toBe(true);
     expect(rows.every(row => existsSync(resolve(dir, row.runPath ?? '')))).toBe(true);
+  });
+});
+
+/**
+ * The defect: the bench applies NO topic filter (`engine.ts` calls
+ * `port.retrieve(text, { k })` with none), so two topics whose only difference is
+ * an authored `domain`/`type` filter are ONE topic measured twice — every
+ * macro-average double-counts it.
+ */
+describe('collapsingTopicGroups', () => {
+  const gold = (...docIds: readonly string[]): Qrel =>
+    new Map(docIds.map(docId => [docId, 1]));
+
+  it('finds two topics sharing query text and gold set', () => {
+    expect(
+      collapsingTopicGroups(
+        new Map([
+          ['q-059', 'what did we decide'],
+          ['q-060', 'what did we decide'],
+        ]),
+        new Map([
+          ['q-059', gold('a', 'b')],
+          ['q-060', gold('b', 'a')],
+        ])
+      )
+    ).toEqual([['q-059', 'q-060']]);
+  });
+
+  it('is not a group when the query text matches but the gold set differs', () => {
+    expect(
+      collapsingTopicGroups(
+        new Map([
+          ['q-1', 'same text'],
+          ['q-2', 'same text'],
+        ]),
+        new Map([
+          ['q-1', gold('a', 'b')],
+          ['q-2', gold('a', 'c')],
+        ])
+      )
+    ).toEqual([]);
+  });
+
+  it('is not a group when the gold set matches but the query text differs', () => {
+    expect(
+      collapsingTopicGroups(
+        new Map([
+          ['q-1', 'one text'],
+          ['q-2', 'other text'],
+        ]),
+        new Map([
+          ['q-1', gold('a')],
+          ['q-2', gold('a')],
+        ])
+      )
+    ).toEqual([]);
+  });
+
+  // Grade 0 is a judged NON-relevant document (`metrics.ts` counts grade > 0), so
+  // it MUST NOT make two different gold sets look identical, nor split two equal ones.
+  it('ignores grade-0 judgments when comparing gold sets', () => {
+    const queries = new Map([
+      ['q-1', 'same text'],
+      ['q-2', 'same text'],
+    ]);
+    expect(
+      collapsingTopicGroups(
+        queries,
+        new Map([
+          ['q-1', new Map([['a', 1], ['z', 0]])],
+          ['q-2', new Map([['a', 1]])],
+        ])
+      )
+    ).toEqual([['q-1', 'q-2']]);
+    expect(
+      collapsingTopicGroups(
+        queries,
+        new Map([
+          ['q-1', new Map([['a', 1], ['z', 0]])],
+          ['q-2', new Map([['a', 1], ['z', 1]])],
+        ])
+      )
+    ).toEqual([]);
+  });
+
+  it('groups a three-way collapse as one group and orders ids and groups', () => {
+    expect(
+      collapsingTopicGroups(
+        new Map([
+          ['q-c', 'beta'],
+          ['q-b', 'alpha'],
+          ['q-a', 'alpha'],
+          ['q-d', 'beta'],
+          ['q-e', 'alpha'],
+        ]),
+        new Map([
+          ['q-c', gold('x')],
+          ['q-b', gold('a')],
+          ['q-a', gold('a')],
+          ['q-d', gold('x')],
+          ['q-e', gold('a')],
+        ])
+      )
+    ).toEqual([
+      ['q-a', 'q-b', 'q-e'],
+      ['q-c', 'q-d'],
+    ]);
+  });
+
+  it('returns no groups for empty input', () => {
+    expect(collapsingTopicGroups(new Map(), new Map())).toEqual([]);
+  });
+});
+
+describe('warnCollapsingTopics', () => {
+  const collapsing = (): readonly [ReadonlyMap<string, string>, ReadonlyMap<string, Qrel>] => [
+    new Map([
+      ['q-059', 'what did we decide'],
+      ['q-060', 'what did we decide'],
+    ]),
+    new Map([
+      ['q-059', new Map([['d1', 1]])],
+      ['q-060', new Map([['d1', 1]])],
+    ]),
+  ];
+
+  it('names the dataset, the group and the double-counting on stderr', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const [queries, qrels] = collapsing();
+    warnCollapsingTopics('vault', queries, qrels);
+    const written = stderr.mock.calls.map(call => String(call[0])).join('');
+    stderr.mockRestore();
+    expect(written).toContain(COLLAPSING_TOPICS_WARNING);
+    expect(written).toContain('vault');
+    expect(written).toContain('q-059 + q-060');
+    expect(written).toContain('double-counted');
+  });
+
+  it('writes nothing when no topic set collapses', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    warnCollapsingTopics(
+      'vault-hu',
+      new Map([['q-1', 'a']]),
+      new Map([['q-1', new Map([['d1', 1]])]])
+    );
+    const calls = stderr.mock.calls.length;
+    stderr.mockRestore();
+    expect(calls).toBe(0);
   });
 });

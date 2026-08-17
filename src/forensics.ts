@@ -102,18 +102,35 @@ interface RunPosting {
   readonly docId: string;
 }
 
-/**
- * `qid Q0 docid rank score tag`, whitespace-separated. A line short of the docid
- * column is dropped rather than read as an `undefined` document — a truncated
- * write must not enter a ranking as data.
- */
+/** `qid Q0 docid rank score tag`, whitespace-separated; short of docid is malformed. */
 const parseRunLine = (line: string): RunPosting | undefined => {
   const [queryId, , docId] = line.trim().split(/\s+/);
   return queryId === undefined || docId === undefined ? undefined : { queryId, docId };
 };
 
-const isPosting = (posting: RunPosting | undefined): posting is RunPosting =>
-  posting !== undefined;
+/** `error.cause` when a run file holds a line short of the docid column. */
+export const MALFORMED_RUN_LINE_CAUSE = 'dp-gnosis-bench/malformed-run-line';
+
+const malformedLineMessage = (absPath: string, lineNumber: number, line: string): string =>
+  `dp-gnosis-bench: malformed TREC run line in ${absPath} at line ${lineNumber} — ` +
+  `expected at least 3 whitespace-separated fields (qid Q0 docid), got "${line.trim()}"`;
+
+/**
+ * A truncated write must not enter a ranking as data, and it must not be dropped
+ * either: a silently shorter ranking is scored as the ranking the run produced.
+ * The number is the 1-based position among the file's NON-EMPTY lines, which is
+ * the file line number for every run file this suite writes.
+ */
+const postingAt = (absPath: string): ((line: string, index: number) => RunPosting) =>
+  (line, index) => {
+    const posting = parseRunLine(line);
+    if (posting === undefined) {
+      throw new Error(malformedLineMessage(absPath, index + 1, line), {
+        cause: MALFORMED_RUN_LINE_CAUSE,
+      });
+    }
+    return posting;
+  };
 
 const appendPosting = (
   run: Map<string, readonly string[]>,
@@ -124,9 +141,10 @@ const appendPosting = (
 /**
  * A persisted run file as `qid -> docids in FILE ORDER`. The file is already
  * written in descending-score order, so no re-sort happens here — re-sorting is
- * how `trec_eval` silently substitutes an alphabetical ranking.
+ * how `trec_eval` silently substitutes an alphabetical ranking. A malformed line
+ * THROWS, naming the file and the line.
  */
 export const readRunFile = (absPath: string): ReadonlyMap<string, readonly string[]> =>
-  mapNonEmptyLines(absPath, parseRunLine)
-    .filter(isPosting)
+  mapNonEmptyLines(absPath, line => line)
+    .map(postingAt(absPath))
     .reduce(appendPosting, new Map<string, readonly string[]>());

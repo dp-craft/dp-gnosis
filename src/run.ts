@@ -387,6 +387,72 @@ export const topicsOf = (
     .map(id => ({ id, text: queries.get(id) ?? '' }))
     .filter(topic => topic.text.length > 0);
 
+/** The gold set as `metrics.ts` reads it: judged docs above grade 0, order-free. */
+const relevantIdsOf = (qrel: Qrel): readonly string[] =>
+  [...qrel.entries()]
+    .filter(([, grade]) => grade > 0)
+    .map(([docId]) => docId)
+    .sort();
+
+/**
+ * A topic's identity UNDER THE RETRIEVAL ACTUALLY PERFORMED. The bench applies no
+ * topic filter, so an authored `domain`/`type` filter is invisible here — only the
+ * query text and the gold set can tell two topics apart.
+ */
+const topicSignature = (text: string, qrel: Qrel): string =>
+  JSON.stringify([text.trim(), relevantIdsOf(qrel)]);
+
+const bySignature = (
+  topics: readonly Topic[],
+  qrels: ReadonlyMap<string, Qrel>
+): ReadonlyMap<string, readonly string[]> =>
+  topics.reduce((groups, topic) => {
+    const key = topicSignature(topic.text, qrels.get(topic.id) ?? new Map());
+    return groups.set(key, [...(groups.get(key) ?? []), topic.id]);
+  }, new Map<string, readonly string[]>());
+
+const byFirstId = (a: readonly string[], b: readonly string[]): number =>
+  (a[0] ?? '') < (b[0] ?? '') ? -1 : 1;
+
+/**
+ * Topic ids that are INDISTINGUISHABLE to this bench — same trimmed query text and
+ * same gold set — in groups of two or more. Each group is one topic the macro
+ * averages count once per member. Empty when every topic is distinct.
+ */
+export const collapsingTopicGroups = (
+  queries: ReadonlyMap<string, string>,
+  qrels: ReadonlyMap<string, Qrel>
+): readonly (readonly string[])[] =>
+  [...bySignature(topicsOf(queries, qrels), qrels).values()]
+    .filter(ids => ids.length > 1)
+    .map(ids => [...ids].sort())
+    .sort(byFirstId);
+
+/** Prefix of the collapsing-topics warning — a WARNING, not a refusal. */
+export const COLLAPSING_TOPICS_WARNING = 'dp-gnosis-bench/collapsing-topics';
+
+const collapsingMessage = (
+  datasetId: string,
+  groups: readonly (readonly string[])[]
+): string =>
+  `${COLLAPSING_TOPICS_WARNING}: ${datasetId} has ${groups.length} topic group(s) that this ` +
+  `bench cannot tell apart — identical query text and identical gold set, and no topic filter ` +
+  `is applied at retrieval: ${groups.map(ids => ids.join(' + ')).join(', ')}. ` +
+  `Every member beyond the first is double-counted in every macro-average of this run.\n`;
+
+/**
+ * Warns, and lets the run proceed: the collapsing pair in the vault golden set is
+ * deliberately authored, so refusing would block every `vault` run.
+ */
+export const warnCollapsingTopics = (
+  datasetId: string,
+  queries: ReadonlyMap<string, string>,
+  qrels: ReadonlyMap<string, Qrel>
+): void => {
+  const groups = collapsingTopicGroups(queries, qrels);
+  if (groups.length > 0) process.stderr.write(collapsingMessage(datasetId, groups));
+};
+
 /** The CLI's `k_init` handling, which `engine.ts` leaves to its caller. */
 export const firstPassDepth = (depth: number, rerank: boolean): number =>
   rerank ? Math.max(depth, RERANK_K_INIT) : depth;
@@ -566,10 +632,21 @@ const probeThenQuery = async (
   }
 };
 
+/** The scorable topics, after warning about any this bench cannot tell apart. */
+const topicsFor = (
+  dir: string,
+  datasetId: string,
+  qrels: ReadonlyMap<string, Qrel>
+): readonly Topic[] => {
+  const queries = readQueries(dir);
+  warnCollapsingTopics(datasetId, queries, qrels);
+  return topicsOf(queries, qrels);
+};
+
 const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
   const dir = await ensureDataset(entry);
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
-  const topics = topicsOf(readQueries(dir), qrels);
+  const topics = topicsFor(dir, entry.id, qrels);
   const prepared = await prepareOf(entry, dir, {
     adapter: options.adapter,
     analyzer: options.analyzer,

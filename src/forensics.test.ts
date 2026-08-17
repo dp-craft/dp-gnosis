@@ -16,6 +16,16 @@ import { ndcgAt, type Qrel } from './metrics.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-forensics-'));
 
+/** The message a throwing call produced, or the empty string when it did not throw. */
+const messageOf = (act: () => unknown): string => {
+  try {
+    act();
+    return '';
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+};
+
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const CUT = 10;
@@ -185,5 +195,23 @@ describe('readRunFile', () => {
 
   it('should read an empty file as no topics', () => {
     expect(readRunFile(fixture('empty.trec', '')).size).toBe(0);
+  });
+
+  // A line short of the docid column is a TRUNCATED WRITE. Skipping it records a
+  // shorter ranking as if it were the ranking the run produced — the recurring
+  // failure class of this repo (a component produced nothing, read as data).
+  it('should THROW naming the file and the 1-based line number on a short line', () => {
+    const path = fixture(
+      'truncated.trec',
+      ['q1 Q0 docA 1 3 fts5', 'q2 Q0', 'q3 Q0 docC 1 1 fts5'].join('\n')
+    );
+    const message = messageOf(() => readRunFile(path));
+    expect(message).toContain(path);
+    expect(message).toContain('line 2');
+  });
+
+  it('should THROW on a line carrying only a query id', () => {
+    const path = fixture('qid-only.trec', 'q1\n');
+    expect(() => readRunFile(path)).toThrow(/line 1/);
   });
 });
