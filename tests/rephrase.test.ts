@@ -12,8 +12,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
-import { REPHRASE_MODEL_ID } from '../src/config.js';
-import { normaliseRewrite, rephraseQuery } from '../src/rephrase.js';
+import { REPHRASE_MODEL_ID, REPHRASE_PROMPT_VERSION } from '../src/config.js';
+import {
+  carriesExactRareTerm,
+  normaliseRewrite,
+  REPHRASE_SYSTEM_PROMPT,
+  rephraseCacheKey,
+  rephraseQuery
+} from '../src/rephrase.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Gamma'] as const;
 
@@ -132,6 +138,72 @@ describe('normaliseRewrite', () => {
   });
 });
 
+describe('prompt v2 — the two diagnosed v1 defects', () => {
+  // Both are prompt-side statements the measurement note requires; the guard
+  // below is the code-side half of the second one.
+  it('tells the model to answer in the QUERY OWN language', () => {
+    expect(REPHRASE_SYSTEM_PROMPT).toMatch(/same language as the question/i);
+    expect(REPHRASE_SYSTEM_PROMPT).not.toMatch(/English word STEM/i);
+  });
+
+  it('carries a worked Hungarian example, so the language rule is shown not just stated', () => {
+    expect(REPHRASE_SYSTEM_PROMPT).toContain('bejövő számla adópont');
+  });
+
+  it('forbids splitting an identifier, the measured English harm', () => {
+    expect(REPHRASE_SYSTEM_PROMPT).toMatch(/MUST NOT split/i);
+    expect(REPHRASE_SYSTEM_PROMPT).toContain('forEachLocale');
+  });
+});
+
+describe('REPHRASE_PROMPT_VERSION in the cache key', () => {
+  // The v1 rewrites on disk (and in the frozen arm goldens) MUST NOT be served
+  // under the v2 prompt — the version is what makes them miss.
+  it('is v2, so every v1 entry misses', () => {
+    expect(REPHRASE_PROMPT_VERSION).toBe('v2');
+  });
+
+  it('changes the key when only the version changes', () => {
+    expect(rephraseCacheKey(REPHRASE_MODEL_ID, 'v1', RAW_QUERY)).not.toBe(
+      rephraseCacheKey(REPHRASE_MODEL_ID, 'v2', RAW_QUERY)
+    );
+  });
+
+  it('is stable for identical inputs', () => {
+    expect(rephraseCacheKey(REPHRASE_MODEL_ID, 'v2', RAW_QUERY)).toBe(
+      rephraseCacheKey(REPHRASE_MODEL_ID, 'v2', RAW_QUERY)
+    );
+  });
+});
+
+describe('carriesExactRareTerm — README rule 5 as a hard guard', () => {
+  it.each([
+    'where is forEachLocale defined',
+    'guardRejections behaviour',
+    'RUNNER_EVAL_CAPTURE meaning',
+    'what does gate-no-verdict mean',
+    'how to use llama-swap',
+    'Xenova/distilgpt2 model',
+    'lint:test-shape task',
+    '@/features import rule',
+    'what is in db/idb.ts',
+    'the --no-verify flag',
+  ])('guards %s', query => {
+    expect(carriesExactRareTerm(query)).toBe(true);
+  });
+
+  it.each([
+    'i would like to see testing strategy related info',
+    'how to start e2e tests',
+    'what llm service solutions are available',
+    'functional programming style',
+    'Hogyan kapcsolom be a naplókban az áfa-analitikát?',
+    'Mi dönti el egy bejövő számla adópontját?',
+  ])('leaves %s to the rewriter', query => {
+    expect(carriesExactRareTerm(query)).toBe(false);
+  });
+});
+
 describe('rephraseQuery', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -189,6 +261,16 @@ describe('rephraseQuery', () => {
 
     expect(outcome.ok).toBe(false);
     expect(error).toContain('no usable query line');
+  });
+
+  it('returns a rare-term query UNCHANGED and never calls the rewriter', async () => {
+    const identifierQuery = 'where is forEachLocale defined';
+    const calls = stubServer([REPHRASE_MODEL_ID], REWRITTEN_QUERY);
+
+    const outcome = await rephraseQuery(identifierQuery);
+
+    expect(outcome).toEqual({ ok: true, rewritten: identifierQuery, cached: false });
+    expect(calls).toEqual([]);
   });
 
   it('caches a rewrite on disk: the second call is a HIT and issues no fetch', async () => {

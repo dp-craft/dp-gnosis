@@ -266,8 +266,15 @@ export const REPHRASE_MAX_TOKENS = 120;
  * key. A cache that outlived a prompt change would serve one prompt's rewrites
  * under another's name with a fresh mtime, which is the stale-derived-artefact
  * landmine in GNOSIS-GUIDE.md § Landmines.
+ *
+ * `v2` (2026-08-18) replaces the prompt that FAILED its own acceptance —
+ * inert on Hungarian, significantly harmful on English
+ * (`docs/analysis/2026-08-18-dp-gnosis-full-review/10-rephrase-arm-measurement.md`).
+ * Every v1 entry on disk, and every v1 rewrite frozen into an arm golden, is
+ * now evidence about a prompt that no longer exists: the version is what makes
+ * a v1 entry MISS instead of being served under the new prompt's name.
  */
-export const REPHRASE_PROMPT_VERSION = 'v1';
+export const REPHRASE_PROMPT_VERSION = 'v2';
 
 /**
  * The embedding model the dense leg calls, served by llama-swap under this id.
