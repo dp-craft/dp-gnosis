@@ -365,6 +365,10 @@ const resolved = (options: RerankOptions): Required<RerankOptions> => ({
 /**
  * Reorder `atoms` by the fused ranking, carrying the FUSED score on each atom —
  * the score a caller reads must be the one that produced the order it reads.
+ *
+ * The discrimination gate is NOT here: the bench runs its own before a
+ * dataset's first call, and the serving path runs {@link rerankProbeRefusal}.
+ * A second gate inside this function would probe twice on the bench path.
  */
 export const rerankAtoms = async (
   query: string,
@@ -500,4 +504,58 @@ export const probeRerankDiscrimination = async (
     timeoutMs: PROBE_TIMEOUT_MS,
   });
   return probeOutcomeOf(endpoint, scored);
+};
+
+/**
+ * The cause tag a probe refusal carries, mirroring the bench's
+ * `dp-gnosis-bench/rerank-probe-failed`: the two gates diagnose the same fault
+ * on two paths, and a reader grepping one MUST find the other.
+ */
+const PROBE_FAILED_CAUSE = 'dp-gnosis/rerank-probe-failed';
+
+const probeRefusal = (error: string): string => `${PROBE_FAILED_CAUSE}: ${error}`;
+
+/** One memo entry per endpoint: the URL and the model both change the verdict. */
+const probeKey = (endpoint: Endpoint): string => `${endpoint.baseUrl}\u0000${endpoint.model}`;
+
+/**
+ * The per-process probe memo. It holds the PROMISE, not the outcome, so two
+ * concurrent first calls share one probe rather than paying the cold load twice.
+ */
+const probeCache = new Map<string, Promise<RerankProbeOutcome>>();
+
+/**
+ * Drops the memo. For tests, which exercise a healthy and a broken server in one
+ * process and would otherwise read the first verdict for every later one.
+ */
+export const resetRerankProbeCache = (): void => {
+  probeCache.clear();
+};
+
+/** The probe's verdict for `endpoint`, computed at most once per process. */
+const probeOnce = (endpoint: Endpoint): Promise<RerankProbeOutcome> => {
+  const key = probeKey(endpoint);
+  const cached = probeCache.get(key);
+  if (cached !== undefined) return cached;
+  const pending = probeRerankDiscrimination({ ...endpoint });
+  probeCache.set(key, pending);
+  return pending;
+};
+
+/**
+ * The SERVING path's gate: the refusal to report, or `undefined` when this
+ * endpoint discriminates and may be scored with. Memoised per process, so the
+ * probe is paid once and doubles as the warm-up the cold-load landmine requires
+ * (GNOSIS-GUIDE.md § Landmines) — hence the probe's own long timeout.
+ *
+ * It is called BEFORE `rerankAtoms`, because a model whose rank head this build
+ * cannot use answers HTTP 200 with well-formed numbers: nothing downstream of
+ * the scoring call can notice it.
+ */
+export const rerankProbeRefusal = async (
+  options: RerankOptions = {}
+): Promise<string | undefined> => {
+  const { baseUrl, model } = resolved(options);
+  const probe = await probeOnce({ baseUrl, model });
+  return probe.ok ? undefined : probeRefusal(probe.error);
 };

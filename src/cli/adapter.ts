@@ -42,8 +42,21 @@ export const ADAPTER_NAMES = [
 
 export type AdapterName = (typeof ADAPTER_NAMES)[number];
 
-/** The reference adapter: no index, so `index` is a no-op and retrieval always works. */
-export const DEFAULT_ADAPTER: AdapterName = 'linear';
+/**
+ * The PRODUCTION adapter, and the one the bench measures by default — the two
+ * are asserted equal (`tests/defaults.test.ts`) so the CLI can never serve a
+ * route the suite does not measure.
+ *
+ * Measured (`GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at `gitSha`
+ * b64d5bff): the champion arm is `fts5` + `RERANK_MODEL_ID` over a pool of
+ * `RERANK_K_INIT`, scoring `vault` nDCG@10 0.5040 and `vault-hu` 0.6929, above
+ * every `linear` arm recorded there.
+ *
+ * It costs what `linear` did not: `fts5` searches an INDEX, so a vault that was
+ * ingested but never indexed reports `indexState: 'unavailable'` with the build
+ * command in its note, rather than falling back to a scan.
+ */
+export const DEFAULT_ADAPTER: AdapterName = 'fts5';
 
 /** Membership test rather than a cast — an unknown name is not an `AdapterName`. */
 export const resolveAdapter = (value: string): AdapterName | undefined =>

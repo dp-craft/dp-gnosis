@@ -140,10 +140,19 @@ export const RETRIEVE_TOKEN_BUDGET = 64000;
 
 /**
  * The reranker `retrieve --rerank` calls, served by llama-swap under this id.
- * One id, one model: the measured configuration below was measured against
- * THIS model, so serving another one under the flag would report its numbers.
+ * One id, one model: a run that does not carry the id cannot be told from one
+ * that used another model, so `--rerank-model` records what it selects.
+ *
+ * The measured champion (`GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at
+ * `gitSha` b64d5bff): `fts5` + this model over a pool of {@link RERANK_K_INIT}
+ * scores `vault` nDCG@10 0.5040 and `vault-hu` 0.6929.
+ *
+ * What the MODEL alone buys, isolated at a common pool of 20 against the former
+ * default `bge-reranker-v2-m3`: `vault` +0.0454 nDCG@10 (p=0.0011) and
+ * **nothing on Hungarian** (+0.0000, not significant). The Hungarian gain in
+ * the champion row comes from the pool depth, not from this swap.
  */
-export const RERANK_MODEL_ID = 'bge-reranker-v2-m3';
+export const RERANK_MODEL_ID = 'qwen3-reranker-4b';
 
 /** llama-swap's OpenAI-compatible base URL, overridden by {@link RERANK_URL_ENV_VAR}. */
 export const RERANK_DEFAULT_URL = 'http://127.0.0.1:9292';
@@ -152,13 +161,21 @@ export const RERANK_DEFAULT_URL = 'http://127.0.0.1:9292';
 export const RERANK_URL_ENV_VAR = 'DP_GNOSIS_RERANK_URL';
 
 /**
- * First-pass depth: how many candidates the reranker reorders. Measured
- * (2026-08-13,
- * `docs/benchmarks/2026-08-13-dp-gnosis-evolution-and-maturity-analysis.md`
- * §5.1) — it is the pool the fusion below was measured over, so it moves with
- * {@link RERANK_RRF_K} and {@link RERANK_RRF_WEIGHT}, never alone.
+ * First-pass depth: how many candidates the reranker reorders. A FLOOR, not a
+ * cap — `retrieveCommand.ts` resolves the first pass as `max(k, RERANK_K_INIT)`,
+ * so a caller asking for more keeps its own `k`.
+ *
+ * The champion pool (`GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at
+ * `gitSha` b64d5bff): `fts5` + {@link RERANK_MODEL_ID} at this depth scores
+ * `vault` nDCG@10 0.5040 and `vault-hu` 0.6929, against 0.4911 / 0.6277 for the
+ * same pair at pool 20. Hungarian's whole gain is this depth, not the model.
+ *
+ * It is bought with latency: the champion arm measured ≈12 s per `vault` query,
+ * and every `--rerank` call pays it. Deliberately uncapped and with no opt-out
+ * — a pool a caller can silently shrink would report champion numbers off a
+ * shallower pool.
  */
-export const RERANK_K_INIT = 20;
+export const RERANK_K_INIT = 100;
 
 /**
  * Characters of an atom body sent to the reranker, taken from the HEAD.

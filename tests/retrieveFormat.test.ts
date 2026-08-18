@@ -45,6 +45,11 @@ const retrieveArgv = (
 ): readonly string[] => [
   'retrieve',
   query,
+  // Pinned: the RENDERINGS are the subject here and are adapter-independent by
+  // construction; the default adapter is index-backed and would search the
+  // repo's own index rather than the fixture's atoms.
+  '--adapter',
+  'linear',
   '--atoms-dir',
   fixture.atomsDir,
   '--repo-root',
@@ -188,6 +193,8 @@ describe('retrieve --format', () => {
       const unavailable = await runCli([
         'retrieve',
         'escaping probe',
+        '--adapter',
+        'linear',
         '--atoms-dir',
         join(fixture.repoRoot, 'absent'),
         '--format',

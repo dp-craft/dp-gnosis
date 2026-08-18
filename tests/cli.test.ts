@@ -238,6 +238,8 @@ describe('runCli', () => {
       const result = await runCli([
         'retrieve',
         'retrieval',
+        '--adapter',
+        'linear',
         '--atoms-dir',
         fixture.atomsDir,
       ]);
@@ -311,10 +313,20 @@ describe('runCli', () => {
       await runCli(ingestArgv(fixture));
       const budgeted = ['--max-tokens', '1', '--repo-root', fixture.repoRoot];
 
-      const text = await runCli(['retrieve', 'retrieval', '--atoms-dir', fixture.atomsDir, ...budgeted]);
+      const text = await runCli([
+        'retrieve',
+        'retrieval',
+        '--adapter',
+        'linear',
+        '--atoms-dir',
+        fixture.atomsDir,
+        ...budgeted,
+      ]);
       const xml = await runCli([
         'retrieve',
         'retrieval',
+        '--adapter',
+        'linear',
         '--atoms-dir',
         fixture.atomsDir,
         '--format',
@@ -360,6 +372,8 @@ describe('runCli', () => {
       const result = await runCli([
         'retrieve',
         'retrieval',
+        '--adapter',
+        'linear',
         '--atoms-dir',
         fixture.atomsDir,
       ]);

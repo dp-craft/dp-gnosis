@@ -24,7 +24,11 @@ import {
   RERANK_MODEL_ID,
   RERANK_RRF_WEIGHT
 } from '../src/config.js';
-import { fuseLegs, fuseRanking, resolveRerankFusion } from '../src/rerank.js';
+import {
+  fuseLegs,
+  fuseRanking,
+  resetRerankProbeCache,
+  resolveRerankFusion } from '../src/rerank.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Echo', 'Gamma', 'Hotel'] as const;
 
@@ -75,13 +79,43 @@ const okResponse = (payload: unknown): unknown => ({
   text: async (): Promise<string> => JSON.stringify(payload),
 });
 
+/**
+ * The discrimination probe runs on the serving path before the first scoring
+ * call, so the fake server must answer it as a working reranker would — its
+ * query is the one carrying {@link PROBE_MARKER}, and index 0 is the relevant
+ * document. Answering it from `order` instead would make the probe's verdict an
+ * accident of the fixture's rerank order.
+ */
+const PROBE_MARKER = 'BM25';
+
+const isProbe = (init: { readonly body?: string } | undefined): boolean =>
+  String(JSON.parse(String(init?.body ?? '{}'))['query'] ?? '').includes(PROBE_MARKER);
+
+const HEALTHY_PROBE = [
+  { index: 0, relevance_score: 2.07 },
+  { index: 1, relevance_score: -11 },
+];
+
+const rerankBody = (order: readonly number[]): unknown => ({
+  results: order.map((index, position) => ({ index, relevance_score: 1 - position * 0.1 })),
+});
+
 const stubServer = (order: readonly number[]): void => {
-  vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+  vi.stubGlobal('fetch', async (url: string, init?: { readonly body?: string }): Promise<unknown> => {
     if (url.endsWith('/v1/models')) return okResponse({ data: [{ id: RERANK_MODEL_ID }] });
-    return okResponse({
-      results: order.map((index, position) => ({ index, relevance_score: 1 - position * 0.1 })),
-    });
+    return okResponse(isProbe(init) ? { results: HEALTHY_PROBE } : rerankBody(order));
   });
+};
+
+/** The same stub, recording which model id each rerank call named. */
+const capturingServer = (order: readonly number[], served: string): string[] => {
+  const models: string[] = [];
+  vi.stubGlobal('fetch', async (url: string, init?: { readonly body?: string }): Promise<unknown> => {
+    if (url.endsWith('/v1/models')) return okResponse({ data: [{ id: served }] });
+    models.push(String(JSON.parse(String(init?.body ?? '{}'))['model']));
+    return okResponse(isProbe(init) ? { results: HEALTHY_PROBE } : rerankBody(order));
+  });
+  return models;
 };
 
 interface JsonAtom {
@@ -89,10 +123,17 @@ interface JsonAtom {
   readonly score: number;
 }
 
-const rankingOf = async (fixture: Fixture): Promise<readonly (readonly [string, number])[]> => {
+const rankingOf = async (
+  fixture: Fixture,
+  extra: readonly string[] = []
+): Promise<readonly (readonly [string, number])[]> => {
   const out = await runCli([
     'retrieve',
     'zestful retrieval',
+    // Pinned: the fusion rule is the subject here, and the default adapter is
+    // index-backed — an unpinned run would search the repo's own index.
+    '--adapter',
+    'linear',
     '--atoms-dir',
     fixture.atomsDir,
     '--repo-root',
@@ -101,6 +142,7 @@ const rankingOf = async (fixture: Fixture): Promise<readonly (readonly [string, 
     '-k',
     '6',
     '--rerank',
+    ...extra,
   ]);
   const payload = JSON.parse(out.stdout) as { readonly atoms: readonly JsonAtom[] };
   return payload.atoms.map(atom => [atom.id, atom.score] as const);
@@ -109,6 +151,8 @@ const rankingOf = async (fixture: Fixture): Promise<readonly (readonly [string, 
 describe('retrieve --rerank default arm', () => {
   beforeEach(() => {
     vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    // The probe memo is per PROCESS; each test serves its own fake reranker.
+    resetRerankProbeCache();
   });
 
   afterEach(() => {
@@ -234,5 +278,92 @@ describe('HYBRID_DENSE_LEG_WEIGHT', () => {
     expect(declaration).toContain('HYBRID_DENSE_LEG_WEIGHT');
     expect(declaration.slice(0, declaration.indexOf('}'))).not.toContain('RERANK_RRF_WEIGHT');
     expect(RERANK_RRF_WEIGHT).toBe(0.5);
+  });
+});
+
+/**
+ * The three tuning flags on `retrieve`. Each mirrors the bench's rule: a
+ * treatment a run NAMES must be a treatment the run APPLIED, so a tuning flag
+ * without `--rerank` refuses instead of being ignored, and neither an unknown
+ * preset nor an out-of-range weight is quietly repaired into something that
+ * would score under the wrong label.
+ */
+describe('retrieve rerank tuning flags', () => {
+  const usageErrorFor = async (
+    extra: readonly string[]
+  ): Promise<Awaited<ReturnType<typeof runCli>>> =>
+    await runCli(['retrieve', 'zestful retrieval', '--adapter', 'linear', ...extra]);
+
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    // The probe memo is per PROCESS; each test serves its own fake reranker.
+    resetRerankProbeCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ['--rerank-model', 'qwen3-reranker-0.6b'],
+    ['--rerank-profile', 'beir-ce'],
+    ['--rerank-weight', '0.75'],
+  ])('exits 2 when %s is passed without --rerank, naming the missing flag', async (flag, value) => {
+    const result = await usageErrorFor([flag, value]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain(flag);
+    expect(result.stderr).toContain('--rerank');
+  });
+
+  it('exits 2 on an unknown --rerank-profile, listing the known presets', async () => {
+    const result = await usageErrorFor(['--rerank', '--rerank-profile', 'rrf60']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('rrf60');
+    expect(result.stderr).toContain('shipped, beir-ce');
+  });
+
+  it.each(['1.5', 'heavy'])(
+    'exits 2 on --rerank-weight %s, naming the range rather than clamping it',
+    async value => {
+      const result = await usageErrorFor(['--rerank', '--rerank-weight', value]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('0');
+      expect(result.stderr).toContain('1');
+      expect(result.stderr).toContain('never clamped');
+    }
+  );
+
+  it('scores with the model --rerank-model names, not the shipped default', async () => {
+    const fixture = await makeFixture();
+    const models = capturingServer(RERANK_ORDER, 'qwen3-reranker-0.6b');
+
+    await rankingOf(fixture, ['--rerank-model', 'qwen3-reranker-0.6b']);
+
+    expect(models).toContain('qwen3-reranker-0.6b');
+    expect(models).not.toContain(RERANK_MODEL_ID);
+  });
+
+  it('applies the fusion rule --rerank-profile names — beir-ce replaces the first pass', async () => {
+    const fixture = await makeFixture();
+    stubServer(RERANK_ORDER);
+
+    const ranked = await rankingOf(fixture, ['--rerank-profile', 'beir-ce']);
+
+    expect(ranked.map(([id]) => id)).not.toEqual(SHIPPED_RANKING.map(([id]) => id));
+    expect(ranked[0]?.[1]).toBe(1);
+    expect(ranked[1]?.[1]).toBe(1 / 2);
+  });
+
+  it('applies the weight --rerank-weight names, moving the fused scores', async () => {
+    const fixture = await makeFixture();
+    stubServer(RERANK_ORDER);
+
+    const ranked = await rankingOf(fixture, ['--rerank-weight', '1']);
+
+    expect(ranked.map(([, score]) => score)).not.toEqual(SHIPPED_RANKING.map(([, score]) => score));
   });
 });

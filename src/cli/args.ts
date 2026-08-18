@@ -1,7 +1,7 @@
 /**
  * Hand-rolled argv parsing. No dependency: `commander` is not a root dependency
  * and adding one needs a COMMON.md §IX round, while the surface here is three
- * subcommands and seven flags.
+ * subcommands and a closed flag table.
  *
  * The rule that shapes this file: an UNKNOWN flag is a hard error, never an
  * ignored token. A silently dropped `--jsn` gives an agent-driven caller a wrong
@@ -9,6 +9,7 @@
  * driven by an LLM can have. Every rejection names the valid alternatives.
  */
 
+import { RERANK_PRESET_NAMES } from '../config.js';
 import { ADAPTER_NAMES } from './adapter.js';
 
 type FlagSpec =
@@ -36,6 +37,12 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--max-tokens': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only, OPT-IN: RRF-fuse a reranker pass over the first pass.
   '--rerank': { kind: 'boolean' },
+  // The three below tune that pass and are meaningless without it, so each one
+  // REFUSES on its own: a run labelled with a model or a fusion that never ran
+  // is the failure naming them exists to prevent.
+  '--rerank-model': { kind: 'value', placeholder: '<id>' },
+  '--rerank-profile': { kind: 'value', placeholder: `<${RERANK_PRESET_NAMES.join('|')}>` },
+  '--rerank-weight': { kind: 'value', placeholder: '<w>' },
   // `retrieve` only, OPT-IN: rewrite the query into keywords before the first pass.
   '--rephrase': { kind: 'boolean' },
   '--json': { kind: 'boolean' },

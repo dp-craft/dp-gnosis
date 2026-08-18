@@ -55,6 +55,10 @@ interface CliOutput {
 const cliArgs = (fixture: Fixture, query: string, extra: readonly string[]): string[] => [
   'retrieve',
   query,
+  // Pinned: the rewrite is the subject here, and the default adapter is
+  // index-backed — an unpinned run would search the repo's own index.
+  '--adapter',
+  'linear',
   '--atoms-dir',
   fixture.atomsDir,
   '--index-path',

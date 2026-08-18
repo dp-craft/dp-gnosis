@@ -34,20 +34,22 @@ A bare invocation, `--help` or `-h` prints help and exits 0. An **unknown flag i
 
 Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried blindly.
 
+Exit 3 cases: `indexState unavailable` · a refused `--rephrase` (raw query searched) · a refused `--rerank` (**first-pass ranking returned**, `mode` keeps NO `+rerank` suffix, refusal in `note`). A rerank refusal is never exit 2 — `RERANK_K_INIT` is 100, so discarding the run would bin a full 100-candidate first pass over an unreachable reranker.
+
 ### Commands
 
 | Command | Positionals | Honoured flags |
 |---|---|---|
 | `ingest` | **none** (passing one is exit 2) | `--atoms-dir`, `--repo-root`, `--json` |
 | `index` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--json` |
-| `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json` |
+| `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` |
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
 
 ### Flags
 
 | Flag | Value | Default |
 |---|---|---|
-| `--adapter` | `linear\|fts5\|minisearch\|lancedb\|lancedb-vec\|lancedb-hybrid\|lancedb-hybrid-full` | `linear` |
+| `--adapter` | `linear\|fts5\|minisearch\|lancedb\|lancedb-vec\|lancedb-hybrid\|lancedb-hybrid-full` | `fts5` — the measured champion, and what the bench measures |
 | `--atoms-dir` | dir | `dp-gnosis/vault/atoms` |
 | `--index-path` | file for `fts5`/`minisearch`, **directory** for every `lancedb*` route | per-adapter path under `dp-gnosis/cache/index/` |
 | `--hybrid-weight` | `0`…`1` — the DENSE leg's share of the leg fusion, `lancedb-hybrid` / `-full` only. Out-of-range FAILS loudly, never clamps | `0.5` — **measured-mistuned on English; 0.25 scored better. Not changed, see below** |
@@ -62,6 +64,10 @@ Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried bl
 | `--json` | boolean — alias for `--format json` | off |
 | `--max-tokens` | non-negative integer — **`retrieve` only**, the injection budget as a **conservative UPPER BOUND on tokens, estimated as UTF-8 byte length**, not an exact token count | `64000` |
 | `--rephrase` | boolean — **`retrieve` only**, rewrite the query into BM25 keywords first | off |
+| `--rerank` | boolean — **`retrieve` only**, rerank a pool of at least `RERANK_K_INIT` and RRF-fuse that order with the first pass | off |
+| `--rerank-model` | cross-encoder id — **requires `--rerank`** | `RERANK_MODEL_ID` (`qwen3-reranker-4b`) |
+| `--rerank-profile` | `shipped\|beir-ce` — the FUSION RULE. Unknown name fails loudly, listing both. **Requires `--rerank`** | `shipped` |
+| `--rerank-weight` | `0`…`1` — the reranked order's RRF weight; the first pass carries `1 - w`. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** | `0.5` |
 | `--help` / `-h` | boolean | off |
 
 **`--max-tokens` counts an upper bound, so it over-reserves.** The estimator charges each atom its UTF-8 byte length; why that bounds the real token count is derived in `estimateTokens` (`src/budget.ts`) and not repeated here. The reserve is measured: on 2026-08-18 over this vault, 5 558 bytes of real atom bodies tokenized to 1 414 tokens — **3.93 bytes/token**, read off `usage.prompt_tokens` against the tokenizer of `qwen38-27b-q4kxl-high-ctx130k-mtp-coding`. So the bound over-reserves **~3.9x**, and the `64000` default admits roughly **16 000 real tokens**. Size the flag at about 4x the context you actually mean to fill. An atom that does not fit the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size.
@@ -105,7 +111,7 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 |---|---|
 | `ingest` | `command`, `written`, `skipped[{source,title,reasons[]}]` |
 | `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note` |
-| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `atoms[{id,title,domain,body,score,sourcePath}]`, plus `note` when `indexState` is `unavailable` |
+| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `atoms[{id,title,domain,body,score,sourcePath}]`, plus `note` when `indexState` is `unavailable` or a `--rephrase` / `--rerank` refusal degraded the run |
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
 | any usage failure | `error` |
 
@@ -172,11 +178,11 @@ npm run gnosis -- retrieve "functional programming immutability pure functions" 
 
 **`<section>` limitation.** It carries the atom's `title`, which `ingest` sets to the **leaf heading** — promoted to the full `>`-joined heading chain only when that leaf is ambiguous across sources. The chain is otherwise consumed to build the atom id and is not stored on the atom, so most sections show one heading with no ancestry. Reconstructing it would mean re-reading the source document; no `headingChain` field exists.
 
-**Zero results vs no search.** Both render the same empty block, and the difference stays machine-readable: a real search that matched nothing is `indexState="ready" count="0"` with no `<note>`; `indexState="unavailable"` (exit 3) adds a `<note>` and means **nothing was searched**.
+**Zero results vs no search.** Both render the same empty block, and the difference stays machine-readable: a real search that matched nothing is `indexState="ready" count="0"` with no `<note>`; `indexState="unavailable"` (exit 3) adds a `<note>` and means **nothing was searched**. On an index-backed adapter the note names the index build too — an ingested-but-unindexed vault is the second way to reach `unavailable`.
 
 ```xml
-<retrieved_context query="…" adapter="linear" mode="lexical:bm25-linear" indexState="unavailable" count="0">
-  <note>retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `gnosis ingest &lt;path...&gt;`</note>
+<retrieved_context query="…" adapter="fts5" mode="fts5" indexState="unavailable" count="0">
+  <note>retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `gnosis ingest &lt;path...&gt;`; if the corpus is already ingested, build the index with `npm run gnosis -- index --adapter fts5`</note>
 </retrieved_context>
 ```
 
@@ -186,8 +192,8 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 
 | Adapter | Index | Dependency | Notes |
 |---|---|---|---|
-| `linear` (default) | none | — | reference BM25 in memory; re-scans the vault every call, so an edit lands on the next call with no reindex. `index` is a stated no-op |
-| `fts5` | `cache/index/atoms-fts5.db` | `better-sqlite3` (required) | contentless FTS5 + `atom_meta` join table; bodies never stored in SQL |
+| `linear` | none | — | reference BM25 in memory; re-scans the vault every call, so an edit lands on the next call with no reindex. `index` is a stated no-op |
+| `fts5` (default) | `cache/index/atoms-fts5.db` | `better-sqlite3` (required) | contentless FTS5 + `atom_meta` join table; bodies never stored in SQL |
 | `minisearch` | `cache/index/atoms-minisearch.json` | **optional** | measured for its load-vs-query cost profile |
 | `lancedb` | `cache/index/atoms-lancedb/` (a tree) | **optional** | LanceDB's BM25 FTS path only — no vectors. A v2-readiness probe |
 

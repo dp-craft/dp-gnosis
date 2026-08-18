@@ -12,11 +12,17 @@ import { relative } from 'node:path';
 import type { SkippedAtom } from '../budget.js';
 import { fitToTokenBudget } from '../budget.js';
 import type { AtomType } from '../config.js';
-import { ATOM_TYPES, RERANK_K_INIT, RETRIEVE_TOKEN_BUDGET } from '../config.js';
+import {
+  ATOM_TYPES,
+  RERANK_K_INIT,
+  RETRIEVE_TOKEN_BUDGET
+} from '../config.js';
 import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
 import { rephraseQuery } from '../rephrase.js';
-import { rerankAtoms } from '../rerank.js';
-import { createPort } from './adapter.js';
+import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
+import { rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
+import type { AdapterName } from './adapter.js';
+import { createPort, hasPersistentIndex } from './adapter.js';
 import type { FlagValues } from './args.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
@@ -65,6 +71,101 @@ export const RERANK_FLAG = '--rerank';
  * What IS reported is the rewritten query itself, which the reader can check.
  */
 export const REPHRASE_FLAG = '--rephrase';
+
+/**
+ * The three tuning flags for that pass. Each one is inert without
+ * {@link RERANK_FLAG} — nothing would rerank, yet the run would carry the label
+ * — so each REFUSES on its own rather than being ignored, the same rule the
+ * bench's `--rerank-model` follows.
+ */
+export const RERANK_MODEL_FLAG = '--rerank-model';
+
+export const RERANK_PROFILE_FLAG = '--rerank-profile';
+
+export const RERANK_WEIGHT_FLAG = '--rerank-weight';
+
+const RERANK_TUNING_FLAGS: readonly string[] = [
+  RERANK_MODEL_FLAG,
+  RERANK_PROFILE_FLAG,
+  RERANK_WEIGHT_FLAG,
+];
+
+/** The RRF weight the RERANKED order carries; the first pass carries `1 - w`. */
+const RERANK_WEIGHT_MIN = 0;
+const RERANK_WEIGHT_MAX = 1;
+
+const weightRangeText = `${RERANK_WEIGHT_MIN} (first pass only) to ${RERANK_WEIGHT_MAX} (reranker only)`;
+
+/**
+ * A weight outside `0…1` is a usage error, NOT something to clamp: a clamped
+ * run reports the weight it was ASKED for while fusing another one.
+ */
+const rerankWeightError = (raw: string): string =>
+  `${RERANK_WEIGHT_FLAG} expects a number from ${weightRangeText} — got "${raw}"; it is never clamped`;
+
+const orphanRerankFlagError = (flag: string): string =>
+  `${flag} requires ${RERANK_FLAG} — without it nothing reranks and the result would carry a rerank label it never earned`;
+
+const parseRerankWeight = (raw: string): number | undefined => {
+  const weight = Number(raw);
+  return weight >= RERANK_WEIGHT_MIN && weight <= RERANK_WEIGHT_MAX ? weight : undefined;
+};
+
+type RerankOptionsResult =
+  | { readonly ok: true; readonly options: RerankOptions }
+  | { readonly ok: false; readonly error: string };
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * The fusion a NAME selects, resolved by `rerank.ts` — this file MUST NOT hold a
+ * second resolution path, or an unknown preset could be refused in one place and
+ * accepted in the other. Its throw becomes the usage message, which already
+ * lists every valid name.
+ */
+const fusionOf = (name: string | undefined, weight: number | undefined): RerankOptionsResult => {
+  const overrides: RerankFusionOverrides = weight === undefined ? {} : { rerankWeight: weight };
+  try {
+    return { ok: true, options: { fusion: resolveRerankFusion(name, overrides) } };
+  } catch (error) {
+    return { ok: false, error: messageOf(error) };
+  }
+};
+
+const withModel = (options: RerankOptions, model: string | undefined): RerankOptions =>
+  model === undefined ? options : { ...options, model };
+
+type WeightResult =
+  | { readonly ok: true; readonly weight: number | undefined }
+  | { readonly ok: false; readonly error: string };
+
+const rerankWeightOf = (flags: FlagValues): WeightResult => {
+  const raw = stringFlag(flags, RERANK_WEIGHT_FLAG);
+  if (raw === undefined) return { ok: true, weight: undefined };
+  const weight = parseRerankWeight(raw);
+  return weight === undefined ? { ok: false, error: rerankWeightError(raw) } : { ok: true, weight };
+};
+
+/** The first tuning flag passed without `--rerank`, or `undefined` when none was. */
+const orphanTuningFlag = (flags: FlagValues, rerank: boolean): string | undefined =>
+  rerank ? undefined : RERANK_TUNING_FLAGS.find(flag => flags[flag] !== undefined);
+
+/**
+ * Every rerank tuning flag, resolved together into the single options object
+ * `rerankAtoms` takes. Absent flags resolve to the shipped preset and the
+ * shipped model, so a bare `--rerank` is bit-identical to what it always was.
+ */
+const resolveRerankOptions = (flags: FlagValues, rerank: boolean): RerankOptionsResult => {
+  const orphan = orphanTuningFlag(flags, rerank);
+  if (orphan !== undefined) return { ok: false, error: orphanRerankFlagError(orphan) };
+  const weight = rerankWeightOf(flags);
+  if (!weight.ok) return weight;
+  const fusion = fusionOf(stringFlag(flags, RERANK_PROFILE_FLAG), weight.weight);
+  return fusion.ok
+    ? { ok: true, options: withModel(fusion.options, stringFlag(flags, RERANK_MODEL_FLAG)) }
+    : fusion;
+};
 
 /** The rewrite cache sits beside the index it serves, like the embedding cache. */
 const REPHRASE_CACHE_SUFFIX = '.rephrase-cache';
@@ -124,15 +225,37 @@ const resolveTypes = (flags: FlagValues): TypesResult => {
 const NO_CORPUS =
   'retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `gnosis ingest <path...>`';
 
+/**
+ * An index-backed adapter has a SECOND way to reach `unavailable`: the corpus is
+ * ingested but never indexed. The note names that build command verbatim, so an
+ * agent-driven caller can run the correction without a second lookup — an
+ * ingest-only remedy would send it to rebuild a corpus that is already there.
+ */
+const indexRemedy = (adapter: AdapterName): string =>
+  `; if the corpus is already ingested, build the index with \`npm run gnosis -- index --adapter ${adapter}\``;
+
+const noCorpusNote = (adapter: AdapterName): string =>
+  hasPersistentIndex(adapter) ? `${NO_CORPUS}${indexRemedy(adapter)}` : NO_CORPUS;
+
 const isUnavailable = (result: RetrievalResult): boolean => result.indexState === 'unavailable';
 
 /**
- * A refused rewrite is PARTIAL, not success: the run did retrieve, but not the
- * way `--rephrase` claimed it would, and a caller that reads exit 0 would take
- * the raw-query ranking for a rephrased one.
+ * Every refusal the run collected, in the order they could happen. Both are
+ * reported: a run whose rewrite AND whose rerank were refused got neither, and
+ * naming one would let the reader assume the other succeeded.
+ */
+const refusalsOf = (request: RetrieveRequest): readonly string[] =>
+  [request.rephraseRefusal, request.rerankRefusal].flatMap(refusal =>
+    refusal === undefined ? [] : [refusal]
+  );
+
+/**
+ * A refused rewrite or a refused rerank is PARTIAL, not success: the run did
+ * retrieve, but not the way `--rephrase` / `--rerank` claimed it would, and a
+ * caller that reads exit 0 would take the degraded ranking for the promised one.
  */
 const exitCodeFor = (request: RetrieveRequest, result: RetrievalResult): number =>
-  isUnavailable(result) || request.rephraseRefusal !== undefined ? EXIT_PARTIAL : EXIT_OK;
+  isUnavailable(result) || refusalsOf(request).length > 0 ? EXIT_PARTIAL : EXIT_OK;
 
 const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
 
@@ -188,12 +311,17 @@ const rephraseLines = (request: RetrieveRequest): readonly string[] => {
   return request.rephraseRefusal === undefined ? [] : [request.rephraseRefusal];
 };
 
+/** The rerank refusal reads as its own line; the atoms below it are first-pass. */
+const rerankLines = (request: RetrieveRequest): readonly string[] =>
+  request.rerankRefusal === undefined ? [] : [request.rerankRefusal];
+
 const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): string => {
   const { result } = budgeted;
   return [
     `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
     ...rephraseLines(request),
-    ...(isUnavailable(result) ? [NO_CORPUS] : []),
+    ...rerankLines(request),
+    ...(isUnavailable(result) ? [noCorpusNote(request.context.adapter)] : []),
     ...result.atoms.flatMap(atomLines),
     ...skipText(budgeted),
   ].join('\n');
@@ -206,9 +334,36 @@ type ArgsResult =
     readonly maxTokens: number;
     readonly types: readonly AtomType[] | undefined;
     readonly rerank: boolean;
+    readonly rerankOptions: RerankOptions;
     readonly rephrase: boolean;
   }
   | { readonly ok: false; readonly error: string };
+
+/** The value flags that carry no refusal of their own, once each has parsed. */
+interface ResolvedValues {
+  readonly k: number;
+  readonly maxTokens: number;
+  readonly types: readonly AtomType[] | undefined;
+}
+
+const okArgs = (
+  flags: FlagValues,
+  values: ResolvedValues,
+  rerankOptions: RerankOptions
+): ArgsResult => ({
+  ok: true,
+  ...values,
+  rerank: flags[RERANK_FLAG] === true,
+  rerankOptions,
+  rephrase: flags[REPHRASE_FLAG] === true,
+});
+
+const withRerankArgs = (flags: FlagValues, values: ResolvedValues): ArgsResult => {
+  const options = resolveRerankOptions(flags, flags[RERANK_FLAG] === true);
+  return options.ok
+    ? okArgs(flags, values, options.options)
+    : { ok: false, error: options.error };
+};
 
 /** Every value flag, resolved together so the command states one refusal path. */
 const resolveArgs = (flags: FlagValues): ArgsResult => {
@@ -219,16 +374,8 @@ const resolveArgs = (flags: FlagValues): ArgsResult => {
   if (maxTokens === undefined) {
     return { ok: false, error: maxTokensError(rawFlag(flags, MAX_TOKENS_FLAG)) };
   }
-  return types.ok
-    ? {
-        ok: true,
-        k,
-        maxTokens,
-        types: types.types,
-        rerank: flags[RERANK_FLAG] === true,
-        rephrase: flags[REPHRASE_FLAG] === true,
-      }
-    : { ok: false, error: types.error };
+  if (!types.ok) return { ok: false, error: types.error };
+  return withRerankArgs(flags, { k, maxTokens, types: types.types });
 };
 
 interface RetrieveRequest {
@@ -239,11 +386,15 @@ interface RetrieveRequest {
   /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
   readonly types: readonly AtomType[] | undefined;
   readonly rerank: boolean;
+  /** The reranker's model and fusion rule as the tuning flags resolved them. */
+  readonly rerankOptions: RerankOptions;
   readonly rephrase: boolean;
   /** The rewrite `--rephrase` produced; `undefined` when it was off or refused. */
   readonly queryRewritten: string | undefined;
   /** The rewriter's refusal, carried into the note and the PARTIAL exit code. */
   readonly rephraseRefusal: string | undefined;
+  /** The reranker's refusal, carried the same way. `undefined` when it ranked. */
+  readonly rerankRefusal: string | undefined;
 }
 
 /**
@@ -264,9 +415,12 @@ const noteField = (
   request: RetrieveRequest,
   budgeted: BudgetedResult
 ): Readonly<Record<string, string>> => {
-  if (request.rephraseRefusal !== undefined) return { note: request.rephraseRefusal };
+  const refusals = refusalsOf(request);
+  if (refusals.length > 0) return { note: refusals.join('\n') };
   if (hasSkips(budgeted)) return { note: budgetWarning(budgeted) };
-  return isUnavailable(budgeted.result) ? { note: NO_CORPUS } : {};
+  return isUnavailable(budgeted.result)
+    ? { note: noCorpusNote(request.context.adapter) }
+    : {};
 };
 
 /** Omitted entirely when no rewrite happened, so an unrephrased payload is unchanged. */
@@ -361,7 +515,9 @@ const skipXml = (budgeted: BudgetedResult, repoRoot: string): readonly string[] 
 const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
   [
     `<retrieved_context ${rootAttributes(request, budgeted.result)}>`,
-    ...(isUnavailable(budgeted.result) ? [`  <note>${escapeXml(NO_CORPUS)}</note>`] : []),
+    ...(isUnavailable(budgeted.result)
+      ? [`  <note>${escapeXml(noCorpusNote(request.context.adapter))}</note>`]
+      : []),
     ...skipXml(budgeted, request.context.repoRoot),
     ...budgeted.result.atoms.map(atom => documentXml(atom, request.context.repoRoot)),
     '</retrieved_context>',
@@ -381,25 +537,44 @@ const retrieveOptions = (request: RetrieveRequest): RetrieveOptions => {
   return request.types === undefined ? { k } : { k, types: request.types };
 };
 
-type RankedResult =
-  | { readonly ok: true; readonly result: RetrievalResult }
-  | { readonly ok: false; readonly error: string };
+/** The ranking to render, plus the reranker's refusal when there was one. */
+interface RankedOutcome {
+  readonly result: RetrievalResult;
+  readonly refusal: string | undefined;
+}
+
+/** The requested depth out of the deeper pool `firstPassK` asked the port for. */
+const trimmed = (result: RetrievalResult, k: number): RetrievalResult => ({
+  ...result,
+  atoms: result.atoms.slice(0, k),
+});
 
 /**
- * The reranked-and-fused ranking, or the refusal that explains why there is
- * none. A failure MUST NOT degrade to the first-pass ranking: `--rerank` is a
- * quality claim, and a silent fallback would make it a false one. `mode` names
- * the extra leg so a caller reads which ranking it got.
+ * The reranked-and-fused ranking, or the first pass plus the refusal that
+ * explains why there is no second one.
+ *
+ * The discrimination probe runs FIRST, before any document is scored: a broken
+ * reranker answers HTTP 200 with numbers that carry no ranking signal.
+ *
+ * A refusal DEGRADES rather than discards. `RERANK_K_INIT` is 100, so throwing
+ * the run away over an unreachable reranker would bin a full 100-candidate
+ * first pass — a real ranking the caller can use — and answer a question with
+ * nothing. What the degraded run MUST NOT do is claim the rerank: `mode` keeps
+ * the first-pass value with NO `+rerank` suffix, since `mode` is the caller's
+ * only evidence of which ranking it actually received, and the refusal reaches
+ * it as the note under a PARTIAL exit code.
  */
 const rankedResult = async (
   request: RetrieveRequest,
   result: RetrievalResult
-): Promise<RankedResult> => {
-  if (!request.rerank) return { ok: true, result };
-  const reranked = await rerankAtoms(effectiveQuery(request), result.atoms);
-  if (!reranked.ok) return reranked;
+): Promise<RankedOutcome> => {
+  if (!request.rerank) return { result, refusal: undefined };
+  const unusable = await rerankProbeRefusal(request.rerankOptions);
+  if (unusable !== undefined) return { result: trimmed(result, request.k), refusal: unusable };
+  const reranked = await rerankAtoms(effectiveQuery(request), result.atoms, request.rerankOptions);
+  if (!reranked.ok) return { result: trimmed(result, request.k), refusal: reranked.error };
   const atoms = reranked.atoms.slice(0, request.k);
-  return { ok: true, result: { ...result, atoms, mode: `${result.mode}+rerank` } };
+  return { result: { ...result, atoms, mode: `${result.mode}+rerank` }, refusal: undefined };
 };
 
 /**
@@ -436,32 +611,41 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   const result = await port.retrieve(effectiveQuery(request), retrieveOptions(request));
   port.close?.();
   const ranked = await rankedResult(request, result);
-  if (!ranked.ok) return usageError(ranked.error);
+  const reported: RetrieveRequest = { ...request, rerankRefusal: ranked.refusal };
   const budgeted = applyBudget(ranked.result, request.maxTokens);
   return {
-    exitCode: exitCodeFor(request, ranked.result),
-    data: payload(request, budgeted),
-    text: retrieveText(request, budgeted),
-    xml: retrieveXml(request, budgeted),
+    exitCode: exitCodeFor(reported, ranked.result),
+    data: payload(reported, budgeted),
+    text: retrieveText(reported, budgeted),
+    xml: retrieveXml(reported, budgeted),
   };
 };
+
+type ResolvedArgs = Extract<ArgsResult, { readonly ok: true }>;
+
+/** The request as argv described it — every refusal field still unresolved. */
+const initialRequest = (
+  context: CommandContext,
+  query: string,
+  args: ResolvedArgs
+): RetrieveRequest => ({
+  context,
+  query,
+  k: args.k,
+  maxTokens: args.maxTokens,
+  types: args.types,
+  rerank: args.rerank,
+  rerankOptions: args.rerankOptions,
+  rephrase: args.rephrase,
+  queryRewritten: undefined,
+  rephraseRefusal: undefined,
+  rerankRefusal: undefined,
+});
 
 export const runRetrieveCommand = async (context: CommandContext): Promise<CommandOutcome> => {
   const query = context.positionals.join(' ');
   const args = resolveArgs(context.flags);
   if (query.length === 0) return usageError(NO_QUERY);
   if (!args.ok) return usageError(args.error);
-  return await search(
-    await withRewrite({
-      context,
-      query,
-      k: args.k,
-      maxTokens: args.maxTokens,
-      types: args.types,
-      rerank: args.rerank,
-      rephrase: args.rephrase,
-      queryRewritten: undefined,
-      rephraseRefusal: undefined,
-    })
-  );
+  return await search(await withRewrite(initialRequest(context, query, args)));
 };

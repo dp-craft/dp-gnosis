@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { estimateTokens } from '../src/budget.js';
 import { runCli } from '../src/cli/cli.js';
 import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
-import { fuseRanking, probeRerankDiscrimination } from '../src/rerank.js';
+import { fuseRanking, probeRerankDiscrimination, resetRerankProbeCache } from '../src/rerank.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Gamma'] as const;
 
@@ -49,6 +49,11 @@ const retrieve = async (
   await runCli([
     'retrieve',
     'zestful retrieval',
+    // Pinned, not defaulted: this file measures the RERANK leg, and the default
+    // adapter is index-backed, so an unpinned run would search the repo's own
+    // index instead of the fixture's atoms.
+    '--adapter',
+    'linear',
     '--atoms-dir',
     fixture.atomsDir,
     '--repo-root',
@@ -65,6 +70,8 @@ interface JsonAtom {
 interface JsonPayload {
   readonly atoms: readonly JsonAtom[];
   readonly skipped: readonly { readonly id: string }[];
+  readonly mode?: string;
+  readonly note?: string;
   readonly error?: string;
 }
 
@@ -76,14 +83,34 @@ const okResponse = (payload: unknown): unknown => ({
   text: async (): Promise<string> => JSON.stringify(payload),
 });
 
-/** Answers both llama-swap endpoints; `order` lists first-pass indices best-first. */
+/** The probe's own query, recognised so the fake server answers it as a reranker would. */
+const PROBE_MARKER = 'BM25';
+
+const queryOf = (init: { readonly body?: string } | undefined): string =>
+  String(JSON.parse(String(init?.body ?? '{}'))['query'] ?? '');
+
+const isProbe = (init: { readonly body?: string } | undefined): boolean =>
+  queryOf(init).includes(PROBE_MARKER);
+
+/** A discriminating answer to the probe: the relevant document (index 0) wins. */
+const HEALTHY_PROBE = [
+  { index: 0, relevance_score: 2.07 },
+  { index: 1, relevance_score: -11 },
+];
+
+/**
+ * Answers both llama-swap endpoints; `order` lists first-pass indices best-first.
+ * The discrimination probe now runs on the serving path, so the fake server must
+ * answer it too — its query is the one carrying {@link PROBE_MARKER}.
+ */
 const stubServer = (models: readonly string[], order: readonly number[]): string[] => {
   const calls: string[] = [];
-  vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+  vi.stubGlobal('fetch', async (url: string, init?: { readonly body?: string }): Promise<unknown> => {
     calls.push(url);
     if (url.endsWith('/v1/models')) {
       return okResponse({ data: models.map(id => ({ id })) });
     }
+    if (isProbe(init)) return okResponse({ results: HEALTHY_PROBE });
     return okResponse({
       results: order.map((index, position) => ({ index, relevance_score: 1 - position * 0.1 })),
     });
@@ -112,6 +139,8 @@ describe('fuseRanking — the shipped preset', () => {
 describe('retrieve --rerank', () => {
   beforeEach(() => {
     vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    // The probe memo is per PROCESS; each test serves its own fake reranker.
+    resetRerankProbeCache();
   });
 
   afterEach(() => {
@@ -173,9 +202,9 @@ describe('retrieve --rerank', () => {
     });
 
     const result = await retrieve(fixture, ['--rerank']);
-    const error = parsePayload(result.stdout).error ?? '';
+    const error = parsePayload(result.stdout).note ?? '';
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(3);
     expect(error).toContain(`"${RERANK_MODEL_ID}"`);
     expect(error).toContain('http://127.0.0.1:9292');
     expect(error).toContain('server down');
@@ -188,9 +217,9 @@ describe('retrieve --rerank', () => {
     stubServer(['some-chat-model'], []);
 
     const result = await retrieve(fixture, ['--rerank']);
-    const error = parsePayload(result.stdout).error ?? '';
+    const error = parsePayload(result.stdout).note ?? '';
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(3);
     expect(error).toContain(`"${RERANK_MODEL_ID}"`);
     expect(error).toContain('http://127.0.0.1:9292');
     expect(error).toContain('model not served');
@@ -205,7 +234,7 @@ describe('retrieve --rerank', () => {
       throw new TypeError('fetch failed');
     });
 
-    const error = parsePayload((await retrieve(fixture, ['--rerank'])).stdout).error ?? '';
+    const error = parsePayload((await retrieve(fixture, ['--rerank'])).stdout).note ?? '';
 
     expect(error).toContain('http://127.0.0.1:9999');
   });
@@ -296,5 +325,94 @@ describe('probeRerankDiscrimination', () => {
     expect(error).toContain('model not served');
     expect(error).toContain('some-chat-model');
     expect(error).not.toContain('server down');
+  });
+});
+
+/**
+ * The probe ON THE SERVING PATH (T1.2) and what its refusal does to the run
+ * (T1.3). A broken reranker answers HTTP 200 with well-formed numbers, so the
+ * probe is the only thing between it and a ranking nobody can tell from a good
+ * one — and its refusal MUST NOT cost the caller the first pass it already has.
+ */
+describe('retrieve --rerank — the serving-path probe', () => {
+  /** The score mxbai-rerank-large-v2 returned for BOTH documents, measured live. */
+  const CONSTANT_SCORE = 0.11378549039363861;
+
+  /** A fake server whose reranker is invariant to the document. */
+  const stubConstantServer = (): void => {
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+      if (url.endsWith('/v1/models')) return okResponse({ data: [{ id: RERANK_MODEL_ID }] });
+      return okResponse({
+        results: [0, 1, 2, 3].map(index => ({ index, relevance_score: CONSTANT_SCORE })),
+      });
+    });
+  };
+
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    resetRerankProbeCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('probes once per process, before the first document scoring call', async () => {
+    const fixture = await makeFixture();
+    const queries: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, init?: { readonly body?: string }): Promise<unknown> => {
+      if (url.endsWith('/v1/models')) return okResponse({ data: [{ id: RERANK_MODEL_ID }] });
+      queries.push(queryOf(init));
+      if (isProbe(init)) return okResponse({ results: HEALTHY_PROBE });
+      return okResponse({ results: [{ index: 0, relevance_score: 1 }] });
+    });
+
+    await retrieve(fixture, ['--rerank']);
+    await retrieve(fixture, ['--rerank']);
+
+    expect(queries[0]).toContain(PROBE_MARKER);
+    expect(queries.filter(query => query.includes(PROBE_MARKER))).toHaveLength(1);
+    expect(queries).toHaveLength(3);
+  });
+
+  it('REFUSES a reranker whose score is constant across documents', async () => {
+    const fixture = await makeFixture();
+    stubConstantServer();
+
+    const note = parsePayload((await retrieve(fixture, ['--rerank'])).stdout).note ?? '';
+
+    expect(note).toContain('rerank-probe-failed');
+    expect(note).toContain('CONSTANT');
+    expect(note).toContain(String(CONSTANT_SCORE));
+  });
+
+  it('leaves a healthy run byte-identical to the unprobed one', async () => {
+    const fixture = await makeFixture();
+    stubServer([RERANK_MODEL_ID], [1, 2, 3, 0]);
+    const first = await retrieve(fixture, ['--rerank']);
+
+    resetRerankProbeCache();
+    stubServer([RERANK_MODEL_ID], [1, 2, 3, 0]);
+    const second = await retrieve(fixture, ['--rerank']);
+
+    expect(second.stdout).toBe(first.stdout);
+    expect(second.exitCode).toBe(0);
+  });
+
+  it('degrades a refusal to the first pass at exit 3, with no +rerank in mode', async () => {
+    const fixture = await makeFixture();
+    const unreranked = parsePayload((await retrieve(fixture, [])).stdout);
+    stubConstantServer();
+
+    const result = await retrieve(fixture, ['--rerank']);
+    const payload = parsePayload(result.stdout);
+
+    expect(result.exitCode).toBe(3);
+    expect(payload.mode).toBe(unreranked.mode);
+    expect(payload.mode ?? '').not.toContain('+rerank');
+    expect(payload.note ?? '').toContain('rerank-probe-failed');
+    expect(payload.atoms.map(atom => atom.id)).toEqual(unreranked.atoms.map(atom => atom.id));
+    expect(payload.atoms.length).toBeGreaterThan(0);
   });
 });
