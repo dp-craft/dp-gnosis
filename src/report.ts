@@ -133,7 +133,7 @@ export interface DatasetResult {
   /** Sample sd (n-1) of the per-topic values behind `metrics`. */
   readonly metricsSd: Metrics;
   /** Topics R-Precision was measurable on — the denominator behind its mean. */
-  readonly rPrecisionTopics?: number;
+  readonly rPrecisionTopics?: number | undefined;
   readonly perTopic: readonly TopicScore[];
   /**
    * The document ranking per topic, in rank order — the run file's whole input.
@@ -172,11 +172,11 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * `keyof Metrics`, and a topic COUNT must never be offerable as a pairable
    * metric. Absent on rows written before it existed.
    */
-  readonly rPrecisionTopics?: number;
+  readonly rPrecisionTopics?: number | undefined;
   /** Sample sd (n-1) of the per-topic values; absent on older rows. */
   readonly ndcg10Sd?: number;
-  readonly recall10Sd?: number;
-  readonly recall100Sd?: number;
+  readonly recall10Sd?: number | undefined;
+  readonly recall100Sd?: number | undefined;
   readonly mrr10Sd?: number;
   /** Per-query latency distribution; absent on older rows. */
   readonly queryP50Ms?: number;
