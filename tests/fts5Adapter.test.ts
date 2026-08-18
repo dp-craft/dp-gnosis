@@ -4,9 +4,9 @@ import { dirname, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
 
-import { buildFts5Index, createFts5Adapter } from '../src/adapters/fts5Adapter.js';
+import { buildFts5Index, createFts5Adapter, toMatchExpression } from '../src/adapters/fts5Adapter.js';
 import type { KnowledgePort } from '../src/port.js';
-import { stemText } from '../src/query.js';
+import { DEFAULT_ANALYZER, stemText } from '../src/query.js';
 
 const NOW = new Date('2026-08-08T00:00:00.000Z');
 
@@ -723,6 +723,101 @@ describe('fts5 analyzer stamp', () => {
     buildFts5Index({ atomsDir, indexPath });
 
     const result = await port().retrieve('adr-018', { k: 5 });
+
+    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-adjacent']);
+  });
+});
+
+/**
+ * THE REGRESSION CONTRACT of the query-adjacency treatment: with `adjacency`
+ * absent or false the expression is what it has always been, byte for byte, for
+ * every shape of input — so every recorded fts5 run stays reproducible.
+ */
+describe('toMatchExpression — adjacency OFF is byte-identical', () => {
+  const cases: readonly (readonly [string, string | undefined])[] = [
+    ['lint:test-shape', '"lint test shape"'],
+    ['dirty-tree', '"dirti tree"'],
+    ['zustand', '"zustand"'],
+    ['adr-018 store', '"adr 018" OR "store"'],
+    ['e2e   spacing', '"e2" OR "space"'],
+    ['say "hi" now', '"sai" OR "hi" OR "now"'],
+    ['', undefined],
+    ['   ', undefined],
+    ['"', undefined],
+  ];
+
+  cases.forEach(([query, expected]) => {
+    it(`emits ${String(expected)} for ${JSON.stringify(query)} when adjacency is absent`, () => {
+      expect(toMatchExpression(query, DEFAULT_ANALYZER)).toBe(expected);
+    });
+
+    it(`emits ${String(expected)} for ${JSON.stringify(query)} when adjacency is false`, () => {
+      expect(toMatchExpression(query, DEFAULT_ANALYZER, false)).toBe(expected);
+    });
+  });
+});
+
+/**
+ * The treatment itself: an ADDED disjunct, never a substituted one and never a
+ * filter — the individual terms stay in the expression.
+ */
+describe('toMatchExpression — adjacency ON', () => {
+  it('adds the multi-term phrase BESIDE the individual terms of one raw token', () => {
+    expect(toMatchExpression('lint:test-shape', DEFAULT_ANALYZER, true)).toBe(
+      '"lint" OR "test" OR "shape" OR "lint test shape"'
+    );
+  });
+
+  it('adds one phrase per multi-token raw token, in query order', () => {
+    expect(toMatchExpression('adr-018 dirty-tree', DEFAULT_ANALYZER, true)).toBe(
+      '"adr" OR "018" OR "adr 018" OR "dirti" OR "tree" OR "dirti tree"'
+    );
+  });
+
+  it('leaves a single-token raw token exactly as adjacency-off emits it', () => {
+    expect(toMatchExpression('zustand selectors', DEFAULT_ANALYZER, true)).toBe(
+      toMatchExpression('zustand selectors', DEFAULT_ANALYZER)
+    );
+  });
+
+  it('still emits undefined for a term-free query', () => {
+    expect(toMatchExpression('  "  ', DEFAULT_ANALYZER, true)).toBeUndefined();
+  });
+
+  it('honours the stamped analyzer when building the phrase', () => {
+    expect(toMatchExpression('dirty-tree', 'nostem-fold', true)).toBe(
+      '"dirty" OR "tree" OR "dirty tree"'
+    );
+  });
+});
+
+describe('fts5 adjacency retrieval', () => {
+  const writePair = (): void => {
+    writeAtom({ file: 'a.md', id: 'atom-adjacent', body: 'adr-018 defines the layered test model' });
+    writeAtom({ file: 'b.md', id: 'atom-apart', body: 'adr work covers 018 somewhere else' });
+    buildFts5Index({ atomsDir, indexPath });
+  };
+
+  it('scores additively: an atom holding the terms APART still matches', async () => {
+    writePair();
+
+    const result = await port().retrieve('adr-018', { k: 5, adjacency: true });
+
+    expect(result.atoms.map(atom => atom.id).sort()).toEqual(['atom-adjacent', 'atom-apart']);
+  });
+
+  it('ranks the atom carrying the phrase first, the point of the extra disjunct', async () => {
+    writePair();
+
+    const result = await port().retrieve('adr-018', { k: 5, adjacency: true });
+
+    expect(result.atoms[0]?.id).toBe('atom-adjacent');
+  });
+
+  it('leaves the ranking of adjacency-off untouched', async () => {
+    writePair();
+
+    const result = await port().retrieve('adr-018', { k: 5, adjacency: false });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-adjacent']);
   });

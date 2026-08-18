@@ -74,7 +74,7 @@ import type {
   RetrieveOptions
 } from '../port.js';
 import { assertTypeFilter } from '../port.js';
-import { type AnalyzerId, ANALYZERS, analyzeToText, DEFAULT_ANALYZER } from '../query.js';
+import { analyze, type AnalyzerId, ANALYZERS, analyzeToText, DEFAULT_ANALYZER } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
 /** `mode`/`name` reported by this adapter. */
@@ -274,6 +274,17 @@ const stampedAnalyzer = (db: Database.Database): AnalyzerId => {
 const escapeTerm = (term: string): string => `"${term.replaceAll('"', '""')}"`;
 
 /**
+ * The disjuncts ONE raw token contributes. Off, and for a token analyzing to a
+ * single term, that is the one literal it has always been. On, a multi-term run
+ * contributes its terms AND the phrase — the phrase last, so the expression
+ * reads as "these terms, and a bonus when they are adjacent".
+ */
+const disjunctsOf = (run: readonly string[], adjacency: boolean): readonly string[] =>
+  adjacency && run.length > 1
+    ? [...run.map(escapeTerm), escapeTerm(run.join(' '))]
+    : [escapeTerm(run.join(' '))];
+
+/**
  * QUERY SIDE of the shared analyzer. `analyzer` is the chain STAMPED into the
  * index being searched, never a parameter a caller chose: index and query are
  * analyzed by construction rather than by convention.
@@ -292,13 +303,26 @@ const escapeTerm = (term: string): string => `"${term.replaceAll('"', '""')}"`;
  * Disjunction, not FTS5's implicit AND: a `buildQuery` string carries up to 32
  * distilled terms, and requiring all of them would match nothing. `undefined`
  * for a term-free query — an empty `MATCH` is a syntax error.
+ *
+ * `adjacency` is ADDITIVE SCORING, never a filter: it ADDS each individual term
+ * of a multi-token raw token beside the phrase that token already produced, so
+ * an atom carrying the terms APART still matches while one carrying them
+ * adjacent is scored by both the terms and the phrase. Absent or `false` emits
+ * today's expression byte for byte, which is what keeps every recorded fts5 run
+ * reproducible.
  */
-const toMatchExpression = (query: string, analyzer: AnalyzerId): string | undefined => {
-  const phrases = query
+export const toMatchExpression = (
+  query: string,
+  analyzer: AnalyzerId,
+  adjacency = false
+): string | undefined => {
+  const runs = query
     .split(WHITESPACE_RE)
-    .map(chunk => analyzeToText(chunk, analyzer))
-    .filter(phrase => phrase.length > 0);
-  return phrases.length === 0 ? undefined : phrases.map(escapeTerm).join(' OR ');
+    .map(chunk => analyze(chunk, analyzer))
+    .filter(run => run.length > 0);
+  return runs.length === 0
+    ? undefined
+    : runs.flatMap(run => disjunctsOf(run, adjacency)).join(' OR ');
 };
 
 const newestCorpusMs = (atomsDir: string): number =>
@@ -502,7 +526,7 @@ const openIndex = (indexPath: string): OpenIndex => {
 interface IndexHandle {
   /** Takes the RAW query: the match expression can only be built once the
    * index — and therefore its stamped analyzer — is open. */
-  readonly snapshot: (indexPath: string, query: string) => IndexSnapshot;
+  readonly snapshot: (indexPath: string, query: string, adjacency: boolean) => IndexSnapshot;
   readonly close: () => void;
 }
 
@@ -530,8 +554,8 @@ const acquire = (cell: HandleCell, indexPath: string): OpenIndex => {
     : reopen(cell, indexPath);
 };
 
-const snapshotOf = (index: OpenIndex, query: string): IndexSnapshot => {
-  const match = toMatchExpression(query, index.analyzer);
+const snapshotOf = (index: OpenIndex, query: string, adjacency: boolean): IndexSnapshot => {
+  const match = toMatchExpression(query, index.analyzer, adjacency);
   return {
     count: (index.count.get() as { readonly n: number }).n,
     rows: match === undefined ? [] : (index.search.all(match) as readonly IndexRow[]),
@@ -542,8 +566,8 @@ const createIndexHandle = (): IndexHandle => {
   const cell: HandleCell = { open: undefined };
   return {
     close: (): void => release(cell),
-    snapshot: (indexPath: string, query: string): IndexSnapshot =>
-      snapshotOf(acquire(cell, indexPath), query),
+    snapshot: (indexPath: string, query: string, adjacency: boolean): IndexSnapshot =>
+      snapshotOf(acquire(cell, indexPath), query, adjacency),
   };
 };
 
@@ -555,7 +579,7 @@ interface Fts5Instance {
 }
 
 const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): RetrievalResult => {
-  const snapshot = self.handle.snapshot(self.options.indexPath, query);
+  const snapshot = self.handle.snapshot(self.options.indexPath, query, opts.adjacency === true);
   return {
     atoms: selectAtoms(self.options, snapshot.rows, opts),
     mode: FTS5_MODE,

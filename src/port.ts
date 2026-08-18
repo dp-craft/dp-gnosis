@@ -65,6 +65,14 @@ export interface RetrieveOptions {
    * bug as an empty corpus.
    */
   readonly types?: readonly AtomType[];
+  /**
+   * QUERY-SIDE adjacency treatment, honoured by `fts5` alone. When true, a raw
+   * query token that analyzes to two or more terms contributes the multi-term
+   * PHRASE as an extra disjunct BESIDE its individual terms — additive scoring,
+   * never a filter: a candidate lacking the phrase still matches on the terms.
+   * Absent or false is today's behaviour, byte for byte, on every adapter.
+   */
+  readonly adjacency?: boolean;
 }
 
 /** The single wording for "an empty type filter is a caller bug". */
