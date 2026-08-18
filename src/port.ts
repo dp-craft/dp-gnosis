@@ -30,6 +30,24 @@ export interface RetrievedAtom {
   readonly type: AtomType;
   readonly body: string;
   readonly score: number;
+  /**
+   * The score BEFORE the rerank, and the raw cross-encoder score that reordered
+   * it. Both are set ONLY on a reranked run — absent everywhere else, so a
+   * first-pass atom is byte-identical to what it always was.
+   *
+   * `score` keeps its meaning: it is the FUSED score, the one that produced the
+   * order it is printed beside. These two exist because that fused number is not
+   * decomposable — a reader cannot tell an atom the reranker promoted from one
+   * the first pass carried, and those are different kinds of evidence. They are
+   * carried through the fusion BY IDENTITY (`rerankAtoms`), never re-looked-up
+   * afterwards: a second lookup by index would silently misattribute a score the
+   * moment the fusion reorders.
+   *
+   * `rerankScore` is absent on an atom the reranker did not return, which is a
+   * fact about that atom, not a zero.
+   */
+  readonly firstPassScore?: number;
+  readonly rerankScore?: number;
   readonly sourcePath: string;
   /**
    * The ORIGINAL document(s) the atom was cut from — its frontmatter `sources`,

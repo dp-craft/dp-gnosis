@@ -26,6 +26,7 @@ import { createPort, hasPersistentIndex } from './adapter.js';
 import type { FlagValues } from './args.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
+import { explainAtoms } from './explain.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
 import { escapeXml, xmlAttribute } from './xml.js';
@@ -259,8 +260,18 @@ const exitCodeFor = (request: RetrieveRequest, result: RetrievalResult): number 
 
 const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
 
+/**
+ * The RAW cross-encoder score, beside the fused one it produced. Present only
+ * when the reranker scored this atom, so a run that did not rerank emits the
+ * line it always did, byte for byte. It sits next to `score` rather than at the
+ * end of the line because the two are read together — the fused number is not
+ * decomposable, and the pair is what says whether the reranker moved this atom.
+ */
+const rerankPart = (atom: RetrievedAtom): string =>
+  atom.rerankScore === undefined ? '' : `  rerank  ${formatScore(atom.rerankScore)}`;
+
 const atomLine = (atom: RetrievedAtom): string =>
-  `  ${formatScore(atom.score)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
+  `  ${formatScore(atom.score)}${rerankPart(atom)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
 
 /**
  * One line per ORIGIN document, under the atom it belongs to. A list rather than
@@ -282,6 +293,12 @@ interface BudgetedResult {
   readonly result: RetrievalResult;
   readonly skipped: readonly SkippedAtom[];
   readonly maxTokens: number;
+  /**
+   * How many atoms the FIRST PASS returned, before the `-k` slice and before the
+   * budget. `count` alone cannot say whether a short answer means a thin corpus
+   * or a deep pool the caller asked to cut.
+   */
+  readonly poolSize: number;
 }
 
 /**
@@ -440,7 +457,8 @@ const payload = (
   mode: budgeted.result.mode,
   indexState: budgeted.result.indexState,
   count: budgeted.result.atoms.length,
-  atoms: budgeted.result.atoms,
+  poolSize: budgeted.poolSize,
+  atoms: explainAtoms(effectiveQuery(request), budgeted.result.atoms),
   skipped: budgeted.skipped,
   ...noteField(request, budgeted),
 });
@@ -582,9 +600,13 @@ const rankedResult = async (
  * rank, the CLI decides what fits the caller's window, and both halves of that
  * decision — kept and skipped — reach every rendering.
  */
-const applyBudget = (result: RetrievalResult, maxTokens: number): BudgetedResult => {
+const applyBudget = (
+  result: RetrievalResult,
+  maxTokens: number,
+  poolSize: number
+): BudgetedResult => {
   const fit = fitToTokenBudget(result.atoms, maxTokens);
-  return { result: { ...result, atoms: fit.kept }, skipped: fit.skipped, maxTokens };
+  return { result: { ...result, atoms: fit.kept }, skipped: fit.skipped, maxTokens, poolSize };
 };
 
 /**
@@ -612,7 +634,7 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   port.close?.();
   const ranked = await rankedResult(request, result);
   const reported: RetrieveRequest = { ...request, rerankRefusal: ranked.refusal };
-  const budgeted = applyBudget(ranked.result, request.maxTokens);
+  const budgeted = applyBudget(ranked.result, request.maxTokens, result.atoms.length);
   return {
     exitCode: exitCodeFor(reported, ranked.result),
     data: payload(reported, budgeted),

@@ -407,6 +407,29 @@ const resolved = (options: RerankOptions): Resolved => ({
 });
 
 /**
+ * Attaches the first-pass score and the RAW cross-encoder score to each atom
+ * BEFORE the fusion, so both travel with the atom through the reorder.
+ *
+ * By identity, deliberately: `fuseRanking` sorts, so the output position no
+ * longer names the input index, and a post-fusion lookup by index would attach
+ * one atom's cross-encoder score to another — a wrong number that reads as a
+ * plausible one. An atom the reranker did not return carries NO `rerankScore`
+ * rather than a zero, which would read as "scored, and scored badly".
+ */
+const withScores = (
+  atoms: readonly RetrievedAtom[],
+  results: readonly RerankResult[]
+): readonly RetrievedAtom[] => {
+  const raw = new Map(results.map(result => [result.index, result.relevanceScore]));
+  return atoms.map((atom, index) => {
+    const rerankScore = raw.get(index);
+    return rerankScore === undefined
+      ? { ...atom, firstPassScore: atom.score }
+      : { ...atom, firstPassScore: atom.score, rerankScore };
+  });
+};
+
+/**
  * Reorder `atoms` by the fused ranking, carrying the FUSED score on each atom —
  * the score a caller reads must be the one that produced the order it reads.
  *
@@ -425,7 +448,7 @@ export const rerankAtoms = async (
   if (refusal !== undefined) return { ok: false, error: refusal };
   const scored = await scoreDocuments(endpoint, query, atoms, window);
   if (!scored.ok) return { ok: false, error: scored.error };
-  const fused = fuseRanking(atoms, bestFirst(scored.results), fusion);
+  const fused = fuseRanking(withScores(atoms, scored.results), bestFirst(scored.results), fusion);
   return { ok: true, atoms: fused.map(entry => ({ ...entry.item, score: entry.score })) };
 };
 
