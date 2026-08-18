@@ -116,9 +116,11 @@ const toDoc = (atomsDir: string, relPath: string): BeirDoc | undefined => {
 const isDoc = (value: BeirDoc | undefined): value is BeirDoc => value !== undefined;
 
 const markdownPaths = (atomsDir: string): readonly string[] =>
-  readdirSync(atomsDir, { recursive: true, encoding: 'utf8' })
-    .filter(entry => entry.endsWith(MARKDOWN_EXT))
-    .toSorted();
+  [
+    ...readdirSync(atomsDir, { recursive: true, encoding: 'utf8' }).filter(entry =>
+      entry.endsWith(MARKDOWN_EXT)
+    ),
+  ].sort();
 
 const assertUniqueIds = (docs: readonly BeirDoc[], atomsDir: string): void => {
   const unique = new Set(docs.map(doc => doc.id));

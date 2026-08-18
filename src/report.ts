@@ -208,8 +208,8 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * change is labelled an arm comparison instead of being subtracted. Absent on a
    * BM25-only row, and on every row recorded before the protocol was nameable.
    */
-  readonly rerankProfile?: string;
-  readonly rerankWeight?: number;
+  readonly rerankProfile?: string | undefined;
+  readonly rerankWeight?: number | undefined;
   /**
    * The reranker MODEL this row was measured under — TREATMENT provenance
    * (`compare.ts`), so a model change is labelled an arm comparison instead of
@@ -217,7 +217,7 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * the model was selectable; those all used the engine's `RERANK_MODEL_ID`,
    * which is how `compare.ts` reads an absent one.
    */
-  readonly rerankModel?: string;
+  readonly rerankModel?: string | undefined;
   /**
    * The first-pass candidate POOL this row's rerank arm scored over — SCALE
    * provenance (`compare.ts`), because it changes WHAT was measured rather than
@@ -226,7 +226,7 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * over the floor `RERANK_K_INIT` held at the time, which is how `compare.ts`
    * reads an absent one.
    */
-  readonly rerankPool?: number;
+  readonly rerankPool?: number | undefined;
   /**
    * The doc window this row's reranker read — how many characters of an atom
    * body, and which part. TREATMENT provenance (`compare.ts`), because they
@@ -235,8 +235,8 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * recorded before the two were stamped; those all extracted the head at 2000
    * characters, which is how `compare.ts` reads an absent one.
    */
-  readonly rerankDocMaxChars?: number;
-  readonly rerankExtract?: string;
+  readonly rerankDocMaxChars?: number | undefined;
+  readonly rerankExtract?: string | undefined;
   /**
    * The DENSE leg's weight this row's hybrid fusion ran at — TREATMENT
    * provenance (`compare.ts`), so a swept weight is labelled an arm comparison
@@ -244,7 +244,7 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * fused at the engine's shipped `HYBRID_FUSION` weight, which is how
    * `compare.ts` reads an absent one.
    */
-  readonly hybridWeight?: number;
+  readonly hybridWeight?: number | undefined;
   /**
    * The analysis chain this row was measured under — TREATMENT provenance
    * (`compare.ts`), so an analyzer change is labelled an arm comparison instead
