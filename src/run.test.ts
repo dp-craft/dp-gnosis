@@ -36,9 +36,12 @@ import {
   percentileMs,
   provenanceOf,
   queryDataset,
+  RERANK_POOL_BELOW_DEPTH_WARNING,
+  rerankPoolOf,
   selectDatasets,
   selectionError,
-  warnCollapsingTopics
+  warnCollapsingTopics,
+  warnRerankPoolBelowDepth
 } from './run.js';
 
 /** A second reranker id — any id the shipped constant is not. */
@@ -121,6 +124,32 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--rerank-model', OTHER_MODEL])).toThrow(/--rerank-model/);
     expect(() => parseArgs(['--rerank-model', OTHER_MODEL])).toThrow(/requires --rerank/);
     expect(() => parseArgs(['--rerank-model', OTHER_MODEL])).toThrow(new RegExp(OTHER_MODEL));
+  });
+
+  it('reads --rerank-pool as the EXPLICIT candidate pool, engine floor bypassed', () => {
+    expect(parseArgs(['--rerank', '--rerank-pool', '20']).rerankPool).toBe(20);
+  });
+
+  it('leaves --rerank-pool unset when it is not named — the old formula stands', () => {
+    expect(parseArgs(['--rerank']).rerankPool).toBeUndefined();
+    expect(parseArgs([]).rerankPool).toBeUndefined();
+  });
+
+  /**
+   * Without `--rerank` nothing reranks, so the row would carry a pool label no
+   * reranker ever scored — the `--rerank-model` failure one field over.
+   */
+  it('REFUSES --rerank-pool without --rerank, naming both flags', () => {
+    expect(() => parseArgs(['--rerank-pool', '20'])).toThrow(/--rerank-pool/);
+    expect(() => parseArgs(['--rerank-pool', '20'])).toThrow(/requires --rerank/);
+  });
+
+  it('REFUSES a non-integer, zero or negative pool, naming the constraint', () => {
+    expect(() => parseArgs(['--rerank', '--rerank-pool', '2.5'])).toThrow(/2\.5/);
+    expect(() => parseArgs(['--rerank', '--rerank-pool', '2.5'])).toThrow(/integer/);
+    expect(() => parseArgs(['--rerank', '--rerank-pool', '0'])).toThrow(/integer/);
+    expect(() => parseArgs(['--rerank', '--rerank-pool', '-5'])).toThrow(/integer/);
+    expect(() => parseArgs(['--rerank', '--rerank-pool', 'deep'])).toThrow(/deep/);
   });
 
   it('defaults --analyzer to the engine chain every recorded run was measured on', () => {
@@ -312,6 +341,21 @@ describe('firstPassDepth', () => {
     expect(firstPassDepth(100, true)).toBe(100);
     expect(firstPassDepth(5, false)).toBe(5);
   });
+
+  /**
+   * The whole point of the flag: the engine constant is a SERVING default, not a
+   * floor the measuring instrument may impose on itself.
+   */
+  it('honours an explicit pool BELOW the engine RERANK_K_INIT, floor bypassed', () => {
+    expect(RERANK_K_INIT).toBeGreaterThan(20);
+    expect(firstPassDepth(100, true, 20)).toBe(20);
+    expect(rerankPoolOf(parseArgs(['--depth', '100', '--rerank', '--rerank-pool', '20']))).toBe(20);
+  });
+
+  it('reproduces the old formula exactly when no pool is named', () => {
+    expect(rerankPoolOf(parseArgs(['--depth', '20', '--rerank']))).toBe(RERANK_K_INIT);
+    expect(rerankPoolOf(parseArgs(['--depth', '20']))).toBe(20);
+  });
 });
 
 describe('selectDatasets', () => {
@@ -395,6 +439,18 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
 
   it('records NO model on a run that did not rerank', () => {
     expect(provenanceOf(parseArgs([]), 'sha').rerankModel).toBeUndefined();
+  });
+
+  it('stamps the EXPLICIT pool on rerankPool — one field, not a second', () => {
+    const argv = ['--depth', '100', '--rerank', '--rerank-pool', '20'];
+    expect(provenanceOf(parseArgs(argv), 'sha').rerankPool).toBe(20);
+  });
+
+  it('stamps the old formula on rerankPool when no pool is named', () => {
+    expect(provenanceOf(parseArgs(['--depth', '20', '--rerank']), 'sha').rerankPool).toBe(
+      RERANK_K_INIT
+    );
+    expect(provenanceOf(parseArgs(['--depth', '20']), 'sha').rerankPool).toBeUndefined();
   });
 
   it('records the hybrid leg weight, so a swept weight is never silent', () => {
@@ -694,5 +750,35 @@ describe('warnCollapsingTopics', () => {
     const calls = stderr.mock.calls.length;
     stderr.mockRestore();
     expect(calls).toBe(0);
+  });
+});
+
+/**
+ * A pool below the requested depth is a LEGITIMATE arm — it is what measuring a
+ * small-pool reranker means — but every metric cut above the pool is capped by
+ * it, so R@100 from a pool of 20 is R@20 under another name. Warned, never
+ * refused, exactly as a collapsing topic group is.
+ */
+describe('warnRerankPoolBelowDepth', () => {
+  const writtenFor = (argv: readonly string[]): string => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    warnRerankPoolBelowDepth(parseArgs(argv));
+    const written = stderr.mock.calls.map(call => String(call[0])).join('');
+    stderr.mockRestore();
+    return written;
+  };
+
+  it('names the pool, the depth and the capping when the pool is smaller', () => {
+    const written = writtenFor(['--depth', '100', '--rerank', '--rerank-pool', '20']);
+    expect(written).toContain(RERANK_POOL_BELOW_DEPTH_WARNING);
+    expect(written).toContain('20');
+    expect(written).toContain('100');
+    expect(written).toMatch(/capped/i);
+  });
+
+  it('writes nothing when the pool covers the depth, or no pool is named', () => {
+    expect(writtenFor(['--depth', '20', '--rerank', '--rerank-pool', '50'])).toBe('');
+    expect(writtenFor(['--depth', '20', '--rerank'])).toBe('');
+    expect(writtenFor(['--depth', '20'])).toBe('');
   });
 });

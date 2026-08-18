@@ -135,6 +135,15 @@ export interface CliOptions {
    * as a treatment field, so two model arms can never be subtracted.
    */
   readonly rerankModel: string | undefined;
+  /**
+   * The EXPLICIT candidate pool the reranker scores, bypassing the engine's
+   * `RERANK_K_INIT` floor entirely. `undefined` means the shipped formula —
+   * `max(depth, RERANK_K_INIT)` — which every recorded arm was measured under,
+   * so an unflagged run stays bit-identical. It exists because the floor made a
+   * pool SMALLER than the constant unmeasurable once the constant reached 100,
+   * and the bench must be able to measure a pool the serving path does not use.
+   */
+  readonly rerankPool: number | undefined;
   /** The engine's resolution of that name, resolved ONCE so a bad one fails before any dataset. */
   readonly rerankFusion: RerankFusion;
   /**
@@ -332,6 +341,39 @@ const parseRerankModel = (value: string | undefined, rerank: boolean): string | 
   );
 };
 
+const RERANK_POOL_FLAG = '--rerank-pool';
+
+/** A pool of fewer than one document scores nothing; there is no smaller arm. */
+const RERANK_POOL_MIN = 1;
+
+/**
+ * A fractional, zero or negative pool is a usage error, NOT something to clamp:
+ * a clamped run records the pool it was ASKED for while scoring another, which
+ * is the very divergence `rerankPool` was added to make visible.
+ */
+const parseRerankPoolSize = (value: string): number => {
+  const pool = Number(value);
+  if (Number.isInteger(pool) && pool >= RERANK_POOL_MIN) return pool;
+  throw new Error(
+    `dp-gnosis-bench: ${RERANK_POOL_FLAG} expects an integer of at least ` +
+      `${RERANK_POOL_MIN}, got "${value}"`
+  );
+};
+
+/**
+ * A `--rerank-pool` without `--rerank` REFUSES, exactly as `--rerank-model`
+ * does: nothing would rerank, yet the row would carry a pool label no
+ * cross-encoder ever scored over.
+ */
+const parseRerankPool = (value: string | undefined, rerank: boolean): number | undefined => {
+  if (value === undefined) return undefined;
+  if (rerank) return parseRerankPoolSize(value);
+  throw new Error(
+    `dp-gnosis-bench: ${RERANK_POOL_FLAG} "${value}" requires --rerank — ` +
+      'without it nothing reranks and the row would name a pool nothing scored'
+  );
+};
+
 export const parseArgs = (argv: readonly string[]): CliOptions => {
   const rerankProfile = flagValue(argv, '--rerank-profile') ?? DEFAULT_RERANK_PRESET;
   const rerankWeight = parseRerankWeight(flagValue(argv, '--rerank-weight'));
@@ -347,6 +389,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     rerankProfile,
     rerankWeight,
     rerankModel: parseRerankModel(flagValue(argv, '--rerank-model'), rerank),
+    rerankPool: parseRerankPool(flagValue(argv, RERANK_POOL_FLAG), rerank),
     rerankFusion: parseRerankFusion(rerankProfile, rerankWeight),
     hybridWeight: checkHybridWeightAdapter(
       adapter,
@@ -480,9 +523,38 @@ export const warnCollapsingTopics = (
   if (groups.length > 0) process.stderr.write(collapsingMessage(datasetId, groups));
 };
 
-/** The CLI's `k_init` handling, which `engine.ts` leaves to its caller. */
-export const firstPassDepth = (depth: number, rerank: boolean): number =>
-  rerank ? Math.max(depth, RERANK_K_INIT) : depth;
+/**
+ * The CLI's `k_init` handling, which `engine.ts` leaves to its caller. An
+ * EXPLICIT `pool` wins outright — it is the measurement's own scale, and the
+ * engine constant is a serving default the instrument must be able to step
+ * outside of. Absent, the shipped formula is unchanged to the byte.
+ */
+export const firstPassDepth = (depth: number, rerank: boolean, pool?: number): number =>
+  pool ?? (rerank ? Math.max(depth, RERANK_K_INIT) : depth);
+
+/** The ONE resolution of the first pass, so ranking and provenance cannot diverge. */
+export const rerankPoolOf = (options: CliOptions): number =>
+  firstPassDepth(options.depth, options.rerank, options.rerankPool);
+
+/** Prefix of the pool-below-depth warning — a WARNING, not a refusal. */
+export const RERANK_POOL_BELOW_DEPTH_WARNING = 'dp-gnosis-bench/rerank-pool-below-depth';
+
+const poolBelowDepthMessage = (pool: number, depth: number): string =>
+  `${RERANK_POOL_BELOW_DEPTH_WARNING}: the reranker scored a pool of ${pool} while the run ` +
+  `asks for depth ${depth}. Every metric whose cut is above ${pool} is CAPPED by the pool — ` +
+  `R@${depth} from a pool of ${pool} is R@${pool} under another name.\n`;
+
+/**
+ * Warns, and lets the run proceed: a pool below the depth is exactly what a
+ * small-pool rerank arm IS, so refusing would block the measurement the flag
+ * exists for. Silent truncation is the part that would not be legitimate.
+ */
+export const warnRerankPoolBelowDepth = (options: CliOptions): void => {
+  const pool = rerankPoolOf(options);
+  if (options.rerank && pool < options.depth) {
+    process.stderr.write(poolBelowDepthMessage(pool, options.depth));
+  }
+};
 
 /**
  * One dataset's query-time context. `excluded` is per QUERY, because BRIGHT
@@ -497,7 +569,7 @@ export interface RankContext {
 
 const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly string[]> => {
   const { options } = context;
-  const depth = firstPassDepth(options.depth, options.rerank);
+  const depth = rerankPoolOf(options);
   const atoms = await retrieveDocs(context.port, topic.text, depth, options.queryAdjacency);
   const ordered = await rerankIfRequested(topic.text, atoms, options.rerank, {
     fusion: options.rerankFusion,
@@ -857,7 +929,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   rerankProfile: options.rerank ? options.rerankProfile : undefined,
   rerankWeight: options.rerank ? options.rerankWeight : undefined,
   rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
-  rerankPool: options.rerank ? firstPassDepth(options.depth, options.rerank) : undefined,
+  rerankPool: options.rerank ? rerankPoolOf(options) : undefined,
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
   queryAdjacency: options.queryAdjacency,
@@ -935,6 +1007,7 @@ const runSelection = async (
 
 export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
   const options = parseArgs(argv);
+  warnRerankPoolBelowDepth(options);
   const selection = selectDatasets(loadManifest(MANIFEST_PATH), options.only, options.layer);
   const problem = selectionError(selection);
   if (problem === undefined) return runSelection(selection.entries, options, gitSha);
