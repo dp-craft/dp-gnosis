@@ -20,6 +20,7 @@
  * | treatment | `hybridWeight` | a different WEIGHT on the hybrid route's two LEGS — a second fusion |
  * | treatment | `rerankModel` | a different CROSS-ENCODER producing the reranked order |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
+ * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
  *
  * A moved SCALE is still refused: the two numbers are not on one axis and no
  * label can rescue them. A moved TREATMENT is the experiment, so it is compared
@@ -52,6 +53,7 @@ export const TREATMENT_FIELDS = [
   'rerankModel',
   'hybridWeight',
   'analyzer',
+  'queryAdjacency',
 ] as const;
 
 export type ScaleField = (typeof SCALE_FIELDS)[number];
@@ -143,14 +145,18 @@ export type Comparison =
  *
  * `rerankModel` follows it: every row recorded before the model was selectable
  * was scored by `RERANK_MODEL_ID`, the only reranker the engine ever called.
+ * `queryAdjacency` likewise: no row recorded before the flag existed applied the
+ * adjacency phrase, so absence reads as OFF rather than as a moved treatment.
+ *
  * `hybridWeight` likewise: every row recorded before the leg weight was
  * settable fused at `HYBRID_FUSION`'s weight, and it applies to every row alike,
  * so a non-hybrid pair still compares equal on it.
  */
-const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number>> = {
+const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>> = {
   analyzer: DEFAULT_ANALYZER,
   rerankModel: RERANK_MODEL_ID,
   hybridWeight: HYBRID_FUSION.rerankWeight,
+  queryAdjacency: false,
 };
 
 const valueOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>

@@ -15,6 +15,7 @@ stay comparable across a chunker change.
 ./bench.sh --rerank             # add the reranker arm (see the caveat below)
 ./bench.sh --rerank-model <id>  # which cross-encoder to call; requires --rerank
 ./bench.sh --analyzer <id>      # which analysis chain builds AND queries; fts5 only
+./bench.sh --query-adjacency    # add the phrase disjunct to multi-term query tokens; fts5 only
 ./bench.sh --adapter lancedb-hybrid --hybrid-weight 0.25   # dense leg's share of the LEG fusion
 ./bench.sh --compare            # print the delta against the previous run
 ./bench.sh --per-topic          # also write per-topic TSVs for a paired test
@@ -24,6 +25,8 @@ stay comparable across a chunker change.
 root. Exit 0 means every selected dataset ran and was recorded; non-zero means
 at least one failed — the rest are still recorded, because a partial run must
 never look complete.
+
+**`--query-adjacency`** is OFF by default and applies to `fts5` only — no other adapter reads the option, so naming it elsewhere REFUSES rather than recording a treatment the run never applied. On, a raw query token that analyzes to two or more terms contributes its multi-term phrase as an EXTRA disjunct beside its individual terms: additive scoring, never a filter, so a document lacking the phrase still matches on the terms. Recorded as `queryAdjacency`, a **TREATMENT** field, so `--compare` labels it `ARM COMPARISON` rather than subtracting it.
 
 **`--hybrid-weight <w>`** applies to `lancedb-hybrid` / `lancedb-hybrid-full` only — `0` pure lexical, `1` pure dense. An out-of-range or non-numeric value FAILS loudly naming the range; it is never clamped. It is recorded as a **TREATMENT** field, so `--compare` labels a weight change `ARM COMPARISON` rather than subtracting it. It is **NOT** `--rerank-weight`: those are two different fusions (leg↔leg vs reranker↔first-pass), and conflating them confounds any sweep.
 

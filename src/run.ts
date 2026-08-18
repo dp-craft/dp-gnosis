@@ -142,6 +142,12 @@ export interface CliOptions {
    * row, because every run has one whether or not it named it.
    */
   readonly analyzer: AnalyzerId;
+  /**
+   * The QUERY-SIDE adjacency treatment: a multi-term raw token contributes its
+   * phrase as an extra disjunct BESIDE its individual terms. Recorded on every
+   * row like `analyzer`, because every run either applied it or did not.
+   */
+  readonly queryAdjacency: boolean;
 }
 
 /** A scorable query: judged by the qrels, so it can contribute a non-zero mean. */
@@ -216,6 +222,26 @@ const checkAnalyzerAdapter = (adapter: AdapterName, analyzer: AnalyzerId): Analy
   throw new Error(
     `dp-gnosis-bench: adapter "${adapter}" does not honour --analyzer "${analyzer}" — ` +
       `only "${ANALYZER_AWARE_ADAPTER}" builds its index with the named chain`
+  );
+};
+
+const QUERY_ADJACENCY_FLAG = '--query-adjacency';
+
+/** The ONE adapter whose `retrieve` honours the adjacency option (`fts5Adapter.ts`). */
+const ADJACENCY_AWARE_ADAPTER: AdapterName = 'fts5';
+
+/**
+ * `--query-adjacency` on any other adapter REFUSES, before a dataset is
+ * prepared, exactly as `--analyzer` does: no other adapter reads the option, so
+ * the row would record `queryAdjacency` — a TREATMENT field `compare.ts` labels
+ * an arm — under a treatment the run never applied. The flagless invocation is
+ * what every adapter already does, so every legacy invocation stands.
+ */
+const checkAdjacencyAdapter = (adapter: AdapterName, adjacency: boolean): boolean => {
+  if (!adjacency || adapter === ADJACENCY_AWARE_ADAPTER) return adjacency;
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour ${QUERY_ADJACENCY_FLAG} — ` +
+      `only "${ADJACENCY_AWARE_ADAPTER}" applies the adjacency phrase at query time`
   );
 };
 
@@ -327,6 +353,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
       parseHybridWeight(flagValue(argv, HYBRID_WEIGHT_FLAG))
     ),
     analyzer: checkAnalyzerAdapter(adapter, parseAnalyzer(flagValue(argv, '--analyzer'))),
+    queryAdjacency: checkAdjacencyAdapter(adapter, argv.includes(QUERY_ADJACENCY_FLAG)),
   };
 };
 
@@ -471,7 +498,7 @@ export interface RankContext {
 const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly string[]> => {
   const { options } = context;
   const depth = firstPassDepth(options.depth, options.rerank);
-  const atoms = await retrieveDocs(context.port, topic.text, depth);
+  const atoms = await retrieveDocs(context.port, topic.text, depth, options.queryAdjacency);
   const ordered = await rerankIfRequested(topic.text, atoms, options.rerank, {
     fusion: options.rerankFusion,
     model: options.rerankModel,
@@ -832,6 +859,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
+  queryAdjacency: options.queryAdjacency,
 });
 
 /** The headline; the other three metrics are read off the delta line above it. */

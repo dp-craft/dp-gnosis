@@ -714,9 +714,10 @@ export const probePortSoundness = async (request: PortProbeRequest): Promise<voi
 export const retrieveDocs = async (
   port: KnowledgePort,
   rawQueryText: string,
-  depth: number
+  depth: number,
+  adjacency = false
 ): Promise<readonly RetrievedAtom[]> => {
-  const result = await port.retrieve(rawQueryText, { k: depth });
+  const result = await port.retrieve(rawQueryText, { k: depth, adjacency });
   return result.poolAtoms ?? result.atoms;
 };
 

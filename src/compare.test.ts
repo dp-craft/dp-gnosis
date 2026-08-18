@@ -188,6 +188,34 @@ describe('compareLastTwo', () => {
     expect(result.kind).toBe('delta');
   });
 
+  it('guards query adjacency as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('queryAdjacency');
+    expect(SCALE_FIELDS).not.toContain('queryAdjacency');
+  });
+
+  it('COMPARES a query-adjacency change as an arm comparison, never subtracting it', () => {
+    const result = compareLastTwo(
+      [
+        row({ queryAdjacency: false }),
+        row({ gitSha: 'bbb2222', queryAdjacency: true, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['queryAdjacency']);
+    expect(formatComparison(result)).toContain('queryAdjacency');
+  });
+
+  /** Every row recorded before the flag existed queried without the treatment. */
+  it('reads an ABSENT query adjacency as OFF, not as a changed treatment', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', queryAdjacency: false, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
   it('guards the reranker MODEL as a TREATMENT, never as a measuring scale', () => {
     expect(TREATMENT_FIELDS).toContain('rerankModel');
     expect(SCALE_FIELDS).not.toContain('rerankModel');

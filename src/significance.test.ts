@@ -56,6 +56,7 @@ const BASE_ROW: HistoryRow = {
 const asProvenance = (run: HistoryRow): RunProvenance => ({
   ...run,
   analyzer: run.analyzer ?? DEFAULT_ANALYZER,
+  queryAdjacency: run.queryAdjacency ?? false,
 });
 
 const row = (overrides: Partial<HistoryRow>): HistoryRow => {

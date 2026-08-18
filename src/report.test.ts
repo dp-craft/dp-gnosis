@@ -52,6 +52,7 @@ const provenance: RunProvenance = {
   depth: 100,
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
+  queryAdjacency: false,
 };
 
 const result: DatasetResult = {
@@ -158,6 +159,7 @@ describe('writeRunReport', () => {
         'recall100',
         'recall100Sd',
         'recall10Sd',
+        'queryAdjacency',
         'rerank',
         'perTopicPath',
         'runPath',
@@ -168,6 +170,22 @@ describe('writeRunReport', () => {
     expect(rows[0]?.corpusBytes).toBe(4096);
     expect(rows[0]?.ndcg10).toBeCloseTo(0.6863, 12);
     expect(rows[0]?.rerank).toBe(false);
+  });
+
+  it('records the query-adjacency treatment on the row, applied or not', () => {
+    const dir = tempResultsDir();
+    writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    expect(readHistory(resolve(dir, HISTORY_FILE))[0]?.queryAdjacency).toBe(false);
+  });
+
+  it('records an APPLIED query-adjacency treatment as true', () => {
+    const dir = tempResultsDir();
+    writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, queryAdjacency: true },
+      results: [result],
+    });
+    expect(readHistory(resolve(dir, HISTORY_FILE))[0]?.queryAdjacency).toBe(true);
   });
 
   it('records the analysis chain on the row, so --compare can see an analyzer change', () => {

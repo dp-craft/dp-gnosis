@@ -9,7 +9,12 @@ import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.j
 import type { AdapterName } from '../../dp-gnosis/src/cli/adapter.js';
 import { runCli } from '../../dp-gnosis/src/cli/cli.js';
 import { DEFAULT_ATOM_TYPE, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
-import type { IndexState, KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
+import type {
+  IndexState,
+  KnowledgePort,
+  RetrievedAtom,
+  RetrieveOptions
+} from '../../dp-gnosis/src/port.js';
 import { type AnalyzerId, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { BeirDoc } from './beir.js';
 import {
@@ -477,6 +482,32 @@ describe('retrieveDocs', () => {
 
     expect((await retrieveDocs(pooled, 'q', 1)).map(a => a.id)).toEqual(['a', 'b', 'c']);
     expect((await retrieveDocs(plain, 'q', 1)).map(a => a.id)).toEqual(['a']);
+  });
+
+  /**
+   * The query-adjacency treatment is applied by the PORT, so the measured call
+   * has to carry it: a run recording the treatment while retrieving without it
+   * records a treatment it never applied.
+   */
+  it('hands the port the adjacency treatment it was asked for, OFF by default', async () => {
+    const seen: RetrieveOptions[] = [];
+    const spy: KnowledgePort = {
+      name: 'fts5',
+      retrieve: async (_query: string, opts: RetrieveOptions) => {
+        seen.push(opts);
+        return await Promise.resolve({
+          atoms: [],
+          mode: 'fts5',
+          indexState: 'ready' as IndexState,
+        });
+      },
+    };
+
+    await retrieveDocs(spy, 'lint:test-shape', 10, true);
+    await retrieveDocs(spy, 'lint:test-shape', 10, false);
+    await retrieveDocs(spy, 'lint:test-shape', 10);
+
+    expect(seen.map(opts => opts.adjacency)).toEqual([true, false, false]);
   });
 });
 

@@ -77,6 +77,12 @@ export interface RunProvenance {
    * omitted it could never be told apart from one measured on another chain.
    */
   readonly analyzer: string;
+  /**
+   * Whether the QUERY-SIDE adjacency treatment was applied. Required for the
+   * reason `analyzer` is: every run either applied it or did not, and a row
+   * omitting it could not be told apart from one measured under the other arm.
+   */
+  readonly queryAdjacency: boolean;
 }
 
 /** One dataset's outcome plus the provenance that is specific to that dataset. */
@@ -196,6 +202,14 @@ export interface HistoryRow extends Metrics {
    * how `compare.ts` reads an absent one.
    */
   readonly analyzer?: string;
+  /**
+   * Whether this row's queries carried the adjacency phrase — TREATMENT
+   * provenance (`compare.ts`), so switching it on is labelled an arm comparison
+   * instead of being subtracted. Absent on every row recorded before the flag
+   * existed; none of those applied it, which is how `compare.ts` reads an absent
+   * one.
+   */
+  readonly queryAdjacency?: boolean;
   readonly topics: number;
   readonly docCount: number;
   readonly atomCount: number;
@@ -360,6 +374,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   rerankModel: provenance.rerankModel,
   hybridWeight: provenance.hybridWeight,
   analyzer: provenance.analyzer,
+  queryAdjacency: provenance.queryAdjacency,
   ...descriptorFields(result),
   ...costFields(result),
   ...result.metrics,

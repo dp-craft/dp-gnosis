@@ -12,6 +12,7 @@ import {
   RERANK_MODEL_ID,
   RERANK_RRF_K
 } from '../../dp-gnosis/src/config.js';
+import type { IndexState, KnowledgePort, RetrieveOptions } from '../../dp-gnosis/src/port.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import type { Qrel } from './metrics.js';
@@ -34,6 +35,7 @@ import {
   parseArgs,
   percentileMs,
   provenanceOf,
+  queryDataset,
   selectDatasets,
   selectionError,
   warnCollapsingTopics
@@ -54,6 +56,7 @@ describe('parseArgs', () => {
       rerankWeight: undefined,
       rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
       analyzer: DEFAULT_ANALYZER,
+      queryAdjacency: false,
     });
   });
 
@@ -69,6 +72,7 @@ describe('parseArgs', () => {
         rerankWeight: undefined,
         rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
         analyzer: DEFAULT_ANALYZER,
+        queryAdjacency: false,
       });
   });
 
@@ -158,6 +162,30 @@ describe('parseArgs', () => {
     expect(parseArgs(['--adapter', 'fts5', '--analyzer', 'nostem-fold']).analyzer).toBe(
       'nostem-fold'
     );
+  });
+
+  it('defaults --query-adjacency OFF, the treatment every recorded run was measured without', () => {
+    expect(parseArgs([]).queryAdjacency).toBe(false);
+  });
+
+  it('reads --query-adjacency as a switch', () => {
+    expect(parseArgs(['--query-adjacency']).queryAdjacency).toBe(true);
+    expect(parseArgs(['--adapter', 'fts5', '--query-adjacency']).queryAdjacency).toBe(true);
+  });
+
+  it('REFUSES --query-adjacency on an adapter that does not honour it, naming both', () => {
+    const argv = ['--adapter', 'linear', '--query-adjacency'];
+    expect(() => parseArgs(argv)).toThrow(/linear/);
+    expect(() => parseArgs(argv)).toThrow(/--query-adjacency/);
+    expect(() => parseArgs(argv)).toThrow(/fts5/);
+    expect(() => parseArgs(['--adapter', 'minisearch', '--query-adjacency'])).toThrow(
+      /minisearch/
+    );
+    expect(() => parseArgs(['--adapter', 'lancedb', '--query-adjacency'])).toThrow(/lancedb/);
+  });
+
+  it('leaves the flagless invocation on a non-fts5 adapter alone — every legacy run', () => {
+    expect(parseArgs(['--adapter', 'linear']).queryAdjacency).toBe(false);
   });
 
   it('reads --layer as the suite layer to run', () => {
@@ -374,6 +402,47 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
     expect(provenanceOf(parseArgs(argv), 'sha').hybridWeight).toBe(0.8);
     expect(provenanceOf(parseArgs([]), 'sha').hybridWeight).toBeUndefined();
   });
+
+  it('records the query-adjacency treatment on every row, applied or not', () => {
+    expect(provenanceOf(parseArgs(['--query-adjacency']), 'sha').queryAdjacency).toBe(true);
+    expect(provenanceOf(parseArgs([]), 'sha').queryAdjacency).toBe(false);
+  });
+});
+
+/**
+ * The flag is worthless unless it reaches `port.retrieve` — a run recording
+ * `queryAdjacency: true` while querying without it is exactly the failure class
+ * the refusal above exists to prevent, one layer down.
+ */
+describe('queryDataset — the treatment reaches the port', () => {
+  const spyPort = (seen: RetrieveOptions[]): KnowledgePort => ({
+    name: 'fts5',
+    retrieve: async (_query: string, opts: RetrieveOptions) => {
+      seen.push(opts);
+      return await Promise.resolve({
+        atoms: [],
+        mode: 'fts5',
+        indexState: 'ready' as IndexState,
+      });
+    },
+  });
+
+  const seenOptionsFor = async (argv: readonly string[]): Promise<readonly RetrieveOptions[]> => {
+    const seen: RetrieveOptions[] = [];
+    await queryDataset(
+      { port: spyPort(seen), options: parseArgs(argv), excluded: new Map() },
+      [{ id: 'q1', text: 'lint:test-shape' }]
+    );
+    return seen;
+  };
+
+  it('passes adjacency true when the flag is set', async () => {
+    expect((await seenOptionsFor(['--query-adjacency']))[0]?.adjacency).toBe(true);
+  });
+
+  it('passes adjacency false when it is not', async () => {
+    expect((await seenOptionsFor([]))[0]?.adjacency).toBe(false);
+  });
 });
 
 describe('main dataset selection', () => {
@@ -445,6 +514,7 @@ const testProvenance: RunProvenance = {
   depth: 100,
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
+  queryAdjacency: false,
 };
 
 /**
