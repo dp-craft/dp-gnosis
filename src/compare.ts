@@ -20,6 +20,7 @@
  * | treatment | `rerankProfile` / `rerankWeight` | a different FUSION rule over the same two orders |
  * | treatment | `hybridWeight` | a different WEIGHT on the hybrid route's two LEGS — a second fusion |
  * | treatment | `rerankModel` | a different CROSS-ENCODER producing the reranked order |
+ * | treatment | `rerankDocMaxChars` / `rerankExtract` | a different TEXT put in front of the reranker — how much of an atom body, and which part — guarded ONLY between two rows that both reranked |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
  *
@@ -53,6 +54,8 @@ export const TREATMENT_FIELDS = [
   'rerankProfile',
   'rerankWeight',
   'rerankModel',
+  'rerankDocMaxChars',
+  'rerankExtract',
   'hybridWeight',
   'analyzer',
   'queryAdjacency',
@@ -138,6 +141,16 @@ export type Comparison =
   | ComparisonMissing;
 
 /**
+ * The doc window every reranked row was scored under from the reranker's
+ * introduction until these two fields were stamped: 2000 characters of the
+ * atom's HEAD. A HISTORICAL fact about rows ALREADY WRITTEN. MUST NOT be read
+ * as the live window — that is `RERANK_DOC_MAX_CHARS` in the engine config and
+ * `EXTRACT_STRATEGY` in `rerank.ts`, and both move.
+ */
+const LEGACY_RERANK_DOC_MAX_CHARS = 2000;
+const LEGACY_RERANK_EXTRACT = 'head';
+
+/**
  * What an ABSENT field means, for the fields where absence is not "unknown" but
  * a known older value. A row recorded before the analyzer was selectable was
  * built by `DEFAULT_ANALYZER` — the only chain that ever built one — so reading
@@ -159,6 +172,8 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   rerankModel: RERANK_MODEL_ID,
   hybridWeight: HYBRID_FUSION.rerankWeight,
   queryAdjacency: false,
+  rerankDocMaxChars: LEGACY_RERANK_DOC_MAX_CHARS,
+  rerankExtract: LEGACY_RERANK_EXTRACT,
 };
 
 /**
@@ -182,16 +197,27 @@ const defaultOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[Provenan
   field === 'rerankPool' ? legacyRerankPool(row) : FIELD_DEFAULTS[field];
 
 /**
- * Whether a field DESCRIBES this row at all. Only `rerankPool` is conditional:
- * a BM25 row scored no pool, so between a BM25 row and a rerank row the pool
- * does not MOVE, it comes into existence — and that is the `rerank` treatment
- * itself, which already labels the pair an ARM COMPARISON. Letting the pool fire
- * a scale refusal there would make rerank-on-vs-off, the comparison this bench
- * exists to run, permanently unsubtractable. Between two rows that BOTH
- * reranked, the pool is a real measuring scale and a move still refuses.
+ * The fields that describe a RERANKED row and nothing else — the pool it scored
+ * over, and the text window it read. A BM25 row has none of them.
+ */
+const RERANK_ONLY_FIELDS: ReadonlySet<ProvenanceField> = new Set<ProvenanceField>([
+  'rerankPool',
+  'rerankDocMaxChars',
+  'rerankExtract',
+]);
+
+/**
+ * Whether a field DESCRIBES this row at all. Only the rerank-only fields are
+ * conditional: a BM25 row scored no pool and read no document, so between a BM25
+ * row and a rerank row they do not MOVE, they come into existence — and that is
+ * the `rerank` treatment itself, which already labels the pair an ARM COMPARISON.
+ * Letting them fire there would name three fields for one flip, and would make
+ * the pool's scale refusal swallow rerank-on-vs-off, the comparison this bench
+ * exists to run. Between two rows that BOTH reranked they describe both rows,
+ * and a move is reported.
  */
 const appliesTo = (row: HistoryRow, field: ProvenanceField): boolean =>
-  field === 'rerankPool' ? row.rerank : true;
+  RERANK_ONLY_FIELDS.has(field) ? row.rerank : true;
 
 const valueOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>
   row[field] === undefined ? defaultOf(row, field) : row[field];

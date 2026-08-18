@@ -41,12 +41,13 @@ import {
 import {
   ATOM_MAX_CHARS,
   DEFAULT_RERANK_PRESET,
+  RERANK_DOC_MAX_CHARS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
   type RerankFusion } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
 import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
-import { resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
+import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
 import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
 import { compareAll, type Comparison, formatComparison } from './compare.js';
 import {
@@ -930,6 +931,8 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   rerankWeight: options.rerank ? options.rerankWeight : undefined,
   rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
   rerankPool: options.rerank ? rerankPoolOf(options) : undefined,
+  rerankDocMaxChars: options.rerank ? RERANK_DOC_MAX_CHARS : undefined,
+  rerankExtract: options.rerank ? EXTRACT_STRATEGY : undefined,
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
   queryAdjacency: options.queryAdjacency,

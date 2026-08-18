@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ATOM_MAX_CHARS,
   DEFAULT_RERANK_PRESET,
+  RERANK_DOC_MAX_CHARS,
   RERANK_FUSION_PRESETS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
@@ -14,6 +15,7 @@ import {
 } from '../../dp-gnosis/src/config.js';
 import type { IndexState, KnowledgePort, RetrieveOptions } from '../../dp-gnosis/src/port.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
+import { EXTRACT_STRATEGY } from '../../dp-gnosis/src/rerank.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import type { Qrel } from './metrics.js';
 import {
@@ -457,6 +459,23 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
     const argv = ['--adapter', 'lancedb-hybrid', '--hybrid-weight', '0.8'];
     expect(provenanceOf(parseArgs(argv), 'sha').hybridWeight).toBe(0.8);
     expect(provenanceOf(parseArgs([]), 'sha').hybridWeight).toBeUndefined();
+  });
+
+  /**
+   * The two parameters that decide WHAT the reranker is shown. They are engine
+   * constants today, so an unstamped row would let a change to either be
+   * subtracted as a like-for-like delta.
+   */
+  it('stamps the rerank doc window and extraction on a run that reranked', () => {
+    const provenance = provenanceOf(parseArgs(['--rerank']), 'sha');
+    expect(provenance.rerankDocMaxChars).toBe(RERANK_DOC_MAX_CHARS);
+    expect(provenance.rerankExtract).toBe(EXTRACT_STRATEGY);
+  });
+
+  it('stamps NO doc window on a run that reranked nothing', () => {
+    const provenance = provenanceOf(parseArgs([]), 'sha');
+    expect(provenance.rerankDocMaxChars).toBeUndefined();
+    expect(provenance.rerankExtract).toBeUndefined();
   });
 
   it('records the query-adjacency treatment on every row, applied or not', () => {

@@ -75,6 +75,14 @@ export interface RunProvenance {
    */
   readonly rerankPool?: number | undefined;
   /**
+   * WHAT the reranker was shown: how many characters of an atom body were sent,
+   * and which part of it. Both are engine constants today, and both decide the
+   * TEXT the cross-encoder scored rather than the pool it scored over. Absent on
+   * a run that did not rerank — nothing was extracted for one.
+   */
+  readonly rerankDocMaxChars?: number | undefined;
+  readonly rerankExtract?: string | undefined;
+  /**
    * The DENSE leg's weight in the hybrid route's LEG fusion. Absent on a run
    * that named none, which `compare.ts` reads as the shipped `HYBRID_FUSION`
    * weight — the value every recorded hybrid row was measured under.
@@ -204,6 +212,16 @@ export interface HistoryRow extends Metrics {
    * reads an absent one.
    */
   readonly rerankPool?: number;
+  /**
+   * The doc window this row's reranker read — how many characters of an atom
+   * body, and which part. TREATMENT provenance (`compare.ts`), because they
+   * change what the model was SHOWN, so a move is labelled an arm comparison
+   * instead of being subtracted. Absent on a BM25-only row, and on every row
+   * recorded before the two were stamped; those all extracted the head at 2000
+   * characters, which is how `compare.ts` reads an absent one.
+   */
+  readonly rerankDocMaxChars?: number;
+  readonly rerankExtract?: string;
   /**
    * The DENSE leg's weight this row's hybrid fusion ran at — TREATMENT
    * provenance (`compare.ts`), so a swept weight is labelled an arm comparison
@@ -391,6 +409,8 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   rerankWeight: provenance.rerankWeight,
   rerankModel: provenance.rerankModel,
   rerankPool: provenance.rerankPool,
+  rerankDocMaxChars: provenance.rerankDocMaxChars,
+  rerankExtract: provenance.rerankExtract,
   hybridWeight: provenance.hybridWeight,
   analyzer: provenance.analyzer,
   queryAdjacency: provenance.queryAdjacency,

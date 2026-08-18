@@ -12,6 +12,10 @@ import {
 } from './compare.js';
 import type { HistoryRow } from './report.js';
 
+/** What an absent rerank doc window on a row means — the values that always held. */
+const LEGACY_RERANK_DOC_CHARS = 2000;
+const LEGACY_RERANK_EXTRACT = 'head';
+
 /** The shipped DENSE leg weight — what an absent `hybridWeight` on a row means. */
 const HYBRID_FUSION_WEIGHT: number = HYBRID_FUSION.rerankWeight;
 
@@ -358,6 +362,74 @@ describe('compareLastTwo', () => {
     if (bothReranked.kind !== 'provenance-changed') return;
     expect(bothReranked.changed.map(change => change.field)).toEqual(['rerankPool']);
     expect(formatComparison(bothReranked)).toContain('rerankPool');
+  });
+
+  /**
+   * The two parameters that decide WHAT THE RERANKER IS SHOWN: how much of an
+   * atom body it reads, and which part. A move in either changes the treatment,
+   * so it is labelled an arm comparison rather than subtracted.
+   */
+  it('guards the rerank DOC WINDOW as a treatment, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('rerankDocMaxChars');
+    expect(TREATMENT_FIELDS).toContain('rerankExtract');
+    expect(SCALE_FIELDS).not.toContain('rerankDocMaxChars');
+    expect(SCALE_FIELDS).not.toContain('rerankExtract');
+  });
+
+  it('labels a moved rerank doc window an ARM COMPARISON naming both fields', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankDocMaxChars: 2000, rerankExtract: 'head' }),
+        row({
+          gitSha: 'bbb2222',
+          rerank: true,
+          rerankDocMaxChars: 4000,
+          rerankExtract: 'headtail',
+          ndcg10: 0.65,
+        }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual([
+      'rerankDocMaxChars',
+      'rerankExtract',
+    ]);
+    expect(formatComparison(result)).toContain('rerankExtract');
+  });
+
+  /** Every row written before the fields existed was scored at 2000 chars of HEAD. */
+  it('reads an ABSENT doc window as the values that held, not as a moved arm', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankPool: 100 }),
+        row({
+          gitSha: 'bbb2222',
+          rerank: true,
+          rerankPool: 100,
+          rerankDocMaxChars: LEGACY_RERANK_DOC_CHARS,
+          rerankExtract: LEGACY_RERANK_EXTRACT,
+          ndcg10: 0.65,
+        }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  /** Turning rerank OFF removes the window rather than moving it. */
+  it('names ONLY rerank when the arm flips with a doc window on one side', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankPool: 100, rerankDocMaxChars: 2000, rerankExtract: 'head' }),
+        row({ gitSha: 'bbb2222', rerank: false, ndcg10: 0.62 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['rerank']);
   });
 
   /** A BM25 row reranked nothing, so it has no pool — absence on both sides is no move. */
