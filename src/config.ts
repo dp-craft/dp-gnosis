@@ -111,29 +111,32 @@ export const bodyMaxChars = (body: string, maxChars: number = ATOM_MAX_CHARS): n
 export const ATOM_MIN_CHARS = 200;
 
 /**
- * Default injection budget for one `retrieve` call, in the unit
- * `estimateTokens` returns — UTF-8 BYTES, not tokenizer tokens.
+ * Default injection budget for one `retrieve` call, expressed in the unit
+ * `estimateTokens` returns: a CONSERVATIVE UPPER BOUND on the token count,
+ * estimated as UTF-8 BYTE LENGTH. It is NOT an exact token count, and it cannot
+ * become one without a real tokenizer as a dependency here. Why the byte length
+ * bounds the token count, and what the bound costs, is derived once in
+ * `estimateTokens` (`budget.ts`) — not restated here.
  *
- * It is a byte bound because no tokenizer is a dependency here, and the byte
- * count is a PROVEN upper bound on the real token count (see `estimateTokens`).
- * The price is measured: on the repo top-5 median the bound reads 6 190 where
- * Qwen counts 1 520 tokens — 4.1x reserve — and 5 272 vs 1 959 in Hungarian,
- * 2.7x. A caller who knows its own window passes `--max-tokens`.
+ * The reserve is large and measured: 2026-08-18 on this vault, 5 558 bytes of
+ * real atom bodies tokenized to 1 414 tokens — 3.93 bytes/token — against the
+ * tokenizer of `qwen38-27b-q4kxl-high-ctx130k-mtp-coding`, read off
+ * `usage.prompt_tokens`. So the bound OVER-RESERVES ~3.9x, and a 64000 budget
+ * admits roughly 16 000 real tokens today. A caller who knows its own window
+ * passes `--max-tokens`.
  *
- * 16000 is measured (2026-08-13, full curve in
+ * The value is 4x the 16000 measured on 2026-08-13 (full curve in
  * `docs/benchmarks/2026-08-13-dp-gnosis-evolution-and-maturity-analysis.md`
- * §5.3): raising the budget from 8000 lifts delivered recall@10 from 0.4373 to
- * 0.5330 against an unlimited-budget ceiling of 0.5420, and the median count of
- * top-10 atoms actually admitted from 6.5 to 10.0. So 16000 bytes recovers 91%
- * of the recall the 8000 default was discarding, and ~3900 real tokens
- * (16000 ÷ 4.1) still sits inside the 2000–4000 token band published for
- * retrieved knowledge in a pipeline that filters.
+ * §5.3), raised while the larger window is under test. That curve is what 16000
+ * rested on: raising the budget from 8000 lifted delivered recall@10 from
+ * 0.4373 to 0.5330 against an unlimited-budget ceiling of 0.5420, and the median
+ * count of top-10 atoms actually admitted from 6.5 to 10.0.
  *
  * Unrelated to `ATOM_FENCE_MAX_CHARS`: that one caps a single atom's CHARACTERS
- * at write time, this one caps a whole result's BYTES at read time. They move
- * independently.
+ * at write time, this one caps a whole result's estimated tokens at read time.
+ * They move independently.
  */
-export const RETRIEVE_TOKEN_BUDGET = 16000;
+export const RETRIEVE_TOKEN_BUDGET = 64000;
 
 /**
  * The reranker `retrieve --rerank` calls, served by llama-swap under this id.

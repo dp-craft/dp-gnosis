@@ -60,8 +60,11 @@ Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried bl
 | `-k` | positive integer | `5` |
 | `--format` | `text\|json\|xml` — **`retrieve` only** | `text` |
 | `--json` | boolean — alias for `--format json` | off |
+| `--max-tokens` | non-negative integer — **`retrieve` only**, the injection budget as a **conservative UPPER BOUND on tokens, estimated as UTF-8 byte length**, not an exact token count | `64000` |
 | `--rephrase` | boolean — **`retrieve` only**, rewrite the query into BM25 keywords first | off |
 | `--help` / `-h` | boolean | off |
+
+**`--max-tokens` counts an upper bound, so it over-reserves.** The estimator charges each atom its UTF-8 byte length; why that bounds the real token count is derived in `estimateTokens` (`src/budget.ts`) and not repeated here. The reserve is measured: on 2026-08-18 over this vault, 5 558 bytes of real atom bodies tokenized to 1 414 tokens — **3.93 bytes/token**, read off `usage.prompt_tokens` against the tokenizer of `qwen38-27b-q4kxl-high-ctx130k-mtp-coding`. So the bound over-reserves **~3.9x**, and the `64000` default admits roughly **16 000 real tokens**. Size the flag at about 4x the context you actually mean to fill. An atom that does not fit the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size.
 
 #### `--rephrase` — the rules below, executed
 
