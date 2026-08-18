@@ -19,13 +19,22 @@ stay comparable across a chunker change.
 ./bench.sh --query-adjacency    # add the phrase disjunct to multi-term query tokens; fts5 only
 ./bench.sh --adapter lancedb-hybrid --hybrid-weight 0.25   # dense leg's share of the LEG fusion
 ./bench.sh --compare            # print the delta against the previous run
+./bench.sh --baseline <sel> --fail-under 0.01   # regression gate; exits 4 on a drop past the tolerance
 ./bench.sh --per-topic          # also write per-topic TSVs for a paired test
 ```
 
 `npm run gnosis:bench -- --only nfcorpus` is the same entry point from the repo
-root. Exit 0 means every selected dataset ran and was recorded; non-zero means
-at least one failed — the rest are still recorded, because a partial run must
-never look complete.
+root. `--help` prints the exit codes; the flags are documented here, once.
+
+| Exit | Meaning |
+|---|---|
+| 0 | every selected dataset ran and was recorded |
+| 1 | at least one dataset failed — the rest are still recorded, because a partial run must never look complete |
+| 4 | the regression gate failed: a drop past `--fail-under`, or a pair it could not compare |
+
+**`--baseline <perTopicPath substring>` + `--fail-under <Δ nDCG@10>`** are the regression gate, and they are given TOGETHER or not at all — a baseline with no tolerance gates nothing, and a tolerance with no baseline has nothing to compare, so half a pair REFUSES naming both. The selector follows `gnosis:pair` semantics (a unique substring of a recorded run's `perTopicPath`) but is resolved **per dataset**: one `--layer smoke` invocation measures several, and a selector that matches no run — or two — of the dataset just measured fails naming BOTH the selector and the dataset. The pairing is `significance.ts`, so the number is the same statistic `--compare` and `gnosis:pair` print.
+
+The gate decides on the **point estimate**: it fails when the paired mean nDCG@10 difference falls below `-failUnder`. The permutation p and the bootstrap CI are printed beside it but are **not** the gate — `vault-hu`'s MDE is 0.05–0.07 (`GNOSIS-GUIDE.md` § Known harness gaps), so requiring significance would let a real regression through on the corpus least able to detect one. A pairing the harness REFUSES — a `SCALE_FIELDS` move, a missing per-topic file, differing topic sets — exits 4 as well, with the refusal's own reason: a gate that cannot compare has verified nothing, and reporting that as a pass is the failure class the suite exists to prevent. Absent both flags, a run is byte-identical to one before they existed.
 
 **`--query-adjacency`** is OFF by default and applies to `fts5` only — no other adapter reads the option, so naming it elsewhere REFUSES rather than recording a treatment the run never applied. On, a raw query token that analyzes to two or more terms contributes its multi-term phrase as an EXTRA disjunct beside its individual terms: additive scoring, never a filter, so a document lacking the phrase still matches on the terms. Recorded as `queryAdjacency`, a **TREATMENT** field, so `--compare` labels it `ARM COMPARISON` rather than subtracting it.
 

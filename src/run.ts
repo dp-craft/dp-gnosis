@@ -62,6 +62,7 @@ import {
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
 import { describeDerivation, ensureVaultDataset } from './fetch/vault.js';
+import { GATE_EXIT_CODE, type GateOptions, gateReport, parseGateArgs } from './gate.js';
 import {
   type BeirDataset,
   type DatasetEntry,
@@ -1021,14 +1022,89 @@ const runSelection = async (
   return exitCode(results.length, entries.length);
 };
 
+/**
+ * The flags themselves are documented ONCE, in the README — restating them here
+ * would create a second owner that rots. What `--help` owns is the exit-code
+ * contract (CLAUDE.md § Script Exit-Code Contract), which no other surface
+ * states in full.
+ */
+export const RUN_HELP = [
+  'dp-gnosis-bench — the retrieval benchmark.',
+  '',
+  'usage: ./bench.sh [flags]   (npm run gnosis:bench -- [flags] from the repo root)',
+  '',
+  'flags: tools/dp-gnosis-bench/README.md § Run it — the single owner of the flag table.',
+  '',
+  'regression gate:',
+  `  --baseline <perTopicPath substring>  the reference run, resolved PER DATASET`,
+  `  --fail-under <delta>                 the tolerated drop in nDCG@10`,
+  '  Given together or not at all. The gate rates the POINT ESTIMATE, prints the',
+  '  p-value and CI beside it, and a pairing it cannot make is a FAILURE, not a pass.',
+  '',
+  'exit codes:',
+  '  0  every selected dataset ran and was recorded',
+  '  1  at least one dataset failed (the rest are still recorded)',
+  `  ${GATE_EXIT_CODE}  the regression gate failed — a drop past --fail-under, or a pair it could not compare`,
+  '',
+].join('\n');
+
+const GATE_HEADER = '\n-- regression gate (nDCG@10) --\n';
+
+/**
+ * The gate was ASKED for and did not run. It SAYS so: a run that exits non-zero
+ * having printed nothing about a gate the operator requested reads as "the gate
+ * passed", which is the § Landmines shape — a component produced nothing and the
+ * reader recorded it as data. The code is NOT changed: exit 1 says a dataset did
+ * not measure, and that is the more basic failure.
+ */
+const reportGateSkipped = (code: number): void => {
+  process.stdout.write(
+    `${GATE_HEADER}NOT RUN — the run exited ${code}: at least one dataset failed, so the ` +
+      'recorded set is partial and pairing it would compare an incomplete run against the baseline.\n'
+  );
+};
+
+const runGate = (gate: GateOptions, entries: readonly DatasetEntry[]): number => {
+  const report = gateReport({
+    resultsDir: RESULTS_DIR,
+    history: readHistory(resolve(RESULTS_DIR, HISTORY_FILE)),
+    datasets: entries.map(entry => entry.id),
+    options: gate,
+  });
+  process.stdout.write(`${GATE_HEADER}${report.lines.join('\n')}\n`);
+  return report.exitCode;
+};
+
+/**
+ * The gate's verdict, or the run's own code. No gate asked for means SILENCE —
+ * the flags absent leave the run byte-identical to one before they existed.
+ */
+export const applyGate = (
+  gate: GateOptions | undefined,
+  entries: readonly DatasetEntry[],
+  code: number
+): number => {
+  if (gate === undefined) return code;
+  if (code === 0) return runGate(gate, entries);
+  reportGateSkipped(code);
+  return code;
+};
+
 export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
+  if (argv.includes('--help')) {
+    process.stdout.write(RUN_HELP);
+    return 0;
+  }
   const options = parseArgs(argv);
+  const gate = parseGateArgs(argv);
   warnRerankPoolBelowDepth(options);
   const selection = selectDatasets(loadManifest(MANIFEST_PATH), options.only, options.layer);
   const problem = selectionError(selection);
-  if (problem === undefined) return runSelection(selection.entries, options, gitSha);
-  process.stderr.write(`${problem}\n`);
-  return FAILURE_EXIT_CODE;
+  if (problem !== undefined) {
+    process.stderr.write(`${problem}\n`);
+    return FAILURE_EXIT_CODE;
+  }
+  return applyGate(gate, selection.entries, await runSelection(selection.entries, options, gitSha));
 };
 
 /** Guarded so the exported helpers stay importable from a test. */

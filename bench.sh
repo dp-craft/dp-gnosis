@@ -6,8 +6,9 @@
 # The per-topic TSVs are always written: a recorded run must stay re-analysable
 # without paying for the benchmark a second time.
 #
-# Exit 0 = every selected dataset ran and was recorded; non-zero = at least one
-# failed (the rest are still recorded — a partial run must never look complete).
+# Exit 0 = every selected dataset ran and was recorded; 1 = at least one failed
+# (the rest are still recorded — a partial run must never look complete); 4 = the
+# regression gate failed. `--help` and README.md own the full list.
 set -euo pipefail
 
 # The SINGLE owner of the benchmark's heap limit. Node's default old-space cap

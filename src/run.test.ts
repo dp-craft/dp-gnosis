@@ -26,6 +26,7 @@ import {
   type RunProvenance
 } from './report.js';
 import {
+  applyGate,
   BENCH_DEFAULT_ADAPTER,
   COLLAPSING_TOPICS_WARNING,
   collapsingTopicGroups,
@@ -40,6 +41,7 @@ import {
   queryDataset,
   RERANK_POOL_BELOW_DEPTH_WARNING,
   rerankPoolOf,
+  RUN_HELP,
   selectDatasets,
   selectionError,
   warnCollapsingTopics,
@@ -805,5 +807,43 @@ describe('warnRerankPoolBelowDepth', () => {
     expect(writtenFor(['--depth', '20', '--rerank', '--rerank-pool', '50'])).toBe('');
     expect(writtenFor(['--depth', '20', '--rerank'])).toBe('');
     expect(writtenFor(['--depth', '20'])).toBe('');
+  });
+});
+
+describe('the regression gate wiring', () => {
+  const entries = [{ id: 'vault' } as DatasetEntry];
+
+  it('leaves a run without the flags untouched — no gate, no output', () => {
+    const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    expect(applyGate(undefined, entries, 0)).toBe(0);
+    expect(applyGate(undefined, entries, 1)).toBe(1);
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it('keeps a failed run\'s own exit code AND says the gate did not run', () => {
+    const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    expect(applyGate({ baseline: 'anything', failUnder: 0.01 }, entries, 1)).toBe(1);
+    const printed = String(write.mock.calls[0]?.[0]);
+    expect(printed).toContain('NOT RUN');
+    expect(printed).toContain('exited 1');
+    write.mockRestore();
+  });
+
+  it('documents exit 4 in --help', async () => {
+    const write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    expect(await main(['--help'], 'sha')).toBe(0);
+    expect(write.mock.calls[0]?.[0]).toContain('  4  the regression gate failed');
+    write.mockRestore();
+  });
+
+  it('names both flags when only one of the pair is given', async () => {
+    await expect(main(['--baseline', 'x'], 'sha')).rejects.toThrow(/--baseline.*--fail-under/s);
+    await expect(main(['--fail-under', '0.01'], 'sha')).rejects.toThrow(/--baseline/);
+  });
+
+  it('states in --help that the flags come in a pair', () => {
+    expect(RUN_HELP).toContain('--baseline');
+    expect(RUN_HELP).toContain('--fail-under');
   });
 });
