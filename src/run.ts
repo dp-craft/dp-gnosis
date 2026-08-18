@@ -31,6 +31,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { fusesLegs } from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
+import { fitToTokenBudget } from '../../dp-gnosis/src/budget.js';
 import {
   ADAPTER_NAMES,
   adapterError,
@@ -41,11 +42,12 @@ import {
 import {
   ATOM_MAX_CHARS,
   DEFAULT_RERANK_PRESET,
+  EMBED_MODEL_ID,
   RERANK_DOC_MAX_CHARS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
   type RerankFusion } from '../../dp-gnosis/src/config.js';
-import type { KnowledgePort } from '../../dp-gnosis/src/port.js';
+import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
 import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
@@ -62,6 +64,7 @@ import {
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
 import { describeDerivation, ensureVaultDataset } from './fetch/vault.js';
+import { assertKnownFlags, type FlagSpec, GATE_VALUE_FLAGS } from './flags.js';
 import { GATE_EXIT_CODE, type GateOptions, gateReport, parseGateArgs } from './gate.js';
 import {
   type BeirDataset,
@@ -146,6 +149,18 @@ export interface CliOptions {
    * and the bench must be able to measure a pool the serving path does not use.
    */
   readonly rerankPool: number | undefined;
+  /**
+   * The CONSUMER's token cap, applied to the PRESENTED ranking after every
+   * ranking stage. `undefined` means no cap at all — the default path every
+   * recorded row was measured on, byte for byte.
+   */
+  readonly tokenBudget: number | undefined;
+  /**
+   * How many top atoms the budget is charged over. `undefined` means the run
+   * depth — the whole presentation — so `--budget` alone caps by TOKENS and
+   * nothing else. Meaningless without a budget, and refused there.
+   */
+  readonly servedK: number | undefined;
   /** The engine's resolution of that name, resolved ONCE so a bad one fails before any dataset. */
   readonly rerankFusion: RerankFusion;
   /**
@@ -376,12 +391,87 @@ const parseRerankPool = (value: string | undefined, rerank: boolean): number | u
   );
 };
 
+const BUDGET_FLAG = '--budget';
+const SERVED_K_FLAG = '--served-k';
+
+/** A budget of fewer than one token admits nothing; there is no smaller arm. */
+const TOKEN_BUDGET_MIN = 1;
+
+/** A served window of fewer than one atom presents nothing. */
+const SERVED_K_MIN = 1;
+
+const positiveIntegerError = (flag: string, minimum: number, value: string): Error =>
+  new Error(
+    `dp-gnosis-bench: ${flag} expects an integer of at least ${minimum}, got "${value}"`
+  );
+
+/**
+ * A fractional, zero or negative budget is a usage error, NOT something to
+ * clamp: a clamped run records the cap it was ASKED for while presenting under
+ * another, and the presented set is not recoverable from the metrics afterwards.
+ */
+const parseTokenBudget = (value: string | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  const budget = Number(value);
+  if (Number.isInteger(budget) && budget >= TOKEN_BUDGET_MIN) return budget;
+  throw positiveIntegerError(BUDGET_FLAG, TOKEN_BUDGET_MIN, value);
+};
+
+const parseServedKSize = (value: string): number => {
+  const servedK = Number(value);
+  if (Number.isInteger(servedK) && servedK >= SERVED_K_MIN) return servedK;
+  throw positiveIntegerError(SERVED_K_FLAG, SERVED_K_MIN, value);
+};
+
+/**
+ * A `--served-k` without `--budget` REFUSES, exactly as `--rerank-pool` does
+ * without `--rerank`: nothing would be capped, yet the row would carry a served
+ * window no presentation ever applied.
+ */
+const parseServedK = (value: string | undefined, budget: number | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  if (budget !== undefined) return parseServedKSize(value);
+  throw new Error(
+    `dp-gnosis-bench: ${SERVED_K_FLAG} "${value}" requires ${BUDGET_FLAG} — ` +
+      'without it nothing is capped and the row would name a window nothing applied'
+  );
+};
+
+/**
+ * Every flag this CLI reads, the gate's included (`gate.ts` parses the same
+ * argv). Declared ONCE, beside the parser that consumes it, and asserted
+ * against its own call sites by `flags.test.ts` — a flag parsed but missing
+ * here fails that test rather than drifting into a silent acceptance.
+ */
+export const RUN_FLAGS: FlagSpec = {
+  value: [
+    '--adapter',
+    '--analyzer',
+    '--depth',
+    '--layer',
+    '--only',
+    '--rerank-model',
+    '--rerank-profile',
+    '--rerank-weight',
+    BUDGET_FLAG,
+    SERVED_K_FLAG,
+    RERANK_POOL_FLAG,
+    HYBRID_WEIGHT_FLAG,
+    ...GATE_VALUE_FLAGS,
+  ],
+  boolean: ['--compare', '--help', '--rerank', QUERY_ADJACENCY_FLAG],
+};
+
 export const parseArgs = (argv: readonly string[]): CliOptions => {
+  assertKnownFlags(argv, RUN_FLAGS);
   const rerankProfile = flagValue(argv, '--rerank-profile') ?? DEFAULT_RERANK_PRESET;
   const rerankWeight = parseRerankWeight(flagValue(argv, '--rerank-weight'));
   const adapter = parseAdapter(flagValue(argv, '--adapter'));
   const rerank = argv.includes('--rerank');
+  const tokenBudget = parseTokenBudget(flagValue(argv, BUDGET_FLAG));
   return {
+    tokenBudget,
+    servedK: parseServedK(flagValue(argv, SERVED_K_FLAG), tokenBudget),
     only: csv(flagValue(argv, '--only')),
     layer: parseLayer(flagValue(argv, '--layer')),
     depth: Number(flagValue(argv, '--depth') ?? DEFAULT_DEPTH),
@@ -569,6 +659,30 @@ export interface RankContext {
   readonly excluded: ReadonlyMap<string, readonly string[]>;
 }
 
+/** The window the budget is charged over: the named one, else the whole presentation. */
+export const servedKOf = (options: CliOptions): number => options.servedK ?? options.depth;
+
+/**
+ * The PRESENTED atoms — what a consumer would actually receive.
+ *
+ * `fitToTokenBudget` is the CLI's presentation cap and is IMPORTED, never
+ * restated, so the arm measures the shipped admission rule (skip-and-continue,
+ * not prefix truncation). It sits HERE rather than in `engine.ts:retrieveDocs`
+ * on purpose: `retrieveDocs` runs BEFORE `rerankIfRequested`, so capping there
+ * would truncate the RERANKER'S CANDIDATE POOL and record a presentation cap as
+ * a pool cap — the provenance confusion `rerankPool` exists to prevent.
+ *
+ * No budget means no cap: the slice is exactly what every recorded row was
+ * measured under, to the byte.
+ */
+const servedAtoms = (
+  options: CliOptions,
+  ordered: readonly RetrievedAtom[]
+): readonly RetrievedAtom[] => {
+  if (options.tokenBudget === undefined) return ordered.slice(0, options.depth);
+  return fitToTokenBudget(ordered.slice(0, servedKOf(options)), options.tokenBudget).kept;
+};
+
 const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly string[]> => {
   const { options } = context;
   const depth = rerankPoolOf(options);
@@ -577,7 +691,7 @@ const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly s
     fusion: options.rerankFusion,
     model: options.rerankModel,
   });
-  return toDocumentRanking(ordered.slice(0, options.depth), context.excluded.get(topic.id) ?? []);
+  return toDocumentRanking(servedAtoms(options, ordered), context.excluded.get(topic.id) ?? []);
 };
 
 /** One topic's ranking and the wall time the retrieve+rerank+rollup path took. */
@@ -931,6 +1045,12 @@ export const selectionError = (selection: Selection): string | undefined => {
  * numbers afterwards, and two model arms with no id on the row read as one
  * treatment.
  *
+ * The CONSUMER cap follows the same rule: `tokenBudget` and `servedK` are
+ * stamped only on a run that asked for a budget, so every recorded row stays
+ * byte-identical on both. `embedModel` is stamped only where an encoder ran —
+ * a dense route — exactly as `rerankDocMaxChars` is stamped only where a
+ * reranker ran.
+ *
  * Exported so a test can read the TREATMENT a flag set records without paying
  * for a measured run — the value is unrecoverable from the numbers, so what it
  * stamps is the property worth asserting.
@@ -947,6 +1067,9 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   rerankPool: options.rerank ? rerankPoolOf(options) : undefined,
   rerankDocMaxChars: options.rerank ? RERANK_DOC_MAX_CHARS : undefined,
   rerankExtract: options.rerank ? EXTRACT_STRATEGY : undefined,
+  tokenBudget: options.tokenBudget,
+  servedK: options.tokenBudget === undefined ? undefined : servedKOf(options),
+  embedModel: denseRouteOf(options.adapter) === undefined ? undefined : EMBED_MODEL_ID,
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
   queryAdjacency: options.queryAdjacency,

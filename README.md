@@ -18,10 +18,13 @@ stay comparable across a chunker change.
 ./bench.sh --analyzer <id>      # which analysis chain builds AND queries; fts5 only
 ./bench.sh --query-adjacency    # add the phrase disjunct to multi-term query tokens; fts5 only
 ./bench.sh --adapter lancedb-hybrid --hybrid-weight 0.25   # dense leg's share of the LEG fusion
+./bench.sh --budget 16000 --served-k 5   # cap what the CONSUMER receives, after ranking
 ./bench.sh --compare            # print the delta against the previous run
 ./bench.sh --baseline <sel> --fail-under 0.01   # regression gate; exits 4 on a drop past the tolerance
-./bench.sh --per-topic          # also write per-topic TSVs for a paired test
 ```
+
+Per-topic TSVs are written on every run, so there is no flag for them. An
+unknown flag now REFUSES rather than being ignored, so a stale one fails loudly.
 
 `npm run gnosis:bench -- --only nfcorpus` is the same entry point from the repo
 root. `--help` prints the exit codes; the flags are documented here, once.
@@ -39,6 +42,8 @@ The gate decides on the **point estimate**: it fails when the paired mean nDCG@1
 **`--query-adjacency`** is OFF by default and applies to `fts5` only — no other adapter reads the option, so naming it elsewhere REFUSES rather than recording a treatment the run never applied. On, a raw query token that analyzes to two or more terms contributes its multi-term phrase as an EXTRA disjunct beside its individual terms: additive scoring, never a filter, so a document lacking the phrase still matches on the terms. Recorded as `queryAdjacency`, a **TREATMENT** field, so `--compare` labels it `ARM COMPARISON` rather than subtracting it.
 
 **`--rerank-pool <n>`** sets the reranker's candidate pool EXPLICITLY, bypassing the engine's `RERANK_K_INIT` floor — the only way to measure a pool below that constant. Omitted, the pool stays `max(depth, RERANK_K_INIT)`, so every already-recorded arm re-runs bit-identical. A non-integer, zero or negative value FAILS loudly naming the constraint; it is never clamped. Without `--rerank` it REFUSES, naming both flags. The effective pool is stamped on `rerankPool`, a **SCALE** field, so `--compare` refuses to subtract across a pool change. A pool below `--depth` WARNS (`dp-gnosis-bench/rerank-pool-below-depth`) rather than refusing: the arm is legitimate, but every metric whose cut is above the pool is capped by it — R@100 from a pool of 20 is R@20 under another name.
+
+**`--budget <n>`** applies the engine's own `fitToTokenBudget` (`tools/dp-gnosis/src/budget.ts`, imported — never re-implemented) to the ranking a consumer would actually receive: it is charged AFTER the rerank and immediately before the atom→document rollup, so it caps the PRESENTATION and never the reranker's candidate pool. **`--served-k <k>`** narrows the window the budget is charged over; omitted, it is `--depth`, so `--budget` alone caps by tokens and by nothing else. A non-integer, zero or negative value of either FAILS loudly naming the constraint; neither is ever clamped. `--served-k` without `--budget` REFUSES, naming both flags — nothing would be capped, yet the row would carry a served window no presentation applied. Both are stamped as **TREATMENT** fields (`tokenBudget`, `servedK`), so `--compare` labels a budget change `ARM COMPARISON`. Absent, no cap is applied and the run is byte-identical to one before the flags existed.
 
 **`--hybrid-weight <w>`** applies to `lancedb-hybrid` / `lancedb-hybrid-full` only — `0` pure lexical, `1` pure dense. An out-of-range or non-numeric value FAILS loudly naming the range; it is never clamped. It is recorded as a **TREATMENT** field, so `--compare` labels a weight change `ARM COMPARISON` rather than subtracting it. It is **NOT** `--rerank-weight`: those are two different fusions (leg↔leg vs reranker↔first-pass), and conflating them confounds any sweep.
 

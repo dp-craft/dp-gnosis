@@ -12,9 +12,15 @@
  *    passes exactly that, and `fts5Adapter.toMatchExpression` does the stemming
  *    via the package-wide `stemText`. Building a query or document frequencies
  *    here would measure a path production never takes.
- * 2. `fitToTokenBudget` is NOT applied. It is the CLI's PRESENTATION cap
- *    (`retrieveCommand.ts:342`) and at depth 100 would drop most of the ranking
- *    before it could be scored.
+ * 2. `fitToTokenBudget` is NOT applied HERE, ever — not in `retrieveDocs`, which
+ *    runs BEFORE `rerankIfRequested`, so capping here would truncate the
+ *    RERANKER'S CANDIDATE POOL and record a presentation cap as a pool cap. It is
+ *    the CLI's PRESENTATION cap (`retrieveCommand.ts:342`) and at depth 100 would
+ *    drop most of the ranking before it could be scored. ONE exception, and it
+ *    lives in `run.ts:rankTopic` rather than in this file: behind `--budget` the
+ *    cap is applied there, AFTER the rerank and immediately before
+ *    `toDocumentRanking`, over `--served-k` atoms. Without `--budget` nothing is
+ *    capped and the default path is unchanged to the byte.
  * 3. Every dataset gets its OWN parent directory. `ingest.ts:428 writeManifest`
  *    writes `corpus-manifest.json` to `dirname(outputDir)`, and
  *    `claimOutputDir`/`pruneOrphans` wipe an atoms directory another profile

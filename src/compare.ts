@@ -21,6 +21,8 @@
  * | treatment | `hybridWeight` | a different WEIGHT on the hybrid route's two LEGS — a second fusion |
  * | treatment | `rerankModel` | a different CROSS-ENCODER producing the reranked order |
  * | treatment | `rerankDocMaxChars` / `rerankExtract` | a different TEXT put in front of the reranker — how much of an atom body, and which part — guarded ONLY between two rows that both reranked |
+ * | treatment | `tokenBudget` / `servedK` | a different SET PRESENTED to the consumer — the token cap, and the window it was charged over |
+ * | treatment | `embedModel` | a different ENCODER behind the dense leg |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
  *
@@ -32,7 +34,7 @@
  * `gitSha` and `ts` are deliberately NOT guarded: a changed engine commit is
  * precisely the thing a delta is supposed to measure.
  */
-import { HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import { EMBED_MODEL_ID, HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { HistoryRow } from './report.js';
 
@@ -57,6 +59,9 @@ export const TREATMENT_FIELDS = [
   'rerankDocMaxChars',
   'rerankExtract',
   'hybridWeight',
+  'tokenBudget',
+  'servedK',
+  'embedModel',
   'analyzer',
   'queryAdjacency',
 ] as const;
@@ -166,11 +171,20 @@ const LEGACY_RERANK_EXTRACT = 'head';
  * `hybridWeight` likewise: every row recorded before the leg weight was
  * settable fused at `HYBRID_FUSION`'s weight, and it applies to every row alike,
  * so a non-hybrid pair still compares equal on it.
+ *
+ * `embedModel` likewise: every recorded dense row was embedded by
+ * `EMBED_MODEL_ID`, the only encoder the engine ever called. It applies to every
+ * row alike, so a lexical pair — which embedded nothing — still compares equal.
+ *
+ * `tokenBudget` / `servedK` have NO default and MUST NOT be given one: absence
+ * means no cap was applied, which is a real arm rather than an older value, so a
+ * budgeted row against an unbudgeted one is the experiment.
  */
 const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>> = {
   analyzer: DEFAULT_ANALYZER,
   rerankModel: RERANK_MODEL_ID,
   hybridWeight: HYBRID_FUSION.rerankWeight,
+  embedModel: EMBED_MODEL_ID,
   queryAdjacency: false,
   rerankDocMaxChars: LEGACY_RERANK_DOC_MAX_CHARS,
   rerankExtract: LEGACY_RERANK_EXTRACT,

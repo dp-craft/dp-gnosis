@@ -7,13 +7,19 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ATOM_MAX_CHARS,
   DEFAULT_RERANK_PRESET,
+  EMBED_MODEL_ID,
   RERANK_DOC_MAX_CHARS,
   RERANK_FUSION_PRESETS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
   RERANK_RRF_K
 } from '../../dp-gnosis/src/config.js';
-import type { IndexState, KnowledgePort, RetrieveOptions } from '../../dp-gnosis/src/port.js';
+import type {
+  IndexState,
+  KnowledgePort,
+  RetrievedAtom,
+  RetrieveOptions
+} from '../../dp-gnosis/src/port.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY } from '../../dp-gnosis/src/rerank.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
@@ -154,6 +160,40 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--rerank', '--rerank-pool', '0'])).toThrow(/integer/);
     expect(() => parseArgs(['--rerank', '--rerank-pool', '-5'])).toThrow(/integer/);
     expect(() => parseArgs(['--rerank', '--rerank-pool', 'deep'])).toThrow(/deep/);
+  });
+
+  it('reads --budget and --served-k as the CONSUMER cap and the served window', () => {
+    const options = parseArgs(['--budget', '16000', '--served-k', '5']);
+    expect(options.tokenBudget).toBe(16000);
+    expect(options.servedK).toBe(5);
+  });
+
+  it('leaves both unset when --budget is not named — the default path stands', () => {
+    expect(parseArgs([]).tokenBudget).toBeUndefined();
+    expect(parseArgs([]).servedK).toBeUndefined();
+  });
+
+  /**
+   * Without `--budget` nothing is capped, yet the row would carry a served-window
+   * label no presentation ever applied — the `--rerank-model` failure one flag over.
+   */
+  it('REFUSES --served-k without --budget, naming both flags', () => {
+    expect(() => parseArgs(['--served-k', '5'])).toThrow(/--served-k/);
+    expect(() => parseArgs(['--served-k', '5'])).toThrow(/--budget/);
+  });
+
+  it('REFUSES a non-integer, zero or negative budget, naming the constraint', () => {
+    expect(() => parseArgs(['--budget', '2.5'])).toThrow(/2\.5/);
+    expect(() => parseArgs(['--budget', '2.5'])).toThrow(/integer/);
+    expect(() => parseArgs(['--budget', '0'])).toThrow(/integer/);
+    expect(() => parseArgs(['--budget', '-5'])).toThrow(/integer/);
+    expect(() => parseArgs(['--budget', 'wide'])).toThrow(/wide/);
+  });
+
+  it('REFUSES a non-integer, zero or negative served window too', () => {
+    expect(() => parseArgs(['--budget', '16000', '--served-k', '0'])).toThrow(/integer/);
+    expect(() => parseArgs(['--budget', '16000', '--served-k', '2.5'])).toThrow(/integer/);
+    expect(() => parseArgs(['--budget', '16000', '--served-k', '-1'])).toThrow(/integer/);
   });
 
   it('defaults --analyzer to the engine chain every recorded run was measured on', () => {
@@ -480,6 +520,45 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
     expect(provenance.rerankExtract).toBeUndefined();
   });
 
+  /**
+   * The consumer cap and its window: stamped only on a run that ASKED for one,
+   * so every already-recorded row stays byte-identical on both fields. The
+   * window is stamped RESOLVED, exactly as `rerankModel` and `rerankPool` are —
+   * a budgeted row whose window read `undefined` could not be told apart from a
+   * row measured under another one.
+   */
+  it('stamps the budget and the RESOLVED served window on a budgeted run', () => {
+    const provenance = provenanceOf(parseArgs(['--budget', '16000', '--served-k', '5']), 'sha');
+    expect(provenance.tokenBudget).toBe(16000);
+    expect(provenance.servedK).toBe(5);
+  });
+
+  it('resolves an unnamed served window to the run depth, the whole presentation', () => {
+    const provenance = provenanceOf(parseArgs(['--depth', '20', '--budget', '16000']), 'sha');
+    expect(provenance.servedK).toBe(20);
+  });
+
+  it('stamps NEITHER field on a run that named no budget', () => {
+    const provenance = provenanceOf(parseArgs([]), 'sha');
+    expect(provenance.tokenBudget).toBeUndefined();
+    expect(provenance.servedK).toBeUndefined();
+  });
+
+  /**
+   * The encoder is stamped only where one ran. A lexical row embedded nothing,
+   * so naming a model on it would record a treatment it never applied.
+   */
+  it('stamps the embedding model on a dense route and on no other', () => {
+    expect(provenanceOf(parseArgs(['--adapter', 'lancedb-vec']), 'sha').embedModel).toBe(
+      EMBED_MODEL_ID
+    );
+    expect(provenanceOf(parseArgs(['--adapter', 'lancedb-hybrid']), 'sha').embedModel).toBe(
+      EMBED_MODEL_ID
+    );
+    expect(provenanceOf(parseArgs(['--adapter', 'fts5']), 'sha').embedModel).toBeUndefined();
+    expect(provenanceOf(parseArgs(['--adapter', 'lancedb']), 'sha').embedModel).toBeUndefined();
+  });
+
   it('records the query-adjacency treatment on every row, applied or not', () => {
     expect(provenanceOf(parseArgs(['--query-adjacency']), 'sha').queryAdjacency).toBe(true);
     expect(provenanceOf(parseArgs([]), 'sha').queryAdjacency).toBe(false);
@@ -519,6 +598,58 @@ describe('queryDataset — the treatment reaches the port', () => {
 
   it('passes adjacency false when it is not', async () => {
     expect((await seenOptionsFor([]))[0]?.adjacency).toBe(false);
+  });
+});
+
+/**
+ * The budget is a PRESENTATION cap and it sits after the rerank, so it is
+ * measurable only through the ranking a topic ends up with. `estimateTokens` is
+ * the UTF-8 byte length, so a 10-character ASCII body costs exactly 10.
+ */
+describe('queryDataset — the consumer budget caps the PRESENTED ranking', () => {
+  const ATOM_BODY_TOKENS = 10;
+
+  const atomFor = (index: number): RetrievedAtom => ({
+    id: `a${index}`,
+    title: `atom ${index}`,
+    domain: 'docs',
+    type: 'knowledge',
+    body: '0123456789',
+    score: 1 / index,
+    sourcePath: `atoms/a${index}.md`,
+    originPaths: [`docs/d${index}.md`],
+  });
+
+  const budgetPort = (): KnowledgePort => ({
+    name: 'fts5',
+    retrieve: async () =>
+      await Promise.resolve({
+        atoms: [atomFor(1), atomFor(2), atomFor(3)],
+        mode: 'fts5',
+        indexState: 'ready' as IndexState,
+      }),
+  });
+
+  const rankingFor = async (argv: readonly string[]): Promise<readonly string[]> => {
+    const outcome = await queryDataset(
+      { port: budgetPort(), options: parseArgs(argv), excluded: new Map() },
+      [{ id: 'q1', text: 'lint:test-shape' }]
+    );
+    return outcome.rankings.get('q1') ?? [];
+  };
+
+  /** The guard that every recorded row still re-runs: no flag, no truncation. */
+  it('presents the WHOLE ranking when no budget is named', async () => {
+    expect(await rankingFor([])).toEqual(['d1', 'd2', 'd3']);
+  });
+
+  it('admits only the atoms the budget holds, in rank order', async () => {
+    expect(await rankingFor(['--budget', String(ATOM_BODY_TOKENS * 2)])).toEqual(['d1', 'd2']);
+  });
+
+  it('narrows the presentation to --served-k before the budget is charged', async () => {
+    const argv = ['--budget', String(ATOM_BODY_TOKENS * 3), '--served-k', '1'];
+    expect(await rankingFor(argv)).toEqual(['d1']);
   });
 });
 

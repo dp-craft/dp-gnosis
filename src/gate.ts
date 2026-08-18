@@ -26,6 +26,7 @@
  * The statistic itself is `significance.ts`, called and never re-implemented.
  */
 import type { ProvenanceChange } from './compare.js';
+import { BASELINE_FLAG, FAIL_UNDER_FLAG } from './flags.js';
 import { resolveRun, type RunSelection } from './pair.js';
 import type { HistoryRow } from './report.js';
 import { type MetricName, pairedSignificance, type Significance } from './significance.js';
@@ -41,8 +42,6 @@ export const GATE_EXIT_CODE = 4;
 /** The headline measure, the same one `--compare` rates a run on. */
 const GATE_METRIC: MetricName = 'ndcg10';
 
-const BASELINE_FLAG = '--baseline';
-const FAIL_UNDER_FLAG = '--fail-under';
 const DIGITS = 4;
 
 /** The reference run and the drop tolerated against it. */

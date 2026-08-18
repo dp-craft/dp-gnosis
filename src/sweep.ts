@@ -32,6 +32,7 @@ import { pathToFileURL } from 'node:url';
 import { readQrels, readQueries } from './beir.js';
 import { openPort } from './engine.js';
 import { readExcluded } from './fetch/bright.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
 import { currentGitSha, runStamp } from './report.js';
 import {
@@ -129,7 +130,18 @@ export const numberCsv = (
   });
 };
 
+/**
+ * Every flag the sweep reads. Declared ONCE beside its parser and asserted
+ * against its call sites by `flags.test.ts`; an unknown flag REFUSES rather
+ * than being dropped into a grid recorded under provenance it never ran.
+ */
+export const SWEEP_FLAGS: FlagSpec = {
+  value: ['--only', '--k1', '--b', '--depth'],
+  boolean: [],
+};
+
 export const parseSweepArgs = (argv: readonly string[]): SweepOptions => {
+  assertKnownFlags(argv, SWEEP_FLAGS);
   const only = csv(flagValue(argv, '--only'));
   return {
     only: only.length === 0 ? DEFAULT_DATASETS : only,

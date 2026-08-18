@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import { EMBED_MODEL_ID, HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   compareAll,
@@ -450,6 +450,72 @@ describe('compareLastTwo', () => {
     if (result.kind !== 'provenance-changed') return;
     expect(result.changed.map(change => change.field).sort()).toEqual(['adapter', 'depth']);
     expect(formatComparison(result)).toContain('NO DELTA REPORTED');
+  });
+
+  /**
+   * The three fields promoted to provenance by T0.5. Each names something the
+   * CONSUMER received — the token cap, the served window, and the encoder that
+   * produced the dense leg — and none of them is recoverable from the numbers,
+   * so a move MUST be labelled rather than subtracted.
+   */
+  it('guards the consumer-facing parameters as TREATMENTS, never as scales', () => {
+    expect(TREATMENT_FIELDS).toContain('tokenBudget');
+    expect(TREATMENT_FIELDS).toContain('servedK');
+    expect(TREATMENT_FIELDS).toContain('embedModel');
+    expect(SCALE_FIELDS).not.toContain('tokenBudget');
+    expect(SCALE_FIELDS).not.toContain('servedK');
+    expect(SCALE_FIELDS).not.toContain('embedModel');
+  });
+
+  it('labels a moved token budget an ARM COMPARISON rather than subtracting it', () => {
+    const result = compareLastTwo(
+      [
+        row({ tokenBudget: 16000, servedK: 5 }),
+        row({ gitSha: 'bbb2222', tokenBudget: 8000, servedK: 5, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['tokenBudget']);
+    expect(formatComparison(result)).toContain('ARM COMPARISON');
+  });
+
+  /** Budget OFF versus budget ON is an arm too — the cap came into existence. */
+  it('labels a served window an ARM COMPARISON against an unbudgeted row', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', tokenBudget: 16000, servedK: 5, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['tokenBudget', 'servedK']);
+  });
+
+  it('labels a moved embedding model an ARM COMPARISON naming the field', () => {
+    const result = compareLastTwo(
+      [
+        row({ adapter: 'lancedb-vec', embedModel: EMBED_MODEL_ID }),
+        row({ gitSha: 'bbb2222', adapter: 'lancedb-vec', embedModel: 'gte-multilingual' }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['embedModel']);
+    expect(formatComparison(result)).toContain('embedModel');
+  });
+
+  /** Every recorded dense row was measured on the shipped encoder. */
+  it('reads an ABSENT embedModel as the shipped encoder, not as a moved arm', () => {
+    const result = compareLastTwo(
+      [
+        row({ adapter: 'lancedb-vec' }),
+        row({ gitSha: 'bbb2222', adapter: 'lancedb-vec', embedModel: EMBED_MODEL_ID }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
   });
 
   it('reports insufficient history rather than inventing a baseline', () => {

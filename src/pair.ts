@@ -35,6 +35,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { type ProvenanceChange, scaleChanges, treatmentChanges } from './compare.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 import {
   HISTORY_FILE,
   type HistoryRow,
@@ -100,7 +101,7 @@ export const PAIR_HELP = [
   'exit codes:',
   `  ${PAIR_EXIT_OK}  every requested metric produced a verdict`,
   `  ${PAIR_EXIT_REFUSED}  at least one metric was refused (scale moved, topics differ, metric unmeasured)`,
-  `  ${PAIR_EXIT_USAGE}  unusable invocation (unknown flag value, ambiguous or unmatched selector)`,
+  `  ${PAIR_EXIT_USAGE}  unusable invocation (unknown flag, unknown flag value, ambiguous or unmatched selector)`,
   '',
 ].join('\n');
 
@@ -133,12 +134,26 @@ const required = (argv: readonly string[], name: string): string => {
   return value;
 };
 
-export const parsePairArgs = (argv: readonly string[]): PairArgs => ({
-  a: required(argv, '--a'),
-  b: required(argv, '--b'),
-  metrics: csv(flagValue(argv, '--metric')).map(asMetric),
-  idsPath: flagValue(argv, '--ids'),
-});
+/**
+ * Every flag this CLI reads. Declared ONCE beside its parser and asserted
+ * against its call sites by `flags.test.ts`; an unknown one REFUSES with
+ * `PAIR_EXIT_USAGE` instead of being dropped, which would report a narrower
+ * test than the one asked for under the wider one's name.
+ */
+export const PAIR_FLAGS: FlagSpec = {
+  value: ['--a', '--b', '--metric', '--ids'],
+  boolean: ['--help'],
+};
+
+export const parsePairArgs = (argv: readonly string[]): PairArgs => {
+  assertKnownFlags(argv, PAIR_FLAGS);
+  return {
+    a: required(argv, '--a'),
+    b: required(argv, '--b'),
+    metrics: csv(flagValue(argv, '--metric')).map(asMetric),
+    idsPath: flagValue(argv, '--ids'),
+  };
+};
 
 /** A selector resolved against the history record, or the reason it was not. */
 export type RunSelection =

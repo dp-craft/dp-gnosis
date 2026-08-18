@@ -89,6 +89,18 @@ export interface RunProvenance {
    */
   readonly hybridWeight?: number | undefined;
   /**
+   * What the CONSUMER received: the token cap applied to the presented ranking,
+   * and how many top atoms it was charged over. Both absent on a run that named
+   * no `--budget` — nothing was capped, so there is no window to record.
+   */
+  readonly tokenBudget?: number | undefined;
+  readonly servedK?: number | undefined;
+  /**
+   * The encoder that produced this run's dense leg. Absent on a lexical route,
+   * which embedded nothing at all.
+   */
+  readonly embedModel?: string | undefined;
+  /**
    * The analysis chain the index was BUILT with. Required, unlike the rerank
    * fields: every run has an analyzer whether or not it named one, and a row that
    * omitted it could never be told apart from one measured on another chain.
@@ -245,6 +257,22 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * `compare.ts` reads an absent one.
    */
   readonly hybridWeight?: number | undefined;
+  /**
+   * The consumer cap this row was PRESENTED under, and the window it was charged
+   * over — TREATMENT provenance (`compare.ts`), so a budget change is labelled an
+   * arm comparison instead of being subtracted. Absent on every row that named no
+   * `--budget`, and on every row recorded before the flag existed; none of those
+   * capped anything, so absence is no cap rather than an unknown one.
+   */
+  readonly tokenBudget?: number | undefined;
+  readonly servedK?: number | undefined;
+  /**
+   * The encoder behind this row's dense leg — TREATMENT provenance
+   * (`compare.ts`). Absent on every row recorded before the field was stamped;
+   * every recorded dense row was measured on the engine's `EMBED_MODEL_ID`,
+   * which is how `compare.ts` reads an absent one.
+   */
+  readonly embedModel?: string | undefined;
   /**
    * The analysis chain this row was measured under — TREATMENT provenance
    * (`compare.ts`), so an analyzer change is labelled an arm comparison instead
@@ -427,6 +455,9 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   rerankDocMaxChars: provenance.rerankDocMaxChars,
   rerankExtract: provenance.rerankExtract,
   hybridWeight: provenance.hybridWeight,
+  tokenBudget: provenance.tokenBudget,
+  servedK: provenance.servedK,
+  embedModel: provenance.embedModel,
   analyzer: provenance.analyzer,
   queryAdjacency: provenance.queryAdjacency,
   ...descriptorFields(result),
