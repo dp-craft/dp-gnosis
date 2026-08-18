@@ -274,6 +274,8 @@ The five rules:
 
 These rules are also EXECUTABLE: `retrieve --rephrase` hands the question to a local chat model under exactly this prompt and searches its rewrite (§ CLI → `--rephrase`). The flag is opt-in and its rewrite is reported, so a caller can always see — and check — what was actually searched.
 
+**Measured 2026-08-18, the flag does NOT reproduce the rules above.** Against the same golden topics the hand rewrite improves, the model's rewrite is inert on Hungarian (nDCG@10 +0.0086, p=0.9164) and significantly harmful on English (nDCG@10 −0.0679, p=0.0089) — it answers Hungarian queries in English, and rewrites the queries rule 5 says to leave alone. Apply the rules yourself; use the flag only to test or re-measure it. Record: `docs/analysis/2026-08-18-dp-gnosis-full-review/10-rephrase-arm-measurement.md`.
+
 Grammar and word order are **irrelevant** — it is a bag of words. `zustand selector stability` and `stability selector zustand` score identically.
 
 **Non-English corpora.** Stemming is English Porter (npm `stemmer`), applied uniformly to every adapter. On an agglutinative language it does nothing useful: a Hungarian run missed the correct document in 3 of 5 queries purely on suffix mismatch — query `használata` never matched document `használ` / `használnak` / `használva`; query `kerekítési összege` never matched `kerekítése` / `összegeket`; query `modulok` never matched `modul` / `moduloknak` / `modulban`. Until a language-aware analyzer is wired in, a non-English query MUST be written with the **word stem** the document uses, not the inflected form the asker would speak.
