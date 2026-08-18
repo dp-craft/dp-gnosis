@@ -857,6 +857,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   rerankProfile: options.rerank ? options.rerankProfile : undefined,
   rerankWeight: options.rerank ? options.rerankWeight : undefined,
   rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
+  rerankPool: options.rerank ? firstPassDepth(options.depth, options.rerank) : undefined,
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
   queryAdjacency: options.queryAdjacency,

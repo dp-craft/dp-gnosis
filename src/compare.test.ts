@@ -281,6 +281,94 @@ describe('compareLastTwo', () => {
     expect(result.arms.map(change => change.field)).toEqual(['rerank']);
   });
 
+  it('guards the rerank POOL as a measuring scale, never as a treatment', () => {
+    expect(SCALE_FIELDS).toContain('rerankPool');
+    expect(TREATMENT_FIELDS).not.toContain('rerankPool');
+  });
+
+  /**
+   * The `RERANK_K_INIT` 20 -> 100 lesson: the first pass deepened under every
+   * rerank arm below 100 while `depth` — the SCORING cutoff — never moved, so
+   * two genuinely different pools carried identical provenance.
+   */
+  it('REFUSES a delta when the rerank POOL moved under an unchanged depth', () => {
+    const result = compareLastTwo(
+      [
+        row({ depth: 20, rerank: true, rerankPool: 20 }),
+        row({ gitSha: 'bbb2222', depth: 20, rerank: true, rerankPool: 100, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('provenance-changed');
+    if (result.kind !== 'provenance-changed') return;
+    expect(result.changed.map(change => change.field)).toEqual(['rerankPool']);
+    expect(result.changed[0]?.previous).toBe(20);
+    expect(result.changed[0]?.latest).toBe(100);
+    expect(formatComparison(result)).toContain('rerankPool');
+  });
+
+  /** Every legacy rerank row was measured over `max(depth, 20)` — the pool that stood. */
+  it('reads an ABSENT rerank pool as the legacy floor, not as a moved scale', () => {
+    const result = compareLastTwo(
+      [
+        row({ depth: 10, rerank: true }),
+        row({ gitSha: 'bbb2222', depth: 10, rerank: true, rerankPool: 20, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  it('derives a legacy pool from the row DEPTH when the depth exceeded the floor', () => {
+    const result = compareLastTwo(
+      [
+        row({ depth: 300, rerank: true }),
+        row({ gitSha: 'bbb2222', depth: 300, rerank: true, rerankPool: 300, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  /**
+   * The rule's boundary, both sides of it: turning `--rerank` ON brings a pool
+   * into existence, which the `rerank` treatment already names — but two rows
+   * that BOTH reranked at different pools changed the measuring scale.
+   */
+  it('guards the pool ONLY between two rows that both reranked', () => {
+    const flipped = compareLastTwo(
+      [
+        row({ depth: 20, rerank: false }),
+        row({ gitSha: 'bbb2222', depth: 20, rerank: true, rerankPool: 100, ndcg10: 0.62 }),
+      ],
+      'scifact'
+    );
+    expect(flipped.kind).toBe('arm-delta');
+    if (flipped.kind !== 'arm-delta') return;
+    expect(flipped.arms.map(change => change.field)).toEqual(['rerank']);
+
+    const bothReranked = compareLastTwo(
+      [
+        row({ depth: 20, rerank: true, rerankPool: 20 }),
+        row({ gitSha: 'bbb2222', depth: 20, rerank: true, rerankPool: 100, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(bothReranked.kind).toBe('provenance-changed');
+    if (bothReranked.kind !== 'provenance-changed') return;
+    expect(bothReranked.changed.map(change => change.field)).toEqual(['rerankPool']);
+    expect(formatComparison(bothReranked)).toContain('rerankPool');
+  });
+
+  /** A BM25 row reranked nothing, so it has no pool — absence on both sides is no move. */
+  it('reads NO pool on either side of a BM25 pair as unchanged', () => {
+    const result = compareLastTwo(
+      [row({ rerank: false }), row({ gitSha: 'bbb2222', rerank: false, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
   it('still REFUSES when a measuring-scale field moved alongside a treatment field', () => {
     const result = compareLastTwo(
       [row({}), row({ gitSha: 'bbb2222', adapter: 'linear', depth: 300 })],

@@ -13,6 +13,7 @@
  * |---|---|---|
  * | measuring scale | `atomMaxChars` | a different chunking, so a different ranking unit |
  * | measuring scale | `depth` | a different retrieval cut, which moves recall mechanically |
+ * | measuring scale | `rerankPool` | a different CANDIDATE POOL the reranker scored, which moves what was reachable — guarded ONLY between two rows that both reranked |
  * | measuring scale | `corpusBytes` / `corpusLines` | a different corpus — the cheap checksum |
  * | treatment | `adapter` | a different engine path — the thing an A/B run exists to compare |
  * | treatment | `rerank` | a second-stage model in the loop, or not |
@@ -40,6 +41,7 @@ const DELTA_DIGITS = 4;
 export const SCALE_FIELDS = [
   'atomMaxChars',
   'depth',
+  'rerankPool',
   'corpusBytes',
   'corpusLines',
 ] as const;
@@ -159,17 +161,51 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   queryAdjacency: false,
 };
 
+/**
+ * The value `RERANK_K_INIT` held from its introduction (`e474419e`, the commit
+ * that added `--rerank`) until `92d683e2` raised it to 100. A HISTORICAL fact
+ * about rows ALREADY WRITTEN — every rerank row recorded before `rerankPool` was
+ * stamped scored a pool floored at this number. MUST NOT be read as the live
+ * floor: that is `RERANK_K_INIT` in the engine config, and it moves.
+ */
+const LEGACY_RERANK_K_INIT = 20;
+
+/**
+ * What an ABSENT `rerankPool` means, which only the ROW can answer: a BM25 row
+ * reranked nothing and so has no pool at all, while a rerank row scored the
+ * legacy floor over its own depth — the same `max(depth, k_init)` the CLI applied.
+ */
+const legacyRerankPool = (row: HistoryRow): number | undefined =>
+  row.rerank ? Math.max(row.depth, LEGACY_RERANK_K_INIT) : undefined;
+
+const defaultOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>
+  field === 'rerankPool' ? legacyRerankPool(row) : FIELD_DEFAULTS[field];
+
+/**
+ * Whether a field DESCRIBES this row at all. Only `rerankPool` is conditional:
+ * a BM25 row scored no pool, so between a BM25 row and a rerank row the pool
+ * does not MOVE, it comes into existence — and that is the `rerank` treatment
+ * itself, which already labels the pair an ARM COMPARISON. Letting the pool fire
+ * a scale refusal there would make rerank-on-vs-off, the comparison this bench
+ * exists to run, permanently unsubtractable. Between two rows that BOTH
+ * reranked, the pool is a real measuring scale and a move still refuses.
+ */
+const appliesTo = (row: HistoryRow, field: ProvenanceField): boolean =>
+  field === 'rerankPool' ? row.rerank : true;
+
 const valueOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>
-  row[field] === undefined ? FIELD_DEFAULTS[field] : row[field];
+  row[field] === undefined ? defaultOf(row, field) : row[field];
 
 const changedField = (
   previous: HistoryRow,
   latest: HistoryRow,
   field: ProvenanceField
-): ProvenanceChange | undefined =>
-  valueOf(previous, field) === valueOf(latest, field)
-    ? undefined
-    : { field, previous: valueOf(previous, field), latest: valueOf(latest, field) };
+): ProvenanceChange | undefined => {
+  if (!appliesTo(previous, field) || !appliesTo(latest, field)) return undefined;
+  const before = valueOf(previous, field);
+  const after = valueOf(latest, field);
+  return before === after ? undefined : { field, previous: before, latest: after };
+};
 
 const isChange = (change: ProvenanceChange | undefined): change is ProvenanceChange =>
   change !== undefined;

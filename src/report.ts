@@ -66,6 +66,15 @@ export interface RunProvenance {
    */
   readonly rerankModel?: string | undefined;
   /**
+   * The FIRST-PASS pool the rerank arm actually scored over — `firstPassDepth`,
+   * which floors the requested depth at the engine's `RERANK_K_INIT`. Recorded
+   * separately from `depth` because they are two different quantities: `depth`
+   * is the SCORING cutoff, this is the candidate pool, and a change to the
+   * engine floor moves this one alone. Absent on a run that did not rerank —
+   * there is no pool to record for one.
+   */
+  readonly rerankPool?: number | undefined;
+  /**
    * The DENSE leg's weight in the hybrid route's LEG fusion. Absent on a run
    * that named none, which `compare.ts` reads as the shipped `HYBRID_FUSION`
    * weight — the value every recorded hybrid row was measured under.
@@ -186,6 +195,15 @@ export interface HistoryRow extends Metrics {
    * which is how `compare.ts` reads an absent one.
    */
   readonly rerankModel?: string;
+  /**
+   * The first-pass candidate POOL this row's rerank arm scored over — SCALE
+   * provenance (`compare.ts`), because it changes WHAT was measured rather than
+   * how it was treated, so a move REFUSES a subtraction. Absent on a BM25-only
+   * row, and on every row recorded before the pool was stamped; those reranked
+   * over the floor `RERANK_K_INIT` held at the time, which is how `compare.ts`
+   * reads an absent one.
+   */
+  readonly rerankPool?: number;
   /**
    * The DENSE leg's weight this row's hybrid fusion ran at — TREATMENT
    * provenance (`compare.ts`), so a swept weight is labelled an arm comparison
@@ -372,6 +390,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   rerankProfile: provenance.rerankProfile,
   rerankWeight: provenance.rerankWeight,
   rerankModel: provenance.rerankModel,
+  rerankPool: provenance.rerankPool,
   hybridWeight: provenance.hybridWeight,
   analyzer: provenance.analyzer,
   queryAdjacency: provenance.queryAdjacency,
@@ -442,8 +461,10 @@ const optionalMetric = (value: number | undefined): string =>
   value === undefined ? '—' : metric(value);
 
 /**
- * R@20 is in the human table because it is the RERANKER's objective — it reads
- * `RERANK_K_INIT`=20 candidates, so a gain that misses R@20 buys nothing
+ * R@20 is in the human table because it is the HEAD of the reranked order — the
+ * window a caller actually reads. It is no longer the reranker's input bound:
+ * that pool is `RERANK_K_INIT` wide and has moved, so recall anywhere inside the
+ * pool is reachable and only recall that lands in the head buys anything
  * downstream. R@300/@1000 stay in the JSON and the per-topic TSV: they exist for
  * the depth curve, and a nine-metric row is unreadable.
  */

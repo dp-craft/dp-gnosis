@@ -26,7 +26,11 @@ export type Qrel = ReadonlyMap<string, number>;
 export interface Metrics {
   readonly ndcg10: number;
   readonly recall10: number;
-  /** The reranker's own objective — it reads `RERANK_K_INIT`=20 candidates. */
+  /**
+   * The HEAD of the reranked order a caller reads, not the reranker's input
+   * bound: that pool is `RERANK_K_INIT` wide and has moved, so a document
+   * anywhere in the pool is reachable and only the head is delivered.
+   */
   readonly recall20: number | undefined;
   readonly recall100: number;
   readonly recall300: number | undefined;
