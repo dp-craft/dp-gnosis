@@ -367,8 +367,16 @@ export const BM25_IDF_SMOOTHING = 0.5;
  * golden set draws 46 of its 103 atoms from `claude-artifacts/` and 30 from the
  * repo-root `RUNNER-*.md` files, so a `doc/`-only corpus leaves most of the
  * benchmark unscoreable.
+ *
+ * `docs` (with an s) is a SECOND, unrelated tree, and it is in scope as of
+ * T2.1: it holds the research notes, plans, ADRs, reviews and lessons-learned
+ * a question about this project is most often asking for, and until now every
+ * one of them failed the scope gate silently. It is also where the machine
+ * output lives — 22 597 of its 22 808 markdown files are generated — so the
+ * root is only usable together with the profile's `excludePaths`, which drop
+ * `docs/tmp` and `docs/benchmarks` before anything is read.
  */
-export const CORPUS_ROOTS: readonly string[] = ['doc', 'claude-artifacts', 'RUNNER-*.md'];
+export const CORPUS_ROOTS: readonly string[] = ['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md'];
 
 /** Comma-separated override of `CORPUS_ROOTS`, read in `resolveCorpusRoots` alone. */
 export const CORPUS_ROOTS_ENV_VAR = 'DP_GNOSIS_CORPUS_ROOTS';

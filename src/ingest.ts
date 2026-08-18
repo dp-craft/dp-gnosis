@@ -91,6 +91,13 @@ export interface IngestSummary {
   readonly skipped: readonly IngestSkip[];
   /** Atom files left by an earlier run that this one no longer produces. */
   readonly pruned: number;
+  /**
+   * How many of `skipped` were refused as an exact-body duplicate. A SUBSET of
+   * the skip count, reported separately because it is the one refusal class
+   * that says nothing about the source document's quality — a mirrored body is
+   * the corpus being deduplicated, not a document needing a correction.
+   */
+  readonly duplicates: number;
 }
 
 interface LoadedSource {
@@ -179,6 +186,18 @@ const expandCorpus = async (
   return [...new Set(nested.flat())];
 };
 
+/**
+ * PATH EXCLUSION — a source under a declared `excludePaths` prefix is dropped
+ * BEFORE it is read, so it is never chunked, never validated and never counted.
+ * That placement is the rule, not an optimisation: a generated tree is not a
+ * document that failed a check, so surfacing it in `skipped[]` would drown the
+ * refusals a reader has to act on under 22 597 entries nothing can be done
+ * about. Same prefix semantics as `domainRules` — a repo-relative,
+ * forward-slash `startsWith` match.
+ */
+const isExcluded = (profile: IngestProfile, sourcePath: string): boolean =>
+  (profile.excludePaths ?? []).some(prefix => sourcePath.startsWith(prefix));
+
 const loadSource = async (
   absolutePath: string,
   repoRoot: string,
@@ -190,6 +209,17 @@ const loadSource = async (
     text: await readFile(absolutePath, 'utf8'),
     domain: domainForPath(profile, sourcePath),
   };
+};
+
+/** Every in-scope source of the run, read once, in sorted path order. */
+const loadCorpus = async (
+  repoRoot: string,
+  corpusRoots: readonly string[],
+  profile: IngestProfile
+): Promise<readonly LoadedSource[]> => {
+  const files = await expandCorpus(repoRoot, corpusRoots);
+  const kept = [...files].sort().filter(file => !isExcluded(profile, toPosix(relative(repoRoot, file))));
+  return await Promise.all(kept.map(file => loadSource(file, repoRoot, profile)));
 };
 
 const unmappedSkip = (source: LoadedSource, profile: IngestProfile): IngestSkip => ({
@@ -534,16 +564,81 @@ const emptyBodyReasons = (planned: PlannedAtom): readonly string[] =>
         `section "${planned.atom.frontmatter.title}" has an empty body once its heading line is stripped, so it would index nothing and could never be retrieved — give the section prose of its own, or remove the heading`,
       ];
 
+/**
+ * EXACT-BODY DEDUPE. Measured on the corpus roots as they stood before `docs/`
+ * joined them, 497 atoms carried a body byte-identical to another atom's, in
+ * 201 groups — so 296 of them could only ever occupy a rank a distinct answer
+ * had earned. Consolidation, migration and mirrored appendices are how they get
+ * there; none of them is a defect in the source document, which is why the
+ * refusal names the atom that WAS kept instead of asking for a correction.
+ *
+ * The key is taken over the HEADING-STRIPPED body — `chunk.body`, the same
+ * string `emptyBodyReasons` measures — and NOT over `atom.body`, which
+ * `bodyWithHeading` has already prefixed with the heading line. Hashing the
+ * composed string would miss exactly the common case: one body filed under two
+ * different headings.
+ */
+const DUPLICATE_REASON_PREFIX = 'duplicate-body-of:';
+
+/**
+ * The floor the duplicate groups were measured at. Deliberately its OWN
+ * binding despite reading the same 200 as `ATOM_MIN_CHARS`: that constant is
+ * the chunker's fold threshold, and tuning one MUST NOT move the other. Below
+ * it a byte-identical body is a boilerplate line, not a mirrored document.
+ */
+const DEDUPE_MIN_BODY_CHARS = 200;
+
+const bodyKey = (planned: PlannedAtom): string | undefined => {
+  const body = stripComments(planned.candidate.chunk.body);
+  return body.length < DEDUPE_MIN_BODY_CHARS
+    ? undefined
+    : createHash('sha1').update(body).digest('hex');
+};
+
+/**
+ * body hash → the id of the FIRST atom carrying it. `planned` arrives sorted by
+ * source path, and a `Map` built from a list keeps the LAST write per key, so
+ * the pairs are reversed to make the first one win — which is what keeps the
+ * kept copy stable across runs.
+ */
+const firstByBody = (planned: readonly PlannedAtom[]): ReadonlyMap<string, string> => {
+  const pairs = planned.flatMap((entry): readonly (readonly [string, string])[] => {
+    const key = bodyKey(entry);
+    return key === undefined ? [] : [[key, entry.atom.frontmatter.id]];
+  });
+  return new Map([...pairs].reverse());
+};
+
+const duplicateReasons = (
+  planned: PlannedAtom,
+  keptByBody: ReadonlyMap<string, string>
+): readonly string[] => {
+  const key = bodyKey(planned);
+  const kept = key === undefined ? undefined : keptByBody.get(key);
+  return kept === undefined || kept === planned.atom.frontmatter.id
+    ? []
+    : [`${DUPLICATE_REASON_PREFIX}${kept}`];
+};
+
+/** The duplicate share of a refusal set — a subset of it, never its total. */
+const countDuplicates = (refused: readonly CheckedAtom[]): number =>
+  refused.filter(entry => entry.reasons.some(reason => reason.startsWith(DUPLICATE_REASON_PREFIX)))
+    .length;
+
 const checkAtoms = (
   planned: readonly PlannedAtom[],
   existing: ReadonlySet<string>,
   profile: IngestProfile
 ): readonly CheckedAtom[] => {
-  const runIds = new Set(planned.map(entry => entry.atom.frontmatter.id));
-  const reserved = foreignIds(existing, runIds);
+  const reserved = foreignIds(existing, new Set(planned.map(entry => entry.atom.frontmatter.id)));
+  const keptByBody = firstByBody(planned);
   return planned.map(entry => ({
     ...entry,
-    reasons: [...validateAtom(entry.atom, reserved, profile), ...emptyBodyReasons(entry)],
+    reasons: [
+      ...validateAtom(entry.atom, reserved, profile),
+      ...emptyBodyReasons(entry),
+      ...duplicateReasons(entry, keptByBody),
+    ],
   }));
 };
 
@@ -559,6 +654,7 @@ interface WritePhase {
   readonly profile: IngestProfile;
   readonly writable: readonly CheckedAtom[];
   readonly skipped: number;
+  readonly duplicates: number;
 }
 
 const persist = async (phase: WritePhase): Promise<number> => {
@@ -570,6 +666,7 @@ const persist = async (phase: WritePhase): Promise<number> => {
     profile: phase.profile.name,
     atoms: phase.writable.map(manifestAtom),
     skipped: phase.skipped,
+    duplicates: phase.duplicates,
   });
   return pruned;
 };
@@ -578,16 +675,16 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
   const outputDir = options.outputDir ?? ATOMS_DIR;
   const repoRoot = options.repoRoot ?? REPO_ROOT;
   const profile = profileOf(options);
-  const files = await expandCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots());
-  const loaded = await Promise.all([...files].sort().map(file => loadSource(file, repoRoot, profile)));
+  const loaded = await loadCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots(), profile);
   const unmapped = loaded
     .filter(source => source.domain === undefined)
     .map(source => unmappedSkip(source, profile));
   const candidates = [...loaded.flatMap(source => toCandidates(source, profile))].sort(byOrder);
   const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), profile);
   const writable = checked.filter(entry => entry.reasons.length === 0);
-  const refused = checked.filter(entry => entry.reasons.length > 0).map(toSkip);
-  const skipped = [...unmapped, ...refused];
-  const pruned = await persist({ outputDir, profile, writable, skipped: skipped.length });
-  return { written: writable.length, skipped, pruned };
+  const refused = checked.filter(entry => entry.reasons.length > 0);
+  const skipped = [...unmapped, ...refused.map(toSkip)];
+  const duplicates = countDuplicates(refused);
+  const pruned = await persist({ outputDir, profile, writable, skipped: skipped.length, duplicates });
+  return { written: writable.length, skipped, pruned, duplicates };
 };

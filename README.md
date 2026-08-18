@@ -381,7 +381,7 @@ An unlabelled document is **dropped whole** — never chunked, never indexed, ne
 | `dp-gnosis/corpus-hu/` | `docs` | no — override only |
 | `dp-gnosis/cache/bench/corpus-ext/` | `docs` | no — override only |
 
-**The trap: `docs/` (with an s) matches no corpus root and no domain prefix.** Measured in this worktree: **192** markdown files under `docs/`, **0** atoms in the vault carry a `docs/` source (`grep '^  - docs/'` over 11 345 atom files → 0 matches). `docs/research/`, `docs/benchmarks/`, `docs/reviews/`, `docs/plans/`, `docs/brainstorm/`, `docs/analysis/` are all invisible to retrieval. It fails at the SCOPE gate, so it is not even listed in `skipped[]`. This is **current behaviour**, stated as fact — not a recommendation to keep it.
+**`docs/` (with an s) is a corpus root as of T2.1, and a `docs/` domain prefix claims it.** It was invisible to retrieval before that — it matched no root and no prefix, so it failed at the SCOPE gate and was not even listed in `skipped[]`. What made the root usable is the profile's three-entry `excludePaths` — `docs/tmp/`, `docs/benchmarks/`, `doc/_meta/corpus-digest.md` — dropped by path BEFORE anything is read, so they are ingested nowhere and counted nowhere. `docs/` holds 22 808 markdown files and 22 597 of them are machine output (`docs/tmp` 12 211, `docs/benchmarks` 10 386). `doc/_meta/corpus-digest.md` is excluded as a NAVIGATION artefact, not as generated bulk: it produces 204 atoms carrying one line of vocabulary from every document in the corpus, so it scores on almost any query. Only that one file — the rest of `doc/_meta/` is authored and stays. A DIRECTORY entry MUST carry a trailing slash, because the match is a plain repo-relative `startsWith` prefix: `docs/benchmarks/` MUST NOT swallow the sibling `docs/benchmarking/`, which is authored and kept. The ~211 authored files under `docs/` remain (~3 400 atoms), and `docs/research/`, `docs/plans/`, `docs/implementation-lessons-learned/`, `docs/adrs/`, `docs/reviews/` and `docs/analysis/` each carry a type rule of their own.
 
 ### 2. Type table — what the directory says the document is
 
@@ -443,7 +443,7 @@ Author rules that follow mechanically:
 
 ### 5. Pre-save checklist
 
-1. Is the path under `doc/`, `claude-artifacts/`, or a repo-root `RUNNER-*.md` — **not** `docs/`?
+1. Is the path under `doc/`, `docs/` (outside `docs/tmp` and `docs/benchmarks`), `claude-artifacts/`, or a repo-root `RUNNER-*.md`?
 2. Does a `SOURCE_ROOT_DOMAINS` prefix claim it, so `x_domain` resolves?
 3. Does the directory give the `type` a caller would filter on, or does it silently fall back to `knowledge`?
 4. Does every block of prose sit under a heading?

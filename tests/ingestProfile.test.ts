@@ -217,7 +217,11 @@ describe('shipped default profile', () => {
   it('declares the shipped path exclusions and the default-excluded history types', () => {
     const shipped = loadIngestProfile(INGEST_PROFILE_PATH);
 
-    expect(shipped.excludePaths).toEqual(['docs/tmp', 'docs/benchmarks']);
+    expect(shipped.excludePaths).toEqual([
+      'docs/tmp/',
+      'docs/benchmarks/',
+      'doc/_meta/corpus-digest.md',
+    ]);
     expect(shipped.defaultExcludedTypes).toEqual([
       'feature-log',
       'benchmark',
@@ -248,15 +252,20 @@ describe('shipped default profile', () => {
     expect(written).toEqual([[], [], []]);
   });
 
-  it('lets no path rule claim research, plan or lessons-learned', () => {
+  it('claims research, plan and lessons-learned from the docs/ directories that carry them', () => {
     const claimed = [
       ...DEFAULT_INGEST_PROFILE.typeRules.map(rule => rule.type),
       ...DEFAULT_INGEST_PROFILE.segmentRules.map(rule => rule.type),
       DEFAULT_INGEST_PROFILE.defaultType,
     ];
 
-    expect(claimed).not.toContain('research');
-    expect(claimed).not.toContain('plan');
-    expect(claimed).not.toContain('lessons-learned');
+    expect(claimed).toContain('research');
+    expect(claimed).toContain('plan');
+    expect(claimed).toContain('lessons-learned');
+    expect(typeForPath(DEFAULT_INGEST_PROFILE, 'docs/research/x.md')).toBe('research');
+    expect(typeForPath(DEFAULT_INGEST_PROFILE, 'docs/plans/x.md')).toBe('plan');
+    expect(typeForPath(DEFAULT_INGEST_PROFILE, 'docs/implementation-lessons-learned/x.md')).toBe(
+      'lessons-learned'
+    );
   });
 });

@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "comment:purpose": "The fixed probe set for the T2.1 corpus-hygiene acceptance: no identical adjacent hits, and no corpus-digest / table-of-contents atom in the top 5. Every query is quoted VERBATIM from the consumer integration review that observed the defect.",
+  "comment:provenance": "07-plan.md T2.1 cites 'the 8 queries in prepared/consumer-integration-review.md 3.3(d)'. Those 8 are NOT literally recoverable: 3.3(d) names four, one of which appears only elided as \"functional programming ...\" and is omitted here rather than reconstructed; the appendix lists a further four command lines plus a bare count. This file therefore carries the SEVEN queries recoverable verbatim, each with the line that carries it.",
+  "probes": [
+    { "id": "p-01", "query": "run e2e playwright test command spec", "k": 5, "source": "consumer-integration-review.md:225", "observes": "mirror-duplicate: ranks 1+2 identical section title, identical score 19.5" },
+    { "id": "p-02", "query": "runner ownership boundaries gate tool contract roi gate minimalism", "k": 5, "source": "consumer-integration-review.md:413", "observes": "toc-atom: corpus-digest at rank 2 (19.28); RUNNER-GUIDE routing table at rank 1" },
+    { "id": "p-03", "query": "telemetry sqlite escalation fallback rate query", "k": 5, "source": "consumer-integration-review.md:226", "observes": "toc-atom: corpus-digest at rank 5; routing table at rank 4" },
+    { "id": "p-04", "query": "zustand selector stability useShallow infinite render loop", "k": 4, "source": "consumer-integration-review.md:129", "observes": "mirror-duplicate at ranks 1+2" },
+    { "id": "p-05", "query": "agentic code runner escalation ladder gate pipeline region ledger oscillation", "k": 8, "source": "consumer-integration-review.md:182", "observes": "split parts of one document delivered out of order, interleaved with three others" },
+    { "id": "p-06", "query": "layered test model coverage thresholds", "k": 1, "source": "consumer-integration-review.md:416", "observes": "xml single-atom shape" },
+    { "id": "p-07", "query": "kerekitesi kulonbozet afa torveny szamlazas", "k": 3, "source": "consumer-integration-review.md:417", "observes": "Hungarian query against the Hungarian corpus" }
+  ]
+}
