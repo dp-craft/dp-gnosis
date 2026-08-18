@@ -18,7 +18,12 @@
  *
  * The HTTP client is `bench/reranker.ts`'s: one client, one wire format.
  */
-import { createRerankerClient, extractDoc, type RerankResult } from './bench/reranker.js';
+import {
+  createRerankerClient,
+  extractDoc,
+  type ExtractStrategy,
+  type RerankResult
+} from './bench/reranker.js';
 import {
   DEFAULT_RERANK_PRESET,
   RERANK_DEFAULT_URL,
@@ -32,8 +37,13 @@ import {
 } from './config.js';
 import type { RetrievedAtom } from './port.js';
 
-/** The measured extraction: the atom's HEAD, `RERANK_DOC_MAX_CHARS` wide. */
-const EXTRACT_STRATEGY = 'head';
+/**
+ * The measured extraction: the atom's HEAD, `RERANK_DOC_MAX_CHARS` wide.
+ * Exported because it decides WHAT the reranker is shown, which the bench
+ * stamps on every rerank row — an unstamped move would be subtracted as a
+ * like-for-like delta.
+ */
+export const EXTRACT_STRATEGY: ExtractStrategy = 'head';
 
 /**
  * Client-side chunking limit, mirroring `DEFAULT_RERANKERS`' `maxBatchTokens`
