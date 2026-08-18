@@ -47,28 +47,29 @@ Exit 3 cases: `indexState unavailable` · a refused `--rephrase` (raw query sear
 
 ### Flags
 
+**This table is the WHOLE flag vocabulary, and it is test-locked.** `tests/readmeFlags.test.ts` asserts it equals `FLAGS` (`src/cli/args.ts`) in **both** directions, so a flag can neither go undocumented nor be documented into existence. `--hybrid-weight` used to sit here and this CLI **refuses it** — it is a BENCH flag, owned by `tools/dp-gnosis-bench/README.md`.
+
 | Flag | Value | Default |
 |---|---|---|
 | `--adapter` | `linear\|fts5\|minisearch\|lancedb\|lancedb-vec\|lancedb-hybrid\|lancedb-hybrid-full` | `fts5` — the measured champion, and what the bench measures |
 | `--atoms-dir` | dir | `dp-gnosis/vault/atoms` |
 | `--index-path` | file for `fts5`/`minisearch`, **directory** for every `lancedb*` route | per-adapter path under `dp-gnosis/cache/index/` |
-| `--hybrid-weight` | `0`…`1` — the DENSE leg's share of the leg fusion, `lancedb-hybrid` / `-full` only. Out-of-range FAILS loudly, never clamps | `0.5` — **measured-mistuned on English; 0.25 scored better. Not changed, see below** |
-
-**The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `GNOSIS-BASELINES.md` § Phase D.
-
-**`--hybrid-weight`'s default is known to be suboptimal on English and has deliberately NOT been changed** — it is a quality-affecting parameter, and every recorded `lancedb-hybrid` row was measured at 0.5. Pass the flag explicitly rather than relying on the default.
 | `--repo-root` | dir | repo root |
+| `--profile` | file — one named instance: its vocabulary, its labelling tables AND its own `repoRoot` / `corpusRoots` / `atomsDir` / `indexPath`. Each profile MUST own its `atomsDir` AND its `indexPath` — an atoms directory is stamped with its owner and refuses a second profile | none, the built-in defaults. Precedence is **flag > profile > default**, so `--atoms-dir` / `--index-path` / `--repo-root` still outrank whatever the profile states |
 | `--golden-set` | file | `tools/dp-gnosis/golden/golden-set.v1.json` |
 | `-k` | positive integer | `5` |
 | `--format` | `text\|json\|xml` — **`retrieve` only** | `text` |
 | `--json` | boolean — alias for `--format json` | off |
+| `--type` | comma-separated atom types — **`retrieve` only**; an atom passes when its type is in the list. The vocabulary is profile-derived, so it is printed by `--help` rather than restated here. `--types` (plural) is an unknown flag, exit 2 | unset — every type is searched |
 | `--max-tokens` | non-negative integer — **`retrieve` only**, the injection budget as a **conservative UPPER BOUND on tokens, estimated as UTF-8 byte length**, not an exact token count | `64000` |
-| `--rephrase` | boolean — **`retrieve` only**, rewrite the query into BM25 keywords first | off |
+| `--rephrase` | boolean — **`retrieve` only**, rewrite the query into BM25 keywords first. **Measured net-negative — see below** | off |
 | `--rerank` | boolean — **`retrieve` only**, rerank a pool of at least `RERANK_K_INIT` and RRF-fuse that order with the first pass | off |
 | `--rerank-model` | cross-encoder id — **requires `--rerank`** | `RERANK_MODEL_ID` (`qwen3-reranker-4b`) |
 | `--rerank-profile` | `shipped\|beir-ce` — the FUSION RULE. Unknown name fails loudly, listing both. **Requires `--rerank`** | `shipped` |
 | `--rerank-weight` | `0`…`1` — the reranked order's RRF weight; the first pass carries `1 - w`. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** | `0.5` |
 | `--help` / `-h` | boolean | off |
+
+**The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `GNOSIS-BASELINES.md` § Phase D.
 
 **`--max-tokens` counts an upper bound, so it over-reserves.** The estimator charges each atom its UTF-8 byte length; why that bounds the real token count is derived in `estimateTokens` (`src/budget.ts`) and not repeated here. The reserve is measured: on 2026-08-18 over this vault, 5 558 bytes of real atom bodies tokenized to 1 414 tokens — **3.93 bytes/token**, read off `usage.prompt_tokens` against the tokenizer of `qwen38-27b-q4kxl-high-ctx130k-mtp-coding`. So the bound over-reserves **~3.9x**, and the `64000` default admits roughly **16 000 real tokens**. Size the flag at about 4x the context you actually mean to fill. An atom that does not fit the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size.
 
@@ -94,7 +95,7 @@ Rewriting by hand and passing the result is still the cheapest path; the flag ex
 
 | Invocation | Result |
 |---|---|
-| no flag / `--format text` | the compact human line per hit (score, id, domain, title — **no body**) |
+| no flag / `--format text` | the compact human line per hit (score, id, domain, title — **no body**). A **reranked** run inserts `rerank <score>` after the fused score; a run that did not rerank emits the line it always did, byte for byte |
 | `--json` / `--format json` / both together | the JSON object in § `--json` key shape |
 | `--format xml` | a `<retrieved_context>` block carrying each atom **body** — paste-ready for an LLM |
 | `--json --format xml` | **exit 2**, naming both flags — a contradiction is refused, never resolved |
@@ -111,11 +112,26 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 |---|---|
 | `ingest` | `command`, `written`, `skipped[{source,title,reasons[]}]` |
 | `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note` |
-| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `atoms[{id,title,domain,body,score,sourcePath}]`, plus `note` when `indexState` is `unavailable` or a `--rephrase` / `--rerank` refusal degraded the run |
+| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable` or a `--rephrase` / `--rerank` refusal degraded the run |
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
 | any usage failure | `error` |
 
 `indexState` ∈ `ready` (searched a current index) · `empty` (searched, corpus holds no atoms) · `stale` (searched, index older than the corpus — ranking may lag) · `unavailable` (**nothing was searched**). `unavailable` exits 3, never 0: a zero `count` under it is evidence about the index, not about the corpus.
+
+#### Why an atom is in the answer
+
+A score alone has no unit, no scale and no connection to the words that earned it. Six fields answer that, and **none of them changes the ranking** — the order is byte-identical with and without them (`tests/retrieveExplain.test.ts` pairs the reranked order against `fuseRanking` itself as the oracle).
+
+| Field | Where | Meaning |
+|---|---|---|
+| `poolSize` | top level | how many atoms the FIRST PASS returned, before the `-k` slice and before the budget. Under `--rerank` this is the pool the cross-encoder actually scored (`max(k, RERANK_K_INIT)`), which is the number the recall question is asked at — not `k` |
+| `firstPassScore` | per atom, **reranked runs only** | the atom's BM25 score before the rerank |
+| `rerankScore` | per atom, **reranked runs only** | the RAW cross-encoder score. `score` keeps holding the FUSED value and is still what the order is taken from; the pair is what says whether the reranker moved this atom or merely agreed |
+| `matchedTerms[]` | per atom | the ANALYSED query terms the body carries, deduped, in query order. Analysed, not raw: the adapters match stems, so `@/features` reports `featur` — a surface-word list would claim a miss on exactly the term that produced the hit. Computed with the DEFAULT analyzer, so on a non-`fts5` adapter it is an approximation of what that adapter matched, never that adapter's own report |
+| `snippet` | per atom | the ≤400-character window of the body holding the most matched terms (ties → earliest); the whole body when it already fits |
+| `scoreNormalised` | per atom | min-max of `score` **within this answer**: `1` is this answer's top hit, `0` its last. `null` when fewer than two atoms or when every score is equal |
+
+**`scoreNormalised` is a within-set number and MUST NOT be read as relevance.** At `-k 2` it is `1` and `0` by construction and carries no signal at all; it starts to mean something around `-k 5`. A set whose values are all near `1` is the NOISE signature — every hit scoring alike — not a set of good hits. The absolute signal is `rerankScore`, which separates by orders of magnitude on a healthy cross-encoder (`qwen3-reranker-4b`: ~0.998 relevant against ~1e-05 irrelevant). Turning that into a calibrated confidence band is not done here — no threshold in this CLI is calibrated yet.
 
 ### Worked examples
 
@@ -328,9 +344,10 @@ Example: "how do I start the e2e tests?" -> "run e2e end-to-end playwright test
 command spec".
 
 READ THE JSON
-Fields: adapter, query, k, mode, indexState, count, atoms[].
-Each atom: {id, title, domain, body, score, sourcePath}. atoms[] is sorted by
-score, descending.
+Fields: adapter, query, k, mode, indexState, count, poolSize, atoms[].
+Each atom: {id, title, domain, type, body, score, sourcePath, originPaths,
+matchedTerms, snippet, scoreNormalised} plus {firstPassScore, rerankScore} on a
+reranked run. atoms[] is sorted by score, descending.
 - exitCode 0  = the search ran.
 - exitCode 2  = you called it wrong; read "error", fix the call, retry once.
 - exitCode 3  = partial. If indexState is "unavailable" NOTHING was searched —
@@ -344,11 +361,23 @@ only; never paraphrase from "title" alone.
 
 SCORES ARE NOT CONFIDENCE — HARD RULE
 This tool ALWAYS returns up to k atoms and NEVER signals "no good match". A
-returned atom is not evidence that an answer exists.
-- Compare scores within the result set: if the top score is close to the bottom
-  one, the ranking is noise.
-- If scores are low or the atoms are plainly off-topic, rewrite the query with
-  different keywords and call again.
+returned atom is not evidence that an answer exists. Nothing here is a
+calibrated threshold; these are the three signals you have, in this order.
+1. matchedTerms — the strongest and cheapest check. An atom whose matchedTerms
+   miss the rare, specific terms of your query is off-topic however it scored.
+   An EMPTY matchedTerms on every atom means the query shares no analysed term
+   with anything: rewrite it, do not report the atoms.
+2. rerankScore, when the run reranked (mode ends in "+rerank"). It is the one
+   number with an absolute scale: on a healthy cross-encoder a relevant atom
+   scores orders of magnitude above an irrelevant one. Read it, not "score" —
+   "score" is a fused rank sum with no scale. Use it to spot the case where the
+   whole pool is weak, which relative comparison cannot see.
+3. scoreNormalised — WITHIN this answer only: 1 is this answer's top hit, 0 its
+   last, null when it cannot be computed. It says nothing about the vault. Every
+   atom near 1 is the NOISE signature (they all scored alike), not a good set.
+   At k=2 it is always 1 and 0 by construction; it needs k>=5 to mean anything.
+- If the signals are weak or the atoms are plainly off-topic, rewrite the query
+  with different keywords and call again.
 - If a second attempt is still weak, tell the user the vault has no clear answer
   and name what you searched for. Do NOT present a low-scoring atom as
   authoritative.
