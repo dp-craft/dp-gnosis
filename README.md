@@ -60,7 +60,9 @@ Exit 3 cases: `indexState unavailable` · a refused `--rephrase` (raw query sear
 | `-k` | positive integer | `5` |
 | `--format` | `text\|json\|xml` — **`retrieve` only** | `text` |
 | `--json` | boolean — alias for `--format json` | off |
-| `--type` | comma-separated atom types — **`retrieve` only**; an atom passes when its type is in the list. The vocabulary is profile-derived, so it is printed by `--help` rather than restated here. `--types` (plural) is an unknown flag, exit 2 | unset — every type is searched |
+| `--type` | comma-separated atom types — **`retrieve` only**; an atom passes when its type is in the list. The vocabulary is profile-derived, so it is printed by `--help` rather than restated here. `--types` (plural) is an unknown flag, exit 2 | unset — every type except the profile's `defaultExcludedTypes`; `--include-history` restores those |
+| `--exclude-type` | comma-separated atom types — **`retrieve` only**; REPLACES the default exclusion with the types named. Each value MUST be in the profile's type vocabulary or the CLI exits 2. Exit 2 alongside `--type` or `--include-history` — one filter source only | the profile's `defaultExcludedTypes`, today `feature-log, benchmark, review, brainstorm` |
+| `--include-history` | boolean — **`retrieve` only**, search the WHOLE type vocabulary, restoring the four types an unfiltered retrieve leaves out. Exit 2 alongside `--type` or `--exclude-type` | off |
 | `--max-tokens` | non-negative integer — **`retrieve` only**, the injection budget as a **conservative UPPER BOUND on tokens, estimated as UTF-8 byte length**, not an exact token count | `64000` |
 | `--rephrase` | boolean — **`retrieve` only**, rewrite the query into BM25 keywords first. **Measured net-negative — see below** | off |
 | `--rerank` | boolean — **`retrieve` only**, rerank a pool of at least `RERANK_K_INIT` and RRF-fuse that order with the first pass | off |
@@ -68,6 +70,8 @@ Exit 3 cases: `indexState unavailable` · a refused `--rephrase` (raw query sear
 | `--rerank-profile` | `shipped\|beir-ce` — the FUSION RULE. Unknown name fails loudly, listing both. **Requires `--rerank`** | `shipped` |
 | `--rerank-weight` | `0`…`1` — the reranked order's RRF weight; the first pass carries `1 - w`. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** | `0.5` |
 | `--help` / `-h` | boolean | off |
+
+**An unfiltered `retrieve` excludes `defaultExcludedTypes`** — the exclusion is a CLI default only, applied on no other path: never on ingest, never in the bench, so every recorded benchmark number is unaffected. Those types stay ingested and indexed, and `--include-history` searches them.
 
 **The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `GNOSIS-BASELINES.md` § Phase D.
 
