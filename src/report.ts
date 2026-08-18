@@ -76,9 +76,12 @@ export interface RunProvenance {
   readonly rerankPool?: number | undefined;
   /**
    * WHAT the reranker was shown: how many characters of an atom body were sent,
-   * and which part of it. Both are engine constants today, and both decide the
-   * TEXT the cross-encoder scored rather than the pool it scored over. Absent on
-   * a run that did not rerank — nothing was extracted for one.
+   * and which part of it. Both are settable per run (`--rerank-doc-max-chars` /
+   * `--rerank-extract`) and stamped EFFECTIVE, never as the engine constant —
+   * a row reading 2000 while 4000 was scored is the provenance failure this pair
+   * exists to prevent. Both decide the TEXT the cross-encoder scored rather than
+   * the pool it scored over. Absent on a run that did not rerank — nothing was
+   * extracted for one.
    */
   readonly rerankDocMaxChars?: number | undefined;
   readonly rerankExtract?: string | undefined;

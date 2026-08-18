@@ -22,6 +22,7 @@ import type {
 } from '../../dp-gnosis/src/port.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY } from '../../dp-gnosis/src/rerank.js';
+import { SCALE_FIELDS, TREATMENT_FIELDS } from './compare.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import type { Qrel } from './metrics.js';
 import {
@@ -160,6 +161,49 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--rerank', '--rerank-pool', '0'])).toThrow(/integer/);
     expect(() => parseArgs(['--rerank', '--rerank-pool', '-5'])).toThrow(/integer/);
     expect(() => parseArgs(['--rerank', '--rerank-pool', 'deep'])).toThrow(/deep/);
+  });
+
+  it('reads --rerank-doc-max-chars and --rerank-extract as WHAT the reranker is shown', () => {
+    const options = parseArgs([
+      '--rerank',
+      '--rerank-doc-max-chars',
+      '4000',
+      '--rerank-extract',
+      'headtail',
+    ]);
+    expect(options.rerankDocMaxChars).toBe(4000);
+    expect(options.rerankExtract).toBe('headtail');
+  });
+
+  it('leaves the doc window unset when neither is named — the shipped window stands', () => {
+    expect(parseArgs(['--rerank']).rerankDocMaxChars).toBeUndefined();
+    expect(parseArgs(['--rerank']).rerankExtract).toBeUndefined();
+  });
+
+  /**
+   * Without `--rerank` nothing reranks, so the row would carry a width label no
+   * cross-encoder ever read — the `--rerank-pool` failure one field over.
+   */
+  it('REFUSES the doc-window flags without --rerank, naming both flags', () => {
+    expect(() => parseArgs(['--rerank-doc-max-chars', '4000'])).toThrow(/requires --rerank/);
+    expect(() => parseArgs(['--rerank-extract', 'headtail'])).toThrow(/requires --rerank/);
+  });
+
+  it('REFUSES a non-integer, zero or negative doc width, naming the constraint', () => {
+    const width = (value: string): (() => unknown) => (): unknown =>
+      parseArgs(['--rerank', '--rerank-doc-max-chars', value]);
+    expect(width('2.5')).toThrow(/2\.5/);
+    expect(width('2.5')).toThrow(/integer/);
+    expect(width('0')).toThrow(/integer/);
+    expect(width('-5')).toThrow(/integer/);
+    expect(width('wide')).toThrow(/wide/);
+  });
+
+  it('REFUSES an unknown extraction, naming the valid ones', () => {
+    const thrown = (): unknown => parseArgs(['--rerank', '--rerank-extract', 'middle']);
+    expect(thrown).toThrow(/middle/);
+    expect(thrown).toThrow(/head/);
+    expect(thrown).toThrow(/headtail/);
   });
 
   it('reads --budget and --served-k as the CONSUMER cap and the served window', () => {
@@ -504,14 +548,33 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
   });
 
   /**
-   * The two parameters that decide WHAT the reranker is shown. They are engine
-   * constants today, so an unstamped row would let a change to either be
-   * subtracted as a like-for-like delta.
+   * The two parameters that decide WHAT the reranker is shown. An unstamped row
+   * would let a change to either be subtracted as a like-for-like delta.
    */
   it('stamps the rerank doc window and extraction on a run that reranked', () => {
     const provenance = provenanceOf(parseArgs(['--rerank']), 'sha');
     expect(provenance.rerankDocMaxChars).toBe(RERANK_DOC_MAX_CHARS);
     expect(provenance.rerankExtract).toBe(EXTRACT_STRATEGY);
+  });
+
+  /**
+   * The EFFECTIVE window, never the constant. A row reading `2000` while 4000
+   * characters were scored is the provenance failure GNOSIS-GUIDE.md § Landmines
+   * is built around — the arm would be subtracted as a like-for-like delta.
+   */
+  it('stamps the EFFECTIVE doc window a width arm named, not the shipped constant', () => {
+    const argv = ['--rerank', '--rerank-doc-max-chars', '4000', '--rerank-extract', 'headtail'];
+    const provenance = provenanceOf(parseArgs(argv), 'sha');
+    expect(provenance.rerankDocMaxChars).toBe(4000);
+    expect(provenance.rerankExtract).toBe('headtail');
+  });
+
+  /** Both are TREATMENT fields, so a width move is labelled, never subtracted. */
+  it('keeps the doc window a treatment, so a width arm is an ARM COMPARISON', () => {
+    expect(TREATMENT_FIELDS).toContain('rerankDocMaxChars');
+    expect(TREATMENT_FIELDS).toContain('rerankExtract');
+    expect(SCALE_FIELDS).not.toContain('rerankDocMaxChars');
+    expect(SCALE_FIELDS).not.toContain('rerankExtract');
   });
 
   it('stamps NO doc window on a run that reranked nothing', () => {

@@ -52,6 +52,7 @@ import {
 import { createLinearScanAdapter } from '../../dp-gnosis/src/adapters/linearScanAdapter.js';
 import { buildMiniSearchIndex } from '../../dp-gnosis/src/adapters/miniSearchAdapter.js';
 import { parseAtom } from '../../dp-gnosis/src/atom.js';
+import type { ExtractStrategy } from '../../dp-gnosis/src/bench/reranker.js';
 import {
   type AdapterName,
   createPort,
@@ -743,6 +744,13 @@ export interface RerankArm {
   readonly fusion?: RerankFusion;
   /** Absent means the engine's shipped `RERANK_MODEL_ID` — today's every run. */
   readonly model?: string | undefined;
+  /**
+   * WHAT the reranker is shown — how much of an atom body, and which part.
+   * Absent on either means the engine's shipped `RERANK_DOC_MAX_CHARS` /
+   * `EXTRACT_STRATEGY`, so an arm that names neither is bit-identical.
+   */
+  readonly rerankDocMaxChars?: number | undefined;
+  readonly rerankExtract?: ExtractStrategy | undefined;
 }
 
 export const rerankIfRequested = async (

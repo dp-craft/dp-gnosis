@@ -31,6 +31,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { fusesLegs } from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
+import type { ExtractStrategy } from '../../dp-gnosis/src/bench/reranker.js';
 import { fitToTokenBudget } from '../../dp-gnosis/src/budget.js';
 import {
   ADAPTER_NAMES,
@@ -149,6 +150,16 @@ export interface CliOptions {
    * and the bench must be able to measure a pool the serving path does not use.
    */
   readonly rerankPool: number | undefined;
+  /**
+   * WHAT the reranker is shown: how much of an atom body reaches it, and which
+   * part. `undefined` on either means the engine's shipped default —
+   * `RERANK_DOC_MAX_CHARS` and `EXTRACT_STRATEGY` — which every recorded arm was
+   * measured under, so an unflagged run stays bit-identical. They are recorded
+   * RESOLVED, because the text the cross-encoder scored is not recoverable from
+   * the numbers afterwards.
+   */
+  readonly rerankDocMaxChars: number | undefined;
+  readonly rerankExtract: ExtractStrategy | undefined;
   /**
    * The CONSUMER's token cap, applied to the PRESENTED ranking after every
    * ranking stage. `undefined` means no cap at all — the default path every
@@ -437,6 +448,70 @@ const parseServedK = (value: string | undefined, budget: number | undefined): nu
   );
 };
 
+const RERANK_DOC_MAX_CHARS_FLAG = '--rerank-doc-max-chars';
+const RERANK_EXTRACT_FLAG = '--rerank-extract';
+
+/** A window of fewer than one character shows the reranker nothing. */
+const RERANK_DOC_MAX_CHARS_MIN = 1;
+
+/**
+ * The extractions the bench may NAME. Deliberately a subset of the engine's
+ * `ExtractStrategy`: `full` and `tail`/`maxfit` either ignore `maxChars` or have
+ * never been measured, and a row stamping a width the extraction never applied
+ * is the provenance failure both fields exist to prevent.
+ */
+const RERANK_EXTRACT_CHOICES: readonly ExtractStrategy[] = ['head', 'headtail'];
+
+const isExtractChoice = (value: string): value is ExtractStrategy =>
+  (RERANK_EXTRACT_CHOICES as readonly string[]).includes(value);
+
+/**
+ * A fractional, zero or negative width is a usage error, NOT something to clamp:
+ * a clamped run records the window it was ASKED for while showing the reranker
+ * another, and the scored text is unrecoverable from the metrics afterwards.
+ */
+const parseRerankDocMaxCharsSize = (value: string): number => {
+  const width = Number(value);
+  if (Number.isInteger(width) && width >= RERANK_DOC_MAX_CHARS_MIN) return width;
+  throw positiveIntegerError(RERANK_DOC_MAX_CHARS_FLAG, RERANK_DOC_MAX_CHARS_MIN, value);
+};
+
+/**
+ * A doc-window flag without `--rerank` REFUSES, exactly as `--rerank-pool` does:
+ * nothing would rerank, yet the row would carry a width label no cross-encoder
+ * ever read.
+ */
+const requireRerank = (flag: string, value: string, rerank: boolean): void => {
+  if (rerank) return;
+  throw new Error(
+    `dp-gnosis-bench: ${flag} "${value}" requires --rerank — ` +
+      'without it nothing reranks and the row would name a window nothing was shown'
+  );
+};
+
+const parseRerankDocMaxChars = (
+  value: string | undefined,
+  rerank: boolean
+): number | undefined => {
+  if (value === undefined) return undefined;
+  requireRerank(RERANK_DOC_MAX_CHARS_FLAG, value, rerank);
+  return parseRerankDocMaxCharsSize(value);
+};
+
+/** An unknown extraction THROWS naming the valid ones, exactly as `--analyzer` does. */
+const parseRerankExtract = (
+  value: string | undefined,
+  rerank: boolean
+): ExtractStrategy | undefined => {
+  if (value === undefined) return undefined;
+  requireRerank(RERANK_EXTRACT_FLAG, value, rerank);
+  if (isExtractChoice(value)) return value;
+  throw new Error(
+    `dp-gnosis-bench: unknown ${RERANK_EXTRACT_FLAG} "${value}" — ` +
+      `use ${RERANK_EXTRACT_CHOICES.join(', ')}`
+  );
+};
+
 /**
  * Every flag this CLI reads, the gate's included (`gate.ts` parses the same
  * argv). Declared ONCE, beside the parser that consumes it, and asserted
@@ -456,6 +531,8 @@ export const RUN_FLAGS: FlagSpec = {
     BUDGET_FLAG,
     SERVED_K_FLAG,
     RERANK_POOL_FLAG,
+    RERANK_DOC_MAX_CHARS_FLAG,
+    RERANK_EXTRACT_FLAG,
     HYBRID_WEIGHT_FLAG,
     ...GATE_VALUE_FLAGS,
   ],
@@ -482,6 +559,11 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     rerankWeight,
     rerankModel: parseRerankModel(flagValue(argv, '--rerank-model'), rerank),
     rerankPool: parseRerankPool(flagValue(argv, RERANK_POOL_FLAG), rerank),
+    rerankDocMaxChars: parseRerankDocMaxChars(
+      flagValue(argv, RERANK_DOC_MAX_CHARS_FLAG),
+      rerank
+    ),
+    rerankExtract: parseRerankExtract(flagValue(argv, RERANK_EXTRACT_FLAG), rerank),
     rerankFusion: parseRerankFusion(rerankProfile, rerankWeight),
     hybridWeight: checkHybridWeightAdapter(
       adapter,
@@ -663,6 +745,17 @@ export interface RankContext {
 export const servedKOf = (options: CliOptions): number => options.servedK ?? options.depth;
 
 /**
+ * WHAT the reranker was actually shown — the named window, else the engine's
+ * shipped default. Resolved ONCE and read by both the scoring path and the
+ * provenance stamp, so the row can never name a width the reranker never read.
+ */
+export const rerankDocMaxCharsOf = (options: CliOptions): number =>
+  options.rerankDocMaxChars ?? RERANK_DOC_MAX_CHARS;
+
+export const rerankExtractOf = (options: CliOptions): ExtractStrategy =>
+  options.rerankExtract ?? EXTRACT_STRATEGY;
+
+/**
  * The PRESENTED atoms — what a consumer would actually receive.
  *
  * `fitToTokenBudget` is the CLI's presentation cap and is IMPORTED, never
@@ -690,6 +783,8 @@ const rankTopic = async (context: RankContext, topic: Topic): Promise<readonly s
   const ordered = await rerankIfRequested(topic.text, atoms, options.rerank, {
     fusion: options.rerankFusion,
     model: options.rerankModel,
+    rerankDocMaxChars: rerankDocMaxCharsOf(options),
+    rerankExtract: rerankExtractOf(options),
   });
   return toDocumentRanking(servedAtoms(options, ordered), context.excluded.get(topic.id) ?? []);
 };
@@ -1065,8 +1160,8 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   rerankWeight: options.rerank ? options.rerankWeight : undefined,
   rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
   rerankPool: options.rerank ? rerankPoolOf(options) : undefined,
-  rerankDocMaxChars: options.rerank ? RERANK_DOC_MAX_CHARS : undefined,
-  rerankExtract: options.rerank ? EXTRACT_STRATEGY : undefined,
+  rerankDocMaxChars: options.rerank ? rerankDocMaxCharsOf(options) : undefined,
+  rerankExtract: options.rerank ? rerankExtractOf(options) : undefined,
   tokenBudget: options.tokenBudget,
   servedK: options.tokenBudget === undefined ? undefined : servedKOf(options),
   embedModel: denseRouteOf(options.adapter) === undefined ? undefined : EMBED_MODEL_ID,
