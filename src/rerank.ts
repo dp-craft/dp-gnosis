@@ -38,10 +38,13 @@ import {
 import type { RetrievedAtom } from './port.js';
 
 /**
- * The measured extraction: the atom's HEAD, `RERANK_DOC_MAX_CHARS` wide.
- * Exported because it decides WHAT the reranker is shown, which the bench
- * stamps on every rerank row — an unstamped move would be subtracted as a
- * like-for-like delta.
+ * The measured extraction, and the DEFAULT a caller that names none gets: the
+ * atom's HEAD, `RERANK_DOC_MAX_CHARS` wide. Exported because it decides WHAT the
+ * reranker is shown, which the bench stamps on every rerank row — an unstamped
+ * move would be subtracted as a like-for-like delta.
+ *
+ * A caller MAY override both via {@link RerankOptions}; the constant stays the
+ * value every recorded run was measured under, so an unset call is bit-identical.
  */
 export const EXTRACT_STRATEGY: ExtractStrategy = 'head';
 
@@ -312,6 +315,17 @@ type ScoreResult =
   | { readonly ok: true; readonly results: readonly RerankResult[] }
   | { readonly ok: false; readonly error: string };
 
+/**
+ * WHAT the reranker is shown: how much of an atom body, and which part. It is a
+ * pair rather than two loose arguments because the two are only meaningful
+ * together — a width without a strategy names no text — and the bench stamps
+ * them as one treatment.
+ */
+interface DocWindow {
+  readonly maxChars: number;
+  readonly extract: ExtractStrategy;
+}
+
 /** One scoring call: already-extracted text, and how long it may take. */
 interface ScoreRequest {
   readonly query: string;
@@ -338,11 +352,12 @@ const scoreTexts = async (endpoint: Endpoint, request: ScoreRequest): Promise<Sc
 const scoreDocuments = async (
   endpoint: Endpoint,
   query: string,
-  atoms: readonly RetrievedAtom[]
+  atoms: readonly RetrievedAtom[],
+  window: DocWindow
 ): Promise<ScoreResult> =>
   await scoreTexts(endpoint, {
     query,
-    documents: atoms.map(atom => extractDoc(atom.body, EXTRACT_STRATEGY, RERANK_DOC_MAX_CHARS)),
+    documents: atoms.map(atom => extractDoc(atom.body, window.extract, window.maxChars)),
     timeoutMs: TIMEOUT_MS,
   });
 
@@ -350,7 +365,7 @@ const bestFirst = (results: readonly RerankResult[]): readonly number[] =>
   [...results].sort((left, right) => right.relevanceScore - left.relevanceScore).map(r => r.index);
 
 /**
- * What a caller may vary. All three are omissible and each defaults to what the
+ * What a caller may vary. All five are omissible and each defaults to what the
  * CLI has always done, so an existing two-argument call is unchanged.
  *
  * `model` names the cross-encoder to score with. A caller measuring a second
@@ -358,20 +373,37 @@ const bestFirst = (results: readonly RerankResult[]): readonly number[] =>
  * rankings, and a run that does not carry the id cannot be told from one that
  * used another model. An unserved id still REFUSES — a wrong model must never
  * degrade into the first-pass order.
+ *
+ * `rerankDocMaxChars` / `rerankExtract` are WHAT the reranker is shown, and they
+ * carry the names the bench stamps on the row so the flag, the option and the
+ * provenance field cannot drift apart. A caller varying either MUST record it:
+ * the text the cross-encoder scored is not recoverable from the numbers, and two
+ * widths with no field on the row read as one treatment.
  */
 export interface RerankOptions {
   readonly baseUrl?: string;
   readonly fusion?: RerankFusion;
   readonly model?: string | undefined;
+  readonly rerankDocMaxChars?: number | undefined;
+  readonly rerankExtract?: ExtractStrategy | undefined;
 }
 
-/** The env-resolved URL, the shipped preset and the shipped model id. */
-const resolved = (
-  options: RerankOptions
-): { readonly baseUrl: string; readonly fusion: RerankFusion; readonly model: string } => ({
+/** The env-resolved URL, the shipped preset, model id and doc window. */
+interface Resolved {
+  readonly baseUrl: string;
+  readonly fusion: RerankFusion;
+  readonly model: string;
+  readonly window: DocWindow;
+}
+
+const resolved = (options: RerankOptions): Resolved => ({
   baseUrl: options.baseUrl ?? resolveRerankUrl(),
   fusion: options.fusion ?? RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
   model: options.model ?? RERANK_MODEL_ID,
+  window: {
+    maxChars: options.rerankDocMaxChars ?? RERANK_DOC_MAX_CHARS,
+    extract: options.rerankExtract ?? EXTRACT_STRATEGY,
+  },
 });
 
 /**
@@ -387,11 +419,11 @@ export const rerankAtoms = async (
   atoms: readonly RetrievedAtom[],
   options: RerankOptions = {}
 ): Promise<RerankOutcome> => {
-  const { baseUrl, fusion, model } = resolved(options);
+  const { baseUrl, fusion, model, window } = resolved(options);
   const endpoint: Endpoint = { baseUrl, model };
   const refusal = await catalogueRefusal(endpoint);
   if (refusal !== undefined) return { ok: false, error: refusal };
-  const scored = await scoreDocuments(endpoint, query, atoms);
+  const scored = await scoreDocuments(endpoint, query, atoms, window);
   if (!scored.ok) return { ok: false, error: scored.error };
   const fused = fuseRanking(atoms, bestFirst(scored.results), fusion);
   return { ok: true, atoms: fused.map(entry => ({ ...entry.item, score: entry.score })) };
