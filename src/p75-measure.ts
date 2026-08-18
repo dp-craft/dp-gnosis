@@ -48,9 +48,8 @@ function parseArgs(): { strategy: ExtractStrategy; docMaxChars: number; allModel
   const strategy = (args.find(a => a.startsWith('--strategy='))?.split('=')[1] as ExtractStrategy) ?? 'head';
   const docMaxChars = parseInt(args.find(a => a.startsWith('--doc-max-chars='))?.split('=')[1] ?? String(DEFAULT_DOC_MAX_CHARS), 10);
   const allModels = args.includes('--all-models');
-  const maxBatchTokens = args.find(a => a.startsWith('--max-batch-tokens='))?.split('=')[1]
-    ? parseInt(args.find(a => a.startsWith('--max-batch-tokens='))!.split('=')[1], 10)
-    : undefined;
+  const maxBatchTokensRaw = args.find(a => a.startsWith('--max-batch-tokens='))?.split('=')[1];
+  const maxBatchTokens = maxBatchTokensRaw ? parseInt(maxBatchTokensRaw, 10) : undefined;
   const outputPrefix = (args.find(a => a.startsWith('--output-prefix='))?.split('=')[1]) ?? `P7-5-${strategy}`;
   return { strategy, docMaxChars, allModels, maxBatchTokens, outputPrefix };
 }

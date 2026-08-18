@@ -63,7 +63,7 @@ export interface IngestOptions {
    * is the ONLY thing that decides what ingest reads — a caller cannot reach a
    * document outside it by naming a path.
    */
-  readonly corpusRoots?: readonly string[];
+  readonly corpusRoots?: readonly string[] | undefined;
   /** Atom output directory. Defaults to the real vault. */
   readonly outputDir?: string;
   /**

@@ -218,7 +218,7 @@ const weighted = (fusion: RerankFusion, rerankWeight: number): RerankFusion => {
 
 /** A raw numeric override on top of a named preset — the parameters stay measurable. */
 export interface RerankFusionOverrides {
-  readonly rerankWeight?: number;
+  readonly rerankWeight?: number | undefined;
 }
 
 /**
@@ -362,11 +362,13 @@ const bestFirst = (results: readonly RerankResult[]): readonly number[] =>
 export interface RerankOptions {
   readonly baseUrl?: string;
   readonly fusion?: RerankFusion;
-  readonly model?: string;
+  readonly model?: string | undefined;
 }
 
 /** The env-resolved URL, the shipped preset and the shipped model id. */
-const resolved = (options: RerankOptions): Required<RerankOptions> => ({
+const resolved = (
+  options: RerankOptions
+): { readonly baseUrl: string; readonly fusion: RerankFusion; readonly model: string } => ({
   baseUrl: options.baseUrl ?? resolveRerankUrl(),
   fusion: options.fusion ?? RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
   model: options.model ?? RERANK_MODEL_ID,
