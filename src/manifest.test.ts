@@ -145,15 +145,17 @@ describe('parseManifest', () => {
 describe('the shipped datasets.json', () => {
   const entries = loadManifest(MANIFEST);
 
-  // AC delta: the BEIR Tier-1 expansion adds four external `beir-zip` entries
-  // (`trec-covid`, `scidocs`, `fiqa`, `webis-touche2020`), so the external-BEIR count
-  // moves 3 → 7 and the total 16 → 20. BRIGHT (9), vault (2) and the vault arms (2)
-  // are untouched. The external list is asserted in MANIFEST ORDER — `webis-touche2020`
-  // is the archive id (touche2020.zip is a 404) and `ensureBeirDataset` resolves
-  // `<dataDir>/<id>/corpus.jsonl`, so a renamed id would break the fetch, not this test.
-  it('carries seven external BEIR, nine BRIGHT, two vault and two vault-arm entries', () => {
+  // AC delta: the AUTO rephrasing arms add two vault-arm entries
+  // (`vault-autorephrased`, `vault-hu-autorephrased`) — the same corpora and judgments
+  // with the query text rewritten by the shipped `--rephrase` path instead of by hand.
+  // The vault arms move 2 → 4 and the total 20 → 22; external BEIR (7), BRIGHT (9) and
+  // vault (2) are untouched. The external list is asserted in MANIFEST ORDER —
+  // `webis-touche2020` is the archive id (touche2020.zip is a 404) and `ensureBeirDataset`
+  // resolves `<dataDir>/<id>/corpus.jsonl`, so a renamed id would break the fetch, not this test.
+  it('carries seven external BEIR, nine BRIGHT, two vault and four vault-arm entries', () => {
     const ids = entries.map(e => e.id);
     const isVault = (id: string): boolean => id === 'vault' || id.startsWith('vault-');
+    const isArm = (id: string): boolean => /-(auto)?rephrased$/.test(id);
     const external = ids.filter(id => !id.startsWith('bright-') && !isVault(id));
 
     expect(entries.filter(e => e.format === 'bright')).toHaveLength(9);
@@ -166,29 +168,33 @@ describe('the shipped datasets.json', () => {
       'fiqa',
       'webis-touche2020',
     ]);
-    expect(ids.filter(id => isVault(id) && !id.endsWith('-rephrased'))).toEqual([
-      'vault',
-      'vault-hu',
-    ]);
-    expect(ids.filter(id => id.endsWith('-rephrased'))).toEqual([
+    expect(ids.filter(id => isVault(id) && !isArm(id))).toEqual(['vault', 'vault-hu']);
+    expect(ids.filter(isArm)).toEqual([
       'vault-rephrased',
+      'vault-autorephrased',
       'vault-hu-rephrased',
+      'vault-hu-autorephrased',
     ]);
-    expect(entries).toHaveLength(7 + 9 + 2 + 2);
+    expect(entries).toHaveLength(7 + 9 + 2 + 4);
   });
 
   // AC delta: the T-04 projection fix gives a title-only record a non-empty chunk body,
   // so `trec-covid` clears the 90% document-coverage gate and joins the default suite —
-  // 17 → 18 enabled. The only entries still disabled are the two rephrased arms, which
+  // 17 → 18 enabled. The only entries still disabled are the four rephrased arms, which
   // are run by `--only` and MUST stay out of a bare `npm run gnosis:bench`.
-  it('enables eighteen of the twenty entries, each having a fetcher', () => {
+  it('enables eighteen of the twenty-two entries, each having a fetcher', () => {
     const disabled = entries.filter(e => !e.enabled).map(e => e.id);
 
-    expect(disabled).toEqual(['vault-rephrased', 'vault-hu-rephrased']);
+    expect(disabled).toEqual([
+      'vault-rephrased',
+      'vault-autorephrased',
+      'vault-hu-rephrased',
+      'vault-hu-autorephrased',
+    ]);
     expect(enabledDatasets(entries)).toHaveLength(18);
   });
 
-  // The four vault-family entries are the only ones that DERIVE their BEIR layout,
+  // The six vault-family entries are the only ones that DERIVE their BEIR layout,
   // and each must name an atoms dir and a golden set — half a derivation is a typo.
   it('gives each vault entry a derive block naming atoms and a golden set', () => {
     const derived = entries.filter(e => e.format === 'beir-local' && e.derive !== undefined);
@@ -197,7 +203,9 @@ describe('the shipped datasets.json', () => {
       'vault',
       'vault-hu',
       'vault-rephrased',
+      'vault-autorephrased',
       'vault-hu-rephrased',
+      'vault-hu-autorephrased',
     ]);
     expect(derived.every(e => e.format === 'beir-local' && e.derive!.atoms.length > 0)).toBe(true);
     expect(derived.every(e => e.format === 'beir-local' && e.derive!.golden.length > 0)).toBe(true);
@@ -208,7 +216,9 @@ describe('the shipped datasets.json', () => {
   // corpus difference instead — the exact defect class this suite guards.
   it.each([
     ['vault-rephrased', 'vault'],
+    ['vault-autorephrased', 'vault'],
     ['vault-hu-rephrased', 'vault-hu'],
+    ['vault-hu-autorephrased', 'vault-hu'],
   ])('pairs %s to %s: same atoms corpus, different golden set', (armId, baseId) => {
     const deriveOf = (id: string): { atoms: string; golden: string } => {
       const found = entries.find(e => e.id === id);
@@ -226,11 +236,17 @@ describe('the shipped datasets.json', () => {
 
   // Enabling an arm would silently change what a bare `npm run gnosis:bench`
   // measures — they are run with `--only <id>`.
-  it('ships both rephrased arms disabled, so the default suite is unchanged', () => {
-    const arms = entries.filter(e => e.id.endsWith('-rephrased'));
+  it('ships all four rephrased arms disabled with empty layers, so the default suite is unchanged', () => {
+    const arms = entries.filter(e => /-(auto)?rephrased$/.test(e.id));
 
-    expect(arms.map(e => e.id)).toEqual(['vault-rephrased', 'vault-hu-rephrased']);
-    expect(arms.map(e => e.enabled)).toEqual([false, false]);
+    expect(arms.map(e => e.id)).toEqual([
+      'vault-rephrased',
+      'vault-autorephrased',
+      'vault-hu-rephrased',
+      'vault-hu-autorephrased',
+    ]);
+    expect(arms.map(e => e.enabled)).toEqual([false, false, false, false]);
+    expect(arms.map(e => e.layers)).toEqual([[], [], [], []]);
   });
 
   // AC delta: trec-covid ships ENABLED once the T-04 projection fix keeps its 42,139

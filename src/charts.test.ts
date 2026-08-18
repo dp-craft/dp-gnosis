@@ -9,7 +9,8 @@ import {
   type Chart,
   type ChartContext,
   type DeltaChart,
-  type RecallDepthChart
+  type RecallDepthChart,
+  RERANK_WINDOW
 } from './chartData.js';
 import { CHARTS_EXIT_OK, CHARTS_EXIT_USAGE, main } from './charts.js';
 import { parseChartsSpec } from './chartSpec.js';
@@ -274,10 +275,10 @@ describe('chart svg', () => {
     withoutNamespace.forEach(svg => expect(svg).not.toMatch(/https?:|<script|href=|@import/));
   });
 
-  it('marks the reranker input window at cutoff 20', () => {
+  it('marks the reranker input window at the engine\'s own cutoff', () => {
     const charts = buildCharts(contextOf(deltaFixture()), parseChartsSpec(RECALL_SPEC));
     const svg = renderChartSvg(only(charts));
-    expect(svg).toContain('RERANK_K_INIT = 20');
+    expect(svg).toContain(`RERANK_K_INIT = ${RERANK_WINDOW}`);
     expect(svg).toContain('recall@k');
   });
 
