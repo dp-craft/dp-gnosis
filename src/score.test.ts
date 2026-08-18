@@ -82,6 +82,13 @@ describe('scoreDataset', () => {
       recall300: undefined,
       recall1000: undefined,
       mrr10: 0,
+      precision5: 0,
+      precision10: 0,
+      allGoldInTop10: 0,
+      map: 0,
+      rPrecision: 0,
+      // the one retrieved id is UNJUDGED for this topic, so all the mass is residual
+      rbpResidual: 1,
     });
   });
 

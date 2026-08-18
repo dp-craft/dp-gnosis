@@ -77,6 +77,12 @@ const result: DatasetResult = {
     recall100: 0.9177,
     recall300: undefined,
     recall1000: undefined,
+    precision5: 0.2,
+    precision10: 0.15,
+    allGoldInTop10: 1,
+    map: 0.5,
+    rPrecision: 0.4,
+    rbpResidual: 0.3,
     mrr10: 0.66,
   },
   metricsSd: {
@@ -86,8 +92,15 @@ const result: DatasetResult = {
     recall100: 0.19,
     recall300: undefined,
     recall1000: undefined,
+    precision5: 0.2,
+    precision10: 0.15,
+    allGoldInTop10: 1,
+    map: 0.5,
+    rPrecision: 0.4,
+    rbpResidual: 0.3,
     mrr10: 0.36,
   },
+  rPrecisionTopics: 300,
   rankings: new Map([['q1', ['doc-a', 'doc-b']]]),
   perTopic: [
     {
@@ -99,6 +112,12 @@ const result: DatasetResult = {
         recall100: 1,
         recall300: undefined,
         recall1000: undefined,
+        precision5: 0.2,
+        precision10: 0.15,
+        allGoldInTop10: 1,
+        map: 0.5,
+        rPrecision: 0.4,
+        rbpResidual: 0.3,
         mrr10: 1,
       },
     },
@@ -159,6 +178,13 @@ describe('writeRunReport', () => {
         'recall100',
         'recall100Sd',
         'recall10Sd',
+        'precision5',
+        'precision10',
+        'allGoldInTop10',
+        'map',
+        'rPrecision',
+        'rPrecisionTopics',
+        'rbpResidual',
         'queryAdjacency',
         'rerank',
         'perTopicPath',
@@ -367,6 +393,23 @@ describe('readHistory', () => {
   it('returns nothing for a record that does not exist yet', () => {
     expect(readHistory(resolve(tempResultsDir(), HISTORY_FILE))).toEqual([]);
   });
+
+  it('round-trips a depth-20 row whose recall100 is UNMEASURABLE', () => {
+    const dir = tempResultsDir();
+    const shallow: DatasetResult = {
+      ...result,
+      metrics: { ...result.metrics, recall100: undefined },
+      metricsSd: { ...result.metricsSd, recall100: undefined },
+    };
+    writeRunReport({ resultsDir: dir, provenance: { ...provenance, depth: 20 }, results: [shallow] });
+    const rows = readHistory(resolve(dir, HISTORY_FILE));
+    // JSON.stringify DROPS the key, so requiring it in NUMBER_FIELDS would have
+    // discarded the whole row — the run would vanish from an append-only log.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.recall100).toBeUndefined();
+    expect(rows[0]?.recall10).toBeCloseTo(0.8, 12);
+    expect(rows[0]?.ndcg10).toBeCloseTo(0.6863, 12);
+  });
 });
 
 describe('renderTrecRun', () => {
@@ -458,7 +501,8 @@ describe('the new recall cutoffs', () => {
 
   it('names every cutoff in the per-topic TSV header', () => {
     expect(readPerTopicTsv(tempResultsDir())[0]).toBe(
-      'query_id\tndcg10\trecall10\trecall20\trecall100\trecall300\trecall1000\tmrr10'
+      'query_id\tndcg10\trecall10\trecall20\trecall100\trecall300\trecall1000\tmrr10' +
+        '\tprecision5\tprecision10\tallGoldInTop10\tmap\trPrecision\trbpResidual'
     );
   });
 

@@ -669,13 +669,21 @@ const measurementsOf = (
   scored: DatasetScore
 ): Pick<
   DatasetResult,
-  'queryMs' | 'queryP50Ms' | 'queryP95Ms' | 'metrics' | 'metricsSd' | 'perTopic' | 'rankings'
+  | 'queryMs'
+  | 'queryP50Ms'
+  | 'queryP95Ms'
+  | 'metrics'
+  | 'metricsSd'
+  | 'rPrecisionTopics'
+  | 'perTopic'
+  | 'rankings'
 > => ({
   queryMs: queried.queryMs,
   queryP50Ms: queried.queryP50Ms,
   queryP95Ms: queried.queryP95Ms,
   metrics: scored.mean,
   metricsSd: scored.sd,
+  rPrecisionTopics: scored.rPrecisionTopics,
   perTopic: scored.perTopic,
   rankings: queried.rankings,
 });
@@ -772,9 +780,14 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
 
 const metric = (value: number): string => value.toFixed(METRIC_DIGITS);
 
+/** A cutoff this run's depth never reached prints as absent, never as a score. */
+const optionalMetric = (value: number | undefined): string =>
+  value === undefined ? '—' : metric(value);
+
 const summaryLine = (result: DatasetResult): string =>
   `${result.dataset}: nDCG@10 ${metric(result.metrics.ndcg10)}  ` +
-  `R@10 ${metric(result.metrics.recall10)}  R@100 ${metric(result.metrics.recall100)}  ` +
+  `R@10 ${optionalMetric(result.metrics.recall10)}  ` +
+  `R@100 ${optionalMetric(result.metrics.recall100)}  ` +
   `MRR@10 ${metric(result.metrics.mrr10)}  ` +
   `(${result.topics} topics, ${result.atomCount} atoms, ${result.ingestMs}ms ingest, ` +
   `${result.queryMs}ms query)`;

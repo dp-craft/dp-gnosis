@@ -132,6 +132,12 @@ export const METRIC_LABELS: Readonly<Record<MetricName, string>> = {
   recall300: 'R@300',
   recall1000: 'R@1000',
   mrr10: 'MRR@10',
+  precision5: 'P@5',
+  precision10: 'P@10',
+  allGoldInTop10: 'all gold in top 10',
+  map: 'MAP',
+  rPrecision: 'R-Prec',
+  rbpResidual: 'RBP residual (p=0.8)',
 };
 
 const fail = (what: string): never => {

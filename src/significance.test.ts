@@ -44,6 +44,12 @@ const BASE_ROW: HistoryRow = {
   recall100: 0.5,
   recall300: undefined,
   recall1000: undefined,
+  precision5: 0.2,
+  precision10: 0.15,
+  allGoldInTop10: 1,
+  map: 0.5,
+  rPrecision: 0.4,
+  rbpResidual: 0.3,
   mrr10: 0.25,
 };
 
@@ -420,6 +426,12 @@ const scoresOf = (
         recall100: 0.2,
         recall300: undefined,
         recall1000: undefined,
+        precision5: 0.2,
+        precision10: 0.15,
+        allGoldInTop10: 1,
+        map: 0.5,
+        rPrecision: 0.4,
+        rbpResidual: 0.3,
         mrr10: 0.3,
       },
     ])
@@ -502,6 +514,18 @@ describe('per-topic TSV parsed by COLUMN NAME', () => {
     expect(scores?.get('q0')?.recall100).toBeCloseTo(0.2, 6);
     expect(scores?.get('q0')?.recall20).toBeUndefined();
     expect(scores?.get('q0')?.recall300).toBeUndefined();
+  });
+
+  it('reads a depth-20 file whose recall100 cell is EMPTY — still a measurement', () => {
+    // The header shape is unchanged (the column is always emitted); only the VALUE
+    // is absent. Requiring a recall100 value would reject every row of this file
+    // and read the whole run as missing.
+    const body = [CURRENT_HEADER, 'q0\t0.4000\t0.1000\t0.2000\t\t\t\t0.3000', ''].join('\n');
+    const scores = readPerTopic(writeTsv(body));
+    expect(scores?.size).toBe(1);
+    expect(scores?.get('q0')?.ndcg10).toBeCloseTo(0.4, 6);
+    expect(scores?.get('q0')?.mrr10).toBeCloseTo(0.3, 6);
+    expect(scores?.get('q0')?.recall100).toBeUndefined();
   });
 
   it('reads the current header, and an EMPTY field is undefined rather than 0', () => {

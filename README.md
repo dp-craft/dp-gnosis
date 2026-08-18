@@ -115,8 +115,15 @@ are fully regenerable by re-running the arm, and every metric derived from them
 is already in `history.jsonl`. Keep the run file an open analysis is reading;
 delete the rest.
 
-A `history.jsonl` row carries the four metrics (`ndcg10`, `recall10`,
-`recall100`, `mrr10`) next to the PROVENANCE that makes them comparable: `ts`,
+A `history.jsonl` row carries the metrics next to the PROVENANCE that makes them
+comparable. Only `ndcg10`, `mrr10`, `map` and `rbpResidual` are always present: a
+CUTOFF the run never retrieved to (`recall10` on a `--depth 5` run, `recall100`
+on a `--depth 20` one, `rPrecision` on a topic with more gold than the depth)
+writes NO key at all, which reads as "not measured" rather than as a number taken
+at the truncation point. The consumer metrics (`precision5`, `precision10`,
+`allGoldInTop10`, `map`, `rPrecision`, `rbpResidual`, and the `rPrecisionTopics`
+denominator) are absent from every row recorded before they existed. The
+provenance: `ts`,
 `gitSha`, `adapter`, `depth`, `rerank`, `atomMaxChars`, and `corpusBytes` /
 `corpusLines` as a cheap corpus checksum. `--compare` subtracts the last two
 rows per dataset and REFUSES a delta when any of those changed, naming the
@@ -131,9 +138,30 @@ the same measurement and must read alike.
 ## Validate the metrics against `pytrec_eval`
 
 `scripts/validate-metrics.py` re-scores a recorded run with `pytrec_eval` (the
-Python binding of `trec_eval`) and diffs nDCG@10 / R@100 against the matching
-`history.jsonl` row. It is a **one-off dev-time check, not a CI gate**: it needs
-a Python toolchain, and the answer changes only when `src/metrics.ts` changes.
+Python binding of `trec_eval`) and diffs six measures. It is a **one-off dev-time
+check, not a CI gate**: it needs a Python toolchain, and the answer changes only
+when `src/metrics.ts` changes.
+
+| Measure | `pytrec_eval` | Diffed against |
+|---|---|---|
+| nDCG@10 | `ndcg_cut_10` | the `history.jsonl` row |
+| R@100 | `recall_100` | the row — skipped, and said so, when the run's depth is below 100 |
+| P@5 / P@10 | `P_5` / `P_10` | `metrics.ts` itself |
+| MAP | `map` | `metrics.ts` itself |
+| R-Prec | `Rprec` | `metrics.ts` itself, and ONLY when every topic's `R` fits inside the run depth |
+
+The last four landed after every recorded row was written, so no row carries a
+value to diff. The script pipes the parsed run and qrels into the suite's OWN
+`scoreTopic` / `meanMetrics` through `npx tsx` and diffs that — nothing is
+re-implemented in Python, which could otherwise agree with `pytrec_eval` while
+the shipped scorer drifts.
+
+R-Prec is reported as **NOT ATTESTED** on a run where any topic has more gold
+documents than the depth: `metrics.ts` records that topic's `rPrecision` as
+unmeasurable (the ranking was truncated before rank R) and means over the
+measured subset, while `pytrec_eval` means over all topics. Measured 2026-08-18:
+attestable on scifact, not on nfcorpus (22 of 323 topics). `rbpResidual` has no
+`pytrec_eval` counterpart and is not attested at all.
 
 One-time setup, from this directory (`.venv/` is git-ignored):
 
@@ -147,7 +175,8 @@ Run it (datasets default to `scifact nfcorpus`):
 .venv/bin/python scripts/validate-metrics.py scifact nfcorpus
 ```
 
-Exit 0 = agreement within 1e-4 · exit 1 = disagreement · exit 2 = bad input.
+Exit 0 = agreement within 1e-4 · exit 1 = disagreement · exit 2 = bad input (a
+missing row / run file / qrels, or the `npx tsx` bridge failing to run).
 It resolves the run file from the row's `runPath` field, never by rebuilding a
 path. Two conventions have to be aligned by hand or the check reports a
 disagreement that is not a defect, and both are stated in the script's
@@ -169,6 +198,16 @@ Measured 2026-08-15 at `gitSha` `35c7a546`, run `2026-08-15-114122694-fts5-*`:
 
 Agreement is to floating-point noise (max |diff| 4.4e-16), not merely to 4
 decimal places.
+
+Measured 2026-08-18 over the latest recorded rows (`2026-08-16-193455040-minisearch-*`,
+depth 100), for the four measures diffed against `metrics.ts` directly:
+
+| Dataset | topics | P@5 | P@10 | MAP | R-Prec |
+|---|---|---|---|---|---|
+| scifact | 300 | 4e-16 | 2e-16 | 3e-16 | 0 |
+| nfcorpus | 323 | 4e-16 | 1e-16 | 0 | NOT ATTESTED (R > depth on 22 topics) |
+
+Cells are max \|diff\| against `pytrec_eval`.
 
 ## Sweep BM25 k1 and b
 

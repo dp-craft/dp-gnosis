@@ -12,7 +12,14 @@
  */
 
 import { mapNonEmptyLines } from './lines.js';
-import { ndcgAt, type Qrel, recallAt } from './metrics.js';
+import { ndcgAt, precisionAt, type Qrel, recallAt } from './metrics.js';
+
+/**
+ * Re-exported, not re-implemented: `metrics.ts` owns every scoring formula and
+ * is the module `pytrec_eval` attests, so a second P@k here could drift from the
+ * one the recorded runs were measured with.
+ */
+export { precisionAt };
 
 /** How many relevant documents the topic has, at any grade above 0. */
 const relevantCountOf = (qrel: Qrel): number =>
@@ -22,10 +29,6 @@ const gradeOf = (qrel: Qrel, docId: string): number => qrel.get(docId) ?? 0;
 
 const retrievedRelevantOf = (ranking: readonly string[], qrel: Qrel): number =>
   ranking.filter(docId => gradeOf(qrel, docId) > 0).length;
-
-/** Relevant documents in the top `k`, over `k` — unretrieved ranks count against it. */
-export const precisionAt = (ranking: readonly string[], qrel: Qrel, k: number): number =>
-  k <= 0 ? 0 : retrievedRelevantOf(ranking.slice(0, k), qrel) / k;
 
 /**
  * The best nDCG@k reachable by REORDERING what this ranking actually retrieved —

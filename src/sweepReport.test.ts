@@ -31,6 +31,12 @@ const metrics = (ndcg10: number): Metrics => ({
   recall100: ndcg10,
   recall300: undefined,
   recall1000: undefined,
+  precision5: 0.2,
+  precision10: 0.15,
+  allGoldInTop10: 1,
+  map: 0.5,
+  rPrecision: 0.4,
+  rbpResidual: 0.3,
   mrr10: ndcg10 * 2,
 });
 

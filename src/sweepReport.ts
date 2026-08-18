@@ -273,14 +273,14 @@ export const writeSweepPerTopic = (options: SweepPerTopicOptions): string => {
 
 // ---------------------------------------------------------------- markdown
 
-/** R@20 only, for the reason `report.ts`'s results table carries it. */
+/** Any cutoff the sweep's depth did not reach, for `report.ts`'s reason. */
 const optionalMetric = (value: number | undefined): string =>
   value === undefined ? '—' : metric(value);
 
 const gridRow = (cell: SweepCell): string =>
   `| ${cell.dataset} | ${cell.k1} | ${cell.b} | ${cell.baseline ? 'baseline' : ''} | ` +
-  `${metric(cell.metrics.ndcg10)} | ${metric(cell.metrics.recall10)} | ` +
-  `${optionalMetric(cell.metrics.recall20)} | ${metric(cell.metrics.recall100)} | ` +
+  `${metric(cell.metrics.ndcg10)} | ${optionalMetric(cell.metrics.recall10)} | ` +
+  `${optionalMetric(cell.metrics.recall20)} | ${optionalMetric(cell.metrics.recall100)} | ` +
   `${metric(cell.metrics.mrr10)} | ${cell.queryMs} | ` +
   `${significanceLabel(cell.significance)} |`;
 

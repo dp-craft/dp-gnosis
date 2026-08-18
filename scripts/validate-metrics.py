@@ -10,6 +10,22 @@ by reconstructing a path — a reconstructed path can land on a file another run
 wrote), scores it against the dataset's official qrels with `pytrec_eval`, and
 diffs nDCG@10 / R@100 against the metrics recorded on the row.
 
+It then diffs FOUR MORE measures — `P_5`, `P_10`, `map`, `Rprec` — against
+`metrics.ts` itself rather than against the row: those columns landed after every
+recorded row was written, so a row carries no value to diff. The script pipes the
+parsed run and qrels into the suite's OWN `scoreTopic`/`meanMetrics` through
+`npx tsx` (see `metrics_ts_means`) and diffs that. Nothing is re-implemented in
+Python — a second implementation here could agree with `pytrec_eval` while the
+shipped one drifts.
+
+`Rprec` is attested only when EVERY topic has `R <= depth`. `metrics.ts` records
+`rPrecision` as unmeasurable for a topic whose gold count exceeds the run depth
+(the ranking was truncated before rank R) and means over the measured subset,
+while `pytrec_eval` means over all topics; on a run where any topic is truncated
+the two denominators differ and the comparison is REPORTED AS NOT ATTESTED rather
+than silently made. `rbpResidual` has no `pytrec_eval` counterpart and is not
+attested here at all.
+
 Conventions aligned with `metrics.ts` (`metrics.ts:1-33`), and why each matters:
 
 1. TOPIC SET — `run.ts:topicsOf` scores every qrels topic that has query text,
@@ -42,12 +58,14 @@ Run:
     .venv/bin/python scripts/validate-metrics.py scifact nfcorpus
 
 Exit 0 = every dataset agrees within 1e-4. Exit 1 = a disagreement (the finding).
-Exit 2 = an input problem (missing row, missing run file, missing qrels).
+Exit 2 = an input problem (missing row, missing run file, missing qrels, or the
+`npx tsx` bridge to `metrics.ts` failing to run).
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -130,6 +148,80 @@ def read_run(path: Path) -> dict[str, dict[str, float]]:
     return run
 
 
+# The suite's OWN scorer, called over stdin. Kept to reading a payload and
+# printing means: every formula stays in `metrics.ts`, which is the module under
+# attestation.
+BRIDGE = """
+import { readFileSync } from 'node:fs';
+import { meanMetrics, rPrecisionTopics, scoreTopic } from './src/metrics.ts';
+const payload = JSON.parse(readFileSync(0, 'utf8'));
+const perTopic = payload.topics.map((t) => scoreTopic(t.ranking, new Map(t.qrel), payload.depth));
+process.stdout.write(
+  JSON.stringify({ mean: meanMetrics(perTopic), rPrecisionTopics: rPrecisionTopics(perTopic) })
+);
+"""
+
+
+def ranked_docs(run: dict[str, dict[str, float]], topic: str) -> list[str]:
+    """Rank order = descending score, ties by doc id — trec_eval's own ordering."""
+    scored = run.get(topic, {})
+    return [doc for doc, _ in sorted(scored.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def metrics_ts_means(
+    run: dict[str, dict[str, float]],
+    qrels: dict[str, dict[str, int]],
+    topics: list[str],
+    depth: int,
+) -> dict:
+    """`metrics.ts` scored over the SAME topic set, through the shipped code."""
+    payload = {
+        "depth": depth,
+        "topics": [
+            {"ranking": ranked_docs(run, topic), "qrel": list(qrels.get(topic, {}).items())}
+            for topic in topics
+        ],
+    }
+    completed = subprocess.run(
+        ["npx", "tsx", "-e", BRIDGE],
+        cwd=SUITE_ROOT,
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        fail(f"metrics.ts bridge failed (npx tsx): {completed.stderr.strip()[:400]}")
+    return json.loads(completed.stdout)
+
+
+def mean_over(scored: dict, topics: list[str], measure: str) -> float:
+    return sum(scored.get(t, {}).get(measure, 0.0) for t in topics) / len(topics)
+
+
+# pytrec_eval measure -> the `metrics.ts` field it must equal.
+CONSUMER_MEASURES = (("P_5", "precision5"), ("P_10", "precision10"), ("map", "map"))
+
+
+def diff_line(label: str, external: float, ours: float) -> tuple[float, str]:
+    delta = abs(external - ours)
+    return delta, f"  {label:<9} pytrec_eval {external:.6f}  metrics.ts {ours:.6f}  |diff| {delta:.2e}"
+
+
+def consumer_diffs(scored: dict, topics: list[str], ours: dict) -> tuple[bool, list[str]]:
+    """P@5 / P@10 / MAP, plus R-Prec when every topic's R fits inside the depth."""
+    rows = [
+        diff_line(measure, mean_over(scored, topics, measure), ours["mean"][field])
+        for measure, field in CONSUMER_MEASURES
+    ]
+    if ours["rPrecisionTopics"] == len(topics):
+        rows.append(diff_line("Rprec", mean_over(scored, topics, "Rprec"), ours["mean"]["rPrecision"]))
+    else:
+        measured = ours["rPrecisionTopics"]
+        rows.append((0.0, f"  Rprec     NOT ATTESTED — R > depth on {len(topics) - measured} of {len(topics)} topics"))
+    return all(delta <= TOLERANCE for delta, _ in rows), [text for _, text in rows]
+
+
 def validate(dataset: str) -> bool:
     entry = manifest_entry(dataset)
     row = latest_row(dataset)
@@ -142,18 +234,35 @@ def validate(dataset: str) -> bool:
     # run's topic set. A zero-hit topic has no run lines and still counts as 0.
     topics = sorted(set(qrels) & query_ids(directory))
 
-    evaluator = pytrec_eval.RelevanceEvaluator(qrels, {"ndcg_cut_10", "recall_100"})
+    measures = {"ndcg_cut_10", "recall_100", "P_5", "P_10", "map", "Rprec"}
+    evaluator = pytrec_eval.RelevanceEvaluator(qrels, measures)
     scored = evaluator.evaluate(run)
-    ndcg = sum(scored.get(t, {}).get("ndcg_cut_10", 0.0) for t in topics) / len(topics)
-    recall = sum(scored.get(t, {}).get("recall_100", 0.0) for t in topics) / len(topics)
+    ndcg = mean_over(scored, topics, "ndcg_cut_10")
+    recall = mean_over(scored, topics, "recall_100")
 
     d_ndcg = abs(ndcg - row["ndcg10"])
-    d_recall = abs(recall - row["recall100"])
-    ok = d_ndcg <= TOLERANCE and d_recall <= TOLERANCE and len(topics) == row["topics"]
+    # A row recorded below depth 100 has no recall100 to diff — that is the point
+    # of the cutoff being unmeasurable, not a missing number.
+    recorded_recall = row.get("recall100")
+    d_recall = None if recorded_recall is None else abs(recall - recorded_recall)
 
-    print(f"{dataset}: {'AGREE' if ok else 'DISAGREE'}  (topics {len(topics)} vs recorded {row['topics']}, run {row['runPath']})")
+    ours = metrics_ts_means(run, qrels, topics, row["depth"])
+    consumer_ok, consumer_rows = consumer_diffs(scored, topics, ours)
+    ok = (
+        d_ndcg <= TOLERANCE
+        and (d_recall is None or d_recall <= TOLERANCE)
+        and consumer_ok
+        and len(topics) == row["topics"]
+    )
+
+    print(f"{dataset}: {'AGREE' if ok else 'DISAGREE'}  (topics {len(topics)} vs recorded {row['topics']}, run {row['runPath']}, depth {row['depth']})")
     print(f"  nDCG@10   pytrec_eval {ndcg:.6f}  metrics.ts {row['ndcg10']:.6f}  |diff| {d_ndcg:.2e}")
-    print(f"  R@100     pytrec_eval {recall:.6f}  metrics.ts {row['recall100']:.6f}  |diff| {d_recall:.2e}")
+    if d_recall is None:
+        print(f"  R@100     pytrec_eval {recall:.6f}  metrics.ts —  (depth {row['depth']} < 100: not measurable)")
+    else:
+        print(f"  R@100     pytrec_eval {recall:.6f}  metrics.ts {recorded_recall:.6f}  |diff| {d_recall:.2e}")
+    for line in consumer_rows:
+        print(line)
     return ok
 
 

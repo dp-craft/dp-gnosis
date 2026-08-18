@@ -85,9 +85,9 @@ export interface ProvenanceChange {
  */
 export interface MetricDelta {
   readonly ndcg10: number;
-  readonly recall10: number;
+  readonly recall10: number | undefined;
   readonly recall20: number | undefined;
-  readonly recall100: number;
+  readonly recall100: number | undefined;
   readonly recall300: number | undefined;
   readonly recall1000: number | undefined;
   readonly mrr10: number;
@@ -270,9 +270,9 @@ const optionalDelta = (
 
 const deltaOf = (previous: HistoryRow, latest: HistoryRow): MetricDelta => ({
   ndcg10: latest.ndcg10 - previous.ndcg10,
-  recall10: latest.recall10 - previous.recall10,
+  recall10: optionalDelta(previous.recall10, latest.recall10),
   recall20: optionalDelta(previous.recall20, latest.recall20),
-  recall100: latest.recall100 - previous.recall100,
+  recall100: optionalDelta(previous.recall100, latest.recall100),
   recall300: optionalDelta(previous.recall300, latest.recall300),
   recall1000: optionalDelta(previous.recall1000, latest.recall1000),
   mrr10: latest.mrr10 - previous.mrr10,
@@ -325,9 +325,9 @@ const optionalText = (label: string, value: number | undefined): string =>
 
 const metricsText = (comparison: ComparisonDelta | ComparisonArmDelta): string =>
   `nDCG@10 ${signed(comparison.delta.ndcg10)}  ` +
-  `R@10 ${signed(comparison.delta.recall10)}  ` +
+  optionalText('R@10', comparison.delta.recall10) +
   optionalText('R@20', comparison.delta.recall20) +
-  `R@100 ${signed(comparison.delta.recall100)}  ` +
+  optionalText('R@100', comparison.delta.recall100) +
   optionalText('R@300', comparison.delta.recall300) +
   optionalText('R@1000', comparison.delta.recall1000) +
   `MRR@10 ${signed(comparison.delta.mrr10)}  ` +

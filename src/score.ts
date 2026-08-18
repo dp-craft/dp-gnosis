@@ -24,7 +24,14 @@
  */
 import { basename } from 'node:path';
 
-import { meanMetrics, type Metrics, type Qrel, scoreTopic, sdMetrics } from './metrics.js';
+import {
+  meanMetrics,
+  type Metrics,
+  type Qrel,
+  rPrecisionTopics,
+  scoreTopic,
+  sdMetrics
+} from './metrics.js';
 
 const MARKDOWN_EXT = '.md';
 
@@ -51,6 +58,13 @@ export interface DatasetScore {
   readonly mean: Metrics;
   /** Sample sd (n-1) of the per-topic values — the sample-size input. */
   readonly sd: Metrics;
+  /**
+   * How many topics R-Precision was measurable on. Its cutoff is `R`, the
+   * topic's own gold count, so a deep topic can exceed the run depth while its
+   * neighbours do not — the mean is over this subset, and the subset size
+   * travels with it so the denominator is never implicit.
+   */
+  readonly rPrecisionTopics: number;
 }
 
 /** An atom with no `sources` frontmatter has no document — it is skipped. */
@@ -92,5 +106,10 @@ export const scoreDataset = (
     metrics: scoreTopic(ranking, qrels.get(queryId) ?? EMPTY_QREL, depth),
   }));
   const metrics = perTopic.map(topic => topic.metrics);
-  return { perTopic, mean: meanMetrics(metrics), sd: sdMetrics(metrics) };
+  return {
+    perTopic,
+    mean: meanMetrics(metrics),
+    sd: sdMetrics(metrics),
+    rPrecisionTopics: rPrecisionTopics(metrics),
+  };
 };

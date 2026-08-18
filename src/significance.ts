@@ -68,17 +68,33 @@ const PERMUTATION_STREAM = SIGNIFICANCE_SEED;
 const BOOTSTRAP_STREAM = SIGNIFICANCE_SEED ^ 0x9e37_79b9;
 
 /**
- * The metrics EVERY per-topic TSV has carried since the first recorded run. A
- * file missing one of them is not ours; a file missing only the later recall
- * cutoffs is a legacy file and still parses, with those cutoffs `undefined`.
+ * The column NAMES every per-topic TSV has carried since the first recorded run
+ * — the header signature that says a file is ours. They are still always
+ * EMITTED, so this detection is unchanged by a cutoff becoming unmeasurable.
  */
-const REQUIRED_COLUMNS = ['ndcg10', 'recall10', 'recall100', 'mrr10'] as const;
+const HEADER_COLUMNS = ['ndcg10', 'recall10', 'recall100', 'mrr10'] as const;
 
-/** Which of the four measures the test is run on; the caller names it. */
+/**
+ * The columns whose VALUE must be present for a row to be a measurement. It is a
+ * strict subset of `HEADER_COLUMNS`: a run below depth 100 emits the `recall100`
+ * column with an EMPTY cell, and requiring a value there would reject every row
+ * of that file and read the whole run as missing.
+ */
+const REQUIRED_VALUES = ['ndcg10', 'mrr10'] as const;
+
+/** Which measure the test is run on; the caller names it. */
 export type MetricName = keyof Metrics;
 
+/**
+ * The READ side of `Metrics`: a TSV recorded before a column existed carries no
+ * cell for it, and a cutoff the run never retrieved to carries an empty one. Both
+ * read as `undefined` — never as 0, which the paired test would subtract as a
+ * measured difference.
+ */
+export type ParsedMetrics = { readonly [K in keyof Metrics]: number | undefined };
+
 /** Per-topic scores for one run, keyed by `query_id`. */
-export type TopicScores = ReadonlyMap<string, Metrics>;
+export type TopicScores = ReadonlyMap<string, ParsedMetrics>;
 
 /** The answer: a mean difference with the noise floor attached to it. */
 export interface SignificanceVerdict {
@@ -248,19 +264,25 @@ const cellValue = (raw: string | undefined): number | undefined => {
 
 type CellsByColumn = ReadonlyMap<string, number | undefined>;
 
-const parseMetrics = (cells: CellsByColumn): Metrics | undefined => {
-  const present = REQUIRED_COLUMNS.filter(column => cells.get(column) !== undefined);
-  return present.length < REQUIRED_COLUMNS.length
-    ? undefined
-    : {
-        ndcg10: cells.get('ndcg10') ?? 0,
-        recall10: cells.get('recall10') ?? 0,
-        recall20: cells.get('recall20'),
-        recall100: cells.get('recall100') ?? 0,
-        recall300: cells.get('recall300'),
-        recall1000: cells.get('recall1000'),
-        mrr10: cells.get('mrr10') ?? 0,
-      };
+const metricsFrom = (cells: CellsByColumn): ParsedMetrics => ({
+  ndcg10: cells.get('ndcg10'),
+  recall10: cells.get('recall10'),
+  recall20: cells.get('recall20'),
+  recall100: cells.get('recall100'),
+  recall300: cells.get('recall300'),
+  recall1000: cells.get('recall1000'),
+  mrr10: cells.get('mrr10'),
+  precision5: cells.get('precision5'),
+  precision10: cells.get('precision10'),
+  allGoldInTop10: cells.get('allGoldInTop10'),
+  map: cells.get('map'),
+  rPrecision: cells.get('rPrecision'),
+  rbpResidual: cells.get('rbpResidual'),
+});
+
+const parseMetrics = (cells: CellsByColumn): ParsedMetrics | undefined => {
+  const present = REQUIRED_VALUES.filter(column => cells.get(column) !== undefined);
+  return present.length < REQUIRED_VALUES.length ? undefined : metricsFrom(cells);
 };
 
 /** Fields addressed by the header's column NAMES, so a legacy file still reads. */
@@ -270,7 +292,7 @@ const cellsOf = (header: readonly string[], columns: readonly string[]): CellsBy
 const parseRow = (
   header: readonly string[],
   line: string
-): readonly [string, Metrics] | undefined => {
+): readonly [string, ParsedMetrics] | undefined => {
   const columns = line.split('\t');
   const queryId = columns[0];
   if (queryId === undefined || queryId.length === 0 || columns.length !== header.length) {
@@ -281,14 +303,14 @@ const parseRow = (
 };
 
 const isEntry = (
-  entry: readonly [string, Metrics] | undefined
-): entry is readonly [string, Metrics] => entry !== undefined;
+  entry: readonly [string, ParsedMetrics] | undefined
+): entry is readonly [string, ParsedMetrics] => entry !== undefined;
 
 /** Ours when it is keyed by `query_id` and names every metric a run has always had. */
 const headerOf = (line: string | undefined): readonly string[] | undefined => {
   const columns = line === undefined ? [] : line.split('\t');
   return columns[0] === PER_TOPIC_QUERY_COLUMN &&
-    REQUIRED_COLUMNS.every(column => columns.includes(column))
+    HEADER_COLUMNS.every(column => columns.includes(column))
     ? columns
     : undefined;
 };

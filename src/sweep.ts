@@ -241,10 +241,14 @@ export const measureCell = async (
 
 const metric = (value: number): string => value.toFixed(METRIC_DIGITS);
 
+/** A cutoff this sweep's depth never reached prints as absent, never as a score. */
+const optionalMetric = (value: number | undefined): string =>
+  value === undefined ? '—' : metric(value);
+
 const cellLine = (cell: SweepCell, index: number, total: number): string =>
   `  [${index + 1}/${total}] k1=${cell.k1} b=${cell.b}${cell.baseline ? ' (baseline)' : ''}  ` +
-  `nDCG@10 ${metric(cell.metrics.ndcg10)}  R@10 ${metric(cell.metrics.recall10)}  ` +
-  `R@100 ${metric(cell.metrics.recall100)}  MRR@10 ${metric(cell.metrics.mrr10)}  ` +
+  `nDCG@10 ${metric(cell.metrics.ndcg10)}  R@10 ${optionalMetric(cell.metrics.recall10)}  ` +
+  `R@100 ${optionalMetric(cell.metrics.recall100)}  MRR@10 ${metric(cell.metrics.mrr10)}  ` +
   `(${cell.queryMs}ms)`;
 
 /**

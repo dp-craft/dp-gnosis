@@ -132,6 +132,8 @@ export interface DatasetResult {
   readonly metrics: Metrics;
   /** Sample sd (n-1) of the per-topic values behind `metrics`. */
   readonly metricsSd: Metrics;
+  /** Topics R-Precision was measurable on — the denominator behind its mean. */
+  readonly rPrecisionTopics?: number;
   readonly perTopic: readonly TopicScore[];
   /**
    * The document ranking per topic, in rank order — the run file's whole input.
@@ -150,7 +152,12 @@ export interface DatasetResult {
  * requiring a late field would erase every earlier run from the progress log —
  * the one thing this append-only file exists to prevent.
  */
-export interface HistoryRow extends Metrics {
+type LateMetrics = Pick<
+  Metrics,
+  'precision5' | 'precision10' | 'allGoldInTop10' | 'map' | 'rPrecision' | 'rbpResidual'
+>;
+
+export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<LateMetrics> {
   readonly ts: string;
   readonly gitSha: string;
   readonly dataset: string;
@@ -158,6 +165,14 @@ export interface HistoryRow extends Metrics {
   readonly domain?: string;
   readonly docShape?: string;
   readonly queryShape?: string;
+  /**
+   * How many topics R-Precision was MEASURED on. Its cutoff is the topic's own
+   * gold count, so measurability varies per topic and its mean covers a subset;
+   * this is that subset's size. Deliberately NOT on `Metrics` — `MetricName` is
+   * `keyof Metrics`, and a topic COUNT must never be offerable as a pairable
+   * metric. Absent on rows written before it existed.
+   */
+  readonly rPrecisionTopics?: number;
   /** Sample sd (n-1) of the per-topic values; absent on older rows. */
   readonly ndcg10Sd?: number;
   readonly recall10Sd?: number;
@@ -416,12 +431,21 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   queryAdjacency: provenance.queryAdjacency,
   ...descriptorFields(result),
   ...costFields(result),
+  rPrecisionTopics: result.rPrecisionTopics,
   ...result.metrics,
   ...sdFields(result.metricsSd),
 });
 
 const STRING_FIELDS: readonly string[] = ['ts', 'gitSha', 'dataset', 'adapter'];
 
+/**
+ * The fields whose NUMBER a row must carry to be recognised. The recall cutoffs
+ * are NOT among them: `JSON.stringify` drops an `undefined`, so a run below
+ * depth 100 writes no `recall100` key at all, and requiring it would make
+ * `readHistory` DISCARD the row — erasing the run from an append-only progress
+ * log. The consumer metrics are absent for the same reason in the other
+ * direction: every row recorded before they existed lacks them.
+ */
 const NUMBER_FIELDS: readonly string[] = [
   'corpusBytes',
   'corpusLines',
@@ -432,8 +456,6 @@ const NUMBER_FIELDS: readonly string[] = [
   'ingestMs',
   'queryMs',
   'ndcg10',
-  'recall10',
-  'recall100',
   'mrr10',
 ];
 
@@ -486,13 +508,15 @@ const optionalMetric = (value: number | undefined): string =>
  * that pool is `RERANK_K_INIT` wide and has moved, so recall anywhere inside the
  * pool is reachable and only recall that lands in the head buys anything
  * downstream. R@300/@1000 stay in the JSON and the per-topic TSV: they exist for
- * the depth curve, and a nine-metric row is unreadable.
+ * the depth curve, and a nine-metric row is unreadable. The consumer metrics
+ * (P@5, P@10, all-gold, MAP, R-Prec, RBP residual) stay out of this table for
+ * that same reason, and are read off the TSV and the JSON summary.
  */
 const markdownRow = (result: DatasetResult): string =>
   `| ${result.dataset} | ${result.domain} | ${result.docShape} | ${result.topics} | ` +
   `${metric(result.metrics.ndcg10)} | ${metric(result.metricsSd.ndcg10)} | ` +
-  `${metric(result.metrics.recall10)} | ${optionalMetric(result.metrics.recall20)} | ` +
-  `${metric(result.metrics.recall100)} | ` +
+  `${optionalMetric(result.metrics.recall10)} | ${optionalMetric(result.metrics.recall20)} | ` +
+  `${optionalMetric(result.metrics.recall100)} | ` +
   `${metric(result.metrics.mrr10)} | ${result.queryP50Ms} | ${result.queryP95Ms} |`;
 
 /**
@@ -539,6 +563,12 @@ export const PER_TOPIC_METRIC_COLUMNS = [
   'recall300',
   'recall1000',
   'mrr10',
+  'precision5',
+  'precision10',
+  'allGoldInTop10',
+  'map',
+  'rPrecision',
+  'rbpResidual',
 ] as const satisfies readonly (keyof Metrics)[];
 
 const TSV_HEADER = [PER_TOPIC_QUERY_COLUMN, ...PER_TOPIC_METRIC_COLUMNS].join('\t');
