@@ -5,6 +5,8 @@
  */
 import {
   ATOM_TYPES,
+  REPHRASE_MODEL_ENV_VAR,
+  REPHRASE_MODEL_ID,
   RERANK_DEFAULT_URL,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
@@ -37,6 +39,9 @@ export const HELP_TEXT: string = [
   `Rerank: --rerank on \`retrieve\` only, OFF by default — reranks the top ${RERANK_K_INIT} with ${RERANK_MODEL_ID} and RRF-fuses that order with the first pass, then applies the budget`,
   `  the endpoint is a llama-swap OpenAI-compatible server at ${RERANK_DEFAULT_URL}, overridable with ${RERANK_URL_ENV_VAR}`,
   '  an unreachable server, or one not serving that model, is a usage error (exit 2) naming which of the two happened — the results are never silently unreranked',
+  `Rephrase: --rephrase on \`retrieve\` only, OFF by default — rewrites the question into a BM25 keyword query with ${REPHRASE_MODEL_ID} (override with ${REPHRASE_MODEL_ENV_VAR}) before the first pass, then searches the rewrite`,
+  '  the rewrite is cached on disk beside the index, so a repeated query costs no network; the reported query stays the one you typed, with the rewrite beside it as queryRewritten',
+  '  a refused rewrite still retrieves with the query AS TYPED, but exits 3 with the refusal in note — a skipped rewrite never reports as a rephrased run',
   'Profile: --profile <file> selects one named instance — its vocabulary, its labelling tables and its own repoRoot, corpusRoots, atomsDir and indexPath',
   '  precedence is flag > profile > default, so --atoms-dir / --index-path / --repo-root still override whatever the profile states',
   '  each profile MUST own its atomsDir AND its indexPath: an atoms directory is stamped with its owner and refuses a second profile',
@@ -53,7 +58,7 @@ export const HELP_TEXT: string = [
   'JSON keys with --json (plus exitCode on every object):',
   '  ingest    command, written, skipped[{source,title,reasons}]',
   '  index     command, adapter, built, indexPath, note',
-  '  retrieve  command, adapter, query, k, mode, indexState, count, atoms[{id,title,domain,body,score,sourcePath,originPaths[]}],',
+  '  retrieve  command, adapter, query, queryRewritten (with --rephrase only), k, mode, indexState, count, atoms[{id,title,domain,body,score,sourcePath,originPaths[]}],',
   '            skipped[{id,sourcePath,estimatedTokens}], note',
   '  bench     command, markdownPath, jsonPath, adapters[], skippedAdapters[{name,reason}], corpora[], goldenSet',
   '  failure   error',

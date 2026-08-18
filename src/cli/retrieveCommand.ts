@@ -14,6 +14,7 @@ import { fitToTokenBudget } from '../budget.js';
 import type { AtomType } from '../config.js';
 import { ATOM_TYPES, RERANK_K_INIT, RETRIEVE_TOKEN_BUDGET } from '../config.js';
 import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
+import { rephraseQuery } from '../rephrase.js';
 import { rerankAtoms } from '../rerank.js';
 import { createPort } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -53,6 +54,20 @@ export const MAX_TOKENS_FLAG = '--max-tokens';
  * what it was before the reranker existed. `cli.ts` refuses it elsewhere.
  */
 export const RERANK_FLAG = '--rerank';
+
+/**
+ * The query rewriter, `retrieve` only and OPT-IN: without it the query reaches
+ * the adapter exactly as typed. `cli.ts` refuses it elsewhere.
+ *
+ * The plan's `rewriteRules[]` output — the model reporting WHICH of the six
+ * rules it applied — is deliberately NOT implemented: a model's own account of
+ * its reasoning is unverifiable, so it would be prose presented as provenance.
+ * What IS reported is the rewritten query itself, which the reader can check.
+ */
+export const REPHRASE_FLAG = '--rephrase';
+
+/** The rewrite cache sits beside the index it serves, like the embedding cache. */
+const REPHRASE_CACHE_SUFFIX = '.rephrase-cache';
 
 const maxTokensError = (raw: string): string =>
   `${MAX_TOKENS_FLAG} must be a non-negative integer — got "${raw}"; pass e.g. \`${MAX_TOKENS_FLAG} ${RETRIEVE_TOKEN_BUDGET}\``;
@@ -111,8 +126,13 @@ const NO_CORPUS =
 
 const isUnavailable = (result: RetrievalResult): boolean => result.indexState === 'unavailable';
 
-const exitCodeFor = (result: RetrievalResult): number =>
-  isUnavailable(result) ? EXIT_PARTIAL : EXIT_OK;
+/**
+ * A refused rewrite is PARTIAL, not success: the run did retrieve, but not the
+ * way `--rephrase` claimed it would, and a caller that reads exit 0 would take
+ * the raw-query ranking for a rephrased one.
+ */
+const exitCodeFor = (request: RetrieveRequest, result: RetrievalResult): number =>
+  isUnavailable(result) || request.rephraseRefusal !== undefined ? EXIT_PARTIAL : EXIT_OK;
 
 const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
 
@@ -157,10 +177,22 @@ const skippedLine = (skipped: SkippedAtom): string =>
 const skipText = (budgeted: BudgetedResult): readonly string[] =>
   hasSkips(budgeted) ? [budgetWarning(budgeted), ...budgeted.skipped.map(skippedLine)] : [];
 
-const retrieveText = (budgeted: BudgetedResult): string => {
+/**
+ * The rewrite is stated in FULL, both sides: the ranking is evidence about the
+ * rewritten query, and a reader who cannot see what was actually searched
+ * cannot judge the results.
+ */
+const rephraseLines = (request: RetrieveRequest): readonly string[] => {
+  const rewritten = request.queryRewritten;
+  if (rewritten !== undefined) return [`retrieve: rephrased "${request.query}" -> "${rewritten}"`];
+  return request.rephraseRefusal === undefined ? [] : [request.rephraseRefusal];
+};
+
+const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): string => {
   const { result } = budgeted;
   return [
     `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
+    ...rephraseLines(request),
     ...(isUnavailable(result) ? [NO_CORPUS] : []),
     ...result.atoms.flatMap(atomLines),
     ...skipText(budgeted),
@@ -174,6 +206,7 @@ type ArgsResult =
     readonly maxTokens: number;
     readonly types: readonly AtomType[] | undefined;
     readonly rerank: boolean;
+    readonly rephrase: boolean;
   }
   | { readonly ok: false; readonly error: string };
 
@@ -187,7 +220,14 @@ const resolveArgs = (flags: FlagValues): ArgsResult => {
     return { ok: false, error: maxTokensError(rawFlag(flags, MAX_TOKENS_FLAG)) };
   }
   return types.ok
-    ? { ok: true, k, maxTokens, types: types.types, rerank: flags[RERANK_FLAG] === true }
+    ? {
+        ok: true,
+        k,
+        maxTokens,
+        types: types.types,
+        rerank: flags[RERANK_FLAG] === true,
+        rephrase: flags[REPHRASE_FLAG] === true,
+      }
     : { ok: false, error: types.error };
 };
 
@@ -199,17 +239,39 @@ interface RetrieveRequest {
   /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
   readonly types: readonly AtomType[] | undefined;
   readonly rerank: boolean;
+  readonly rephrase: boolean;
+  /** The rewrite `--rephrase` produced; `undefined` when it was off or refused. */
+  readonly queryRewritten: string | undefined;
+  /** The rewriter's refusal, carried into the note and the PARTIAL exit code. */
+  readonly rephraseRefusal: string | undefined;
 }
+
+/**
+ * The text the SEARCH runs on — the rewrite when there is one, the raw query
+ * otherwise. One helper, because the port and the reranker MUST see the same
+ * string: a reranker scoring the raw query against a rewritten first pass would
+ * fuse two orders produced for two different questions.
+ */
+const effectiveQuery = (request: RetrieveRequest): string =>
+  request.queryRewritten ?? request.query;
 
 /**
  * One `note` key carries whichever refusal happened, so a caller reads a single
  * field instead of two. A skip and an absent corpus cannot co-occur: nothing was
  * retrieved to budget in the second case.
  */
-const noteField = (budgeted: BudgetedResult): Readonly<Record<string, string>> => {
+const noteField = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult
+): Readonly<Record<string, string>> => {
+  if (request.rephraseRefusal !== undefined) return { note: request.rephraseRefusal };
   if (hasSkips(budgeted)) return { note: budgetWarning(budgeted) };
   return isUnavailable(budgeted.result) ? { note: NO_CORPUS } : {};
 };
+
+/** Omitted entirely when no rewrite happened, so an unrephrased payload is unchanged. */
+const rewrittenField = (request: RetrieveRequest): Readonly<Record<string, string>> =>
+  request.queryRewritten === undefined ? {} : { queryRewritten: request.queryRewritten };
 
 /** The `--json` payload. Its key set is adapter-independent by construction. */
 const payload = (
@@ -219,13 +281,14 @@ const payload = (
   command: 'retrieve',
   adapter: request.context.adapter,
   query: request.query,
+  ...rewrittenField(request),
   k: request.k,
   mode: budgeted.result.mode,
   indexState: budgeted.result.indexState,
   count: budgeted.result.atoms.length,
   atoms: budgeted.result.atoms,
   skipped: budgeted.skipped,
-  ...noteField(budgeted),
+  ...noteField(request, budgeted),
 });
 
 /**
@@ -259,9 +322,15 @@ const documentXml = (atom: RetrievedAtom, repoRoot: string): string =>
     '  </document>',
   ].join('\n');
 
+const rewrittenAttribute = (request: RetrieveRequest): readonly string[] =>
+  request.queryRewritten === undefined
+    ? []
+    : [xmlAttribute('queryRewritten', request.queryRewritten)];
+
 const rootAttributes = (request: RetrieveRequest, result: RetrievalResult): string =>
   [
     xmlAttribute('query', request.query),
+    ...rewrittenAttribute(request),
     xmlAttribute('adapter', request.context.adapter),
     xmlAttribute('mode', result.mode),
     xmlAttribute('indexState', result.indexState),
@@ -327,7 +396,7 @@ const rankedResult = async (
   result: RetrievalResult
 ): Promise<RankedResult> => {
   if (!request.rerank) return { ok: true, result };
-  const reranked = await rerankAtoms(request.query, result.atoms);
+  const reranked = await rerankAtoms(effectiveQuery(request), result.atoms);
   if (!reranked.ok) return reranked;
   const atoms = reranked.atoms.slice(0, request.k);
   return { ok: true, result: { ...result, atoms, mode: `${result.mode}+rerank` } };
@@ -343,18 +412,36 @@ const applyBudget = (result: RetrievalResult, maxTokens: number): BudgetedResult
   return { result: { ...result, atoms: fit.kept }, skipped: fit.skipped, maxTokens };
 };
 
+/**
+ * The rewrite, resolved onto the request before anything is searched.
+ *
+ * A refusal is NOT fatal: the RAW query is still retrieved with, because a
+ * caller asking a question deserves an answer more than it deserves silence.
+ * What it MUST NOT get is exit 0 — the refusal becomes the note and the run is
+ * PARTIAL, so a rephrased run and a degraded one are never confused.
+ */
+const withRewrite = async (request: RetrieveRequest): Promise<RetrieveRequest> => {
+  if (!request.rephrase) return request;
+  const outcome = await rephraseQuery(request.query, {
+    cacheDir: `${request.context.indexPath}${REPHRASE_CACHE_SUFFIX}`,
+  });
+  return outcome.ok
+    ? { ...request, queryRewritten: outcome.rewritten }
+    : { ...request, rephraseRefusal: outcome.error };
+};
+
 const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
-  const { context, query } = request;
+  const { context } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
-  const result = await port.retrieve(query, retrieveOptions(request));
+  const result = await port.retrieve(effectiveQuery(request), retrieveOptions(request));
   port.close?.();
   const ranked = await rankedResult(request, result);
   if (!ranked.ok) return usageError(ranked.error);
   const budgeted = applyBudget(ranked.result, request.maxTokens);
   return {
-    exitCode: exitCodeFor(ranked.result),
+    exitCode: exitCodeFor(request, ranked.result),
     data: payload(request, budgeted),
-    text: retrieveText(budgeted),
+    text: retrieveText(request, budgeted),
     xml: retrieveXml(request, budgeted),
   };
 };
@@ -364,12 +451,17 @@ export const runRetrieveCommand = async (context: CommandContext): Promise<Comma
   const args = resolveArgs(context.flags);
   if (query.length === 0) return usageError(NO_QUERY);
   if (!args.ok) return usageError(args.error);
-  return await search({
-    context,
-    query,
-    k: args.k,
-    maxTokens: args.maxTokens,
-    types: args.types,
-    rerank: args.rerank,
-  });
+  return await search(
+    await withRewrite({
+      context,
+      query,
+      k: args.k,
+      maxTokens: args.maxTokens,
+      types: args.types,
+      rerank: args.rerank,
+      rephrase: args.rephrase,
+      queryRewritten: undefined,
+      rephraseRefusal: undefined,
+    })
+  );
 };

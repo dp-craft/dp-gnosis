@@ -219,6 +219,37 @@ export const RERANK_PRESET_NAMES = Object.keys(RERANK_FUSION_PRESETS) as readonl
 export const DEFAULT_RERANK_PRESET: RerankPresetName = 'shipped';
 
 /**
+ * The rewriter behind `retrieve --rephrase`, overridden by
+ * {@link REPHRASE_MODEL_ENV_VAR}. A CHAT model, not a reranker — but it is
+ * served by the SAME llama-swap instance, so it reuses
+ * {@link RERANK_DEFAULT_URL} / {@link RERANK_URL_ENV_VAR} rather than owning a
+ * second address that could drift from it.
+ */
+export const REPHRASE_MODEL_ID = 'qwen38-27b-q4kxl-ctx130k-mtp-coding';
+
+/** Environment override for {@link REPHRASE_MODEL_ID}, read in `resolveRephraseModel` alone. */
+export const REPHRASE_MODEL_ENV_VAR = 'DP_GNOSIS_LLM_MODEL';
+
+/**
+ * Generous enough to absorb a COLD llama-swap load: this model measured 69 s
+ * from eviction, and a reranker load measured 1 m 59 s (GNOSIS-GUIDE.md
+ * § Landmines). A warm rewrite takes 0.6–1.4 s, so this ceiling is only ever
+ * paid once per eviction.
+ */
+export const REPHRASE_TIMEOUT_MS = 300_000;
+
+/** A keyword line, not prose. */
+export const REPHRASE_MAX_TOKENS = 120;
+
+/**
+ * Bumped whenever `REPHRASE_SYSTEM_PROMPT` changes — it is part of the cache
+ * key. A cache that outlived a prompt change would serve one prompt's rewrites
+ * under another's name with a fresh mtime, which is the stale-derived-artefact
+ * landmine in GNOSIS-GUIDE.md § Landmines.
+ */
+export const REPHRASE_PROMPT_VERSION = 'v1';
+
+/**
  * The embedding model the dense leg calls, served by llama-swap under this id.
  * One id, one model: vectors from two encoders are not comparable, and the
  * embedding cache keys on this id so a change MISSES rather than serving one

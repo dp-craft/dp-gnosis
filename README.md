@@ -60,7 +60,22 @@ Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried bl
 | `-k` | positive integer | `5` |
 | `--format` | `text\|json\|xml` — **`retrieve` only** | `text` |
 | `--json` | boolean — alias for `--format json` | off |
+| `--rephrase` | boolean — **`retrieve` only**, rewrite the query into BM25 keywords first | off |
 | `--help` / `-h` | boolean | off |
+
+#### `--rephrase` — the rules below, executed
+
+`--rephrase` sends the query to a local chat model (`qwen38-27b-q4kxl-ctx130k-mtp-coding`, override with `DP_GNOSIS_LLM_MODEL`) served by the same llama-swap instance as the reranker (`http://127.0.0.1:9292`, override with `DP_GNOSIS_RERANK_URL`), and searches what comes back. The system prompt is § Query rephrasing's six rules plus its example table — the flag EXECUTES the documented rules rather than owning a second set.
+
+| Property | Behaviour |
+|---|---|
+| Opt-in | Without the flag the retrieval path is byte-identical to what it always was — no second network hop, no second failure surface |
+| Reported | `query` stays what you typed; the rewrite is reported beside it as `queryRewritten` (JSON + xml attribute), and as one `retrieve: rephrased "…" -> "…"` line in text |
+| Cached | Keyed by `(model, prompt version, query)` under `<indexPath>.rephrase-cache`; a hit costs no network, so a warm cache works with llama-swap stopped. A cache read or write failure degrades silently |
+| Refusal | A server that is down, does not serve the model, or answers with no usable line still retrieves — with the query **as typed** — but exits **3** with the refusal in `note`. A skipped rewrite never reports as a rephrased run |
+| Cost | 0.6–1.4 s warm. A COLD llama-swap load of that model measured 69 s, paid once per eviction |
+
+Rewriting by hand and passing the result is still the cheapest path; the flag exists for a caller that cannot rewrite (a shell script, a non-English question).
 
 `bench` deliberately IGNORES `--adapter`: a benchmark of one adapter is not a comparison.
 
@@ -87,7 +102,7 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 |---|---|
 | `ingest` | `command`, `written`, `skipped[{source,title,reasons[]}]` |
 | `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note` |
-| `retrieve` | `command`, `adapter`, `query`, `k`, `mode`, `indexState`, `count`, `atoms[{id,title,domain,body,score,sourcePath}]`, plus `note` when `indexState` is `unavailable` |
+| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `atoms[{id,title,domain,body,score,sourcePath}]`, plus `note` when `indexState` is `unavailable` |
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
 | any usage failure | `error` |
 
@@ -253,6 +268,8 @@ The five rules:
 3. **Add synonyms by hand.** BM25 has NO synonymy. `e2e` does not match `end-to-end`; `LLM` does not match `language model`. Include both.
 4. **Prefer rare terms.** IDF rewards them. One `llama-swap` outweighs ten `system`s.
 5. **MUST NOT dilute a query that already carries the exact rare term.** This is the measured exception to rule 3. When the user's own words already contain the corpus's domain term, adding synonyms *lowers* precision — the added terms pull in unrelated documents and sink the exact match. `how to use llama-swap` beat its rewrite (P@10 0.60 vs 0.55) for exactly this reason. Rephrase to *supply* a missing domain term, never to decorate one that is already there.
+
+These rules are also EXECUTABLE: `retrieve --rephrase` hands the question to a local chat model under exactly this prompt and searches its rewrite (§ CLI → `--rephrase`). The flag is opt-in and its rewrite is reported, so a caller can always see — and check — what was actually searched.
 
 Grammar and word order are **irrelevant** — it is a bag of words. `zustand selector stability` and `stability selector zustand` score identically.
 

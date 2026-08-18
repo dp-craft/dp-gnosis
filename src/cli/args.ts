@@ -36,6 +36,8 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--max-tokens': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only, OPT-IN: RRF-fuse a reranker pass over the first pass.
   '--rerank': { kind: 'boolean' },
+  // `retrieve` only, OPT-IN: rewrite the query into keywords before the first pass.
+  '--rephrase': { kind: 'boolean' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },
