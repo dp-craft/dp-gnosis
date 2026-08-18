@@ -131,6 +131,46 @@ describe('ingest profile parsing', () => {
     ).toThrowError(/atomMaxChars/);
   });
 
+  it('carries optional excludePaths, refusing an absolute or parent-traversing prefix', () => {
+    expect(
+      parseIngestProfile({ ...rawMini(), excludePaths: ['docs/tmp', 'docs/benchmarks'] }, 'mini.json')
+        .excludePaths
+    ).toEqual(['docs/tmp', 'docs/benchmarks']);
+    expect(parseIngestProfile(rawMini(), 'mini.json').excludePaths).toBeUndefined();
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), excludePaths: ['/etc/passwd'] }, 'mini.json')
+    ).toThrowError(/\/etc\/passwd/);
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), excludePaths: ['docs/../secrets'] }, 'mini.json')
+    ).toThrowError(/docs\/\.\.\/secrets/);
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), excludePaths: ['docs/tmp', ''] }, 'mini.json')
+    ).toThrowError(/excludePaths/);
+  });
+
+  it('carries optional defaultExcludedTypes, refusing a type outside the profile vocabulary', () => {
+    expect(
+      parseIngestProfile({ ...rawMini(), defaultExcludedTypes: ['page'] }, 'mini.json')
+        .defaultExcludedTypes
+    ).toEqual(['page']);
+    expect(parseIngestProfile(rawMini(), 'mini.json').defaultExcludedTypes).toBeUndefined();
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), defaultExcludedTypes: ['pge'] }, 'mini.json')
+    ).toThrowError(/pge/);
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), defaultExcludedTypes: ['pge'] }, 'mini.json')
+    ).toThrowError(/page/);
+  });
+
+  it('still refuses an unknown key, now naming the two exclusion keys as accepted', () => {
+    expect(() => parseIngestProfile({ ...rawMini(), excludePath: [] }, 'mini.json')).toThrowError(
+      /unknown key\(s\) excludePath /
+    );
+    expect(() => parseIngestProfile({ ...rawMini(), excludePath: [] }, 'mini.json')).toThrowError(
+      /excludePaths, defaultExcludedTypes/
+    );
+  });
+
   it('writes one atom for a document the shipped cap would split, when the profile raises it', async () => {
     const tree = await makeTree();
     const long = `${SECTION_BODY} `.repeat(40).trim();
@@ -172,6 +212,19 @@ describe('shipped default profile', () => {
     expect(shipped.types).toHaveLength(15);
     expect(shipped.defaultType).toBe('knowledge');
     expect(shipped.segmentRules).toEqual([{ segment: '95-brainstorms', type: 'brainstorm' }]);
+  });
+
+  it('declares the shipped path exclusions and the default-excluded history types', () => {
+    const shipped = loadIngestProfile(INGEST_PROFILE_PATH);
+
+    expect(shipped.excludePaths).toEqual(['docs/tmp', 'docs/benchmarks']);
+    expect(shipped.defaultExcludedTypes).toEqual([
+      'feature-log',
+      'benchmark',
+      'review',
+      'brainstorm',
+    ]);
+    expect(shipped.defaultExcludedTypes?.every(type => shipped.types.includes(type))).toBe(true);
   });
 
   it('accepts research, plan and lessons-learned on write', () => {

@@ -31,6 +31,8 @@ import { resolveLocations } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import {
+  EXCLUDE_TYPE_FLAG,
+  INCLUDE_HISTORY_FLAG,
   MAX_TOKENS_FLAG,
   REPHRASE_FLAG,
   RERANK_FLAG,
@@ -118,7 +120,7 @@ const wantsHelp = (args: ParsedArgs): boolean =>
   args.command === undefined || args.flags['--help'] === true || args.flags['-h'] === true;
 
 /**
- * `--format`, `--type`, `--max-tokens`, `--rerank` with its three tuning flags,
+ * `--format`, `--type` with `--exclude-type` / `--include-history`, `--max-tokens`, `--rerank` with its three tuning flags,
  * and `--rephrase` belong to `retrieve` alone. Elsewhere they are refused
  * through the SAME message an unknown flag gets: a flag no command can honour
  * MUST NOT look accepted, and one wording keeps the correction identical either
@@ -129,6 +131,8 @@ const RETRIEVE_COMMAND = 'retrieve';
 const RETRIEVE_ONLY_FLAGS: readonly string[] = [
   FORMAT_FLAG,
   TYPE_FLAG,
+  EXCLUDE_TYPE_FLAG,
+  INCLUDE_HISTORY_FLAG,
   MAX_TOKENS_FLAG,
   RERANK_FLAG,
   RERANK_MODEL_FLAG,

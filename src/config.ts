@@ -545,3 +545,19 @@ export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = DEFAULT_INGEST_PROFI
  */
 export const typeForSource = (repoRelativePath: string): AtomType =>
   expectMember(typeForPath(DEFAULT_INGEST_PROFILE, repoRelativePath), ATOM_TYPES, 'type');
+
+/**
+ * The types the CLI hides from `retrieve` unless the caller asks for them, as
+ * declared by the profile (`defaultExcludedTypes`). It is a PRESENTATION
+ * default and lives on the CLI path alone: nothing in ingest, the port or an
+ * adapter reads it, so a corpus still holds every atom and the bench — which
+ * calls the port directly — measures exactly what it always measured.
+ *
+ * Each value is narrowed against {@link ATOM_TYPES} at load, so a profile
+ * naming a type outside the closed vocabulary stops the process with the defect
+ * named instead of silently excluding nothing. An absent key reads as an empty
+ * list, which is today's behaviour exactly.
+ */
+export const DEFAULT_EXCLUDED_TYPES: readonly AtomType[] = (
+  DEFAULT_INGEST_PROFILE.defaultExcludedTypes ?? []
+).map(value => expectMember(value, ATOM_TYPES, 'defaultExcludedTypes[]'));

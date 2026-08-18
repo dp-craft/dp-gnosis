@@ -50,6 +50,10 @@
     { "prefix": "doc/50-testing-strategy/", "type": "standard" },
     { "prefix": "dp-gnosis/cache/bench/corpus-ext/", "type": "vendor-doc" }
   ],
+  "comment:excludePaths": "`docs/` holds 22,808 .md files, and 22,597 of them are machine output: `docs/tmp` (12,211) and `docs/benchmarks` (10,386). Ingesting them buries the ~211 authored documents that are the actual target, so the two generated roots are excluded by path before anything is chunked. Same prefix semantics as domainRules: a repo-relative, forward-slash prefix.",
+  "excludePaths": ["docs/tmp", "docs/benchmarks"],
+  "comment:defaultExcludedTypes": "Owner decision D5, 2026-08-18: 6,475 of 11,345 atoms (57.1%) are history-shaped — a feature log, a benchmark run, a review or a brainstorm — and on the CLI path they drown the authored knowledge a question is asking for. They stay INGESTED and INDEXED and are one flag away; only the default result set leaves them out, so the benchmark still measures the FULL corpus and every recorded number stands. Nothing reads this key yet — the CLI wiring is a separate task.",
+  "defaultExcludedTypes": ["feature-log", "benchmark", "review", "brainstorm"],
   "comment:segmentRules": "Brainstorms are a SEGMENT rule, not a prefix rule: the directory appears under three unrelated parents, and enumerating those parents would silently mislabel the fourth one somebody adds. Matched on whole path segments, so a directory merely ENDING in the name cannot claim it. A segment rule OVERRIDES every prefix rule.",
   "segmentRules": [{ "segment": "95-brainstorms", "type": "brainstorm" }]
 }
