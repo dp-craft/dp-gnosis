@@ -3,7 +3,7 @@
   "comment:editing": "An unknown domain or type is REFUSED at write time, so a new label MUST be added to `domains`/`types` here before any rule may name it. A missing or malformed file is a hard error — ingest MUST NOT fall back to built-in values. The shipped vocabularies are mirrored as TypeScript unions in src/config.ts and the two are checked equal at load, so a value added here MUST be added there too.",
   "name": "default",
   "domains": ["runner", "standards", "adr", "docs", "claude"],
-  "comment:types": "`knowledge` is the FALLBACK, not the norm — the directory an authored document lives in already carries what kind of document it is, so it stays for the sources no rule claims. `research`, `plan` and `lessons-learned` are accepted on write but deliberately claimed by NO rule: their real directory names are not settled, and a guessed prefix mislabels silently.",
+  "comment:types": "`knowledge` is the FALLBACK, not the norm — the directory an authored document lives in already carries what kind of document it is, so it stays for the sources no rule claims. `research`, `plan` and `lessons-learned` were accepted on write but claimed by NO rule until T2.1, because their real directory names were not settled; the `docs/research/`, `docs/plans/` and `docs/implementation-lessons-learned/` typeRules below are what finally claim them, from the directories the repo actually authors into.",
   "types": [
     "knowledge",
     "feature-log",
@@ -30,11 +30,12 @@
     { "prefix": "doc/40-code-standards/90-decisions/", "domain": "adr" },
     { "prefix": "claude-artifacts/", "domain": "standards" },
     { "prefix": "doc/", "domain": "docs" },
+    { "prefix": "docs/", "domain": "docs" },
     { "prefix": ".claude/", "domain": "claude" },
     { "prefix": "dp-gnosis/corpus-hu/", "domain": "docs" },
     { "prefix": "dp-gnosis/cache/bench/corpus-ext/", "domain": "docs" }
   ],
-  "comment:typeRules": "Same longest-prefix-wins rule: `doc/40-code-standards/90-decisions/` (adr) outranks `doc/40-code-standards/` (standard) by prefix length, not by row order. The external benchmark root types as `vendor-doc` so a type filter alone separates it from authored repo knowledge.",
+  "comment:typeRules": "Same longest-prefix-wins rule: `doc/40-code-standards/90-decisions/` (adr) outranks `doc/40-code-standards/` (standard) by prefix length, not by row order. The external benchmark root types as `vendor-doc` so a type filter alone separates it from authored repo knowledge. The `docs/` rows claim only the subtrees the repo actually authors into; anything else under `docs/` falls to `knowledge`, and `docs/analysis/` types as `review` because its documents ARE reviews under another name.",
   "typeRules": [
     { "prefix": "doc/90-history/10-feature-log/", "type": "feature-log" },
     { "prefix": "doc/80-research-library/papers/", "type": "paper" },
@@ -48,8 +49,18 @@
     { "prefix": "claude-artifacts/standards/", "type": "standard" },
     { "prefix": "doc/40-code-standards/", "type": "standard" },
     { "prefix": "doc/50-testing-strategy/", "type": "standard" },
+    { "prefix": "docs/research/", "type": "research" },
+    { "prefix": "docs/plans/", "type": "plan" },
+    { "prefix": "docs/implementation-lessons-learned/", "type": "lessons-learned" },
+    { "prefix": "docs/adrs/", "type": "adr" },
+    { "prefix": "docs/reviews/", "type": "review" },
+    { "prefix": "docs/analysis/", "type": "review" },
     { "prefix": "dp-gnosis/cache/bench/corpus-ext/", "type": "vendor-doc" }
   ],
+  "comment:excludePaths": "`docs/` holds 22,808 .md files, and 22,597 of them are machine output: `docs/tmp` (12,211) and `docs/benchmarks` (10,386). Ingesting them buries the ~211 authored documents that are the actual target, so the two generated roots are excluded by path before anything is chunked. `doc/_meta/corpus-digest.md` is excluded as a NAVIGATION artefact, not as generated bulk: it produces 204 atoms and carries one line of vocabulary from every document in the corpus, so it scores on almost any query (observed at rank 2 and rank 5 on unrelated probes). Only that one file — the rest of `doc/_meta/` is authored content and stays. Same prefix semantics as domainRules (a repo-relative, forward-slash `startsWith` prefix), so a DIRECTORY prefix carries a trailing slash: `docs/tmp/` cannot silently swallow the sibling `docs/tmpl/`, and `docs/benchmarks/` cannot swallow `docs/benchmarking/` (105 atoms, which survived until now only because the string happened not to match).",
+  "excludePaths": ["docs/tmp/", "docs/benchmarks/", "doc/_meta/corpus-digest.md"],
+  "comment:defaultExcludedTypes": "Owner decision D5, 2026-08-18: 6,475 of 11,345 atoms (57.1%) are history-shaped — a feature log, a benchmark run, a review or a brainstorm — and on the CLI path they drown the authored knowledge a question is asking for. They stay INGESTED and INDEXED and are one flag away; only the default result set leaves them out, so the benchmark still measures the FULL corpus and every recorded number stands. `src/config.ts` reads it into the exported `DEFAULT_EXCLUDED_TYPES`, and `src/cli/retrieveCommand.ts` applies that list to an unfiltered CLI `retrieve`; `--exclude-type` REPLACES it and `--include-history` empties it.",
+  "defaultExcludedTypes": ["feature-log", "benchmark", "review", "brainstorm"],
   "comment:segmentRules": "Brainstorms are a SEGMENT rule, not a prefix rule: the directory appears under three unrelated parents, and enumerating those parents would silently mislabel the fourth one somebody adds. Matched on whole path segments, so a directory merely ENDING in the name cannot claim it. A segment rule OVERRIDES every prefix rule.",
   "segmentRules": [{ "segment": "95-brainstorms", "type": "brainstorm" }]
 }

@@ -33,6 +33,11 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--format': { kind: 'value', placeholder: '<text|json|xml>' },
   // `retrieve` only, refused elsewhere through the same unknown-flag path.
   '--type': { kind: 'value', placeholder: '<type[,type]>' },
+  // `retrieve` only: REPLACES the profile's default type exclusion, so the
+  // caller states the whole exclusion rather than adding to an invisible one.
+  '--exclude-type': { kind: 'value', placeholder: '<type[,type]>' },
+  // `retrieve` only: search every type, default exclusion included.
+  '--include-history': { kind: 'boolean' },
   // `retrieve` only: the injection budget in estimated tokens (UTF-8 bytes).
   '--max-tokens': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only, OPT-IN: RRF-fuse a reranker pass over the first pass.

@@ -72,7 +72,22 @@ export interface IngestProfile {
    * while the repo vault's long authored sections genuinely need the split.
    */
   readonly atomMaxChars?: number | undefined;
+  /**
+   * Repo-relative path prefixes this instance MUST NOT ingest, matched exactly
+   * as a domain rule's prefix is. Absent means nothing is excluded, so an
+   * existing profile walks the same corpus it always did.
+   */
+  readonly excludePaths?: readonly string[] | undefined;
+  /**
+   * Type names the CLI retrieve path leaves out unless a caller asks for them.
+   * It is a PRESENTATION default, not a corpus one: every such atom is still
+   * ingested and still indexed, so a benchmark measures the full corpus.
+   */
+  readonly defaultExcludedTypes?: readonly string[] | undefined;
 }
+
+/** The exclusion half: what a profile leaves out, of the corpus and of a result. */
+type ProfileExclusions = Pick<IngestProfile, 'excludePaths' | 'defaultExcludedTypes'>;
 
 /** The location half of a profile — what T-3 added to the vocabulary half. */
 type ProfileLocations = Pick<
@@ -96,6 +111,8 @@ const KNOWN_KEYS: readonly string[] = [
   'atomsDir',
   'indexPath',
   'atomMaxChars',
+  'excludePaths',
+  'defaultExcludedTypes',
 ];
 
 const fail = (source: string, detail: string): never => {
@@ -249,6 +266,60 @@ const segmentRule = (
   }),
 });
 
+/**
+ * A path prefix is repo-relative by contract, so an absolute one or one walking
+ * out through `..` is REFUSED rather than normalised: silently rebasing it would
+ * exclude a directory nobody named, and the symptom is only missing atoms.
+ */
+const unsafePrefix = (value: string): boolean => value.startsWith('/') || value.includes('..');
+
+/** An empty member would prefix-match EVERY path, so it is refused, not dropped. */
+const withoutEmptyMember = (
+  values: readonly string[] | undefined,
+  key: string,
+  source: string
+): readonly string[] | undefined =>
+  values?.includes('') === true
+    ? fail(source, `field "${key}" contains an empty string — every member must be non-empty`)
+    : values;
+
+const excludePathList = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string
+): readonly string[] | undefined => {
+  const value = withoutEmptyMember(optionalStringList(raw, 'excludePaths', source), 'excludePaths', source);
+  const offender = value?.find(unsafePrefix);
+  return offender === undefined
+    ? value
+    : fail(
+        source,
+        `field "excludePaths" names "${offender}" — a prefix MUST be repo-relative, neither absolute nor containing ".."`
+      );
+};
+
+/**
+ * Checked against the profile's OWN `types`, by the same closed-vocabulary rule
+ * every label obeys: a typo here would exclude nothing and read as a working
+ * default, so the name is refused with the accepted vocabulary beside it.
+ */
+const defaultExcludedTypeList = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string,
+  types: readonly string[]
+): readonly string[] | undefined =>
+  optionalStringList(raw, 'defaultExcludedTypes', source)?.map((value, index) =>
+    member(value, types, { source, where: `defaultExcludedTypes[${index}]` })
+  );
+
+const exclusionsOf = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string,
+  types: readonly string[]
+): ProfileExclusions => ({
+  excludePaths: excludePathList(raw, source),
+  defaultExcludedTypes: defaultExcludedTypeList(raw, source, types),
+});
+
 const locationsOf = (
   raw: Readonly<Record<string, unknown>>,
   source: string
@@ -292,6 +363,7 @@ export const parseIngestProfile = (raw: unknown, source: string): IngestProfile 
     typeRules: ruleList(raw, 'typeRules', source).map((rule, i) => typeRule(rule, i, typeCtx)),
     segmentRules: ruleList(raw, 'segmentRules', source).map((rule, i) => segmentRule(rule, i, typeCtx)),
     atomMaxChars: optionalPositiveInteger(raw, 'atomMaxChars', source),
+    ...exclusionsOf(raw, source, types),
     ...locationsOf(raw, source),
   };
 };

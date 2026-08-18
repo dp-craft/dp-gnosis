@@ -367,8 +367,16 @@ export const BM25_IDF_SMOOTHING = 0.5;
  * golden set draws 46 of its 103 atoms from `claude-artifacts/` and 30 from the
  * repo-root `RUNNER-*.md` files, so a `doc/`-only corpus leaves most of the
  * benchmark unscoreable.
+ *
+ * `docs` (with an s) is a SECOND, unrelated tree, and it is in scope as of
+ * T2.1: it holds the research notes, plans, ADRs, reviews and lessons-learned
+ * a question about this project is most often asking for, and until now every
+ * one of them failed the scope gate silently. It is also where the machine
+ * output lives — 22 597 of its 22 808 markdown files are generated — so the
+ * root is only usable together with the profile's `excludePaths`, which drop
+ * `docs/tmp` and `docs/benchmarks` before anything is read.
  */
-export const CORPUS_ROOTS: readonly string[] = ['doc', 'claude-artifacts', 'RUNNER-*.md'];
+export const CORPUS_ROOTS: readonly string[] = ['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md'];
 
 /** Comma-separated override of `CORPUS_ROOTS`, read in `resolveCorpusRoots` alone. */
 export const CORPUS_ROOTS_ENV_VAR = 'DP_GNOSIS_CORPUS_ROOTS';
@@ -545,3 +553,19 @@ export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = DEFAULT_INGEST_PROFI
  */
 export const typeForSource = (repoRelativePath: string): AtomType =>
   expectMember(typeForPath(DEFAULT_INGEST_PROFILE, repoRelativePath), ATOM_TYPES, 'type');
+
+/**
+ * The types the CLI hides from `retrieve` unless the caller asks for them, as
+ * declared by the profile (`defaultExcludedTypes`). It is a PRESENTATION
+ * default and lives on the CLI path alone: nothing in ingest, the port or an
+ * adapter reads it, so a corpus still holds every atom and the bench — which
+ * calls the port directly — measures exactly what it always measured.
+ *
+ * Each value is narrowed against {@link ATOM_TYPES} at load, so a profile
+ * naming a type outside the closed vocabulary stops the process with the defect
+ * named instead of silently excluding nothing. An absent key reads as an empty
+ * list, which is today's behaviour exactly.
+ */
+export const DEFAULT_EXCLUDED_TYPES: readonly AtomType[] = (
+  DEFAULT_INGEST_PROFILE.defaultExcludedTypes ?? []
+).map(value => expectMember(value, ATOM_TYPES, 'defaultExcludedTypes[]'));

@@ -52,7 +52,7 @@ describe('paths', () => {
 
 describe('resolveCorpusRoots', () => {
   it('defaults to the declared corpus roots when the override is absent or blank', () => {
-    expect(CORPUS_ROOTS).toEqual(['doc', 'claude-artifacts', 'RUNNER-*.md']);
+    expect(CORPUS_ROOTS).toEqual(['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md']);
     expect(resolveCorpusRoots({})).toEqual(CORPUS_ROOTS);
     expect(resolveCorpusRoots({ [CORPUS_ROOTS_ENV_VAR]: '' })).toEqual(CORPUS_ROOTS);
     expect(resolveCorpusRoots({ [CORPUS_ROOTS_ENV_VAR]: ' , ' })).toEqual(CORPUS_ROOTS);
@@ -117,7 +117,7 @@ describe('domainForSource', () => {
 
   it('returns undefined for an unmapped path', () => {
     expect(domainForSource('src/features/chat/index.ts')).toBeUndefined();
-    expect(domainForSource('docs/plans/some-plan.md')).toBeUndefined();
+    expect(domainForSource('electron/main.ts')).toBeUndefined();
     expect(domainForSource('')).toBeUndefined();
   });
 

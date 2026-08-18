@@ -14,6 +14,7 @@ import { fitToTokenBudget } from '../budget.js';
 import type { AtomType } from '../config.js';
 import {
   ATOM_TYPES,
+  DEFAULT_EXCLUDED_TYPES,
   RERANK_K_INIT,
   RETRIEVE_TOKEN_BUDGET
 } from '../config.js';
@@ -52,6 +53,17 @@ const resolveK = (flags: FlagValues): number | undefined => {
 
 /** The type filter belongs to `retrieve` alone; `cli.ts` refuses it elsewhere. */
 export const TYPE_FLAG = '--type';
+
+/**
+ * The exclusion override, `retrieve` only; `cli.ts` refuses it elsewhere. It
+ * REPLACES {@link DEFAULT_EXCLUDED_TYPES} instead of extending it, so what a
+ * run excluded is what the caller typed — an exclusion silently unioned with an
+ * invisible default is not readable off the command line.
+ */
+export const EXCLUDE_TYPE_FLAG = '--exclude-type';
+
+/** Search every type, default exclusion included. `retrieve` only. */
+export const INCLUDE_HISTORY_FLAG = '--include-history';
 
 /** The budget override, `retrieve` only; `cli.ts` refuses it elsewhere. */
 export const MAX_TOKENS_FLAG = '--max-tokens';
@@ -194,14 +206,20 @@ const rawFlag = (flags: FlagValues, name: string): string => stringFlag(flags, n
  * ranking as a filtered one. The message names the offending value AND the whole
  * vocabulary, so the correction needs no second call.
  */
-const typeError = (offender: string): string =>
-  `${TYPE_FLAG} value "${offender}" is outside the closed vocabulary — replace it with one of ${ATOM_TYPES.join(' | ')}; pass several as \`${TYPE_FLAG} adr,review\``;
+const typeError = (offender: string, flag: string = TYPE_FLAG): string =>
+  `${flag} value "${offender}" is outside the closed vocabulary — replace it with one of ${ATOM_TYPES.join(' | ')}; pass several as \`${flag} adr,review\``;
 
 const splitTypes = (raw: string): readonly string[] => raw.split(',').map(part => part.trim());
 
 const asType = (value: string): AtomType | undefined => ATOM_TYPES.find(type => type === value);
 
-type TypesResult =
+/**
+ * `types: undefined` = no filter reaches the port at all. It is deliberately
+ * NOT "the whole vocabulary spelled out": the unfiltered call is the path every
+ * recorded number was measured on, and passing a complete list instead would
+ * change the query the adapter builds.
+ */
+export type TypesResult =
   | { readonly ok: true; readonly types: readonly AtomType[] | undefined }
   | { readonly ok: false; readonly error: string };
 
@@ -214,6 +232,71 @@ const resolveTypes = (flags: FlagValues): TypesResult => {
   return offender === undefined
     ? { ok: true, types: requested.flatMap(value => asType(value) ?? []) }
     : { ok: false, error: typeError(offender) };
+};
+
+/**
+ * The three ways to state a type filter, and a run may use exactly ONE: they
+ * mean different things (name the types, replace the exclusion, exclude
+ * nothing), so honouring one and dropping another would hand back a filter the
+ * caller never asked for under a success code.
+ */
+const FILTER_SOURCE_FLAGS: readonly string[] = [TYPE_FLAG, EXCLUDE_TYPE_FLAG, INCLUDE_HISTORY_FLAG];
+
+const filterConflictError = (given: readonly string[]): string =>
+  `${given.join(' and ')} each select the type filter, and a run may state it only once — ${TYPE_FLAG} names the only types to search, ${EXCLUDE_TYPE_FLAG} replaces the default exclusion, ${INCLUDE_HISTORY_FLAG} searches every type`;
+
+const filterConflict = (flags: FlagValues): string | undefined => {
+  const given = FILTER_SOURCE_FLAGS.filter(flag => flags[flag] !== undefined);
+  return given.length > 1 ? filterConflictError(given) : undefined;
+};
+
+/**
+ * An exclusion that leaves nothing is refused HERE rather than sent on: the
+ * port refuses an empty type list too, but only after the run looks well-formed,
+ * and this message names the flags that produced the emptiness.
+ */
+const emptyExclusionError = (): string =>
+  `${EXCLUDE_TYPE_FLAG} excludes every type in the vocabulary, so nothing could be searched — drop a value, or pass ${INCLUDE_HISTORY_FLAG} to search all of ${ATOM_TYPES.join(' | ')}`;
+
+type ExcludedResult =
+  | { readonly ok: true; readonly excluded: readonly AtomType[] }
+  | { readonly ok: false; readonly error: string };
+
+/** The exclusion in force: none with `--include-history`, the flag's list when
+ * given, the shipped profile default otherwise. */
+const resolveExcluded = (flags: FlagValues): ExcludedResult => {
+  if (flags[INCLUDE_HISTORY_FLAG] === true) return { ok: true, excluded: [] };
+  const raw = stringFlag(flags, EXCLUDE_TYPE_FLAG);
+  if (raw === undefined) return { ok: true, excluded: DEFAULT_EXCLUDED_TYPES };
+  const requested = splitTypes(raw);
+  const offender = requested.find(value => asType(value) === undefined);
+  return offender === undefined
+    ? { ok: true, excluded: requested.flatMap(value => asType(value) ?? []) }
+    : { ok: false, error: typeError(offender, EXCLUDE_TYPE_FLAG) };
+};
+
+/** Excluding nothing passes NO filter, keeping the today-path byte-identical. */
+const keptTypes = (excluded: readonly AtomType[]): TypesResult => {
+  if (excluded.length === 0) return { ok: true, types: undefined };
+  const kept = ATOM_TYPES.filter(type => !excluded.includes(type));
+  return kept.length === 0 ? { ok: false, error: emptyExclusionError() } : { ok: true, types: kept };
+};
+
+const exclusionFilter = (flags: FlagValues): TypesResult => {
+  const excluded = resolveExcluded(flags);
+  return excluded.ok ? keptTypes(excluded.excluded) : { ok: false, error: excluded.error };
+};
+
+/**
+ * The effective type filter for one run. `--type` is an explicit request and
+ * WINS whole: nothing is subtracted from a list the caller named. Only when it
+ * is absent does the default exclusion apply.
+ */
+export const resolveTypeFilter = (flags: FlagValues): TypesResult => {
+  const conflict = filterConflict(flags);
+  if (conflict !== undefined) return { ok: false, error: conflict };
+  const requested = resolveTypes(flags);
+  return requested.ok && requested.types === undefined ? exclusionFilter(flags) : requested;
 };
 
 /**
@@ -386,7 +469,7 @@ const withRerankArgs = (flags: FlagValues, values: ResolvedValues): ArgsResult =
 const resolveArgs = (flags: FlagValues): ArgsResult => {
   const k = resolveK(flags);
   const maxTokens = resolveMaxTokens(flags);
-  const types = resolveTypes(flags);
+  const types = resolveTypeFilter(flags);
   if (k === undefined) return { ok: false, error: kError(rawFlag(flags, '-k')) };
   if (maxTokens === undefined) {
     return { ok: false, error: maxTokensError(rawFlag(flags, MAX_TOKENS_FLAG)) };

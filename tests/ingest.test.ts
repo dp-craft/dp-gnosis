@@ -56,6 +56,13 @@ const UNIT_BODY =
   'fast unit tier tests run in under a millisecond each, and the unit tier section carries enough prose of its own that it stands alone as an atom of the corpus instead of folding into the introduction above it';
 const DOC = `# Layered Test Model\n\n${INTRO_BODY}\n\n## Unit tier\n\n${UNIT_BODY}\n`;
 
+/**
+ * Same headings as `DOC`, different prose. A second file carrying DOC verbatim
+ * would be refused as an exact-body duplicate, so a test about scope would
+ * silently become a test about dedupe.
+ */
+const MIRRORED_DOC = DOC.split('atom of the').join('separate unit of the');
+
 describe('ingest', () => {
   it('turns a fixture doc into one atom file per chunk', async () => {
     const fixture = await makeFixture();
@@ -177,13 +184,13 @@ describe('ingest', () => {
   });
 
   it('declares the whole authored knowledge base as the default scope', () => {
-    expect(CORPUS_ROOTS).toEqual(['doc', 'claude-artifacts', 'RUNNER-*.md']);
+    expect(CORPUS_ROOTS).toEqual(['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md']);
   });
 
   it('contributes the files a glob root matches, and only those', async () => {
     const fixture = await makeFixture();
     await writeDoc(fixture.root, 'RUNNER-GUIDE.md', DOC);
-    await writeDoc(fixture.root, 'RUNNER-MAP.md', DOC);
+    await writeDoc(fixture.root, 'RUNNER-MAP.md', MIRRORED_DOC);
     await writeDoc(fixture.root, 'CLAUDE.md', DOC);
 
     const summary = await ingest({
@@ -451,7 +458,7 @@ describe('ingest — document title in the frontmatter, never the body', () => {
 
 /** Both docs carry the same leaf title, so the chain is what resolves it. */
 const EMPTY_SEGMENT_DOC = (body: string): string =>
-  `# Prompting best practices\n\nlead text about prompting that clears the atom floor, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding forward into the leaf tactics section that follows it\n\n## \n\n### Leaf tactics\n\n${body}\n`;
+  `# Prompting best practices\n\n${body.split(' ')[0] ?? ''} lead text about prompting that clears the atom floor, carrying enough prose of its own to stand as a separate atom of the corpus rather than folding forward into the leaf tactics section that follows it\n\n## \n\n### Leaf tactics\n\n${body}\n`;
 
 describe('ingest — heading chain with an empty segment', () => {
   it('joins only the named chain parts, never emitting a blank separator run', async () => {
@@ -670,6 +677,7 @@ describe('ingest — corpus manifest', () => {
       byType: { 'feature-log': 1, standard: 1 },
       byDomain: { docs: 1, standards: 1 },
       skipped: 0,
+      duplicates: 0,
     });
   });
 

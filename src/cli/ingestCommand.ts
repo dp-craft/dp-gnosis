@@ -23,13 +23,18 @@ const skipLine = (skip: IngestSkip): string =>
 
 const ingestText = (summary: IngestSummary): string =>
   [
-    `ingest: written ${summary.written}, skipped ${summary.skipped.length}`,
+    `ingest: written ${summary.written}, skipped ${summary.skipped.length} (${summary.duplicates} duplicate-body)`,
     ...summary.skipped.map(skipLine),
   ].join('\n');
 
 const summarize = (summary: IngestSummary): CommandOutcome => ({
   exitCode: summary.skipped.length === 0 ? EXIT_OK : EXIT_PARTIAL,
-  data: { command: 'ingest', written: summary.written, skipped: summary.skipped },
+  data: {
+    command: 'ingest',
+    written: summary.written,
+    skipped: summary.skipped,
+    duplicates: summary.duplicates,
+  },
   text: ingestText(summary),
 });
 
