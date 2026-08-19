@@ -646,32 +646,91 @@ const byPreference =
     };
 
 /**
- * body hash → the id of the surviving atom. A `Map` built from a list keeps the
- * LAST write per key, so the preference-sorted pairs are reversed to make the
- * most preferred one win.
+ * The DOCUMENT a judgment credits: the SOURCE FILE's basename, which is the id
+ * `dp-gnosis-bench/src/score.ts` rolls a retrieved atom up to. Two members of one
+ * byte-identical group are the same document only when this key matches, so it —
+ * not the atom id — is what counts how many judged documents a group holds.
  */
+const documentKey = (planned: PlannedAtom): string =>
+  basename(planned.candidate.sourcePath, MD_SUFFIX);
+
+/** A group holding this many judged DOCUMENTS cannot be reduced to one without losing gold. */
+const DOUBLE_GOLD_DOCUMENTS = 2;
+
+/** One member per judged document, keeping the most preferred copy of each. */
+const judgedSurvivors = (
+  group: readonly PlannedAtom[],
+  gold: ReadonlySet<string>
+): readonly PlannedAtom[] => {
+  const judged = group.filter(entry => isJudged(entry, gold));
+  return judged.filter(
+    (entry, index) =>
+      judged.findIndex(other => documentKey(other) === documentKey(entry)) === index
+  );
+};
+
+/**
+ * WHICH COPIES SURVIVE one byte-identical group, which arrives preference-sorted.
+ *
+ * At most ONE judged document in the group — the ordinary case, and the only one
+ * a gold-blind run can produce — keeps exactly the most preferred member, which
+ * is the rule this has always had.
+ *
+ * TWO OR MORE judged documents is the case keep-one cannot serve: whichever copy
+ * loses, a document the golden set judges leaves the corpus entirely, and no arm
+ * can retrieve it. Measured on `vault` at T2.1a: 10 groups held two judged
+ * documents, 9 gold documents were absent from the indexed corpus and 8 topics
+ * lost `recall@100` outright. So every judged document keeps a copy; the group's
+ * UNJUDGED mirrors are still refused, because nothing credits them.
+ */
+const survivorsOf = (
+  group: readonly PlannedAtom[],
+  gold: ReadonlySet<string>
+): readonly string[] => {
+  const judged = judgedSurvivors(group, gold);
+  const kept = judged.length >= DOUBLE_GOLD_DOCUMENTS ? judged : group.slice(0, 1);
+  return kept.map(entry => entry.atom.frontmatter.id);
+};
+
+/** body hash → the members of that group, in preference order. Unhashed atoms form no group. */
+const groupedByBody = (
+  planned: readonly PlannedAtom[],
+  gold: ReadonlySet<string>
+): ReadonlyMap<string, readonly PlannedAtom[]> =>
+  [...planned]
+    .sort(byPreference(gold))
+    .reduce((groups, entry) => {
+      const key = bodyKey(entry);
+      return key === undefined ? groups : groups.set(key, [...(groups.get(key) ?? []), entry]);
+    }, new Map<string, readonly PlannedAtom[]>());
+
+/** body hash → the ids that survive the group, most preferred first. */
 const keptByBody = (
   planned: readonly PlannedAtom[],
   gold: ReadonlySet<string>
-): ReadonlyMap<string, string> => {
-  const pairs = [...planned]
-    .sort(byPreference(gold))
-    .flatMap((entry): readonly (readonly [string, string])[] => {
-      const key = bodyKey(entry);
-      return key === undefined ? [] : [[key, entry.atom.frontmatter.id]];
-    });
-  return new Map([...pairs].reverse());
+): ReadonlyMap<string, readonly string[]> =>
+  new Map(
+    [...groupedByBody(planned, gold)].map(([key, group]) => [key, survivorsOf(group, gold)])
+  );
+
+/** The ids that survived this atom's group; empty when it belongs to no group. */
+const survivorsFor = (
+  planned: PlannedAtom,
+  keptByBody: ReadonlyMap<string, readonly string[]>
+): readonly string[] => {
+  const key = bodyKey(planned);
+  return key === undefined ? [] : (keptByBody.get(key) ?? []);
 };
 
 const duplicateReasons = (
   planned: PlannedAtom,
-  keptByBody: ReadonlyMap<string, string>
+  keptByBody: ReadonlyMap<string, readonly string[]>
 ): readonly string[] => {
-  const key = bodyKey(planned);
-  const kept = key === undefined ? undefined : keptByBody.get(key);
-  return kept === undefined || kept === planned.atom.frontmatter.id
+  const kept = survivorsFor(planned, keptByBody);
+  const [primary] = kept;
+  return primary === undefined || kept.includes(planned.atom.frontmatter.id)
     ? []
-    : [`${DUPLICATE_REASON_PREFIX}${kept}`];
+    : [`${DUPLICATE_REASON_PREFIX}${primary}`];
 };
 
 /** The duplicate share of a refusal set — a subset of it, never its total. */

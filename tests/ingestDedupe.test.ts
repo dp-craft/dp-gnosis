@@ -84,4 +84,36 @@ describe('exact-body dedupe', () => {
 
     expect(await writtenAtoms(fixture.out)).toEqual([`${ALPHA_ID}.md`]);
   });
+
+  it('keeps BOTH judged copies when the duplicate group holds two judged documents', async () => {
+    const fixture = await stage('alpha-doc.md', 'zeta-doc.md');
+
+    const summary = await ingest({
+      corpusRoots: [...ROOTS],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+      goldIds: [ALPHA_ID, ZETA_ID],
+    });
+
+    expect(await writtenAtoms(fixture.out)).toEqual([`${ALPHA_ID}.md`, `${ZETA_ID}.md`]);
+    expect(summary.duplicates).toBe(0);
+  });
+
+  it('drops the unjudged mirror of a double-gold group, keeping one atom per judged document', async () => {
+    const fixture = await stage('alpha-doc.md', 'zeta-doc.md');
+    await writeFile(join(fixture.root, 'docs', 'mu-doc.md'), DOC, 'utf8');
+
+    const summary = await ingest({
+      corpusRoots: [...ROOTS],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+      goldIds: [ALPHA_ID, ZETA_ID],
+    });
+
+    expect(await writtenAtoms(fixture.out)).toEqual([`${ALPHA_ID}.md`, `${ZETA_ID}.md`]);
+    expect(summary.duplicates).toBe(1);
+    expect(summary.skipped.map(skip => skip.reasons.join(''))).toEqual([
+      `duplicate-body-of:${ALPHA_ID}`,
+    ]);
+  });
 });
