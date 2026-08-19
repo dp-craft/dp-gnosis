@@ -454,6 +454,28 @@ const noCorpusNote = (adapter: AdapterName): string =>
 const isUnavailable = (result: RetrievalResult): boolean => result.indexState === 'unavailable';
 
 /**
+ * The index is THERE and was refused: it describes another corpus, or a stamp
+ * schema this build does not read. The refusal TEXT comes from the adapter that
+ * ran the check — it already names the condition, both digests and the rebuild
+ * command, and a second wording here would be a second thing to keep in step.
+ */
+const isRefused = (result: RetrievalResult): boolean => result.indexState === 'mismatched';
+
+/**
+ * The two ways a run can deliver zero atoms WITHOUT having searched. Every note
+ * that reasons about the corpus is gated on this: the vault is evidence about
+ * nothing when nothing was asked of it.
+ */
+const isUnsearched = (result: RetrievalResult): boolean =>
+  isUnavailable(result) || isRefused(result);
+
+/** The line that explains an unsearched run, whichever of the two it was. */
+const unsearchedNotes = (request: RetrieveRequest, result: RetrievalResult): readonly string[] => {
+  if (result.indexRefusal !== undefined) return [result.indexRefusal];
+  return isUnavailable(result) ? [noCorpusNote(request.context.adapter)] : [];
+};
+
+/**
  * Every refusal the run collected, in the order they could happen. Both are
  * reported: a run whose rewrite AND whose rerank were refused got neither, and
  * naming one would let the reader assume the other succeeded.
@@ -469,7 +491,7 @@ const refusalsOf = (request: RetrieveRequest): readonly string[] =>
  * caller that reads exit 0 would take the degraded ranking for the promised one.
  */
 const exitCodeFor = (request: RetrieveRequest, result: RetrievalResult): number =>
-  isUnavailable(result) || refusalsOf(request).length > 0 ? EXIT_PARTIAL : EXIT_OK;
+  isUnsearched(result) || refusalsOf(request).length > 0 ? EXIT_PARTIAL : EXIT_OK;
 
 const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
 
@@ -662,7 +684,7 @@ const emptyNotes = (
   request: RetrieveRequest,
   budgeted: BudgetedResult
 ): readonly string[] =>
-  budgeted.poolSize === 0 && !isUnavailable(budgeted.result) ? [emptyNote(request)] : [];
+  budgeted.poolSize === 0 && !isUnsearched(budgeted.result) ? [emptyNote(request)] : [];
 
 /**
  * Under-delivery MUST NOT be silent. An answer shorter than `-k` reads exactly
@@ -766,7 +788,7 @@ const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): strin
     confidenceLine(request, budgeted),
     ...rephraseLines(request),
     ...rerankLines(request),
-    ...(isUnavailable(result) ? [noCorpusNote(request.context.adapter)] : []),
+    ...unsearchedNotes(request, result),
     ...result.atoms.flatMap(atom => atomLines(atom, isGrouped(request))),
     ...skipText(budgeted),
     ...floorNotes(budgeted),
@@ -927,7 +949,7 @@ const noteLines = (
   ];
   if (refusals.length > 0) return [...refusals, ...trailing];
   if (hasSkips(budgeted)) return [budgetWarning(budgeted), ...trailing];
-  return isUnavailable(budgeted.result) ? [noCorpusNote(request.context.adapter)] : trailing;
+  return [...unsearchedNotes(request, budgeted.result), ...trailing];
 };
 
 const noteField = (
@@ -1038,9 +1060,9 @@ const skipXml = (budgeted: BudgetedResult, repoRoot: string): readonly string[] 
 const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
   [
     `<retrieved_context ${rootAttributes(request, budgeted)}>`,
-    ...(isUnavailable(budgeted.result)
-      ? [`  <note>${escapeXml(noCorpusNote(request.context.adapter))}</note>`]
-      : []),
+    ...unsearchedNotes(request, budgeted.result).map(
+      note => `  <note>${escapeXml(note)}</note>`
+    ),
     ...skipXml(budgeted, request.context.repoRoot),
     ...floorXml(budgeted),
     ...emptyNotes(request, budgeted).map(note => `  <note>${escapeXml(note)}</note>`),

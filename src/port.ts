@@ -14,8 +14,16 @@ import { ATOM_TYPES } from './config.js';
  * - `stale` — a real search ran, but the index is older than the corpus, so
  *   RANKING may lag the current atoms.
  * - `unavailable` — no index exists; no search happened at all.
+ * - `mismatched` — an index exists but its STAMP refuses it: it describes a
+ *   different corpus than the one on disk, or a schema this build cannot read.
+ *   No search happened either, and the remedy differs from `unavailable`'s —
+ *   the corpus is there, the index is the thing that must be rebuilt.
+ *
+ * `mismatched` is its own value rather than a second route to `unavailable`
+ * precisely because `count: 0` under it is NOT the "it is not in the vault"
+ * answer: nothing was asked of the corpus at all.
  */
-export type IndexState = 'ready' | 'empty' | 'stale' | 'unavailable';
+export type IndexState = 'ready' | 'empty' | 'stale' | 'unavailable' | 'mismatched';
 
 /**
  * WHERE IN its source document an atom sits, carried verbatim from the
@@ -151,6 +159,13 @@ export interface RetrievalResult {
   /** Names which legs ran (e.g. the lexical/vector combination used). */
   readonly mode: string;
   readonly indexState: IndexState;
+  /**
+   * WHY the index was refused, present on `mismatched` alone. It names which
+   * condition fired, both digests (or that one is absent) and the rebuild
+   * command, so the caller needs no second call to act on it. Absent everywhere
+   * else, so a searched run is byte-identical to what it always was.
+   */
+  readonly indexRefusal?: string;
   /**
    * The UN-TRUNCATED candidate pool `atoms` was cut from, best-first, for a
    * route whose whole point is that the cut throws information away: merging two

@@ -34,7 +34,7 @@ A bare invocation, `--help` or `-h` prints help and exits 0. An **unknown flag i
 
 Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried blindly.
 
-Exit 3 cases: `indexState unavailable` · a refused `--rephrase` (raw query searched) · a refused `--rerank` (**first-pass ranking returned**, `mode` keeps NO `+rerank` suffix, refusal in `note`). A rerank refusal is never exit 2 — `RERANK_K_INIT` is 100, so discarding the run would bin a full 100-candidate first pass over an unreachable reranker.
+Exit 3 cases: `indexState unavailable` · `indexState mismatched` (**the index is REFUSED — no search ran**) · a refused `--rephrase` (raw query searched) · a refused `--rerank` (**first-pass ranking returned**, `mode` keeps NO `+rerank` suffix, refusal in `note`). A rerank refusal is never exit 2 — `RERANK_K_INIT` is 100, so discarding the run would bin a full 100-candidate first pass over an unreachable reranker.
 
 ### Commands
 
@@ -125,9 +125,19 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
 | any usage failure | `error` |
 
-`indexState` ∈ `ready` (searched a current index) · `empty` (searched, corpus holds no atoms) · `stale` (searched, index older than the corpus — ranking may lag) · `unavailable` (**nothing was searched**). `unavailable` exits 3, never 0: a zero `count` under it is evidence about the index, not about the corpus.
+`indexState` ∈ `ready` (searched a current index) · `empty` (searched, corpus holds no atoms) · `stale` (searched, index older than the corpus — ranking may lag) · `unavailable` (**nothing was searched — no index exists**) · `mismatched` (**nothing was searched — the index exists and was REFUSED**). The last two exit 3, never 0: a zero `count` under either is evidence about the index, not about the corpus.
 
-**`count: 0` with `confidence: none` is an ANSWER, not a failure — it means "it is not in the vault".** It exits **0**, and a caller MUST relay it as such rather than inventing an answer or falling back to its own memory. The `note` names the remedy to try first, and which of two situations produced the emptiness:
+**`mismatched` — the index stamp.** `fts5` stamps `schema_version` and `corpus_digest` into `index_meta` in the same transaction that writes the rows, and every retrieve compares the stamped digest with the one `corpus-manifest.json` carries beside the atoms dir NOW. Three conditions refuse, each with **no search at all** and the failing condition, both digests and the rebuild command in `note`:
+
+| Condition | Meaning |
+|---|---|
+| stamped `corpus_digest` ≠ the manifest's | the index describes a DIFFERENT corpus — answering it would rank content that is no longer there |
+| no `corpus_digest` stamp, manifest present | an index built before the stamp existed; which corpus it describes cannot be proved |
+| `schema_version` this build does not read | the stamp keys mean something this code was not told |
+
+No manifest beside the atoms dir means there is nothing to compare, which is NOT drift — that run proceeds, and a build made with no manifest present stamps NO digest rather than an empty one. Remedy in every refusing case: `npm run gnosis -- index --adapter <adapter>`.
+
+**`count: 0` with `confidence: none` UNDER `indexState: ready` (or `empty` / `stale`) is an ANSWER, not a failure — it means "it is not in the vault".** The same pair under `unavailable` or `mismatched` is NOT an answer: nothing was searched, so the corpus was never asked. Branch on `indexState` first, then on `count`. The answer case exits **0**, and a caller MUST relay it as such rather than inventing an answer or falling back to its own memory. The `note` names the remedy to try first, and which of two situations produced the emptiness:
 
 | Situation | What the `note` names |
 |---|---|
@@ -213,7 +223,7 @@ npm run gnosis -- retrieve "functional programming immutability pure functions" 
 
 **`<section>` limitation.** It carries the atom's `title`, which `ingest` sets to the **leaf heading** — promoted to the full `>`-joined heading chain only when that leaf is ambiguous across sources. The chain is otherwise consumed to build the atom id and is not stored on the atom, so most sections show one heading with no ancestry. Reconstructing it would mean re-reading the source document; no `headingChain` field exists.
 
-**Zero results vs no search.** Both render the same empty block, and the difference stays machine-readable: a real search that matched nothing is `indexState="ready" count="0"` with no `<note>`; `indexState="unavailable"` (exit 3) adds a `<note>` and means **nothing was searched**. On an index-backed adapter the note names the index build too — an ingested-but-unindexed vault is the second way to reach `unavailable`.
+**Zero results vs no search.** Both render the same empty block, and the difference stays machine-readable: a real search that matched nothing is `indexState="ready" count="0"` with no `<note>`; `indexState="unavailable"` and `indexState="mismatched"` (both exit 3) each add a `<note>` and mean **nothing was searched**. On an index-backed adapter the `unavailable` note names the index build too — an ingested-but-unindexed vault is the second way to reach it; the `mismatched` note names the stamp condition, both digests and the rebuild.
 
 ```xml
 <retrieved_context query="…" adapter="fts5" mode="fts5" indexState="unavailable" count="0">
@@ -372,7 +382,9 @@ reranked run. atoms[] is sorted by score, descending.
 - exitCode 3  = partial. If indexState is "unavailable" NOTHING was searched —
   say so; do not report "no results found".
 - indexState "empty" = the corpus holds no atoms. "stale" = ranking may lag the
-  current docs; say so when you cite.
+  current docs; say so when you cite. "mismatched" = the index was REFUSED
+  because it describes another corpus; NOTHING was searched — say so and run
+  the rebuild the note names; do not report "no results found".
 
 CITE
 Cite every claim as: <title> (<id>, <sourcePath>). Quote from the atom "body"

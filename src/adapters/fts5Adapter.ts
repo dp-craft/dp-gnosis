@@ -46,6 +46,14 @@
  * stamp carries no `index_meta`; it reads as `porter-fold`, the only chain that
  * ever built one. An index stamped with an id outside `ANALYZERS` REFUSES.
  *
+ * CORPUS IDENTITY IS STAMPED THE SAME WAY, and it is a REFUSAL rather than a
+ * label: `schema_version` and `corpus_digest` go into `index_meta` in that same
+ * transaction, and every retrieve compares the stamped digest with the one
+ * `corpus-manifest.json` carries beside the atoms dir NOW. A disagreement, an
+ * absent stamp beside a present manifest, or a schema version this build does
+ * not read, each report `mismatched` with NO search — an index answered from
+ * after the corpus moved is a ranking over content that is no longer there.
+ *
  * NO `prefix=` index — RECORDED CHOICE AND TRAP. `buildQuery` (`query.ts`) emits
  * plain terms only, so a prefix index would index nothing anyone asks for. If a
  * future query builder ever emits `term*`, a prefix query against a table
@@ -66,6 +74,7 @@ import {
   type AtomType,
   DEFAULT_ATOM_TYPE
 } from '../config.js';
+import { CORPUS_MANIFEST_FILE, readManifestDigest } from '../corpusManifest.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -103,6 +112,20 @@ const HAS_INDEX_META_SQL =
   'SELECT name FROM sqlite_master WHERE type = \'table\' AND name = \'index_meta\'';
 /** The stamped key naming the analysis chain hop 7 used. */
 const ANALYZER_KEY = 'analyzer';
+/** The stamped key naming the SHAPE of the stamp itself. */
+const SCHEMA_VERSION_KEY = 'schema_version';
+/**
+ * The stamped key naming WHICH CORPUS produced this index — the aggregate
+ * digest `corpus-manifest.json` records beside the atoms dir.
+ */
+const CORPUS_DIGEST_KEY = 'corpus_digest';
+/**
+ * The stamp shape this build writes and this query side reads. A version outside
+ * it REFUSES rather than being read optimistically: an unrecognised stamp means
+ * the keys mean something this code has not been told, and guessing there is how
+ * a stale index gets answered from.
+ */
+export const INDEX_SCHEMA_VERSION = '1';
 const CREATE_FTS_SQL =
   'CREATE VIRTUAL TABLE atom_fts USING fts5(body, content=\'\', detail=full)';
 const INSERT_META_SQL = 'INSERT INTO atom_meta(rowid, id, path) VALUES (?, ?, ?)';
@@ -198,27 +221,52 @@ const collectEntries = (atomsDir: string): readonly IndexEntry[] =>
     .map(rel => toEntry(atomsDir, rel))
     .filter(isDefined);
 
+/** One `index_meta` row, as the build states it. */
+interface StampRow {
+  readonly key: string;
+  readonly value: string;
+}
+
+/** What one build stamps into the index it produces. */
+interface StampSpec {
+  readonly analyzer: AnalyzerId;
+  /**
+   * `undefined` when no corpus manifest sits beside the atoms dir. NO row is
+   * written then — an empty string would claim a corpus identity the build never
+   * read, and the query side could not tell it from a real digest.
+   */
+  readonly corpusDigest: string | undefined;
+}
+
+const stampRows = (spec: StampSpec): readonly StampRow[] => [
+  { key: ANALYZER_KEY, value: spec.analyzer },
+  { key: SCHEMA_VERSION_KEY, value: INDEX_SCHEMA_VERSION },
+  ...(spec.corpusDigest === undefined
+    ? []
+    : [{ key: CORPUS_DIGEST_KEY, value: spec.corpusDigest }]),
+];
+
 /**
  * The stamp is written inside the SAME transaction as the rows it describes, so
- * a build that dies part-way leaves no index claiming a chain it never applied:
- * either both land or neither does.
+ * a build that dies part-way leaves no index claiming a chain or a corpus it
+ * never applied: either both land or neither does.
  */
 const writeEntries = (
   db: Database.Database,
   entries: readonly IndexEntry[],
-  analyzer: AnalyzerId
+  spec: StampSpec
 ): void => {
   const meta = db.prepare(INSERT_META_SQL);
   const fts = db.prepare(INSERT_FTS_SQL);
   const stamp = db.prepare(INSERT_INDEX_META_SQL);
   db.transaction(() => {
-    stamp.run(ANALYZER_KEY, analyzer);
+    stampRows(spec).forEach(row => stamp.run(row.key, row.value));
     entries.forEach((entry, index) => {
       meta.run(index + 1, entry.id, entry.path);
       // INDEX SIDE of the shared analyzer: `unicode61` then tokenizes text that
       // is already analyzed, so the inverted index holds the same terms the
       // linear scan computes in memory.
-      fts.run(index + 1, analyzeToText(entry.body, analyzer));
+      fts.run(index + 1, analyzeToText(entry.body, spec.analyzer));
     });
   })();
 };
@@ -237,7 +285,10 @@ export const buildFts5Index = (options: BuildFts5IndexOptions): void => {
   db.exec(CREATE_META_SQL);
   db.exec(CREATE_FTS_SQL);
   db.exec(CREATE_INDEX_META_SQL);
-  writeEntries(db, entries, options.analyzer ?? DEFAULT_ANALYZER);
+  writeEntries(db, entries, {
+    analyzer: options.analyzer ?? DEFAULT_ANALYZER,
+    corpusDigest: readManifestDigest(options.atomsDir),
+  });
   db.close();
 };
 
@@ -256,10 +307,9 @@ const asAnalyzer = (value: string): AnalyzerId => {
 const hasIndexMeta = (db: Database.Database): boolean =>
   db.prepare(HAS_INDEX_META_SQL).get() !== undefined;
 
-const stampValue = (db: Database.Database): string | undefined =>
+const stampValue = (db: Database.Database, key: string): string | undefined =>
   hasIndexMeta(db)
-    ? (db.prepare(SELECT_INDEX_META_SQL).get(ANALYZER_KEY) as { readonly value: string } | undefined)
-        ?.value
+    ? (db.prepare(SELECT_INDEX_META_SQL).get(key) as { readonly value: string } | undefined)?.value
     : undefined;
 
 /**
@@ -276,9 +326,63 @@ const stampValue = (db: Database.Database): string | undefined =>
 const PRE_STAMP_ANALYZER: AnalyzerId = 'porter-fold';
 
 const stampedAnalyzer = (db: Database.Database): AnalyzerId => {
-  const value = stampValue(db);
+  const value = stampValue(db, ANALYZER_KEY);
   return value === undefined ? PRE_STAMP_ANALYZER : asAnalyzer(value);
 };
+
+/**
+ * The two INDEX-IDENTITY keys, read off the file being searched. Both are
+ * `undefined` on a pre-stamp index, and that absence is itself the finding —
+ * never defaulted to a value the build never wrote.
+ */
+interface IndexStamp {
+  readonly schemaVersion: string | undefined;
+  readonly corpusDigest: string | undefined;
+}
+
+const readStamp = (db: Database.Database): IndexStamp => ({
+  schemaVersion: stampValue(db, SCHEMA_VERSION_KEY),
+  corpusDigest: stampValue(db, CORPUS_DIGEST_KEY),
+});
+
+const REBUILD_REMEDY = `rebuild it with \`npm run gnosis -- index --adapter ${FTS5_MODE}\``;
+
+const REFUSED = 'fts5 index: REFUSED, nothing was searched —';
+
+/**
+ * An unrecognised `schema_version` refuses on its own, BEFORE the digests are
+ * compared: this build does not know what the other keys mean under that
+ * version, so reading a digest out of it would compare two things it cannot
+ * prove are the same measurement.
+ */
+const versionRefusal = (version: string | undefined): string | undefined =>
+  version === undefined || version === INDEX_SCHEMA_VERSION
+    ? undefined
+    : `${REFUSED} its stamp schema_version is "${version}" and this build reads only "${INDEX_SCHEMA_VERSION}"; ${REBUILD_REMEDY}`;
+
+const unstampedRefusal = (manifest: string): string =>
+  `${REFUSED} the index carries NO ${CORPUS_DIGEST_KEY} stamp (it was built before the stamp existed), while ${CORPUS_MANIFEST_FILE} beside the atoms dir carries ${manifest}, so which corpus the index describes cannot be proved; ${REBUILD_REMEDY}`;
+
+const driftRefusal = (stamped: string, manifest: string): string =>
+  `${REFUSED} the stamped ${CORPUS_DIGEST_KEY} ${stamped} disagrees with ${manifest}, the digest ${CORPUS_MANIFEST_FILE} beside the atoms dir carries now — the index describes a different corpus; ${REBUILD_REMEDY}`;
+
+/**
+ * NO manifest beside the atoms dir means there is nothing to compare against,
+ * which is not evidence of drift: a corpus ingested before the manifest existed,
+ * or an atoms dir assembled by hand, MUST NOT be refused for a fact nobody
+ * recorded. Every other combination is stated.
+ */
+const digestRefusal = (
+  stamped: string | undefined,
+  manifest: string | undefined
+): string | undefined => {
+  if (manifest === undefined) return undefined;
+  if (stamped === undefined) return unstampedRefusal(manifest);
+  return stamped === manifest ? undefined : driftRefusal(stamped, manifest);
+};
+
+const stampRefusal = (stamp: IndexStamp, manifest: string | undefined): string | undefined =>
+  versionRefusal(stamp.schemaVersion) ?? digestRefusal(stamp.corpusDigest, manifest);
 
 /**
  * Every term is wrapped in an FTS5 string literal (inner `"` doubled). Without
@@ -540,6 +644,8 @@ interface OpenIndex {
   readonly search: Database.Statement;
   /** Read off the file being searched — the query side's ONLY source of it. */
   readonly analyzer: AnalyzerId;
+  /** Read off the same file, and checked BEFORE any row is matched. */
+  readonly stamp: IndexStamp;
 }
 
 /**
@@ -563,6 +669,7 @@ const openIndex = (indexPath: string): OpenIndex => {
     count: db.prepare(COUNT_META_SQL),
     search: db.prepare(SEARCH_SQL),
     analyzer: stampedAnalyzer(db),
+    stamp: readStamp(db),
   };
 };
 
@@ -580,6 +687,8 @@ interface IndexHandle {
   /** Takes the RAW query: the match expression can only be built once the
    * index — and therefore its stamped analyzer — is open. */
   readonly snapshot: (indexPath: string, query: string, adjacency: boolean) => IndexSnapshot;
+  /** The index-identity keys alone, so the stamp can be judged without searching. */
+  readonly stamp: (indexPath: string) => IndexStamp;
   readonly close: () => void;
 }
 
@@ -619,6 +728,7 @@ const createIndexHandle = (): IndexHandle => {
   const cell: HandleCell = { open: undefined };
   return {
     close: (): void => release(cell),
+    stamp: (indexPath: string): IndexStamp => acquire(cell, indexPath).stamp,
     snapshot: (indexPath: string, query: string, adjacency: boolean): IndexSnapshot =>
       snapshotOf(acquire(cell, indexPath), query, adjacency),
   };
@@ -640,19 +750,36 @@ const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): Retri
   };
 };
 
+/** The stamp on the open index, judged against the manifest sitting there NOW. */
+const refusalOf = (self: Fts5Instance): string | undefined =>
+  stampRefusal(
+    self.handle.stamp(self.options.indexPath),
+    readManifestDigest(self.options.atomsDir)
+  );
+
 /**
  * A missing index file reports `unavailable` with NO atoms — never `empty`.
  * Conflating "no search happened" with "searched and found nothing" is what
  * lets a later evaluation measure nothing and report a clean null result.
+ *
+ * A REFUSED stamp is the same class of fact under its own name: the index is
+ * present but describes another corpus, so the query is never run. Answering it
+ * would be the worst version of the conflation — a full ranking, over content
+ * that is no longer there, under exit 0.
  */
 const retrieveFrom = (
   self: Fts5Instance,
   query: string,
   opts: RetrieveOptions
-): RetrievalResult =>
-  existsSync(self.options.indexPath)
+): RetrievalResult => {
+  if (!existsSync(self.options.indexPath)) {
+    return { atoms: [], mode: FTS5_MODE, indexState: 'unavailable' };
+  }
+  const refusal = refusalOf(self);
+  return refusal === undefined
     ? search(self, query, opts)
-    : { atoms: [], mode: FTS5_MODE, indexState: 'unavailable' };
+    : { atoms: [], mode: FTS5_MODE, indexState: 'mismatched', indexRefusal: refusal };
+};
 
 /**
  * Build a port reading the index at `options.indexPath` over `options.atomsDir`.
