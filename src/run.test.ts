@@ -12,7 +12,8 @@ import {
   RERANK_FUSION_PRESETS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
-  RERANK_RRF_K
+  RERANK_RRF_K,
+  RERANK_RRF_WEIGHT
 } from '../../dp-gnosis/src/config.js';
 import type {
   IndexState,
@@ -542,6 +543,21 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
       RERANK_K_INIT
     );
     expect(provenanceOf(parseArgs(['--depth', '20']), 'sha').rerankPool).toBeUndefined();
+  });
+
+  /**
+   * The EFFECTIVE fusion weight, never the raw flag. An unstamped row reads as
+   * the LEGACY 0.5 in `compare.ts`, so a row measured at the shipped weight must
+   * say so on its own line — otherwise a 0.5 arm and a 0.75 arm are subtracted.
+   * A `replace` protocol has no weight term and records none.
+   */
+  it('stamps the EFFECTIVE rerank fusion weight, not just a named override', () => {
+    expect(provenanceOf(parseArgs(['--rerank']), 'sha').rerankWeight).toBe(RERANK_RRF_WEIGHT);
+    const named = parseArgs(['--rerank', '--rerank-weight', '0.25']);
+    expect(provenanceOf(named, 'sha').rerankWeight).toBe(0.25);
+    const replaced = parseArgs(['--rerank', '--rerank-profile', 'beir-ce']);
+    expect(provenanceOf(replaced, 'sha').rerankWeight).toBeUndefined();
+    expect(provenanceOf(parseArgs([]), 'sha').rerankWeight).toBeUndefined();
   });
 
   it('records the hybrid leg weight, so a swept weight is never silent', () => {

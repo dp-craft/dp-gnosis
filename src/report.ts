@@ -55,8 +55,10 @@ export interface RunProvenance {
   readonly depth: number;
   readonly rerank: boolean;
   /**
-   * The rerank protocol BY NAME, and any raw weight override. Both absent on a
-   * run that did not rerank — there is no protocol to record for one.
+   * The rerank protocol BY NAME, and the EFFECTIVE weight it fused at — the
+   * `--rerank-weight` override when one was given, else the preset's own. Both
+   * absent on a run that did not rerank — there is no protocol to record for one
+   * — and the weight is absent on a `replace` protocol, which has no weight term.
    */
   readonly rerankProfile?: string | undefined;
   readonly rerankWeight?: number | undefined;
@@ -218,10 +220,11 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
   readonly depth: number;
   readonly rerank: boolean;
   /**
-   * The rerank protocol this row was measured under, and the raw weight when one
-   * was overridden. Both are TREATMENT provenance (`compare.ts`), so a fusion-rule
+   * The rerank protocol this row was measured under, and the EFFECTIVE weight it
+   * fused at. Both are TREATMENT provenance (`compare.ts`), so a fusion-rule
    * change is labelled an arm comparison instead of being subtracted. Absent on a
-   * BM25-only row, and on every row recorded before the protocol was nameable.
+   * BM25-only row, and on every row recorded before the protocol was nameable;
+   * an absent weight on an RRF row is read as the legacy 0.5 by `compare.ts`.
    */
   readonly rerankProfile?: string | undefined;
   readonly rerankWeight?: number | undefined;

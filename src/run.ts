@@ -773,6 +773,18 @@ export const servedKOf = (options: CliOptions): number => options.servedK ?? opt
 export const rerankDocMaxCharsOf = (options: CliOptions): number =>
   options.rerankDocMaxChars ?? RERANK_DOC_MAX_CHARS;
 
+/**
+ * The EFFECTIVE fusion weight — read off the RESOLVED fusion, so it is the
+ * `--rerank-weight` override when one was given and the preset's own shipped
+ * weight otherwise. Stamping the raw flag instead left every default run's row
+ * blank, and `compare.ts` reads a blank as the LEGACY weight: once the shipped
+ * weight moved, two rows fused at DIFFERENT weights both read blank and were
+ * subtracted as a like-for-like delta. A `replace` protocol has no weight term,
+ * so it records none.
+ */
+export const rerankWeightOf = (options: CliOptions): number | undefined =>
+  options.rerankFusion.kind === 'rrf' ? options.rerankFusion.rerankWeight : undefined;
+
 export const rerankExtractOf = (options: CliOptions): ExtractStrategy =>
   options.rerankExtract ?? EXTRACT_STRATEGY;
 
@@ -1221,7 +1233,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   depth: options.depth,
   rerank: options.rerank,
   rerankProfile: options.rerank ? options.rerankProfile : undefined,
-  rerankWeight: options.rerank ? options.rerankWeight : undefined,
+  rerankWeight: options.rerank ? rerankWeightOf(options) : undefined,
   rerankModel: options.rerank ? (options.rerankModel ?? RERANK_MODEL_ID) : undefined,
   rerankPool: options.rerank ? rerankPoolOf(options) : undefined,
   rerankDocMaxChars: options.rerank ? rerankDocMaxCharsOf(options) : undefined,

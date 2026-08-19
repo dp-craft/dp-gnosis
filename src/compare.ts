@@ -17,7 +17,7 @@
  * | measuring scale | `corpusBytes` / `corpusLines` | a different corpus — the cheap checksum |
  * | treatment | `adapter` | a different engine path — the thing an A/B run exists to compare |
  * | treatment | `rerank` | a second-stage model in the loop, or not |
- * | treatment | `rerankProfile` / `rerankWeight` | a different FUSION rule over the same two orders |
+ * | treatment | `rerankProfile` / `rerankWeight` | a different FUSION rule over the same two orders — the WEIGHT guarded ONLY between two rows that both fused with RRF, since a replacement protocol has no weight term |
  * | treatment | `hybridWeight` | a different WEIGHT on the hybrid route's two LEGS — a second fusion |
  * | treatment | `rerankModel` | a different CROSS-ENCODER producing the reranked order |
  * | treatment | `rerankDocMaxChars` / `rerankExtract` | a different TEXT put in front of the reranker — how much of an atom body, and which part — guarded ONLY between two rows that both reranked |
@@ -34,7 +34,14 @@
  * `gitSha` and `ts` are deliberately NOT guarded: a changed engine commit is
  * precisely the thing a delta is supposed to measure.
  */
-import { EMBED_MODEL_ID, HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import {
+  DEFAULT_RERANK_PRESET,
+  EMBED_MODEL_ID,
+  HYBRID_FUSION,
+  RERANK_FUSION_PRESETS,
+  RERANK_MODEL_ID,
+  type RerankFusion
+} from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import type { HistoryRow } from './report.js';
 
@@ -165,6 +172,15 @@ const LEGACY_RERANK_DOC_MAX_CHARS = 2000;
 const LEGACY_RERANK_EXTRACT = 'head';
 
 /**
+ * The weight every RRF-fused rerank row carried from the reranker's
+ * introduction until `RERANK_RRF_WEIGHT` moved to 0.75 — none of those rows
+ * stamped the field, so absence on one means exactly this number. A HISTORICAL
+ * fact about rows ALREADY WRITTEN. MUST NOT be read as the live weight: that is
+ * `RERANK_RRF_WEIGHT` in the engine config, and it moves.
+ */
+const LEGACY_RERANK_RRF_WEIGHT = 0.5;
+
+/**
  * What an ABSENT field means, for the fields where absence is not "unknown" but
  * a known older value. A row recorded before the analyzer was selectable was
  * built by `DEFAULT_ANALYZER` — the only chain that ever built one — so reading
@@ -185,6 +201,11 @@ const LEGACY_RERANK_EXTRACT = 'head';
  * `EMBED_MODEL_ID`, the only encoder the engine ever called. It applies to every
  * row alike, so a lexical pair — which embedded nothing — still compares equal.
  *
+ * `rerankWeight` likewise, but only where a weight EXISTS: every RRF-fused row
+ * recorded before the field was stamped fused at `LEGACY_RERANK_RRF_WEIGHT`.
+ * A `replace` protocol (`beir-ce`) has no weight term at all, which `appliesTo`
+ * — not a default — is what answers.
+ *
  * `tokenBudget` / `servedK` have NO default and MUST NOT be given one: absence
  * means no cap was applied, which is a real arm rather than an older value, so a
  * budgeted row against an unbudgeted one is the experiment.
@@ -197,6 +218,7 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   queryAdjacency: false,
   rerankDocMaxChars: LEGACY_RERANK_DOC_MAX_CHARS,
   rerankExtract: LEGACY_RERANK_EXTRACT,
+  rerankWeight: LEGACY_RERANK_RRF_WEIGHT,
 };
 
 /**
@@ -229,6 +251,17 @@ const RERANK_ONLY_FIELDS: ReadonlySet<ProvenanceField> = new Set<ProvenanceField
   'rerankExtract',
 ]);
 
+const presetOf = (name: string): RerankFusion | undefined =>
+  (RERANK_FUSION_PRESETS as Readonly<Record<string, RerankFusion>>)[name];
+
+/**
+ * Whether this row's fusion HAS a weight term — the protocol is read from the
+ * engine's own preset table, so a new preset needs no edit here. A row recorded
+ * before the protocol was nameable ran the default one, which is RRF.
+ */
+const rrfFused = (row: HistoryRow): boolean =>
+  row.rerank && presetOf(row.rerankProfile ?? DEFAULT_RERANK_PRESET)?.kind === 'rrf';
+
 /**
  * Whether a field DESCRIBES this row at all. Only the rerank-only fields are
  * conditional: a BM25 row scored no pool and read no document, so between a BM25
@@ -238,9 +271,15 @@ const RERANK_ONLY_FIELDS: ReadonlySet<ProvenanceField> = new Set<ProvenanceField
  * the pool's scale refusal swallow rerank-on-vs-off, the comparison this bench
  * exists to run. Between two rows that BOTH reranked they describe both rows,
  * and a move is reported.
+ *
+ * `rerankWeight` is the same rule one step narrower: a `replace` protocol has no
+ * weight to move, so between it and an RRF row the weight comes into existence
+ * and `rerankProfile` alone names that flip.
  */
-const appliesTo = (row: HistoryRow, field: ProvenanceField): boolean =>
-  RERANK_ONLY_FIELDS.has(field) ? row.rerank : true;
+const appliesTo = (row: HistoryRow, field: ProvenanceField): boolean => {
+  if (field === 'rerankWeight') return rrfFused(row);
+  return RERANK_ONLY_FIELDS.has(field) ? row.rerank : true;
+};
 
 const valueOf = (row: HistoryRow, field: ProvenanceField): HistoryRow[ProvenanceField] =>
   row[field] === undefined ? defaultOf(row, field) : row[field];

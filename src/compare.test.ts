@@ -16,6 +16,9 @@ import type { HistoryRow } from './report.js';
 const LEGACY_RERANK_DOC_CHARS = 2000;
 const LEGACY_RERANK_EXTRACT = 'head';
 
+/** What an absent `rerankWeight` on a reranked RRF row means — the weight that held. */
+const LEGACY_RERANK_RRF_WEIGHT = 0.5;
+
 /** The shipped DENSE leg weight — what an absent `hybridWeight` on a row means. */
 const HYBRID_FUSION_WEIGHT: number = HYBRID_FUSION.rerankWeight;
 
@@ -119,6 +122,47 @@ describe('compareLastTwo', () => {
     expect(result.kind).toBe('arm-delta');
     if (result.kind !== 'arm-delta') return;
     expect(result.arms.map(change => change.field)).toEqual(['rerankWeight']);
+  });
+
+  /**
+   * `RERANK_RRF_WEIGHT` moved 0.5 -> 0.75, and every row recorded before that
+   * carries NO weight at all. Without a backfill both rows read `undefined`,
+   * the pair compares equal on the field, and a 0.5 arm is SUBTRACTED from a
+   * 0.75 arm as a like-for-like quality delta — the exact failure this module
+   * exists to refuse.
+   */
+  it('BACKFILLS an absent rerankWeight to the legacy 0.5, so a pre-change row is an ARM', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankProfile: 'shipped' }),
+        row({
+          gitSha: 'bbb2222',
+          rerank: true,
+          rerankProfile: 'shipped',
+          rerankWeight: 0.75,
+          ndcg10: 0.63,
+        }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['rerankWeight']);
+    expect(result.arms[0]?.previous).toBe(LEGACY_RERANK_RRF_WEIGHT);
+    expect(result.arms[0]?.latest).toBe(0.75);
+    expect(formatComparison(result)).toContain('ARM COMPARISON');
+  });
+
+  /** A `replace` protocol has no weight term, so it is given none to compare. */
+  it('gives a beir-ce row NO backfilled weight, naming the profile flip alone', () => {
+    const result = compareLastTwo(
+      [
+        row({ rerank: true, rerankProfile: 'beir-ce' }),
+        row({ gitSha: 'bbb2222', rerank: true, rerankProfile: 'beir-ce', ndcg10: 0.63 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
   });
 
   it('guards the rerank protocol through the DERIVED union, not a hand-written list', () => {
