@@ -15,13 +15,15 @@ import type { AtomType } from '../config.js';
 import {
   ATOM_TYPES,
   DEFAULT_EXCLUDED_TYPES,
+  RERANK_CALIBRATION,
   RERANK_K_INIT,
+  RERANK_MODEL_ID,
   RETRIEVE_TOKEN_BUDGET
 } from '../config.js';
 import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
 import { rephraseQuery } from '../rephrase.js';
 import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
-import { rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
+import { calibrate, rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
 import type { AdapterName } from './adapter.js';
 import { createPort, hasPersistentIndex } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -178,6 +180,75 @@ const resolveRerankOptions = (flags: FlagValues, rerank: boolean): RerankOptions
   return fusion.ok
     ? { ok: true, options: withModel(fusion.options, stringFlag(flags, RERANK_MODEL_FLAG)) }
     : fusion;
+};
+
+/**
+ * The calibrated relevance floor, `retrieve` only and OPT-IN: without it the
+ * delivered set is exactly what it was before this flag existed.
+ *
+ * It is STRICTLY SUBTRACTIVE — it drops atoms the run already delivered and
+ * never promotes one from deeper in the pool, so it can lower an answer's
+ * length but never change its order.
+ */
+export const MIN_RELEVANCE_FLAG = '--min-relevance';
+
+const MIN_RELEVANCE_MIN = 0;
+const MIN_RELEVANCE_MAX = 1;
+
+/** The reranker ids with a measured score scale, for a message that lists them. */
+const CALIBRATED_MODEL_IDS: readonly string[] = Object.keys(RERANK_CALIBRATION);
+
+/**
+ * Out of range is a REFUSAL, not a clamp, for the same reason `--rerank-weight`
+ * refuses: a clamped run reports the floor it was ASKED for while filtering on
+ * another one.
+ */
+const minRelevanceError = (raw: string): string =>
+  `${MIN_RELEVANCE_FLAG} expects a calibrated probability from ${MIN_RELEVANCE_MIN} to ${MIN_RELEVANCE_MAX} — got "${raw}"; it is never clamped`;
+
+/**
+ * Without `--rerank` no atom carries a cross-encoder score, so nothing could be
+ * calibrated and the floor would drop the whole answer — a run that looks
+ * filtered while having filtered on no evidence at all.
+ */
+const orphanFloorError = (): string =>
+  `${MIN_RELEVANCE_FLAG} requires ${RERANK_FLAG} — without it no atom carries a calibrated score, so nothing could clear the floor and an empty answer would read as "nothing is relevant"`;
+
+/** An uncalibrated model has no measured scale, so its score is not a probability. */
+const uncalibratedModelError = (model: string): string =>
+  `${MIN_RELEVANCE_FLAG} needs a reranker with a measured score scale and "${model}" has none — pass ${RERANK_MODEL_FLAG} naming one of ${CALIBRATED_MODEL_IDS.join(', ')}, or drop ${MIN_RELEVANCE_FLAG}`;
+
+const parseMinRelevance = (raw: string): number | undefined => {
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= MIN_RELEVANCE_MIN && value <= MIN_RELEVANCE_MAX
+    ? value
+    : undefined;
+};
+
+type MinRelevanceResult =
+  | { readonly ok: true; readonly minRelevance: number | undefined }
+  | { readonly ok: false; readonly error: string };
+
+const calibratedFloor = (floor: number, model: string): MinRelevanceResult =>
+  RERANK_CALIBRATION[model] === undefined
+    ? { ok: false, error: uncalibratedModelError(model) }
+    : { ok: true, minRelevance: floor };
+
+/** The model the run will actually score with, flag or shipped default. */
+const rerankModelOf = (options: RerankOptions): string => options.model ?? RERANK_MODEL_ID;
+
+/** Absent flag = no floor. Every other outcome is a value or a refusal. */
+const resolveMinRelevance = (
+  flags: FlagValues,
+  rerank: boolean,
+  model: string
+): MinRelevanceResult => {
+  const raw = stringFlag(flags, MIN_RELEVANCE_FLAG);
+  if (raw === undefined) return { ok: true, minRelevance: undefined };
+  const floor = parseMinRelevance(raw);
+  if (floor === undefined) return { ok: false, error: minRelevanceError(raw) };
+  if (!rerank) return { ok: false, error: orphanFloorError() };
+  return calibratedFloor(floor, model);
 };
 
 /** The rewrite cache sits beside the index it serves, like the embedding cache. */
@@ -382,6 +453,13 @@ interface BudgetedResult {
    * or a deep pool the caller asked to cut.
    */
   readonly poolSize: number;
+  /**
+   * How many atoms the calibrated floor removed. Zero on every run that named
+   * no floor, so an unfiltered run reports nothing new.
+   */
+  readonly belowFloor: number;
+  /** The floor those atoms fell below; `undefined` when none was in effect. */
+  readonly minRelevance: number | undefined;
 }
 
 /**
@@ -401,6 +479,18 @@ const skipText = (budgeted: BudgetedResult): readonly string[] =>
   hasSkips(budgeted) ? [budgetWarning(budgeted), ...budgeted.skipped.map(skippedLine)] : [];
 
 /**
+ * A floor drop is REPORTED, exactly like a budget skip: an answer that is short
+ * because the reranker judged the rest irrelevant reads identically to a thin
+ * corpus unless the count and the floor are stated.
+ */
+const floorWarning = (budgeted: BudgetedResult): string =>
+  `retrieve: ${budgeted.belowFloor} atom(s) scored below the ${budgeted.minRelevance} calibrated relevance floor and were dropped — lower \`${MIN_RELEVANCE_FLAG} <p>\` or drop the flag to see them`;
+
+/** Empty on every run that named no floor, so nothing new is rendered. */
+const floorNotes = (budgeted: BudgetedResult): readonly string[] =>
+  budgeted.belowFloor > 0 ? [floorWarning(budgeted)] : [];
+
+/**
  * The rewrite is stated in FULL, both sides: the ranking is evidence about the
  * rewritten query, and a reader who cannot see what was actually searched
  * cannot judge the results.
@@ -415,15 +505,65 @@ const rephraseLines = (request: RetrieveRequest): readonly string[] => {
 const rerankLines = (request: RetrieveRequest): readonly string[] =>
   request.rerankRefusal === undefined ? [] : [request.rerankRefusal];
 
+/**
+ * How much CALIBRATED evidence stands behind the delivered atoms.
+ *
+ * Three values and no numeric band — the band is not measured yet, and inventing
+ * one here would publish a threshold nobody measured:
+ *
+ *   `none` nothing was delivered, so there is nothing to be confident about;
+ *   `ok`   a floor was in effect and the top delivered atom clears it;
+ *   `weak` atoms were delivered with no calibrated evidence behind them — no
+ *          rerank, an uncalibrated model, or no floor asked for.
+ *
+ * `ok` is therefore UNREACHABLE by default today, deliberately: it requires
+ * `--min-relevance`, which is opt-in and has no default value until the
+ * calibrated floors are measured. A default `ok` would be an unmeasured claim.
+ */
+export type RetrieveConfidence = 'none' | 'weak' | 'ok';
+
+/** The calibrated probability behind one atom; `undefined` = no such evidence. */
+const calibratedOf = (request: RetrieveRequest, atom: RetrievedAtom): number | undefined =>
+  atom.rerankScore === undefined
+    ? undefined
+    : calibrate(rerankModelOf(request.rerankOptions), atom.rerankScore);
+
+const topCalibrated = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult
+): number | undefined => {
+  const top = budgeted.result.atoms[0];
+  return top === undefined ? undefined : calibratedOf(request, top);
+};
+
+const meetsFloor = (request: RetrieveRequest, budgeted: BudgetedResult): boolean => {
+  const floor = budgeted.minRelevance;
+  const top = topCalibrated(request, budgeted);
+  return floor !== undefined && top !== undefined && top >= floor;
+};
+
+const confidenceOf = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult
+): RetrieveConfidence => {
+  if (budgeted.result.atoms.length === 0) return 'none';
+  return meetsFloor(request, budgeted) ? 'ok' : 'weak';
+};
+
+const confidenceLine = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
+  `retrieve: confidence ${confidenceOf(request, budgeted)}`;
+
 const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): string => {
   const { result } = budgeted;
   return [
     `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
+    confidenceLine(request, budgeted),
     ...rephraseLines(request),
     ...rerankLines(request),
     ...(isUnavailable(result) ? [noCorpusNote(request.context.adapter)] : []),
     ...result.atoms.flatMap(atomLines),
     ...skipText(budgeted),
+    ...floorNotes(budgeted),
   ].join('\n');
 };
 
@@ -435,6 +575,7 @@ type ArgsResult =
     readonly types: readonly AtomType[] | undefined;
     readonly rerank: boolean;
     readonly rerankOptions: RerankOptions;
+    readonly minRelevance: number | undefined;
     readonly rephrase: boolean;
   }
   | { readonly ok: false; readonly error: string };
@@ -446,23 +587,33 @@ interface ResolvedValues {
   readonly types: readonly AtomType[] | undefined;
 }
 
+/** The rerank leg as argv resolved it: how to score, and the floor to serve at. */
+interface RerankResolved {
+  readonly options: RerankOptions;
+  readonly minRelevance: number | undefined;
+}
+
 const okArgs = (
   flags: FlagValues,
   values: ResolvedValues,
-  rerankOptions: RerankOptions
+  rerank: RerankResolved
 ): ArgsResult => ({
   ok: true,
   ...values,
   rerank: flags[RERANK_FLAG] === true,
-  rerankOptions,
+  rerankOptions: rerank.options,
+  minRelevance: rerank.minRelevance,
   rephrase: flags[REPHRASE_FLAG] === true,
 });
 
 const withRerankArgs = (flags: FlagValues, values: ResolvedValues): ArgsResult => {
-  const options = resolveRerankOptions(flags, flags[RERANK_FLAG] === true);
-  return options.ok
-    ? okArgs(flags, values, options.options)
-    : { ok: false, error: options.error };
+  const rerank = flags[RERANK_FLAG] === true;
+  const options = resolveRerankOptions(flags, rerank);
+  if (!options.ok) return { ok: false, error: options.error };
+  const floor = resolveMinRelevance(flags, rerank, rerankModelOf(options.options));
+  return floor.ok
+    ? okArgs(flags, values, { options: options.options, minRelevance: floor.minRelevance })
+    : { ok: false, error: floor.error };
 };
 
 /** Every value flag, resolved together so the command states one refusal path. */
@@ -488,6 +639,8 @@ interface RetrieveRequest {
   readonly rerank: boolean;
   /** The reranker's model and fusion rule as the tuning flags resolved them. */
   readonly rerankOptions: RerankOptions;
+  /** The calibrated relevance floor; `undefined` when no floor was asked for. */
+  readonly minRelevance: number | undefined;
   readonly rephrase: boolean;
   /** The rewrite `--rephrase` produced; `undefined` when it was off or refused. */
   readonly queryRewritten: string | undefined;
@@ -511,16 +664,24 @@ const effectiveQuery = (request: RetrieveRequest): string =>
  * field instead of two. A skip and an absent corpus cannot co-occur: nothing was
  * retrieved to budget in the second case.
  */
+const noteLines = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult
+): readonly string[] => {
+  const refusals = refusalsOf(request);
+  if (refusals.length > 0) return [...refusals, ...floorNotes(budgeted)];
+  if (hasSkips(budgeted)) return [budgetWarning(budgeted), ...floorNotes(budgeted)];
+  return isUnavailable(budgeted.result)
+    ? [noCorpusNote(request.context.adapter)]
+    : floorNotes(budgeted);
+};
+
 const noteField = (
   request: RetrieveRequest,
   budgeted: BudgetedResult
 ): Readonly<Record<string, string>> => {
-  const refusals = refusalsOf(request);
-  if (refusals.length > 0) return { note: refusals.join('\n') };
-  if (hasSkips(budgeted)) return { note: budgetWarning(budgeted) };
-  return isUnavailable(budgeted.result)
-    ? { note: noCorpusNote(request.context.adapter) }
-    : {};
+  const lines = noteLines(request, budgeted);
+  return lines.length > 0 ? { note: lines.join('\n') } : {};
 };
 
 /** Omitted entirely when no rewrite happened, so an unrephrased payload is unchanged. */
@@ -541,6 +702,7 @@ const payload = (
   indexState: budgeted.result.indexState,
   count: budgeted.result.atoms.length,
   poolSize: budgeted.poolSize,
+  confidence: confidenceOf(request, budgeted),
   atoms: explainAtoms(effectiveQuery(request), budgeted.result.atoms),
   skipped: budgeted.skipped,
   ...noteField(request, budgeted),
@@ -582,14 +744,15 @@ const rewrittenAttribute = (request: RetrieveRequest): readonly string[] =>
     ? []
     : [xmlAttribute('queryRewritten', request.queryRewritten)];
 
-const rootAttributes = (request: RetrieveRequest, result: RetrievalResult): string =>
+const rootAttributes = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
   [
     xmlAttribute('query', request.query),
     ...rewrittenAttribute(request),
     xmlAttribute('adapter', request.context.adapter),
-    xmlAttribute('mode', result.mode),
-    xmlAttribute('indexState', result.indexState),
-    xmlAttribute('count', String(result.atoms.length)),
+    xmlAttribute('mode', budgeted.result.mode),
+    xmlAttribute('indexState', budgeted.result.indexState),
+    xmlAttribute('count', String(budgeted.result.atoms.length)),
+    xmlAttribute('confidence', confidenceOf(request, budgeted)),
   ].join(' ');
 
 /**
@@ -605,6 +768,9 @@ const rootAttributes = (request: RetrieveRequest, result: RetrievalResult): stri
 const skippedXml = (skipped: SkippedAtom, repoRoot: string): string =>
   `  <skipped ${xmlAttribute('id', skipped.id)} ${xmlAttribute('source', relative(repoRoot, skipped.sourcePath))} ${xmlAttribute('estimatedTokens', String(skipped.estimatedTokens))}/>`;
 
+const floorXml = (budgeted: BudgetedResult): readonly string[] =>
+  floorNotes(budgeted).map(note => `  <note>${escapeXml(note)}</note>`);
+
 const skipXml = (budgeted: BudgetedResult, repoRoot: string): readonly string[] =>
   hasSkips(budgeted)
     ? [
@@ -615,11 +781,12 @@ const skipXml = (budgeted: BudgetedResult, repoRoot: string): readonly string[] 
 
 const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
   [
-    `<retrieved_context ${rootAttributes(request, budgeted.result)}>`,
+    `<retrieved_context ${rootAttributes(request, budgeted)}>`,
     ...(isUnavailable(budgeted.result)
       ? [`  <note>${escapeXml(noCorpusNote(request.context.adapter))}</note>`]
       : []),
     ...skipXml(budgeted, request.context.repoRoot),
+    ...floorXml(budgeted),
     ...budgeted.result.atoms.map(atom => documentXml(atom, request.context.repoRoot)),
     '</retrieved_context>',
   ].join('\n');
@@ -678,18 +845,58 @@ const rankedResult = async (
   return { result: { ...result, atoms, mode: `${result.mode}+rerank` }, refusal: undefined };
 };
 
+/** The delivered ranking after the floor, and how many atoms it removed. */
+interface FlooredResult {
+  readonly result: RetrievalResult;
+  readonly belowFloor: number;
+  readonly minRelevance: number | undefined;
+}
+
+const clearsFloor = (request: RetrieveRequest, floor: number, atom: RetrievedAtom): boolean => {
+  const probability = calibratedOf(request, atom);
+  return probability !== undefined && probability >= floor;
+};
+
 /**
- * The budget is applied HERE, between the port and the renderings: the adapters
+ * The calibrated floor, applied to the atoms AS DELIVERED — after the rerank and
+ * after the `-k` slice, immediately before the budget.
+ *
+ * SUBTRACTIVE and nothing else: it filters the list in place, so the surviving
+ * atoms keep their relative order, no atom is promoted out of the deeper pool to
+ * replace a dropped one, and `poolSize` is untouched. An atom with no calibrated
+ * probability is dropped rather than kept — the floor asks for evidence, and
+ * absent evidence is not evidence of relevance.
+ */
+const applyFloor = (request: RetrieveRequest, result: RetrievalResult): FlooredResult => {
+  const floor = request.minRelevance;
+  if (floor === undefined) return { result, belowFloor: 0, minRelevance: undefined };
+  const kept = result.atoms.filter(atom => clearsFloor(request, floor, atom));
+  return {
+    result: { ...result, atoms: kept },
+    belowFloor: result.atoms.length - kept.length,
+    minRelevance: floor,
+  };
+};
+
+/**
+ * The budget is applied HERE, between the floor and the renderings: the adapters
  * rank, the CLI decides what fits the caller's window, and both halves of that
  * decision — kept and skipped — reach every rendering.
  */
 const applyBudget = (
-  result: RetrievalResult,
+  floored: FlooredResult,
   maxTokens: number,
   poolSize: number
 ): BudgetedResult => {
-  const fit = fitToTokenBudget(result.atoms, maxTokens);
-  return { result: { ...result, atoms: fit.kept }, skipped: fit.skipped, maxTokens, poolSize };
+  const fit = fitToTokenBudget(floored.result.atoms, maxTokens);
+  return {
+    result: { ...floored.result, atoms: fit.kept },
+    skipped: fit.skipped,
+    maxTokens,
+    poolSize,
+    belowFloor: floored.belowFloor,
+    minRelevance: floored.minRelevance,
+  };
 };
 
 /**
@@ -717,7 +924,8 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   port.close?.();
   const ranked = await rankedResult(request, result);
   const reported: RetrieveRequest = { ...request, rerankRefusal: ranked.refusal };
-  const budgeted = applyBudget(ranked.result, request.maxTokens, result.atoms.length);
+  const floored = applyFloor(reported, ranked.result);
+  const budgeted = applyBudget(floored, request.maxTokens, result.atoms.length);
   return {
     exitCode: exitCodeFor(reported, ranked.result),
     data: payload(reported, budgeted),
@@ -741,6 +949,7 @@ const initialRequest = (
   types: args.types,
   rerank: args.rerank,
   rerankOptions: args.rerankOptions,
+  minRelevance: args.minRelevance,
   rephrase: args.rephrase,
   queryRewritten: undefined,
   rephraseRefusal: undefined,

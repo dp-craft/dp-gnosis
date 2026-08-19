@@ -247,6 +247,41 @@ export const RERANK_PRESET_NAMES = Object.keys(RERANK_FUSION_PRESETS) as readonl
 export const DEFAULT_RERANK_PRESET: RerankPresetName = 'shipped';
 
 /**
+ * Whether a reranker's raw `/v1/rerank` score IS a probability already, or a
+ * logit that must be squashed into one. Two members and no third: the scale of
+ * a model outside this table is unmeasured, and a guessed scale publishes a
+ * number that reads like a probability and is not one.
+ */
+export type RerankCalibration = 'identity' | 'sigmoid';
+
+/**
+ * The measured scale of each served reranker.
+ *
+ * Evidence — probe of 2026-08-19, `POST /v1/rerank` with one relevant, one mid
+ * and one irrelevant document against each served model:
+ *
+ *   qwen3-reranker-4b     0.99972 / 0.32028 / 0.0000039  -> already a probability
+ *   qwen3-reranker-0.6b   0.99973 / 0.94059 / 0.00012    -> already a probability
+ *   bge-reranker-v2-m3    5.0632  / -0.1369 / -10.9998   -> a logit
+ *   ettin-reranker-1b-v1  2.4520  / 0.8657  / -0.2419    -> a logit
+ *
+ * A model NOT listed is UNCALIBRATED: `calibrate` (`rerank.ts`) returns
+ * `undefined` for it and `--min-relevance` refuses to run against it. There is
+ * deliberately no default entry — a default here would be a guess presented as
+ * a measurement.
+ *
+ * The table says how to READ a score, never which score is good. The numeric
+ * BAND — which probability means "relevant" — is NOT decided here and is owed a
+ * separate measurement.
+ */
+export const RERANK_CALIBRATION: Readonly<Record<string, RerankCalibration>> = {
+  'qwen3-reranker-4b': 'identity',
+  'qwen3-reranker-0.6b': 'identity',
+  'bge-reranker-v2-m3': 'sigmoid',
+  'ettin-reranker-1b-v1': 'sigmoid',
+};
+
+/**
  * The rewriter behind `retrieve --rephrase`, overridden by
  * {@link REPHRASE_MODEL_ENV_VAR}. A CHAT model, not a reranker — but it is
  * served by the SAME llama-swap instance, so it reuses

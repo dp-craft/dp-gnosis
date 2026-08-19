@@ -40,6 +40,9 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--include-history': { kind: 'boolean' },
   // `retrieve` only: the injection budget in estimated tokens (UTF-8 bytes).
   '--max-tokens': { kind: 'value', placeholder: '<n>' },
+  // `retrieve` only, OPT-IN: drop every delivered atom whose CALIBRATED
+  // relevance probability falls below the floor. Subtractive, never reordering.
+  '--min-relevance': { kind: 'value', placeholder: '<p>' },
   // `retrieve` only, OPT-IN: RRF-fuse a reranker pass over the first pass.
   '--rerank': { kind: 'boolean' },
   // The three below tune that pass and are meaningless without it, so each one

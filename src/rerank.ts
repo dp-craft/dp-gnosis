@@ -26,6 +26,7 @@ import {
 } from './bench/reranker.js';
 import {
   DEFAULT_RERANK_PRESET,
+  RERANK_CALIBRATION,
   RERANK_DEFAULT_URL,
   RERANK_DOC_MAX_CHARS,
   RERANK_FUSION_PRESETS,
@@ -405,6 +406,30 @@ const resolved = (options: RerankOptions): Resolved => ({
     extract: options.rerankExtract ?? EXTRACT_STRATEGY,
   },
 });
+
+/**
+ * The raw cross-encoder score read as a RELEVANCE PROBABILITY, per the model's
+ * measured scale ({@link RERANK_CALIBRATION}).
+ *
+ * `undefined` is the refusal, and it has three causes, all of them "this number
+ * cannot be published as a probability": the model has no measured scale, the
+ * datum is not a finite number, or an `identity` model returned a value outside
+ * `0…1` — which contradicts the table's own assumption, so the assumption is
+ * abandoned for that datum rather than the datum being coerced.
+ *
+ * Pure: no I/O, no server, no clock. It says how relevant the reranker judged
+ * the pair, never whether that is good enough to serve.
+ */
+const sigmoid = (raw: number): number => 1 / (1 + Math.exp(-raw));
+
+const asProbability = (value: number): number | undefined =>
+  value >= 0 && value <= 1 ? value : undefined;
+
+export const calibrate = (model: string, raw: number): number | undefined => {
+  const scale = RERANK_CALIBRATION[model];
+  if (scale === undefined || !Number.isFinite(raw)) return undefined;
+  return scale === 'sigmoid' ? sigmoid(raw) : asProbability(raw);
+};
 
 /**
  * Attaches the first-pass score and the RAW cross-encoder score to each atom

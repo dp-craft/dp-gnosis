@@ -13,7 +13,12 @@ import { join } from 'node:path';
 import { estimateTokens } from '../src/budget.js';
 import { runCli } from '../src/cli/cli.js';
 import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
-import { fuseRanking, probeRerankDiscrimination, resetRerankProbeCache } from '../src/rerank.js';
+import {
+  calibrate,
+  fuseRanking,
+  probeRerankDiscrimination,
+  resetRerankProbeCache
+} from '../src/rerank.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Gamma'] as const;
 
@@ -414,5 +419,58 @@ describe('retrieve --rerank — the serving-path probe', () => {
     expect(payload.note ?? '').toContain('rerank-probe-failed');
     expect(payload.atoms.map(atom => atom.id)).toEqual(unreranked.atoms.map(atom => atom.id));
     expect(payload.atoms.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * `calibrate` — the raw cross-encoder score read as a PROBABILITY.
+ *
+ * The four served models split into two scales, measured 2026-08-19 by posting
+ * one relevant, one mid and one irrelevant document to each (`RERANK_CALIBRATION`,
+ * `src/config.ts` carries the probe). A model outside that table has no measured
+ * scale, so it calibrates to `undefined` — never to a guessed default, which
+ * would publish a number that reads like a probability and is not one.
+ */
+describe('calibrate — a raw rerank score as a probability', () => {
+  it('passes an identity model through untouched', () => {
+    expect(calibrate('qwen3-reranker-4b', 0.99972)).toBeCloseTo(0.99972, 12);
+    expect(calibrate('qwen3-reranker-0.6b', 0.94059)).toBeCloseTo(0.94059, 12);
+    expect(calibrate('qwen3-reranker-4b', 0.0000039)).toBeCloseTo(0.0000039, 12);
+  });
+
+  it('squashes a logit model through the sigmoid', () => {
+    expect(calibrate('bge-reranker-v2-m3', 5.0632)).toBeCloseTo(1 / (1 + Math.exp(-5.0632)), 12);
+    expect(calibrate('bge-reranker-v2-m3', -10.9998)).toBeCloseTo(1 / (1 + Math.exp(10.9998)), 12);
+    expect(calibrate('ettin-reranker-1b-v1', 2.452)).toBeCloseTo(1 / (1 + Math.exp(-2.452)), 12);
+    expect(calibrate('ettin-reranker-1b-v1', -0.2419)).toBeCloseTo(1 / (1 + Math.exp(0.2419)), 12);
+  });
+
+  it('lands every calibrated value inside 0…1', () => {
+    const values = [
+      calibrate('bge-reranker-v2-m3', 5.0632),
+      calibrate('bge-reranker-v2-m3', -10.9998),
+      calibrate('qwen3-reranker-4b', 0.32028),
+    ];
+
+    values.forEach(value => {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it('refuses a model with no measured calibration', () => {
+    expect(calibrate('jina-reranker-v3', 0.5)).toBeUndefined();
+    expect(calibrate('', 0.5)).toBeUndefined();
+  });
+
+  it('refuses a non-finite raw score', () => {
+    expect(calibrate('qwen3-reranker-4b', Number.NaN)).toBeUndefined();
+    expect(calibrate('bge-reranker-v2-m3', Number.POSITIVE_INFINITY)).toBeUndefined();
+    expect(calibrate('bge-reranker-v2-m3', Number.NEGATIVE_INFINITY)).toBeUndefined();
+  });
+
+  it('refuses an identity model whose datum contradicts the table', () => {
+    expect(calibrate('qwen3-reranker-4b', 5.0632)).toBeUndefined();
+    expect(calibrate('qwen3-reranker-0.6b', -0.5)).toBeUndefined();
   });
 });

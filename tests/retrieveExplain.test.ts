@@ -182,6 +182,8 @@ interface JsonPayload {
   readonly count: number;
   readonly poolSize: number;
   readonly mode: string;
+  readonly confidence: string;
+  readonly note?: string;
 }
 
 const parsePayload = (stdout: string): JsonPayload => JSON.parse(stdout) as JsonPayload;
@@ -392,5 +394,225 @@ describe('the ranking ORDER is unchanged by any of it', () => {
     expect([...again.atoms].sort((l, r) => r.score - l.score).map(entry => entry.id)).toEqual(
       again.atoms.map(entry => entry.id)
     );
+  });
+});
+
+/**
+ * `--min-relevance <p>` — the OPT-IN calibrated floor, and the `confidence`
+ * field every rendering now carries.
+ *
+ * The floor is STRICTLY SUBTRACTIVE: it drops atoms the run already delivered
+ * and MUST NOT reorder them, promote one from deeper in the pool, or move
+ * `poolSize`. That is what the first test pins, against the unfiltered run of
+ * the same fixture as the oracle.
+ */
+const stubScores = (scores: readonly number[]): void => {
+  vi.stubGlobal(
+    'fetch',
+    async (url: string, init?: { readonly body?: string }): Promise<unknown> => {
+      if (url.endsWith('/v1/models')) return okResponse({ data: [{ id: RERANK_MODEL_ID }] });
+      if (queryOf(init).includes(PROBE_MARKER)) return okResponse({ results: HEALTHY_PROBE });
+      return okResponse({
+        results: scores.map((score, index) => ({ index, relevance_score: score })),
+      });
+    }
+  );
+};
+
+/** The floor that keeps the 1.0 / 0.9 / 0.8 raw scores and drops the 0.7 one. */
+const PARTIAL_FLOOR = '0.75';
+
+describe('retrieve --min-relevance — a strictly subtractive floor', () => {
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    resetRerankProbeCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the delivered atoms in their unfiltered order, and drops the rest', async () => {
+    const fixture = await makeFixture();
+    stubServer();
+
+    const unfiltered = await json(fixture, ['--rerank']);
+    const filtered = await json(fixture, ['--rerank', '--min-relevance', PARTIAL_FLOOR]);
+
+    const survivors = unfiltered.atoms
+      .filter(entry => (entry.rerankScore ?? 0) >= Number(PARTIAL_FLOOR))
+      .map(entry => entry.id);
+    expect(survivors.length).toBeGreaterThan(0);
+    expect(survivors.length).toBeLessThan(unfiltered.atoms.length);
+    expect(filtered.atoms.map(entry => entry.id)).toEqual(survivors);
+    expect(filtered.count).toBe(survivors.length);
+    expect(filtered.poolSize).toBe(unfiltered.poolSize);
+  });
+
+  it('delivers nothing, and says so, when the floor drops every atom', async () => {
+    const fixture = await makeFixture();
+    stubScores([0.1, 0.2, 0.3, 0.4]);
+
+    const payload = await json(fixture, ['--rerank', '--min-relevance', '0.9']);
+
+    expect(payload.atoms).toEqual([]);
+    expect(payload.count).toBe(0);
+    expect(payload.confidence).toBe('none');
+    expect(payload.poolSize).toBe(LABELS.length);
+    expect(payload.note ?? '').toContain('0.9');
+    expect(payload.note ?? '').toContain(String(LABELS.length));
+  });
+});
+
+describe('confidence — in all three renderings', () => {
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    resetRerankProbeCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const renderings = async (
+    fixture: Fixture,
+    extra: readonly string[]
+  ): Promise<{ readonly json: string; readonly text: string; readonly xml: string }> => ({
+    json: (await json(fixture, extra)).confidence,
+    text: (await retrieve(fixture, extra)).stdout,
+    xml: (await retrieve(fixture, ['--format', 'xml', ...extra])).stdout,
+  });
+
+  it('reads weak with no floor in effect — no calibrated evidence was required', async () => {
+    const rendered = await renderings(await makeFixture(), []);
+
+    expect(rendered.json).toBe('weak');
+    expect(rendered.text).toContain('retrieve: confidence weak');
+    expect(rendered.xml).toContain('confidence="weak"');
+  });
+
+  it('reads ok when a floor is in effect and the top atom clears it', async () => {
+    const fixture = await makeFixture();
+    stubServer();
+
+    const rendered = await renderings(fixture, ['--rerank', '--min-relevance', '0.5']);
+
+    expect(rendered.json).toBe('ok');
+    expect(rendered.text).toContain('retrieve: confidence ok');
+    expect(rendered.xml).toContain('confidence="ok"');
+  });
+
+  it('reads none when the floor delivered nothing', async () => {
+    const fixture = await makeFixture();
+    stubScores([0.1, 0.2, 0.3, 0.4]);
+
+    const rendered = await renderings(fixture, ['--rerank', '--min-relevance', '0.9']);
+
+    expect(rendered.json).toBe('none');
+    expect(rendered.text).toContain('retrieve: confidence none');
+    expect(rendered.xml).toContain('confidence="none"');
+  });
+});
+
+/** Every key the `--json` payload carried before `confidence` existed. */
+const PRE_CONFIDENCE_KEYS: readonly string[] = [
+  'command',
+  'adapter',
+  'query',
+  'k',
+  'mode',
+  'indexState',
+  'count',
+  'poolSize',
+  'atoms',
+  'skipped',
+  'exitCode',
+];
+
+describe('a run without --min-relevance changes only by the confidence field', () => {
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('adds exactly one key to the --json payload', async () => {
+    const payload = JSON.parse((await retrieve(await makeFixture(), ['--json'])).stdout) as Record<
+      string,
+      unknown
+    >;
+
+    expect(Object.keys(payload).sort()).toEqual([...PRE_CONFIDENCE_KEYS, 'confidence'].sort());
+  });
+
+  it('adds exactly one line to the text rendering, leaving every other line as it was', async () => {
+    const text = (await retrieve(await makeFixture(), [])).stdout;
+
+    const lines = text.trimEnd().split('\n');
+    expect(lines.filter(line => line.includes('confidence'))).toEqual([
+      'retrieve: confidence weak',
+    ]);
+    const rest = lines.filter(line => !line.startsWith('retrieve: confidence'));
+    expect(rest[0]).toMatch(/^retrieve: mode [\w:-]+, indexState \w+, atoms \d+$/);
+    rest.slice(1).forEach(line => expect(line).toMatch(/^ {2}\d+\.\d{4} {2}|^ {4}origin {2}/));
+  });
+
+  it('adds exactly one attribute to the xml root, and nothing to a document', async () => {
+    const xml = (await retrieve(await makeFixture(), ['--format', 'xml'])).stdout;
+
+    expect(xml.match(/confidence/g)).toHaveLength(1);
+    expect(xml).toContain('confidence="weak"');
+    xml
+      .split('\n')
+      .filter(line => line.startsWith('  <document'))
+      .forEach(line =>
+        expect(line).toMatch(/^ {2}<document id="[^"]+" score="\d+\.\d{4}" domain="[^"]+">$/)
+      );
+  });
+});
+
+describe('--min-relevance refuses rather than filtering something it cannot calibrate', () => {
+  const refuse = async (extra: readonly string[]): Promise<CliResult> =>
+    await runCli(['retrieve', 'zestful retrieval', '--adapter', 'linear', ...extra]);
+
+  it('refuses a value outside 0…1, never clamping it', async () => {
+    const result = await refuse(['--rerank', '--min-relevance', '1.5']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('--min-relevance');
+    expect(result.stderr).toContain('1.5');
+    expect(result.stderr).toContain('never clamped');
+  });
+
+  it('refuses a non-finite value', async () => {
+    const result = await refuse(['--rerank', '--min-relevance', 'mostly']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('mostly');
+  });
+
+  it('refuses the floor without --rerank — nothing would carry a calibrated score', async () => {
+    const result = await refuse(['--min-relevance', '0.5']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('--rerank');
+  });
+
+  it('refuses a reranker with no measured calibration, naming it and the calibrated ids', async () => {
+    const result = await refuse([
+      '--rerank',
+      '--rerank-model',
+      'mxbai-rerank-large-v2',
+      '--min-relevance',
+      '0.5',
+    ]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('mxbai-rerank-large-v2');
+    expect(result.stderr).toContain(RERANK_MODEL_ID);
   });
 });

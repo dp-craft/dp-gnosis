@@ -68,7 +68,8 @@ Exit 3 cases: `indexState unavailable` · a refused `--rephrase` (raw query sear
 | `--rerank` | boolean — **`retrieve` only**, rerank a pool of at least `RERANK_K_INIT` and RRF-fuse that order with the first pass | off |
 | `--rerank-model` | cross-encoder id — **requires `--rerank`** | `RERANK_MODEL_ID` (`qwen3-reranker-4b`) |
 | `--rerank-profile` | `shipped\|beir-ce` — the FUSION RULE. Unknown name fails loudly, listing both. **Requires `--rerank`** | `shipped` |
-| `--rerank-weight` | `0`…`1` — the reranked order's RRF weight; the first pass carries `1 - w`. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** | `0.5` |
+| `--rerank-weight` | `0`…`1` — the reranked order's RRF weight; the first pass carries `1 - w`. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** | `0.75` |
+| `--min-relevance` | `0`…`1` — **`retrieve` only**, OPT-IN calibrated relevance floor. Drops every delivered atom whose calibrated probability is below it — strictly SUBTRACTIVE, so it never reorders and never changes `poolSize`; each drop is reported. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** and a reranker carrying a measured scale (`RERANK_CALIBRATION`, `src/config.ts`) | unset — no floor, and every retrieved atom is delivered |
 | `--help` / `-h` | boolean | off |
 
 **An unfiltered `retrieve` excludes `defaultExcludedTypes`** — the exclusion is a CLI default only, applied on no other path: never on ingest, never in the bench, so every recorded benchmark number is unaffected. Those types stay ingested and indexed, and `--include-history` searches them.
