@@ -102,12 +102,14 @@ Rewriting by hand and passing the result is still the cheapest path; the flag ex
 
 | Invocation | Result |
 |---|---|
-| no flag / `--format text` | the compact human line per hit (score, id, domain, title — **no body**). A **reranked** run inserts `rerank <score>` after the fused score; a run that did not rerank emits the line it always did, byte for byte |
+| no flag / `--format text` | the compact human line per hit (score, `(i/n)` reading position, id, domain, title — **no body**). A **reranked** run inserts `rerank <score>` after the fused score; a run that did not rerank emits the line it always did, byte for byte, once `--flat` is passed |
 | `--json` / `--format json` / both together | the JSON object in § `--json` key shape |
 | `--format xml` | a `<retrieved_context>` block carrying each atom **body** — paste-ready for an LLM |
 | `--json --format xml` | **exit 2**, naming both flags — a contradiction is refused, never resolved |
 | `--format <anything else>` | exit 2, naming `text, json, xml` |
 | `--format` on `ingest` / `index` / `bench` | exit 2 through the unknown-flag path |
+
+**Every format is GROUPED BY SOURCE DOCUMENT** unless `--flat` is passed: a document's atoms render together, in reading order, under the group's best-scoring member, so a lower-scoring atom legitimately precedes a higher-scoring one INSIDE a group. `--max-per-doc` (default `2`) bounds how many atoms one document contributes. Grouping reorders the DELIVERED atoms in all three formats, so the budget walk sees reading order; it changes no score and no ranking of documents.
 
 Exit codes are identical across formats; `xml` is a rendering, never a different search.
 
