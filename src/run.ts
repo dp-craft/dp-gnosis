@@ -998,7 +998,7 @@ const relevantIds = (qrels: ReadonlyMap<string, Qrel>): readonly string[] => [
  * never from the golden JSON a second time, so the two can never disagree. The
  * exact-body dedupe keeps one copy of a mirrored document, and gold-blind it
  * kept the unjudged mirror on 8 `vault` topics, which lost their `recall@100`
- * outright (GNOSIS-GUIDE § Known harness gaps).
+ * outright (GNOSIS-BENCH § Known harness gaps).
  *
  * `undefined` for every dataset the bench does not derive: their dedupe stays
  * gold-blind and their rows stay byte-comparable with every one recorded.

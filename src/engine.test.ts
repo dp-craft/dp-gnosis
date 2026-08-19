@@ -735,7 +735,7 @@ describe('assertRerankDiscriminates', () => {
  * GOLD-AWARE DEDUPE, end to end. The exact-body dedupe keeps ONE copy of a
  * mirrored document, and before `goldIds` it chose gold-blind: on `vault` it
  * kept the mirror and dropped the copy the golden set judges, which cost 8
- * topics their `recall@100` outright (GNOSIS-GUIDE § Known harness gaps). The
+ * topics their `recall@100` outright (GNOSIS-BENCH § Known harness gaps). The
  * ids therefore have to reach `ingest()` on the MEASURED path — the field
  * existing on `IngestOptions` proves nothing while no bench caller passes it.
  */
