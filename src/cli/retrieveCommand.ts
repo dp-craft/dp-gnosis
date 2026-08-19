@@ -30,6 +30,14 @@ import type { FlagValues } from './args.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
 import { explainAtoms } from './explain.js';
+import {
+  capPerDocument,
+  DEFAULT_MAX_PER_DOC,
+  groupByDocument,
+  GROUPED_POOL_FLOOR,
+  NO_CAP,
+  positionMarker
+} from './grouping.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
 import { escapeXml, xmlAttribute } from './xml.js';
@@ -86,6 +94,57 @@ export const RERANK_FLAG = '--rerank';
  * What IS reported is the rewritten query itself, which the reader can check.
  */
 export const REPHRASE_FLAG = '--rephrase';
+
+/**
+ * The per-document cap and the escape hatch from grouping, `retrieve` only;
+ * `cli.ts` refuses both elsewhere.
+ *
+ * They are MUTUALLY EXCLUSIVE by construction: `--flat` says the answer is not
+ * grouped, and a cap on a grouping that does not happen is a run whose flag did
+ * nothing under a success code.
+ */
+export const MAX_PER_DOC_FLAG = '--max-per-doc';
+
+export const FLAT_FLAG = '--flat';
+
+const maxPerDocError = (raw: string): string =>
+  `${MAX_PER_DOC_FLAG} must be a non-negative integer — got "${raw}"; pass e.g. \`${MAX_PER_DOC_FLAG} ${DEFAULT_MAX_PER_DOC}\`, or \`${MAX_PER_DOC_FLAG} ${NO_CAP}\` to cap nothing`;
+
+const groupingConflictError = (): string =>
+  `${FLAT_FLAG} and ${MAX_PER_DOC_FLAG} each state how the answer is grouped, and a run may state it only once — ${FLAT_FLAG} delivers the ranking ungrouped, so a per-document cap would have nothing to cap`;
+
+const parseMaxPerDoc = (raw: string): number | undefined => {
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= NO_CAP ? value : undefined;
+};
+
+/**
+ * `undefined` = `--flat`: no grouping, no cap, and the pre-grouping rendering
+ * byte for byte. `NO_CAP` = grouped with every atom kept.
+ */
+type MaxPerDocResult =
+  | { readonly ok: true; readonly maxPerDoc: number | undefined }
+  | { readonly ok: false; readonly error: string };
+
+/** `--flat` accepts no cap beside it; the pairing is the whole conflict. */
+const flatMaxPerDoc = (raw: string | undefined): MaxPerDocResult =>
+  raw === undefined
+    ? { ok: true, maxPerDoc: undefined }
+    : { ok: false, error: groupingConflictError() };
+
+const groupedMaxPerDoc = (raw: string | undefined): MaxPerDocResult => {
+  if (raw === undefined) return { ok: true, maxPerDoc: DEFAULT_MAX_PER_DOC };
+  const value = parseMaxPerDoc(raw);
+  return value === undefined ? { ok: false, error: maxPerDocError(raw) } : { ok: true, maxPerDoc: value };
+};
+
+/** Grouping is on unless `--flat` turned it off; `maxPerDoc` carries that fact. */
+const isGrouped = (request: RetrieveRequest): boolean => request.maxPerDoc !== undefined;
+
+const resolveMaxPerDoc = (flags: FlagValues): MaxPerDocResult => {
+  const raw = stringFlag(flags, MAX_PER_DOC_FLAG);
+  return flags[FLAT_FLAG] === true ? flatMaxPerDoc(raw) : groupedMaxPerDoc(raw);
+};
 
 /**
  * The three tuning flags for that pass. Each one is inert without
@@ -424,8 +483,18 @@ const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
 const rerankPart = (atom: RetrievedAtom): string =>
   atom.rerankScore === undefined ? '' : `  rerank  ${formatScore(atom.rerankScore)}`;
 
-const atomLine = (atom: RetrievedAtom): string =>
-  `  ${formatScore(atom.score)}${rerankPart(atom)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
+/**
+ * WHERE in its document the atom sits, on a GROUPED answer only. An atom that
+ * states no position renders no marker, and `--flat` renders none at all — the
+ * ungrouped line is what every caller before grouping reads, byte for byte.
+ */
+const positionPart = (atom: RetrievedAtom, grouped: boolean): string => {
+  const marker = grouped ? positionMarker(atom) : '';
+  return marker === '' ? '' : `  ${marker}`;
+};
+
+const atomLine = (atom: RetrievedAtom, grouped: boolean): string =>
+  `  ${formatScore(atom.score)}${rerankPart(atom)}${positionPart(atom, grouped)}  ${atom.id}  [${atom.domain}]  ${atom.title}`;
 
 /**
  * One line per ORIGIN document, under the atom it belongs to. A list rather than
@@ -434,8 +503,8 @@ const atomLine = (atom: RetrievedAtom): string =>
  */
 const originLine = (origin: string): string => `    origin  ${origin}`;
 
-const atomLines = (atom: RetrievedAtom): readonly string[] => [
-  atomLine(atom),
+const atomLines = (atom: RetrievedAtom, grouped: boolean): readonly string[] => [
+  atomLine(atom, grouped),
   ...atom.originPaths.map(originLine),
 ];
 
@@ -453,6 +522,14 @@ interface BudgetedResult {
    * or a deep pool the caller asked to cut.
    */
   readonly poolSize: number;
+  /**
+   * How many atoms of that first pass SURVIVE the per-document cap, which is the
+   * most the answer can deliver. Equal to `poolSize` whenever the cap subtracted
+   * nothing (`--flat`, `NO_CAP`, or a pool of distinct documents). The count is
+   * order-invariant — it is `sum over documents of min(cap, atoms)` — so it is
+   * the same before and after a rerank reorders the pool.
+   */
+  readonly cappedPool: number;
   /**
    * How many atoms the calibrated floor removed BECAUSE THEY SCORED BELOW IT.
    * Zero on every run that named no floor, so an unfiltered run reports nothing
@@ -588,6 +665,26 @@ const emptyNotes = (
   budgeted.poolSize === 0 && !isUnavailable(budgeted.result) ? [emptyNote(request)] : [];
 
 /**
+ * Under-delivery MUST NOT be silent. An answer shorter than `-k` reads exactly
+ * like a thin corpus unless the run names what shortened it, and the caller's
+ * remedy differs: a query needs rephrasing, a cap needs raising.
+ *
+ * It fires only when the cap ACTUALLY subtracted (`cappedPool < poolSize`) —
+ * blaming the cap for a pool it left untouched would state a falsehood, and the
+ * budget and the floor already name their own subtractions.
+ */
+const capShortfallNote = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
+  `retrieve: delivered ${budgeted.cappedPool} of the ${request.k} atoms asked for — the per-document cap did that, not the query: the first pass matched ${budgeted.poolSize} atom(s), and at \`${MAX_PER_DOC_FLAG} ${request.maxPerDoc}\` only ${budgeted.cappedPool} of them survive it — raise it with \`${MAX_PER_DOC_FLAG} <n>\`, or pass \`${FLAT_FLAG}\` to cap nothing`;
+
+const isCapShort = (request: RetrieveRequest, budgeted: BudgetedResult): boolean =>
+  budgeted.cappedPool < request.k && budgeted.cappedPool < budgeted.poolSize;
+
+const capNotes = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult
+): readonly string[] => (isCapShort(request, budgeted) ? [capShortfallNote(request, budgeted)] : []);
+
+/**
  * The rewrite is stated in FULL, both sides: the ranking is evidence about the
  * rewritten query, and a reader who cannot see what was actually searched
  * cannot judge the results.
@@ -625,11 +722,23 @@ const calibratedOf = (request: RetrieveRequest, atom: RetrievedAtom): number | u
     ? undefined
     : calibrate(rerankModelOf(request.rerankOptions), atom.rerankScore);
 
+/**
+ * The strongest evidence delivered, chosen by SCORE rather than by position:
+ * grouping arranges the answer for reading, so the first line is the first atom
+ * of the best-ranked DOCUMENT, which need not be the best-scoring atom. On an
+ * ungrouped answer the two are the same atom, so no `--flat` run moves.
+ */
+const bestScored = (atoms: readonly RetrievedAtom[]): RetrievedAtom | undefined =>
+  atoms.reduce<RetrievedAtom | undefined>(
+    (best, atom) => (best === undefined || atom.score > best.score ? atom : best),
+    undefined
+  );
+
 const topCalibrated = (
   request: RetrieveRequest,
   budgeted: BudgetedResult
 ): number | undefined => {
-  const top = budgeted.result.atoms[0];
+  const top = bestScored(budgeted.result.atoms);
   return top === undefined ? undefined : calibratedOf(request, top);
 };
 
@@ -658,10 +767,11 @@ const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): strin
     ...rephraseLines(request),
     ...rerankLines(request),
     ...(isUnavailable(result) ? [noCorpusNote(request.context.adapter)] : []),
-    ...result.atoms.flatMap(atomLines),
+    ...result.atoms.flatMap(atom => atomLines(atom, isGrouped(request))),
     ...skipText(budgeted),
     ...floorNotes(budgeted),
     ...emptyNotes(request, budgeted),
+    ...capNotes(request, budgeted),
   ].join('\n');
 };
 
@@ -671,6 +781,8 @@ type ArgsResult =
     readonly k: number;
     readonly maxTokens: number;
     readonly types: readonly AtomType[] | undefined;
+    /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
+    readonly maxPerDoc: number | undefined;
     readonly rerank: boolean;
     readonly rerankOptions: RerankOptions;
     readonly minRelevance: number | undefined;
@@ -683,6 +795,8 @@ interface ResolvedValues {
   readonly k: number;
   readonly maxTokens: number;
   readonly types: readonly AtomType[] | undefined;
+  /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
+  readonly maxPerDoc: number | undefined;
 }
 
 /** The rerank leg as argv resolved it: how to score, and the floor to serve at. */
@@ -714,17 +828,51 @@ const withRerankArgs = (flags: FlagValues, values: ResolvedValues): ArgsResult =
     : { ok: false, error: floor.error };
 };
 
-/** Every value flag, resolved together so the command states one refusal path. */
-const resolveArgs = (flags: FlagValues): ArgsResult => {
+type CountsResult =
+  | { readonly ok: true; readonly k: number; readonly maxTokens: number }
+  | { readonly ok: false; readonly error: string };
+
+/** The two integer flags, refusing with the token the caller typed. */
+const resolveCounts = (flags: FlagValues): CountsResult => {
   const k = resolveK(flags);
   const maxTokens = resolveMaxTokens(flags);
-  const types = resolveTypeFilter(flags);
   if (k === undefined) return { ok: false, error: kError(rawFlag(flags, '-k')) };
   if (maxTokens === undefined) {
     return { ok: false, error: maxTokensError(rawFlag(flags, MAX_TOKENS_FLAG)) };
   }
+  return { ok: true, k, maxTokens };
+};
+
+type PresentationResult =
+  | {
+    readonly ok: true;
+    readonly types: readonly AtomType[] | undefined;
+    readonly maxPerDoc: number | undefined;
+  }
+  | { readonly ok: false; readonly error: string };
+
+/** WHAT is searched and HOW the answer is arranged — neither one scores. */
+const resolvePresentation = (flags: FlagValues): PresentationResult => {
+  const types = resolveTypeFilter(flags);
+  const maxPerDoc = resolveMaxPerDoc(flags);
   if (!types.ok) return { ok: false, error: types.error };
-  return withRerankArgs(flags, { k, maxTokens, types: types.types });
+  return maxPerDoc.ok
+    ? { ok: true, types: types.types, maxPerDoc: maxPerDoc.maxPerDoc }
+    : { ok: false, error: maxPerDoc.error };
+};
+
+/** Every value flag, resolved together so the command states one refusal path. */
+const resolveArgs = (flags: FlagValues): ArgsResult => {
+  const counts = resolveCounts(flags);
+  if (!counts.ok) return { ok: false, error: counts.error };
+  const presentation = resolvePresentation(flags);
+  if (!presentation.ok) return { ok: false, error: presentation.error };
+  return withRerankArgs(flags, {
+    k: counts.k,
+    maxTokens: counts.maxTokens,
+    types: presentation.types,
+    maxPerDoc: presentation.maxPerDoc,
+  });
 };
 
 interface RetrieveRequest {
@@ -734,6 +882,11 @@ interface RetrieveRequest {
   readonly maxTokens: number;
   /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
   readonly types: readonly AtomType[] | undefined;
+  /**
+   * At most this many atoms from one source document, and the answer arranged by
+   * document. `undefined` = `--flat`: no cap, no grouping, no position marker.
+   */
+  readonly maxPerDoc: number | undefined;
   readonly rerank: boolean;
   /** The reranker's model and fusion rule as the tuning flags resolved them. */
   readonly rerankOptions: RerankOptions;
@@ -767,7 +920,11 @@ const noteLines = (
   budgeted: BudgetedResult
 ): readonly string[] => {
   const refusals = refusalsOf(request);
-  const trailing = [...floorNotes(budgeted), ...emptyNotes(request, budgeted)];
+  const trailing = [
+    ...floorNotes(budgeted),
+    ...emptyNotes(request, budgeted),
+    ...capNotes(request, budgeted),
+  ];
   if (refusals.length > 0) return [...refusals, ...trailing];
   if (hasSkips(budgeted)) return [budgetWarning(budgeted), ...trailing];
   return isUnavailable(budgeted.result) ? [noCorpusNote(request.context.adapter)] : trailing;
@@ -887,6 +1044,7 @@ const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string
     ...skipXml(budgeted, request.context.repoRoot),
     ...floorXml(budgeted),
     ...emptyNotes(request, budgeted).map(note => `  <note>${escapeXml(note)}</note>`),
+    ...capNotes(request, budgeted).map(note => `  <note>${escapeXml(note)}</note>`),
     ...budgeted.result.atoms.map(atom => documentXml(atom, request.context.repoRoot)),
     '</retrieved_context>',
   ].join('\n');
@@ -897,8 +1055,32 @@ const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string
  * than the measured depth keeps its own `k` — never fewer candidates than
  * results.
  */
+/**
+ * How deep the FIRST PASS must go before the cap subtracts from it.
+ *
+ * The cap drops atoms off the TOP of the ranking, so a pool of exactly `k` would
+ * deliver fewer than `k` the moment one document holds several of the best
+ * atoms. `k * maxPerDoc` is the pool in which `k` distinct documents could each
+ * contribute their whole cap — a STATED heuristic, not a guarantee: a pool made
+ * of one document still delivers that document's cap and no more, and `count`
+ * reports what was actually served.
+ *
+ * `k * maxPerDoc` ALONE is inverted, and shipped that way: it SHRINKS the pool
+ * as the cap tightens, while a tighter cap needs `ceil(k / cap)` distinct
+ * documents and so a DEEPER one. {@link GROUPED_POOL_FLOOR} is the floor that
+ * corrects it, exactly as `RERANK_K_INIT` floors the rerank pool.
+ *
+ * `--flat` and `NO_CAP` subtract nothing, so both keep the pool at exactly `k`
+ * and their output is byte-identical to the ungrouped renderer's.
+ */
+const cappedPoolK = (request: RetrieveRequest): number => {
+  const cap = request.maxPerDoc;
+  if (cap === undefined || cap === NO_CAP) return request.k;
+  return Math.max(request.k * cap, GROUPED_POOL_FLOOR);
+};
+
 const firstPassK = (request: RetrieveRequest): number =>
-  request.rerank ? Math.max(request.k, RERANK_K_INIT) : request.k;
+  request.rerank ? Math.max(cappedPoolK(request), RERANK_K_INIT) : cappedPoolK(request);
 
 const retrieveOptions = (request: RetrieveRequest): RetrieveOptions => {
   const k = firstPassK(request);
@@ -911,11 +1093,30 @@ interface RankedOutcome {
   readonly refusal: string | undefined;
 }
 
-/** The requested depth out of the deeper pool `firstPassK` asked the port for. */
-const trimmed = (result: RetrievalResult, k: number): RetrievalResult => ({
-  ...result,
-  atoms: result.atoms.slice(0, k),
-});
+/**
+ * The delivered set, out of the deeper pool `firstPassK` asked the port for: the
+ * per-document cap, then the `-k` slice, then reading order within each
+ * document.
+ *
+ * The order is load-bearing. Capping BEFORE the slice is what lets a lower-
+ * ranked document's atom take a freed slot; grouping AFTER it is what keeps the
+ * delivered atoms the `k` best-ranked ones the cap left — the arrangement
+ * changes how they are read, never which ones they are.
+ *
+ * `--flat` (`maxPerDoc === undefined`) does neither, so it is the plain slice it
+ * always was.
+ */
+const arranged = (
+  atoms: readonly RetrievedAtom[],
+  maxPerDoc: number | undefined
+): readonly RetrievedAtom[] =>
+  maxPerDoc === undefined ? atoms : groupByDocument(atoms).flatMap(group => group.atoms);
+
+const trimmed = (result: RetrievalResult, request: RetrieveRequest): RetrievalResult => {
+  const cap = request.maxPerDoc;
+  const capped = cap === undefined ? result.atoms : capPerDocument(result.atoms, cap);
+  return { ...result, atoms: arranged(capped.slice(0, request.k), cap) };
+};
 
 /**
  * The reranked-and-fused ranking, or the first pass plus the refusal that
@@ -936,13 +1137,13 @@ const rankedResult = async (
   request: RetrieveRequest,
   result: RetrievalResult
 ): Promise<RankedOutcome> => {
-  if (!request.rerank) return { result, refusal: undefined };
+  if (!request.rerank) return { result: trimmed(result, request), refusal: undefined };
   const unusable = await rerankProbeRefusal(request.rerankOptions);
-  if (unusable !== undefined) return { result: trimmed(result, request.k), refusal: unusable };
+  if (unusable !== undefined) return { result: trimmed(result, request), refusal: unusable };
   const reranked = await rerankAtoms(effectiveQuery(request), result.atoms, request.rerankOptions);
-  if (!reranked.ok) return { result: trimmed(result, request.k), refusal: reranked.error };
-  const atoms = reranked.atoms.slice(0, request.k);
-  return { result: { ...result, atoms, mode: `${result.mode}+rerank` }, refusal: undefined };
+  if (!reranked.ok) return { result: trimmed(result, request), refusal: reranked.error };
+  const fused = trimmed({ ...result, atoms: reranked.atoms }, request);
+  return { result: { ...fused, mode: `${result.mode}+rerank` }, refusal: undefined };
 };
 
 /** The delivered ranking after the floor, and how many atoms it removed. */
@@ -999,6 +1200,23 @@ const applyFloor = (request: RetrieveRequest, result: RetrievalResult): FlooredR
   };
 };
 
+/** What the first pass returned, and how much of it the cap leaves deliverable. */
+interface PoolFacts {
+  readonly size: number;
+  readonly capped: number;
+}
+
+/**
+ * How many atoms of the pool survive the per-document cap. Read off the FIRST
+ * PASS rather than the delivered slice: the count is order-invariant, so it is
+ * the ceiling on what any arrangement of that pool could have delivered.
+ */
+const poolFacts = (request: RetrieveRequest, pool: readonly RetrievedAtom[]): PoolFacts => ({
+  size: pool.length,
+  capped:
+    request.maxPerDoc === undefined ? pool.length : capPerDocument(pool, request.maxPerDoc).length,
+});
+
 /**
  * The budget is applied HERE, between the floor and the renderings: the adapters
  * rank, the CLI decides what fits the caller's window, and both halves of that
@@ -1007,14 +1225,15 @@ const applyFloor = (request: RetrieveRequest, result: RetrievalResult): FlooredR
 const applyBudget = (
   floored: FlooredResult,
   maxTokens: number,
-  poolSize: number
+  pool: PoolFacts
 ): BudgetedResult => {
   const fit = fitToTokenBudget(floored.result.atoms, maxTokens);
   return {
     result: { ...floored.result, atoms: fit.kept },
     skipped: fit.skipped,
     maxTokens,
-    poolSize,
+    poolSize: pool.size,
+    cappedPool: pool.capped,
     belowFloor: floored.belowFloor,
     unscored: floored.unscored,
     minRelevance: floored.minRelevance,
@@ -1048,7 +1267,7 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   const ranked = await rankedResult(request, result);
   const reported: RetrieveRequest = { ...request, rerankRefusal: ranked.refusal };
   const floored = applyFloor(reported, ranked.result);
-  const budgeted = applyBudget(floored, request.maxTokens, result.atoms.length);
+  const budgeted = applyBudget(floored, request.maxTokens, poolFacts(request, result.atoms));
   return {
     exitCode: exitCodeFor(reported, ranked.result),
     data: payload(reported, budgeted),
@@ -1070,6 +1289,7 @@ const initialRequest = (
   k: args.k,
   maxTokens: args.maxTokens,
   types: args.types,
+  maxPerDoc: args.maxPerDoc,
   rerank: args.rerank,
   rerankOptions: args.rerankOptions,
   minRelevance: args.minRelevance,

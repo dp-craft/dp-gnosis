@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
+import { DEFAULT_MAX_PER_DOC } from '../src/cli/grouping.js';
 import {
   DEFAULT_EXCLUDED_TYPES,
   DEFAULT_RERANK_PRESET,
@@ -65,6 +66,8 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--rerank-profile': owned('DEFAULT_RERANK_PRESET (src/config.ts)', DEFAULT_RERANK_PRESET),
   '--rerank-weight': owned('RERANK_RRF_WEIGHT (src/config.ts)', RERANK_RRF_WEIGHT),
   '--rephrase': unowned('boolean, off by default'),
+  '--max-per-doc': owned('DEFAULT_MAX_PER_DOC (src/cli/grouping.ts)', DEFAULT_MAX_PER_DOC),
+  '--flat': unowned('boolean, off by default — grouping is on unless it is passed'),
   '--json': unowned('boolean, off by default'),
   '--help': unowned('boolean, off by default'),
   '-h': unowned('boolean, off by default'),

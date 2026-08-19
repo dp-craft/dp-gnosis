@@ -19,6 +19,7 @@ import { join } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
 import { explainAtoms, matchedTerms, snippetOf } from '../src/cli/explain.js';
+import { DEFAULT_MAX_PER_DOC, GROUPED_POOL_FLOOR } from '../src/cli/grouping.js';
 import { DEFAULT_EXCLUDED_TYPES, RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
 import type { RetrievedAtom } from '../src/port.js';
 import { analyze } from '../src/query.js';
@@ -254,13 +255,22 @@ describe('retrieve --json — the interpretability fields', () => {
   it('reports poolSize as the FIRST PASS size, before the -k slice', async () => {
     const fixture = await makeFixture();
 
-    const plain = await json(fixture, ['-k', '2']);
+    const plain = await json(fixture, ['-k', '2', '--flat']);
+    const grouped = await json(fixture, ['-k', '2']);
     stubServer();
     const reranked = await json(fixture, ['-k', '2', '--rerank']);
 
-    // Without --rerank the port is asked for `k`, so the pool IS the answer.
+    // Ungrouped and un-reranked the port is asked for `k`, so the pool IS the answer.
     expect(plain.count).toBe(2);
     expect(plain.poolSize).toBe(2);
+    // GROUPED, the per-document cap subtracts from the pool BEFORE the -k slice —
+    // that is what lets a lower-ranked document take a capped atom's slot — so the
+    // first pass goes DEEPER: `max(k * maxPerDoc, GROUPED_POOL_FLOOR)`, the floor
+    // binding here because 2 * 2 is under it. This corpus is smaller than the
+    // floor, so the pool is the whole corpus and poolSize reports that.
+    expect(GROUPED_POOL_FLOOR).toBeGreaterThan(2 * DEFAULT_MAX_PER_DOC);
+    expect(grouped.count).toBe(2);
+    expect(grouped.poolSize).toBe(Math.min(GROUPED_POOL_FLOOR, LABELS.length));
     // With --rerank the pool is the RERANK_K_INIT floor — the whole corpus here
     // — and `-k` cuts it afterwards. That gap is what poolSize exists to report.
     expect(reranked.count).toBe(2);
@@ -311,8 +321,10 @@ describe('retrieve --format text — the rerank score on the hit line', () => {
   const hitLines = (stdout: string): readonly string[] =>
     stdout.split('\n').filter(line => /^ {2}\d+\.\d{4}/.test(line));
 
+  // `--flat` is the pre-grouping rendering: a grouped line carries an `(i/n)`
+  // reading-position marker, and tests/grouping.test.ts owns that shape.
   it('leaves an un-reranked hit line in the ORIGINAL shape', async () => {
-    const lines = hitLines((await retrieve(await makeFixture(), [])).stdout);
+    const lines = hitLines((await retrieve(await makeFixture(), ['--flat'])).stdout);
 
     expect(lines.length).toBeGreaterThan(0);
     lines.forEach(line => {

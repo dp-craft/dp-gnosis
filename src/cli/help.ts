@@ -19,6 +19,7 @@ import {
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
 import { OUTPUT_FORMATS } from './format.js';
+import { DEFAULT_MAX_PER_DOC } from './grouping.js';
 
 export const HELP_TEXT: string = [
   'dp-gnosis — retrieval over a curated markdown atom vault',
@@ -55,6 +56,9 @@ export const HELP_TEXT: string = [
   `Rephrase: --rephrase on \`retrieve\` only, OFF by default — rewrites the question into a BM25 keyword query with ${REPHRASE_MODEL_ID} (override with ${REPHRASE_MODEL_ENV_VAR}) before the first pass, then searches the rewrite`,
   '  the rewrite is cached on disk beside the index, so a repeated query costs no network; the reported query stays the one you typed, with the rewrite beside it as queryRewritten',
   '  a refused rewrite still retrieves with the query AS TYPED, but exits 3 with the refusal in note — a skipped rewrite never reports as a rephrased run',
+  `Grouping: --max-per-doc <n> on \`retrieve\` only (default ${DEFAULT_MAX_PER_DOC}) — atoms of one source document are delivered together in reading order, marked (i/n), and no document contributes more than n`,
+  '  the cap applies to the POOL before the -k slice, so a dropped atom frees a slot a lower-ranked document takes; --max-per-doc 0 caps nothing',
+  '  --flat delivers the ranking ungrouped — no cap, no arrangement, no marker — and is a usage error (exit 2) beside --max-per-doc, which would then have nothing to cap',
   'Profile: --profile <file> selects one named instance — its vocabulary, its labelling tables and its own repoRoot, corpusRoots, atomsDir and indexPath',
   '  precedence is flag > profile > default, so --atoms-dir / --index-path / --repo-root still override whatever the profile states',
   '  each profile MUST own its atomsDir AND its indexPath: an atoms directory is stamped with its owner and refuses a second profile',

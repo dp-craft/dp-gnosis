@@ -32,7 +32,9 @@ import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import {
   EXCLUDE_TYPE_FLAG,
+  FLAT_FLAG,
   INCLUDE_HISTORY_FLAG,
+  MAX_PER_DOC_FLAG,
   MAX_TOKENS_FLAG,
   MIN_RELEVANCE_FLAG,
   REPHRASE_FLAG,
@@ -122,7 +124,7 @@ const wantsHelp = (args: ParsedArgs): boolean =>
 
 /**
  * `--format`, `--type` with `--exclude-type` / `--include-history`, `--max-tokens`, `--rerank` with its three tuning flags,
- * and `--rephrase` belong to `retrieve` alone. Elsewhere they are refused
+ * `--rephrase`, and the two grouping flags belong to `retrieve` alone. Elsewhere they are refused
  * through the SAME message an unknown flag gets: a flag no command can honour
  * MUST NOT look accepted, and one wording keeps the correction identical either
  * way.
@@ -141,6 +143,8 @@ const RETRIEVE_ONLY_FLAGS: readonly string[] = [
   RERANK_PROFILE_FLAG,
   RERANK_WEIGHT_FLAG,
   REPHRASE_FLAG,
+  MAX_PER_DOC_FLAG,
+  FLAT_FLAG,
 ];
 
 const misplacedFlag = (args: ParsedArgs): string | undefined =>

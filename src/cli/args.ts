@@ -53,6 +53,11 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--rerank-weight': { kind: 'value', placeholder: '<w>' },
   // `retrieve` only, OPT-IN: rewrite the query into keywords before the first pass.
   '--rephrase': { kind: 'boolean' },
+  // `retrieve` only: at most n atoms from any ONE source document; `0` caps nothing.
+  '--max-per-doc': { kind: 'value', placeholder: '<n>' },
+  // `retrieve` only: render the ranking ungrouped and uncapped, as it was before
+  // grouping existed. It contradicts a per-document cap, so the two together refuse.
+  '--flat': { kind: 'boolean' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },
