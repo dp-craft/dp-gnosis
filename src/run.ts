@@ -291,17 +291,32 @@ const parseAnalyzer = (value: string | undefined): AnalyzerId => {
 const ANALYZER_AWARE_ADAPTER: AdapterName = 'fts5';
 
 /**
- * A named `--analyzer` on any other adapter REFUSES, before a dataset is
- * prepared. Those adapters analyse with their own hard-coded chain, so the run
- * would record `analyzer` — a TREATMENT field `compare.ts` labels an arm — under
- * a chain it never used. Only an EXPLICIT non-default value refuses: the default
- * describes what every adapter already does, so every legacy invocation stands.
+ * The chain `linear` and `minisearch` implement IN CODE — they call `tokenize` +
+ * `stemTerm`, which IS `porter-fold`. Deliberately NOT `DEFAULT_ANALYZER`: the
+ * default moves (it became `ident-porter-fold`), and a waiver written against a
+ * moving default silently widens to whatever the default names next, stamping the
+ * `analyzer` treatment field with a chain that never ran.
  */
-const checkAnalyzerAdapter = (adapter: AdapterName, analyzer: AnalyzerId): AnalyzerId => {
-  if (analyzer === DEFAULT_ANALYZER || adapter === ANALYZER_AWARE_ADAPTER) return analyzer;
+const HARDCODED_ADAPTER_ANALYZER: AnalyzerId = 'porter-fold';
+
+/**
+ * The chain an arm ACTUALLY analyses with. `fts5` builds its index with whatever
+ * chain is named, so it takes the flag and the engine default. Every other
+ * adapter analyses with `HARDCODED_ADAPTER_ANALYZER` no matter what is asked, so
+ * an ABSENT flag resolves to that chain — the run then records what ran — and an
+ * EXPLICIT flag naming any other chain REFUSES before a dataset is prepared,
+ * because `analyzer` is a TREATMENT field `compare.ts` labels an arm by, and a
+ * label under a chain the run never used is unrecoverable from the numbers.
+ */
+const resolveAnalyzer = (adapter: AdapterName, value: string | undefined): AnalyzerId => {
+  if (adapter === ANALYZER_AWARE_ADAPTER) return parseAnalyzer(value);
+  if (value === undefined) return HARDCODED_ADAPTER_ANALYZER;
+  const analyzer = parseAnalyzer(value);
+  if (analyzer === HARDCODED_ADAPTER_ANALYZER) return analyzer;
   throw new Error(
     `dp-gnosis-bench: adapter "${adapter}" does not honour --analyzer "${analyzer}" — ` +
-      `only "${ANALYZER_AWARE_ADAPTER}" builds its index with the named chain`
+      `only "${ANALYZER_AWARE_ADAPTER}" builds its index with the named chain; ` +
+      `"${adapter}" always analyses with "${HARDCODED_ADAPTER_ANALYZER}"`
   );
 };
 
@@ -625,7 +640,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
       adapter,
       parseHybridWeight(flagValue(argv, HYBRID_WEIGHT_FLAG))
     ),
-    analyzer: checkAnalyzerAdapter(adapter, parseAnalyzer(flagValue(argv, '--analyzer'))),
+    analyzer: resolveAnalyzer(adapter, flagValue(argv, '--analyzer')),
     queryAdjacency: checkAdjacencyAdapter(adapter, argv.includes(QUERY_ADJACENCY_FLAG)),
     includeHistory: argv.includes(INCLUDE_HISTORY_FLAG),
   };

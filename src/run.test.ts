@@ -250,7 +250,7 @@ describe('parseArgs', () => {
 
   it('defaults --analyzer to the engine chain every recorded run was measured on', () => {
     expect(parseArgs([]).analyzer).toBe(DEFAULT_ANALYZER);
-    expect(DEFAULT_ANALYZER).toBe('porter-fold');
+    expect(DEFAULT_ANALYZER).toBe('ident-porter-fold');
   });
 
   it('reads --analyzer as the chain the index is built with', () => {
@@ -275,18 +275,44 @@ describe('parseArgs', () => {
     );
   });
 
-  it('leaves the DEFAULT analyzer on a non-fts5 adapter alone — every legacy invocation', () => {
-    expect(parseArgs(['--adapter', 'linear']).analyzer).toBe(DEFAULT_ANALYZER);
+  it('stamps the chain a hard-coded adapter RUNS when no --analyzer is given', () => {
+    expect(parseArgs(['--adapter', 'linear']).analyzer).toBe('porter-fold');
     expect(parseArgs(['--adapter', 'linear']).adapter).toBe('linear');
-    expect(parseArgs(['--adapter', 'lancedb', '--analyzer', DEFAULT_ANALYZER]).adapter).toBe(
-      'lancedb'
+    expect(parseArgs(['--adapter', 'minisearch']).analyzer).toBe('porter-fold');
+  });
+
+  it('ACCEPTS the hard-coded chain named explicitly on such an adapter', () => {
+    expect(parseArgs(['--adapter', 'linear', '--analyzer', 'porter-fold']).analyzer).toBe(
+      'porter-fold'
     );
+  });
+
+  it('REFUSES the engine DEFAULT named explicitly on an adapter that never runs it', () => {
+    const argv = ['--adapter', 'linear', '--analyzer', DEFAULT_ANALYZER];
+    expect(() => parseArgs(argv)).toThrow(/linear/);
+    expect(() => parseArgs(argv)).toThrow(new RegExp(DEFAULT_ANALYZER));
+    expect(() => parseArgs(['--adapter', 'lancedb', '--analyzer', DEFAULT_ANALYZER])).toThrow(
+      /lancedb/
+    );
+  });
+
+  it('keeps the waiver OFF the moving default, so a default move cannot widen it', () => {
+    // The waived chain is what `linear` / `minisearch` implement in code
+    // (`tokenize` + `stemTerm` = `porter-fold`), never whatever `DEFAULT_ANALYZER`
+    // happens to name — the T4.1a move to `ident-porter-fold` is exactly the event
+    // that would otherwise have re-widened it.
+    const waived = parseArgs(['--adapter', 'linear']).analyzer;
+    expect(waived).toBe('porter-fold');
+    expect(waived).not.toBe(DEFAULT_ANALYZER);
   });
 
   it('accepts a named analyzer on fts5, the one adapter that builds its index with it', () => {
     expect(parseArgs(['--adapter', 'fts5', '--analyzer', 'nostem-fold']).analyzer).toBe(
       'nostem-fold'
     );
+    Object.keys(ANALYZERS).forEach(id => {
+      expect(parseArgs(['--adapter', 'fts5', '--analyzer', id]).analyzer).toBe(id);
+    });
   });
 
   it('defaults --query-adjacency OFF, the treatment every recorded run was measured without', () => {
