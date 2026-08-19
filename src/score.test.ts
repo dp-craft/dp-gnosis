@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Qrel } from './metrics.js';
-import { atomSpread, scoreDataset, toDocumentRanking } from './score.js';
+import type { Metrics, Qrel } from './metrics.js';
+import {
+  atomSpread,
+  perAxisStrata,
+  scoreDataset,
+  toDocumentRanking,
+  type TopicScore,
+  withTopicFacets
+} from './score.js';
 
 const atom = (...originPaths: string[]): { readonly originPaths: readonly string[] } => ({
   originPaths,
@@ -212,5 +219,75 @@ describe('scoreDataset — the atom spread rides along', () => {
     );
     expect(scored.perTopic[0]?.spread?.distinctDocs10).toBe(5);
     expect(scored.perTopic[1]?.spread).toBeUndefined();
+  });
+});
+
+const metricsAt = (ndcg10: number, recall10: number | undefined, mrr10: number): Metrics => ({
+  ndcg10,
+  recall10,
+  recall20: undefined,
+  recall100: recall10,
+  recall300: undefined,
+  recall1000: undefined,
+  mrr10,
+  precision5: undefined,
+  precision10: undefined,
+  allGoldInTop10: 0,
+  map: 0,
+  rPrecision: undefined,
+  rbpResidual: 0,
+});
+
+const topic = (queryId: string, ndcg10: number, mrr10: number): TopicScore => ({
+  queryId,
+  metrics: metricsAt(ndcg10, ndcg10, mrr10),
+});
+
+describe('withTopicFacets', () => {
+  it('attaches the authored facets and touches no metric', () => {
+    const scored = [topic('q1', 0.4, 0.5), topic('q2', 0.6, 0.7)];
+
+    const faceted = withTopicFacets(scored, new Map([['q1', { axis: 'synonym' }]]));
+
+    expect(faceted[0]?.facets).toEqual({ axis: 'synonym' });
+    expect(faceted[1]?.facets).toBeUndefined();
+    expect(faceted.map(t => t.metrics)).toEqual(scored.map(t => t.metrics));
+  });
+
+  it('leaves every topic untouched when the dataset authored no facet', () => {
+    const scored = [topic('q1', 0.4, 0.5)];
+    expect(withTopicFacets(scored, new Map())).toEqual(scored);
+  });
+});
+
+describe('perAxisStrata', () => {
+  const faceted = withTopicFacets(
+    [topic('q1', 0.4, 0.5), topic('q2', 0.6, 0.9), topic('q3', 0.2, 0.3), topic('q4', 0.8, 0.1)],
+    new Map([
+      ['q1', { axis: 'synonym' }],
+      ['q2', { axis: 'synonym' }],
+      ['q3', { axis: 'exact-keyword' }],
+    ])
+  );
+
+  it('means each axis over ITS topics only, hand-checked', () => {
+    const strata = perAxisStrata(faceted);
+
+    expect(strata.map(s => [s.axis, s.topics])).toEqual([
+      ['synonym', 2],
+      ['exact-keyword', 1],
+    ]);
+    expect(strata[0]?.ndcg10).toBeCloseTo(0.5, 12);
+    expect(strata[0]?.recall10).toBeCloseTo(0.5, 12);
+    expect(strata[0]?.mrr10).toBeCloseTo(0.7, 12);
+    expect(strata[1]?.ndcg10).toBeCloseTo(0.2, 12);
+  });
+
+  it('opens NO bucket for the topics that carry no axis', () => {
+    expect(perAxisStrata(faceted).map(s => s.axis)).not.toContain('');
+  });
+
+  it('is EMPTY — never one bucket — when no topic carries an axis', () => {
+    expect(perAxisStrata([topic('q1', 0.4, 0.5)])).toEqual([]);
   });
 });

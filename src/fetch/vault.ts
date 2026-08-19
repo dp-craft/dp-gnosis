@@ -38,12 +38,27 @@ const QRELS_HEADER = 'query-id\tcorpus-id\tscore';
 /** The golden sets record relevance as a flat list, so every judgment is grade 1. */
 const RELEVANT_SCORE = 1;
 
-/** One hand-authored golden-set entry — the fields the qrels need, nothing else. */
+/**
+ * One hand-authored golden-set entry — the fields the qrels need, plus the
+ * REPORTING facets the author stated about the query's shape.
+ *
+ * `axis` / `domain` / `type` are carried as reporting dimensions ONLY. They are
+ * never a retrieval filter: `buildProfile` labels every bench atom
+ * `domain=docs` / `type=vendor-doc`, so filtering on an authored value would
+ * return zero documents. Each is ABSENT when the entry does not author it — a
+ * placeholder would open a bucket the author never wrote.
+ */
 export interface GoldenQuery {
   readonly id: string;
   readonly query: string;
   readonly relevantAtomIds: readonly string[];
+  readonly axis?: string | undefined;
+  readonly domain?: string | undefined;
+  readonly type?: string | undefined;
 }
+
+/** The facet keys, in the one order every projection and every column uses. */
+export const GOLDEN_FACET_KEYS = ['axis', 'domain', 'type'] as const;
 
 /** What one derivation produced, in the numbers a run must be able to quote. */
 export interface VaultDerivation {
@@ -72,12 +87,22 @@ const stringField = (record: Readonly<Record<string, unknown>>, key: string): st
 const idList = (value: unknown): readonly string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
+/** Only the facets the entry actually authored; an empty string writes no key. */
+const facetsOf = (
+  record: Readonly<Record<string, unknown>>
+): Readonly<Record<string, string>> =>
+  Object.fromEntries(
+    GOLDEN_FACET_KEYS.map(key => [key, stringField(record, key)] as const).filter(
+      pair => pair[1].length > 0
+    )
+  );
+
 const toGoldenQuery = (raw: unknown): GoldenQuery | undefined => {
   if (!isRecord(raw)) return undefined;
   const id = stringField(raw, 'id');
   const query = stringField(raw, 'query');
   return id.length > 0 && query.length > 0
-    ? { id, query, relevantAtomIds: idList(raw['relevantAtomIds']) }
+    ? { id, query, relevantAtomIds: idList(raw['relevantAtomIds']), ...facetsOf(raw) }
     : undefined;
 };
 
@@ -145,6 +170,24 @@ export const readAtomDocs = (atomsDir: string): readonly BeirDoc[] =>
 const jsonl = (rows: readonly Readonly<Record<string, string>>[]): string =>
   `${rows.map(row => JSON.stringify(row)).join('\n')}\n`;
 
+/** The facets a PARSED entry carries, read off the typed fields, never a cast. */
+const authoredFacets = (query: GoldenQuery): Readonly<Record<string, string>> => ({
+  ...(query.axis === undefined ? {} : { axis: query.axis }),
+  ...(query.domain === undefined ? {} : { domain: query.domain }),
+  ...(query.type === undefined ? {} : { type: query.type }),
+});
+
+/**
+ * One `queries.jsonl` row. The facets ride BESIDE `_id`/`text`, and an
+ * unauthored one writes no key at all — a BEIR or BRIGHT dataset authors none,
+ * and its rows must stay exactly what they have always been.
+ */
+const queryRow = (query: GoldenQuery): Readonly<Record<string, string>> => ({
+  _id: query.id,
+  text: query.query,
+  ...authoredFacets(query),
+});
+
 const qrelsBody = (queries: readonly GoldenQuery[]): string => {
   const rows = queries.flatMap(query =>
     query.relevantAtomIds.map(atomId => `${query.id}\t${atomId}\t${RELEVANT_SCORE}`)
@@ -166,7 +209,7 @@ const writeLayout = (
   );
   writeFileSync(
     resolve(dir, QUERIES_FILE),
-    jsonl(queries.map(query => ({ _id: query.id, text: query.query }))),
+    jsonl(queries.map(queryRow)),
     'utf8'
   );
   writeFileSync(resolve(dir, QRELS_DIR, `${split}.tsv`), qrelsBody(queries), 'utf8');

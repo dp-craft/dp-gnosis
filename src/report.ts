@@ -29,9 +29,10 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import type { TopicFacets } from './beir.js';
 import { countNonEmptyLines } from './lines.js';
 import type { Metrics } from './metrics.js';
-import type { AtomSpread, TopicScore } from './score.js';
+import type { AtomSpread, AxisStratum, TopicScore } from './score.js';
 
 const DATE_CHARS = 10;
 const TIME_CHARS = 5;
@@ -152,6 +153,12 @@ export interface DatasetResult {
   /** Topics R-Precision was measurable on — the denominator behind its mean. */
   readonly rPrecisionTopics?: number | undefined;
   readonly perTopic: readonly TopicScore[];
+  /**
+   * Per-axis means over this dataset's topics — DESCRIPTIVE STRATA, never a
+   * result. ABSENT on every dataset whose topics author no axis, so a run that
+   * has none renders no section at all instead of one empty bucket.
+   */
+  readonly perAxisDescriptive?: readonly AxisStratum[] | undefined;
   /**
    * The document ranking per topic, in rank order — the run file's whole input.
    * Kept OUT of the JSON summary (`writeRunSummary`): the rankings are two orders
@@ -581,8 +588,45 @@ const markdownHeader = (provenance: RunProvenance): readonly string[] => [
   '|---|---|---|---|---|---|---|---|---|---|---|---|',
 ];
 
+/**
+ * The per-axis block's own header, stating what the numbers are NOT. It is not
+ * decoration: the largest English stratum is 13 topics against a whole-corpus
+ * MDE of ~0.015 at 60, so a stratum can support no inference at all. No
+ * p-value, interval or verdict is rendered here, and none may be added.
+ */
+const PER_AXIS_HEADER: readonly string[] = [
+  '',
+  '## Per-axis means — DESCRIPTIVE STRATA, not results',
+  '',
+  '> These numbers are DESCRIPTIVE ONLY: each axis holds a handful of topics, far below',
+  '> the corpus-wide detectable effect, so no p-value, interval or verdict is computed for',
+  '> one and a per-axis delta MUST NOT be quoted as a result. They say what a change looks',
+  '> like per query shape. The headline stays the macro mean over ALL topics above.',
+  '',
+  '| dataset | axis | topics | nDCG@10 | R@10 | R@100 | MRR@10 |',
+  '|---|---|---|---|---|---|---|',
+];
+
+const axisRow = (dataset: string, stratum: AxisStratum): string =>
+  `| ${dataset} | ${stratum.axis} | ${stratum.topics} | ${metric(stratum.ndcg10)} | ` +
+  `${optionalMetric(stratum.recall10)} | ${optionalMetric(stratum.recall100)} | ` +
+  `${metric(stratum.mrr10)} |`;
+
+const axisRows = (results: readonly DatasetResult[]): readonly string[] =>
+  results.flatMap(result =>
+    (result.perAxisDescriptive ?? []).map(stratum => axisRow(result.dataset, stratum))
+  );
+
+/** No dataset authored an axis → NO section, rather than an empty table. */
+const perAxisSection = (results: readonly DatasetResult[]): readonly string[] => {
+  const rows = axisRows(results);
+  return rows.length === 0 ? [] : [...PER_AXIS_HEADER, ...rows];
+};
+
 const renderMarkdown = (provenance: RunProvenance, results: readonly DatasetResult[]): string =>
-  [...markdownHeader(provenance), ...results.map(markdownRow), ''].join('\n');
+  [...markdownHeader(provenance), ...results.map(markdownRow), ...perAxisSection(results), ''].join(
+    '\n'
+  );
 
 /** The per-topic TSV's key column; a file not starting with it is not ours. */
 export const PER_TOPIC_QUERY_COLUMN = 'query_id';
@@ -620,14 +664,33 @@ export const PER_TOPIC_SPREAD_COLUMNS = [
   'sameDocRuns10',
 ] as const satisfies readonly (keyof AtomSpread)[];
 
+/**
+ * The authored REPORTING facets, appended AFTER the spread columns and emitted
+ * ONLY when at least one topic carries an AXIS — a BEIR or BRIGHT run authors
+ * none, so its file MUST stay byte-identical to the header above. They are
+ * labels, not measures: nothing averages them and nothing filters on them.
+ */
+export const PER_TOPIC_FACET_COLUMNS = [
+  'axis',
+  'domain',
+  'type',
+] as const satisfies readonly (keyof TopicFacets)[];
+
 /** An unmeasurable cutoff is an EMPTY field — 0 would read as "measured, none". */
 const tsvCell = (value: number | undefined): string => (value === undefined ? '' : metric(value));
 
-const headerOf = (withSpread: boolean): string =>
+/** What the per-topic file carries beyond the metrics — each column set, or not. */
+interface TsvColumns {
+  readonly spread: boolean;
+  readonly facets: boolean;
+}
+
+const headerOf = (columns: TsvColumns): string =>
   [
     PER_TOPIC_QUERY_COLUMN,
     ...PER_TOPIC_METRIC_COLUMNS,
-    ...(withSpread ? PER_TOPIC_SPREAD_COLUMNS : []),
+    ...(columns.spread ? PER_TOPIC_SPREAD_COLUMNS : []),
+    ...(columns.facets ? PER_TOPIC_FACET_COLUMNS : []),
   ].join('\t');
 
 /**
@@ -641,11 +704,16 @@ const spreadCell = (value: number | undefined): string =>
 const spreadCells = (topic: TopicScore): readonly string[] =>
   PER_TOPIC_SPREAD_COLUMNS.map(column => spreadCell(topic.spread?.[column]));
 
-const tsvRow = (topic: TopicScore, withSpread: boolean): string =>
+/** An unauthored facet is an EMPTY field, like an unmeasurable cutoff. */
+const facetCells = (topic: TopicScore): readonly string[] =>
+  PER_TOPIC_FACET_COLUMNS.map(column => topic.facets?.[column] ?? '');
+
+const tsvRow = (topic: TopicScore, columns: TsvColumns): string =>
   [
     topic.queryId,
     ...PER_TOPIC_METRIC_COLUMNS.map(column => tsvCell(topic.metrics[column])),
-    ...(withSpread ? spreadCells(topic) : []),
+    ...(columns.spread ? spreadCells(topic) : []),
+    ...(columns.facets ? facetCells(topic) : []),
   ].join('\t');
 
 /**
@@ -654,8 +722,11 @@ const tsvRow = (topic: TopicScore, withSpread: boolean): string =>
  * and a sweep cell with the same parser and neither can drift from the other.
  */
 export const renderPerTopicTsv = (perTopic: readonly TopicScore[]): string => {
-  const withSpread = perTopic.some(topic => topic.spread !== undefined);
-  return [headerOf(withSpread), ...perTopic.map(topic => tsvRow(topic, withSpread)), ''].join('\n');
+  const columns: TsvColumns = {
+    spread: perTopic.some(topic => topic.spread !== undefined),
+    facets: perTopic.some(topic => topic.facets?.axis !== undefined),
+  };
+  return [headerOf(columns), ...perTopic.map(topic => tsvRow(topic, columns)), ''].join('\n');
 };
 
 const writePerTopic = (

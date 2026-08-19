@@ -224,3 +224,54 @@ describe('assertIndexedGoldReachable', () => {
     ).not.toThrow();
   });
 });
+
+describe('the authored topic facets', () => {
+  const facetedGolden = {
+    version: 2,
+    queries: [
+      {
+        id: 'q-001',
+        query: 'alpha question',
+        axis: 'rare-technical-token',
+        domain: 'engineering',
+        type: 'lookup',
+        relevantAtomIds: ['alpha'],
+      },
+      { id: 'q-002', query: 'beta question', relevantAtomIds: ['beta'] },
+    ],
+  };
+
+  it('carries axis/domain/type off the golden entry, and omits them where unauthored', () => {
+    const queries = parseGoldenSet(facetedGolden, 'golden.json');
+
+    expect(queries[0]).toEqual({
+      id: 'q-001',
+      query: 'alpha question',
+      axis: 'rare-technical-token',
+      domain: 'engineering',
+      type: 'lookup',
+      relevantAtomIds: ['alpha'],
+    });
+    expect(Object.keys(queries[1] ?? {})).toEqual(['id', 'query', 'relevantAtomIds']);
+  });
+
+  it('projects them into queries.jsonl, writing no key for an unauthored facet', () => {
+    const root = stage();
+    writeFileSync(resolve(root, 'golden.json'), JSON.stringify(facetedGolden));
+
+    ensureVaultDataset(entryFor(root), root);
+    const rows = readFileSync(resolve(root, 'data/vault/queries.jsonl'), 'utf8')
+      .split('\n')
+      .filter(line => line.length > 0)
+      .map(line => JSON.parse(line) as Record<string, unknown>);
+
+    expect(rows[0]).toEqual({
+      _id: 'q-001',
+      text: 'alpha question',
+      axis: 'rare-technical-token',
+      domain: 'engineering',
+      type: 'lookup',
+    });
+    expect(rows[1]).toEqual({ _id: 'q-002', text: 'beta question' });
+  });
+});

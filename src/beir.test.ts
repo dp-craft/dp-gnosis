@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { type BeirDoc, readCorpus, readQrels, readQueries } from './beir.js';
+import { type BeirDoc, readCorpus, readQrels, readQueries, readQueryFacets } from './beir.js';
 import { safeDocId } from './docId.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-'));
@@ -58,6 +58,33 @@ describe('readQueries', () => {
     const queries = readQueries(dir);
     expect(queries.get('q1')).toBe('does alpha work');
     expect(queries.size).toBe(2);
+  });
+});
+
+describe('readQueryFacets', () => {
+  const facetDir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-facet-'));
+  afterAll(() => rmSync(facetDir, { recursive: true, force: true }));
+
+  it('is EMPTY for a BEIR dataset, which authors no facet at all', () => {
+    expect(readQueryFacets(dir).size).toBe(0);
+  });
+
+  it('reads only the facets a row actually carries', () => {
+    writeFileSync(
+      resolve(facetDir, 'queries.jsonl'),
+      [
+        JSON.stringify({ _id: 'q1', text: 'a', axis: 'synonym', domain: 'vault', type: 'lookup' }),
+        JSON.stringify({ _id: 'q2', text: 'b', axis: 'exact-keyword' }),
+        JSON.stringify({ _id: 'q3', text: 'c' }),
+      ].join('\n'),
+      'utf8'
+    );
+
+    const facets = readQueryFacets(facetDir);
+
+    expect(facets.get('q1')).toEqual({ axis: 'synonym', domain: 'vault', type: 'lookup' });
+    expect(facets.get('q2')).toEqual({ axis: 'exact-keyword' });
+    expect(facets.has('q3')).toBe(false);
   });
 });
 

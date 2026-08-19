@@ -581,3 +581,114 @@ describe('the atom-spread columns', () => {
     expect((lines[2]?.split('\t') ?? []).slice(-3)).toEqual(['', '', '']);
   });
 });
+
+describe('the topic-facet columns and the per-axis strata', () => {
+  const scored: TopicScore = {
+    queryId: 'q1',
+    metrics: {
+      ndcg10: 0.5,
+      recall10: 0.5,
+      recall20: 0.5,
+      recall100: undefined,
+      recall300: undefined,
+      recall1000: undefined,
+      mrr10: 0.5,
+      precision5: 0.4,
+      precision10: 0.3,
+      allGoldInTop10: 0,
+      map: 0.5,
+      rPrecision: undefined,
+      rbpResidual: 0.1,
+    },
+  };
+
+  it('emits a BYTE-IDENTICAL TSV when no topic carries an axis', () => {
+    const noAxis: TopicScore = { ...scored, facets: { domain: 'engineering' } };
+    expect(renderPerTopicTsv([noAxis])).toBe(renderPerTopicTsv([scored]));
+  });
+
+  it('appends axis/domain/type AFTER the spread columns when a topic carries an axis', () => {
+    const faceted: TopicScore = {
+      ...scored,
+      spread: { distinctDocs5: 3, distinctDocs10: 5, sameDocRuns10: 6 },
+      facets: { axis: 'synonym', domain: 'engineering' },
+    };
+    const lines = renderPerTopicTsv([faceted, scored]).split('\n');
+    const header = lines[0]?.split('\t') ?? [];
+
+    expect(header.slice(-6)).toEqual([
+      'distinctDocs5',
+      'distinctDocs10',
+      'sameDocRuns10',
+      'axis',
+      'domain',
+      'type',
+    ]);
+    expect((lines[1]?.split('\t') ?? []).slice(-3)).toEqual(['synonym', 'engineering', '']);
+    expect((lines[2]?.split('\t') ?? []).slice(-3)).toEqual(['', '', '']);
+  });
+
+  const withAxis = (dir: string): WrittenReport =>
+    writeRunReport({
+      resultsDir: dir,
+      provenance,
+      results: [
+        {
+          ...result,
+          perAxisDescriptive: [
+            { axis: 'synonym', topics: 6, ndcg10: 0.5, recall10: 0.6, recall100: 0.7, mrr10: 0.8 },
+          ],
+        },
+      ],
+    });
+
+  it('renders the per-axis table labelled DESCRIPTIVE, with no p-value or verdict', () => {
+    const dir = tempResultsDir();
+
+    const markdown = readFileSync(withAxis(dir).markdownPath, 'utf8');
+
+    const table = markdown.split('## Per-axis')[1] ?? '';
+    const header = (table.split('\n').find(line => line.startsWith('| dataset')) ?? '')
+      .split('|')
+      .map(cell => cell.trim())
+      .filter(cell => cell.length > 0);
+
+    expect(markdown).toMatch(/DESCRIPTIVE/);
+    expect(table).toMatch(/\| synonym \| 6 \| 0\.5000 \|/);
+    expect(header).toEqual(['dataset', 'axis', 'topics', 'nDCG@10', 'R@10', 'R@100', 'MRR@10']);
+  });
+
+  it('renders NO per-axis section at all for a run whose datasets author no axis', () => {
+    const dir = tempResultsDir();
+
+    const markdown = readFileSync(
+      writeRunReport({ resultsDir: dir, provenance, results: [result] }).markdownPath,
+      'utf8'
+    );
+
+    expect(markdown).not.toMatch(/axis/i);
+  });
+
+  it('carries the strata into the JSON summary and leaves the macro metrics alone', () => {
+    const dir = tempResultsDir();
+
+    const summary = JSON.parse(readFileSync(withAxis(dir).jsonPath, 'utf8')) as {
+      readonly results: readonly Record<string, unknown>[];
+    };
+    const row = summary.results[0] ?? {};
+
+    expect(row['perAxisDescriptive']).toEqual([
+      { axis: 'synonym', topics: 6, ndcg10: 0.5, recall10: 0.6, recall100: 0.7, mrr10: 0.8 },
+    ]);
+    expect(row['metrics']).toEqual(result.metrics);
+  });
+
+  it('adds NO field to the history row', () => {
+    const dir = tempResultsDir();
+    withAxis(dir);
+
+    const rows = readHistory(resolve(dir, HISTORY_FILE));
+
+    expect(Object.keys(rows[0] ?? {})).not.toContain('perAxisDescriptive');
+  });
+});

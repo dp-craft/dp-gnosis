@@ -51,7 +51,14 @@ import {
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
-import { type Qrel, readCorpus, readQrels, readQueries } from './beir.js';
+import {
+  type Qrel,
+  readCorpus,
+  readQrels,
+  readQueries,
+  readQueryFacets,
+  type TopicFacets
+} from './beir.js';
 import { compareAll, type Comparison, formatComparison } from './compare.js';
 import {
   assertRerankDiscriminates,
@@ -92,7 +99,15 @@ import {
   type RunProvenance,
   writeRunSummary
 } from './report.js';
-import { type AtomSpread, atomSpread, type DatasetScore, scoreDataset, toDocumentRanking } from './score.js';
+import {
+  type AtomSpread,
+  atomSpread,
+  type DatasetScore,
+  perAxisStrata,
+  scoreDataset,
+  toDocumentRanking,
+  withTopicFacets
+} from './score.js';
 import { type MetricName, pairedSignificance, type Significance } from './significance.js';
 import { significanceLabel } from './sweepReport.js';
 
@@ -925,7 +940,8 @@ const descriptorOf = (
  */
 const measurementsOf = (
   queried: QueryOutcome,
-  scored: DatasetScore
+  scored: DatasetScore,
+  facets: ReadonlyMap<string, TopicFacets>
 ): Pick<
   DatasetResult,
   | 'queryMs'
@@ -935,17 +951,24 @@ const measurementsOf = (
   | 'metricsSd'
   | 'rPrecisionTopics'
   | 'perTopic'
+  | 'perAxisDescriptive'
   | 'rankings'
-> => ({
-  queryMs: queried.queryMs,
-  queryP50Ms: queried.queryP50Ms,
-  queryP95Ms: queried.queryP95Ms,
-  metrics: scored.mean,
-  metricsSd: scored.sd,
-  rPrecisionTopics: scored.rPrecisionTopics,
-  perTopic: scored.perTopic,
-  rankings: queried.rankings,
-});
+> => {
+  const perTopic = withTopicFacets(scored.perTopic, facets);
+  const strata = perAxisStrata(perTopic);
+  return {
+    queryMs: queried.queryMs,
+    queryP50Ms: queried.queryP50Ms,
+    queryP95Ms: queried.queryP95Ms,
+    metrics: scored.mean,
+    metricsSd: scored.sd,
+    rPrecisionTopics: scored.rPrecisionTopics,
+    perTopic,
+    // A dataset with no authored axis records no key at all — never an empty list.
+    ...(strata.length === 0 ? {} : { perAxisDescriptive: strata }),
+    rankings: queried.rankings,
+  };
+};
 
 /** The treatments that decide what gets BUILT, as opposed to how it is queried. */
 export interface PrepareArm {
@@ -1077,7 +1100,8 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
     ingestMs: prepared.ingestMs,
     ...measurementsOf(
       queried,
-      scoreDataset(queried.rankings, qrels, options.depth, queried.spread)
+      scoreDataset(queried.rankings, qrels, options.depth, queried.spread),
+      readQueryFacets(dir)
     ),
   };
 };

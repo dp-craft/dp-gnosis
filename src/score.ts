@@ -24,6 +24,7 @@
  */
 import { basename } from 'node:path';
 
+import type { TopicFacets } from './beir.js';
 import {
   meanMetrics,
   type Metrics,
@@ -76,7 +77,78 @@ export interface TopicScore {
   readonly metrics: Metrics;
   /** Absent on a run that measured no spread — a sweep cell records none. */
   readonly spread?: AtomSpread | undefined;
+  /**
+   * The authored REPORTING facets of this topic, absent on every dataset that
+   * authors none. They ride ALONGSIDE the score and enter no metric: attaching
+   * them leaves `metrics`, the macro mean and the sd byte-identical.
+   */
+  readonly facets?: TopicFacets | undefined;
 }
+
+/**
+ * One axis's DESCRIPTIVE stratum — the mean of the headline measures over the
+ * topics that carry that axis, and how many topics that is.
+ *
+ * DESCRIPTIVE ONLY. A stratum is a handful of topics, far below the corpus-wide
+ * MDE, so no p-value, interval or verdict is computed for it here and none may
+ * be added: a per-axis delta is a shape to look at, never a result to quote. The
+ * headline stays the macro mean over ALL topics.
+ */
+export interface AxisStratum {
+  readonly axis: string;
+  readonly topics: number;
+  readonly ndcg10: number;
+  readonly recall10: number | undefined;
+  readonly recall100: number | undefined;
+  readonly mrr10: number;
+}
+
+/** A topic with no authored facets keeps the field ABSENT, never present-undefined. */
+const withFacets = (score: TopicScore, facets: TopicFacets | undefined): TopicScore =>
+  facets === undefined ? score : { ...score, facets };
+
+/**
+ * Attach the authored facets to the scored topics. Deliberately OUTSIDE
+ * `scoreDataset`: the facets decorate a score and must be unable to move one,
+ * and a caller that measured none (the sweep) is byte-identical to one that did.
+ */
+export const withTopicFacets = (
+  perTopic: readonly TopicScore[],
+  facetsByQuery: ReadonlyMap<string, TopicFacets>
+): readonly TopicScore[] =>
+  perTopic.map(score => withFacets(score, facetsByQuery.get(score.queryId)));
+
+const axisOf = (score: TopicScore): string | undefined => score.facets?.axis;
+
+const byAxis = (perTopic: readonly TopicScore[]): ReadonlyMap<string, readonly Metrics[]> =>
+  perTopic.reduce((groups, score) => {
+    const axis = axisOf(score);
+    return axis === undefined ? groups : groups.set(axis, [...(groups.get(axis) ?? []), score.metrics]);
+  }, new Map<string, readonly Metrics[]>());
+
+const stratumOf = (axis: string, metrics: readonly Metrics[]): AxisStratum => {
+  const mean = meanMetrics(metrics);
+  return {
+    axis,
+    topics: metrics.length,
+    ndcg10: mean.ndcg10,
+    recall10: mean.recall10,
+    recall100: mean.recall100,
+    mrr10: mean.mrr10,
+  };
+};
+
+/** Largest stratum first, then by axis name — a stable order for a rendered table. */
+const bySize = (a: AxisStratum, b: AxisStratum): number =>
+  b.topics - a.topics || (a.axis < b.axis ? -1 : 1);
+
+/**
+ * The per-axis means, or an EMPTY list when no topic carries an axis — an empty
+ * list renders no section, where a single catch-all bucket would read as a
+ * stratum the author never wrote.
+ */
+export const perAxisStrata = (perTopic: readonly TopicScore[]): readonly AxisStratum[] =>
+  [...byAxis(perTopic)].map(([axis, metrics]) => stratumOf(axis, metrics)).sort(bySize);
 
 /** Every topic's score, the macro mean, and the per-topic spread around it. */
 export interface DatasetScore {

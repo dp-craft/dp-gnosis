@@ -72,6 +72,47 @@ export const readQueries = (dir: string): ReadonlyMap<string, string> =>
   );
 
 /**
+ * The authored REPORTING facets of one topic — a query-shape label, and the
+ * domain/type the author scoped the question to. Only a golden set the suite
+ * itself projects (`fetch/vault.ts`) carries them; a BEIR or BRIGHT topic
+ * authors none, and each field is ABSENT rather than a placeholder so a dataset
+ * with no axis opens no bucket.
+ *
+ * They are REPORTING dimensions only — nothing here filters retrieval.
+ */
+export interface TopicFacets {
+  readonly axis?: string | undefined;
+  readonly domain?: string | undefined;
+  readonly type?: string | undefined;
+}
+
+const FACET_KEYS = ['axis', 'domain', 'type'] as const satisfies readonly (keyof TopicFacets)[];
+
+const facetsOf = (row: Readonly<Record<string, unknown>>): TopicFacets =>
+  Object.fromEntries(
+    FACET_KEYS.map(key => [key, asString(row[key])] as const).filter(pair => pair[1].length > 0)
+  );
+
+const facetEntry = (
+  row: Readonly<Record<string, unknown>>
+): readonly [string, TopicFacets] | undefined => {
+  const facets = facetsOf(row);
+  return Object.keys(facets).length === 0 ? undefined : [asString(row['_id']), facets];
+};
+
+const isFacetEntry = (
+  entry: readonly [string, TopicFacets] | undefined
+): entry is readonly [string, TopicFacets] => entry !== undefined;
+
+/**
+ * Query id → its authored facets, for the topics that carry any. A dataset that
+ * authors none returns an EMPTY map, which is what makes "no per-axis section"
+ * distinguishable from "one empty bucket" downstream.
+ */
+export const readQueryFacets = (dir: string): ReadonlyMap<string, TopicFacets> =>
+  new Map(readJsonl(resolve(dir, QUERIES_FILE)).map(facetEntry).filter(isFacetEntry));
+
+/**
  * Tab-separated WITH a header row, which is skipped by matching the header text.
  * The `corpus-id` column goes through the SAME `safeDocId` as the corpus — the
  * judgments must be keyed on the ids `score.ts` recovers from the atoms, or the
