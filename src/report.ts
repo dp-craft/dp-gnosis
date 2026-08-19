@@ -31,7 +31,7 @@ import { dirname, resolve } from 'node:path';
 
 import { countNonEmptyLines } from './lines.js';
 import type { Metrics } from './metrics.js';
-import type { TopicScore } from './score.js';
+import type { AtomSpread, TopicScore } from './score.js';
 
 const DATE_CHARS = 10;
 const TIME_CHARS = 5;
@@ -608,15 +608,44 @@ export const PER_TOPIC_METRIC_COLUMNS = [
   'rbpResidual',
 ] as const satisfies readonly (keyof Metrics)[];
 
-const TSV_HEADER = [PER_TOPIC_QUERY_COLUMN, ...PER_TOPIC_METRIC_COLUMNS].join('\t');
+/**
+ * The PRESENTATION-diversity columns, appended AFTER the metrics and emitted
+ * ONLY when a run measured them. They are not metrics: `significance.ts` reads
+ * columns by name, a sweep cell carries none, and every legacy file is still the
+ * header above — so a render with no spread MUST stay byte-identical.
+ */
+export const PER_TOPIC_SPREAD_COLUMNS = [
+  'distinctDocs5',
+  'distinctDocs10',
+  'sameDocRuns10',
+] as const satisfies readonly (keyof AtomSpread)[];
 
 /** An unmeasurable cutoff is an EMPTY field — 0 would read as "measured, none". */
 const tsvCell = (value: number | undefined): string => (value === undefined ? '' : metric(value));
 
-const tsvRow = (topic: TopicScore): string =>
+const headerOf = (withSpread: boolean): string =>
+  [
+    PER_TOPIC_QUERY_COLUMN,
+    ...PER_TOPIC_METRIC_COLUMNS,
+    ...(withSpread ? PER_TOPIC_SPREAD_COLUMNS : []),
+  ].join('\t');
+
+/**
+ * A COUNT, not a measure in [0,1]: the 4-decimal form belongs to the metric
+ * family, and `5.0000` beside `ndcg10` reads as one and invites averaging it as
+ * one. Unmeasurable stays the empty field `tsvCell` writes.
+ */
+const spreadCell = (value: number | undefined): string =>
+  value === undefined ? '' : String(value);
+
+const spreadCells = (topic: TopicScore): readonly string[] =>
+  PER_TOPIC_SPREAD_COLUMNS.map(column => spreadCell(topic.spread?.[column]));
+
+const tsvRow = (topic: TopicScore, withSpread: boolean): string =>
   [
     topic.queryId,
     ...PER_TOPIC_METRIC_COLUMNS.map(column => tsvCell(topic.metrics[column])),
+    ...(withSpread ? spreadCells(topic) : []),
   ].join('\t');
 
 /**
@@ -624,8 +653,10 @@ const tsvRow = (topic: TopicScore): string =>
  * writes its cells through it too, so `significance.readPerTopic` parses a run
  * and a sweep cell with the same parser and neither can drift from the other.
  */
-export const renderPerTopicTsv = (perTopic: readonly TopicScore[]): string =>
-  [TSV_HEADER, ...perTopic.map(tsvRow), ''].join('\n');
+export const renderPerTopicTsv = (perTopic: readonly TopicScore[]): string => {
+  const withSpread = perTopic.some(topic => topic.spread !== undefined);
+  return [headerOf(withSpread), ...perTopic.map(topic => tsvRow(topic, withSpread)), ''].join('\n');
+};
 
 const writePerTopic = (
   resultsDir: string,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Qrel } from './metrics.js';
-import { scoreDataset, toDocumentRanking } from './score.js';
+import { atomSpread, scoreDataset, toDocumentRanking } from './score.js';
 
 const atom = (...originPaths: string[]): { readonly originPaths: readonly string[] } => ({
   originPaths,
@@ -103,5 +103,114 @@ describe('scoreDataset', () => {
     const result = scoreDataset(new Map([['q1', ['a', 'b']]]), qrels, 1000);
     expect(result.mean.recall300).toBe(1);
     expect(result.mean.recall1000).toBe(1);
+  });
+});
+
+const SPREAD_ATOMS_10 = [
+  atom('docs/a.md'),
+  atom('docs/a.md'),
+  atom('docs/b.md'),
+  atom('docs/b.md'),
+  atom('docs/c.md'),
+  atom('docs/c.md'),
+  atom('docs/d.md'),
+  atom('docs/d.md'),
+  atom('docs/e.md'),
+  atom('docs/e.md'),
+];
+
+describe('atomSpread', () => {
+  it('counts DISTINCT documents in the first 5 and first 10 served atoms', () => {
+    const spread = atomSpread(SPREAD_ATOMS_10);
+    expect(spread.distinctDocs5).toBe(3);
+    expect(spread.distinctDocs10).toBe(5);
+  });
+
+  it('counts MAXIMAL contiguous same-document runs — A A B A is three runs', () => {
+    const atoms = [
+      atom('docs/a.md'),
+      atom('docs/a.md'),
+      atom('docs/b.md'),
+      atom('docs/a.md'),
+      atom('docs/a.md'),
+      atom('docs/b.md'),
+      atom('docs/b.md'),
+      atom('docs/c.md'),
+      atom('docs/c.md'),
+      atom('docs/c.md'),
+    ];
+    const spread = atomSpread(atoms);
+    expect(spread.sameDocRuns10).toBe(5);
+    expect(spread.distinctDocs10).toBe(3);
+  });
+
+  it('does NOT dedupe — an interleaved order spreads further than a blocked one', () => {
+    const interleaved = [0, 1, 2, 3, 4, 0, 1, 2, 3, 4].map(index => SPREAD_ATOMS_10[index * 2] ?? atom());
+    const spread = atomSpread(interleaved);
+    expect(spread.distinctDocs5).toBe(5);
+    expect(spread.distinctDocs10).toBe(5);
+    expect(spread.sameDocRuns10).toBe(10);
+  });
+
+  it('drops excluded ids before measuring, exactly as the document rollup does', () => {
+    const spread = atomSpread(SPREAD_ATOMS_10, ['a']);
+    expect(spread.distinctDocs5).toBe(3);
+    expect(spread.distinctDocs10).toBeUndefined();
+  });
+
+  it('skips an atom with no originPaths', () => {
+    const spread = atomSpread([atom(), ...SPREAD_ATOMS_10.slice(0, 5), atom()]);
+    expect(spread.distinctDocs5).toBe(3);
+    expect(spread.distinctDocs10).toBeUndefined();
+  });
+
+  it('reports a cutoff the window never filled as UNDEFINED, never as a short count', () => {
+    const spread = atomSpread(SPREAD_ATOMS_10.slice(0, 4));
+    expect(spread.distinctDocs5).toBeUndefined();
+    expect(spread.distinctDocs10).toBeUndefined();
+    expect(spread.sameDocRuns10).toBeUndefined();
+  });
+
+  it('holds sameDocRuns10 >= distinctDocs10, with equality iff every document is contiguous', () => {
+    const blocked = atomSpread(SPREAD_ATOMS_10);
+    expect(blocked.sameDocRuns10).toBe(blocked.distinctDocs10);
+    const scattered = atomSpread([
+      atom('docs/a.md'),
+      ...SPREAD_ATOMS_10.slice(2),
+      atom('docs/a.md'),
+    ]);
+    expect(scattered.sameDocRuns10 ?? 0).toBeGreaterThan(scattered.distinctDocs10 ?? 0);
+  });
+});
+
+describe('scoreDataset — the atom spread rides along', () => {
+  const rankings = new Map([
+    ['q1', ['a', 'b']],
+    ['q2', ['a', 'b']],
+  ]);
+  const spreadQrels = new Map<string, Qrel>([['q1', new Map([['a', 1]])]]);
+
+  it('scores IDENTICALLY with and without the spread argument', () => {
+    const withoutSpread = scoreDataset(rankings, spreadQrels, DEPTH_100);
+    const withSpread = scoreDataset(
+      rankings,
+      spreadQrels,
+      DEPTH_100,
+      new Map([['q1', atomSpread(SPREAD_ATOMS_10)]])
+    );
+    expect(withSpread.perTopic.map(t => t.metrics)).toEqual(withoutSpread.perTopic.map(t => t.metrics));
+    expect(withSpread.mean).toEqual(withoutSpread.mean);
+    expect(withSpread.sd).toEqual(withoutSpread.sd);
+  });
+
+  it('carries each topic its own entry and leaves an unnamed topic without one', () => {
+    const scored = scoreDataset(
+      rankings,
+      spreadQrels,
+      DEPTH_100,
+      new Map([['q1', atomSpread(SPREAD_ATOMS_10)]])
+    );
+    expect(scored.perTopic[0]?.spread?.distinctDocs10).toBe(5);
+    expect(scored.perTopic[1]?.spread).toBeUndefined();
   });
 });

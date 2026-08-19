@@ -11,6 +11,7 @@ import {
   type HistoryRow,
   readHistory,
   recordDataset,
+  renderPerTopicTsv,
   renderTrecRun,
   reportStem,
   runFilePath,
@@ -20,6 +21,7 @@ import {
   runTag,
   writeRunSummary
 } from './report.js';
+import type { TopicScore } from './score.js';
 
 const tempResultsDir = (): string => mkdtempSync(resolve(tmpdir(), 'gnosis-bench-report-'));
 
@@ -533,5 +535,49 @@ describe('the new recall cutoffs', () => {
     expect(markdown).not.toContain('R@300');
     expect(markdown).not.toContain('R@1000');
     expect(markdown).toContain('0.8500');
+  });
+});
+
+describe('the atom-spread columns', () => {
+  const scored: TopicScore = {
+    queryId: 'q1',
+    metrics: {
+      ndcg10: 0.5,
+      recall10: 0.5,
+      recall20: 0.5,
+      recall100: undefined,
+      recall300: undefined,
+      recall1000: undefined,
+      mrr10: 0.5,
+      precision5: 0.4,
+      precision10: 0.3,
+      allGoldInTop10: 0,
+      map: 0.5,
+      rPrecision: undefined,
+      rbpResidual: 0.1,
+    },
+  };
+  const legacyHeader =
+    'query_id\tndcg10\trecall10\trecall20\trecall100\trecall300\trecall1000\tmrr10' +
+    '\tprecision5\tprecision10\tallGoldInTop10\tmap\trPrecision\trbpResidual';
+
+  it('emits a BYTE-IDENTICAL legacy TSV when no topic carries a spread', () => {
+    const lines = renderPerTopicTsv([scored]).split('\n');
+    expect(lines[0]).toBe(legacyHeader);
+    expect(lines[1]?.split('\t')).toHaveLength(legacyHeader.split('\t').length);
+  });
+
+  it('appends the three spread columns AFTER the metrics when a topic carries one', () => {
+    const withSpread: TopicScore = {
+      ...scored,
+      spread: { distinctDocs5: 3, distinctDocs10: 5, sameDocRuns10: undefined },
+    };
+    const lines = renderPerTopicTsv([withSpread, scored]).split('\n');
+    const header = lines[0]?.split('\t') ?? [];
+    expect(header.slice(-3)).toEqual(['distinctDocs5', 'distinctDocs10', 'sameDocRuns10']);
+    const row = lines[1]?.split('\t') ?? [];
+    expect(row[header.indexOf('distinctDocs5')]).toBe('3');
+    expect(row[header.indexOf('sameDocRuns10')]).toBe('');
+    expect((lines[2]?.split('\t') ?? []).slice(-3)).toEqual(['', '', '']);
   });
 });
