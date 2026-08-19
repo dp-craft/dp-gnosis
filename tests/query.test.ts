@@ -192,8 +192,8 @@ describe('analyzer chains', () => {
     expect(mismatched).toHaveLength(0);
   });
 
-  it('defaults to the porter-fold chain', () => {
-    expect(DEFAULT_ANALYZER).toBe('porter-fold');
+  it('defaults to the ident-porter-fold chain, a superset of porter-fold on prose', () => {
+    expect(DEFAULT_ANALYZER).toBe('ident-porter-fold');
     expect(analyze('Café Résumés')).toEqual(analyze('Café Résumés', 'porter-fold'));
     expect(analyzeToText('Café Résumés')).toBe(stemText('Café Résumés'));
   });
@@ -213,8 +213,9 @@ describe('analyzer chains', () => {
     expect(analyze(midWord, 'nostem-nofold')).toEqual(['használata', 'cafés']);
   });
 
-  it('exposes exactly the four named chains', () => {
+  it('exposes exactly the five named chains', () => {
     expect(Object.keys(ANALYZERS).sort()).toEqual([
+      'ident-porter-fold',
       'nostem-fold',
       'nostem-nofold',
       'porter-fold',

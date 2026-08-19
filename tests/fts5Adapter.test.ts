@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 
 import { buildFts5Index, createFts5Adapter, toMatchExpression } from '../src/adapters/fts5Adapter.js';
 import type { KnowledgePort } from '../src/port.js';
-import { DEFAULT_ANALYZER, stemText } from '../src/query.js';
+import { stemText } from '../src/query.js';
 
 const NOW = new Date('2026-08-08T00:00:00.000Z');
 
@@ -655,9 +655,11 @@ describe('fts5 analyzer stamp', () => {
     return results.map(result => result.atoms);
   };
 
-  it('answers a default build exactly as the pre-stamp writer did, rows and ranking alike', async () => {
+  // `porter-fold` is named EXPLICITLY: it is the chain the pre-stamp writer used,
+  // and it stopped being the default when `ident-porter-fold` was added.
+  it('answers a porter-fold build exactly as the pre-stamp writer did, rows and ranking alike', async () => {
     writeFixture();
-    buildFts5Index({ atomsDir, indexPath });
+    buildFts5Index({ atomsDir, indexPath, analyzer: 'porter-fold' });
     const stamped = await answers();
 
     buildLegacyIndex();
@@ -672,7 +674,7 @@ describe('fts5 analyzer stamp', () => {
 
     buildFts5Index({ atomsDir, indexPath });
 
-    expect(readStamp()).toBe('porter-fold');
+    expect(readStamp()).toBe('ident-porter-fold');
   });
 
   it('round-trips a named analyzer: stamped on build, read back on query', async () => {
@@ -748,11 +750,11 @@ describe('toMatchExpression — adjacency OFF is byte-identical', () => {
 
   cases.forEach(([query, expected]) => {
     it(`emits ${String(expected)} for ${JSON.stringify(query)} when adjacency is absent`, () => {
-      expect(toMatchExpression(query, DEFAULT_ANALYZER)).toBe(expected);
+      expect(toMatchExpression(query, 'porter-fold')).toBe(expected);
     });
 
     it(`emits ${String(expected)} for ${JSON.stringify(query)} when adjacency is false`, () => {
-      expect(toMatchExpression(query, DEFAULT_ANALYZER, false)).toBe(expected);
+      expect(toMatchExpression(query, 'porter-fold', false)).toBe(expected);
     });
   });
 });
@@ -763,25 +765,25 @@ describe('toMatchExpression — adjacency OFF is byte-identical', () => {
  */
 describe('toMatchExpression — adjacency ON', () => {
   it('adds the multi-term phrase BESIDE the individual terms of one raw token', () => {
-    expect(toMatchExpression('lint:test-shape', DEFAULT_ANALYZER, true)).toBe(
+    expect(toMatchExpression('lint:test-shape', 'porter-fold', true)).toBe(
       '"lint" OR "test" OR "shape" OR "lint test shape"'
     );
   });
 
   it('adds one phrase per multi-token raw token, in query order', () => {
-    expect(toMatchExpression('adr-018 dirty-tree', DEFAULT_ANALYZER, true)).toBe(
+    expect(toMatchExpression('adr-018 dirty-tree', 'porter-fold', true)).toBe(
       '"adr" OR "018" OR "adr 018" OR "dirti" OR "tree" OR "dirti tree"'
     );
   });
 
   it('leaves a single-token raw token exactly as adjacency-off emits it', () => {
-    expect(toMatchExpression('zustand selectors', DEFAULT_ANALYZER, true)).toBe(
-      toMatchExpression('zustand selectors', DEFAULT_ANALYZER)
+    expect(toMatchExpression('zustand selectors', 'porter-fold', true)).toBe(
+      toMatchExpression('zustand selectors', 'porter-fold')
     );
   });
 
   it('still emits undefined for a term-free query', () => {
-    expect(toMatchExpression('  "  ', DEFAULT_ANALYZER, true)).toBeUndefined();
+    expect(toMatchExpression('  "  ', 'porter-fold', true)).toBeUndefined();
   });
 
   it('honours the stamped analyzer when building the phrase', () => {

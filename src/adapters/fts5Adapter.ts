@@ -74,7 +74,14 @@ import type {
   RetrieveOptions
 } from '../port.js';
 import { assertTypeFilter, atomOrigin } from '../port.js';
-import { analyze, type AnalyzerId, ANALYZERS, analyzeToText, DEFAULT_ANALYZER } from '../query.js';
+import {
+  analyze,
+  type AnalyzerId,
+  ANALYZERS,
+  analyzeToText,
+  DEFAULT_ANALYZER,
+  identifierTermOf
+} from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
 /** `mode`/`name` reported by this adapter. */
@@ -127,7 +134,7 @@ interface Fts5IndexLocation {
 export interface BuildFts5IndexOptions extends Fts5IndexLocation {
   /**
    * The analysis chain hop 7 applies, STAMPED into the index it produces.
-   * Absent means `DEFAULT_ANALYZER`, which is today's behaviour unchanged.
+   * Absent means `DEFAULT_ANALYZER`; a pre-stamp index reads as `porter-fold`.
    */
   readonly analyzer?: AnalyzerId;
 }
@@ -260,9 +267,17 @@ const stampValue = (db: Database.Database): string | undefined =>
  * is the ONLY chain that ever produced one, so reading an absent stamp as that
  * chain is exact rather than a guess — and it neither throws nor rebuilds.
  */
+/**
+ * What a PRE-STAMP index was built by — a fixed chain, never `DEFAULT_ANALYZER`.
+ * Those files were written before `index_meta` existed, and `porter-fold` is the
+ * only chain that ever produced one; reading them under whatever the default has
+ * since become would query them with terms their inverted index does not hold.
+ */
+const PRE_STAMP_ANALYZER: AnalyzerId = 'porter-fold';
+
 const stampedAnalyzer = (db: Database.Database): AnalyzerId => {
   const value = stampValue(db);
-  return value === undefined ? DEFAULT_ANALYZER : asAnalyzer(value);
+  return value === undefined ? PRE_STAMP_ANALYZER : asAnalyzer(value);
 };
 
 /**
@@ -283,6 +298,46 @@ const disjunctsOf = (run: readonly string[], adjacency: boolean): readonly strin
   adjacency && run.length > 1
     ? [...run.map(escapeTerm), escapeTerm(run.join(' '))]
     : [escapeTerm(run.join(' '))];
+
+/** The one chain whose query side emits a whole-token alternative. */
+const IDENT_ANALYZER: AnalyzerId = 'ident-porter-fold';
+
+/**
+ * The disjuncts one chunk contributes under `ident-porter-fold`.
+ *
+ * The chunk is analyzed with `porter-fold` — the PARTS chain — rather than with
+ * the ident chain, because the ident chain flattens the whole-token term into
+ * the same list as the parts and `disjunctsOf` would then weld them into one
+ * nonsense phrase. An identifier-shaped chunk becomes a PARENTHESISED group:
+ * the unstemmed whole-token literal OR whatever the chunk already emitted, so
+ * an atom that spells the identifier whole and one that spells its parts both
+ * match. Anything else is byte-identical to the non-ident path.
+ */
+const identDisjuncts = (chunk: string, adjacency: boolean): readonly string[] => {
+  const parts = analyze(chunk, 'porter-fold');
+  if (parts.length === 0) return [];
+  const whole = identifierTermOf(chunk, parts);
+  const inner = disjunctsOf(parts, adjacency);
+  return whole === undefined ? inner : [`(${[escapeTerm(whole), ...inner].join(' OR ')})`];
+};
+
+const plainDisjuncts = (
+  chunk: string,
+  analyzer: AnalyzerId,
+  adjacency: boolean
+): readonly string[] => {
+  const run = analyze(chunk, analyzer);
+  return run.length === 0 ? [] : disjunctsOf(run, adjacency);
+};
+
+const chunkDisjuncts = (
+  chunk: string,
+  analyzer: AnalyzerId,
+  adjacency: boolean
+): readonly string[] =>
+  analyzer === IDENT_ANALYZER
+    ? identDisjuncts(chunk, adjacency)
+    : plainDisjuncts(chunk, analyzer, adjacency);
 
 /**
  * QUERY SIDE of the shared analyzer. `analyzer` is the chain STAMPED into the
@@ -316,13 +371,10 @@ export const toMatchExpression = (
   analyzer: AnalyzerId,
   adjacency = false
 ): string | undefined => {
-  const runs = query
+  const disjuncts = query
     .split(WHITESPACE_RE)
-    .map(chunk => analyze(chunk, analyzer))
-    .filter(run => run.length > 0);
-  return runs.length === 0
-    ? undefined
-    : runs.flatMap(run => disjunctsOf(run, adjacency)).join(' OR ');
+    .flatMap(chunk => chunkDisjuncts(chunk, analyzer, adjacency));
+  return disjuncts.length === 0 ? undefined : disjuncts.join(' OR ');
 };
 
 const newestCorpusMs = (atomsDir: string): number =>

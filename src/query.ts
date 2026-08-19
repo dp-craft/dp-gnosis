@@ -131,24 +131,106 @@ export const foldTokens: Stage = tokens => tokens.map(foldDiacritics).filter(non
 
 export const stemTokens: Stage = tokens => tokens.map(stemTerm);
 
+const PORTER_FOLD_STAGES: readonly Stage[] = [
+  splitTokens,
+  lowercaseTokens,
+  foldTokens,
+  stemTokens,
+];
+
+/** Run the `porter-fold` stages over ONE raw token, seeded the way `analyze` seeds. */
+const porterFoldParts = (raw: string): readonly string[] =>
+  PORTER_FOLD_STAGES.reduce<readonly string[]>((tokens, stage) => stage(tokens), [raw]);
+
+const WHITESPACE_SPLIT_RE = /\s+/;
+const IDENTIFIER_SHAPE_RE = /[/:_.-]|[a-z][A-Z]/;
+const NON_SLUG_RE = /[^a-z0-9]+/g;
+const EDGE_UNDERSCORE_RE = /^_+|_+$/g;
+const AT_SIGN = '@';
+const AT_WORD = 'at';
+
 /**
- * The named analyzers. `porter-fold` IS today's behaviour — `analyze(text)`
- * reproduces `tokenize(text).map(stemTerm)` token for token — and the other
- * three exist so folding and stemming can be switched off INDEPENDENTLY, which
- * is what a non-English corpus needs to be measured against.
+ * Does this RAW token look like an identifier — a path, a flag, a screaming
+ * constant, a dotted call, a camelCase symbol? Prose never carries `/ : _ - .`
+ * inside a token and never runs a lowercase letter straight into an uppercase
+ * one, so those six shapes separate code-shaped tokens from words without a
+ * dictionary. Accents and digits are NOT a signal: `bevallás` and `018` are
+ * ordinary words a Hungarian or a version query supplies.
+ */
+export const isIdentifierShaped = (raw: string): boolean => IDENTIFIER_SHAPE_RE.test(raw);
+
+/**
+ * The slug an identifier-shaped token keeps as ONE term: lowercase, fold marks
+ * away, spell `@` as `at` (it is the only punctuation that carries a word), then
+ * collapse every non-alphanumeric run to a single `_` and trim the edges. The
+ * result is deliberately NOT stemmed — `useChatStore` must stay findable under
+ * the exact spelling a user typed.
+ */
+const normalizeIdentifier = (raw: string): string =>
+  foldDiacritics(raw.toLowerCase())
+    .replaceAll(AT_SIGN, AT_WORD)
+    .replace(NON_SLUG_RE, '_')
+    .replace(EDGE_UNDERSCORE_RE, '');
+
+/**
+ * The EXTRA whole-token term a raw token contributes beside its `porter-fold`
+ * parts, or `undefined` when it contributes none — the token is not identifier
+ * shaped, normalizes to nothing, or already equals the single part the parts
+ * chain produced (emitting it twice would double that term's frequency).
+ *
+ * Shared by the `ident-porter-fold` chain (index side) and `toMatchExpression`
+ * (query side) so the two cannot drift into disagreeing about which tokens earn
+ * a whole-token term.
+ */
+const isRedundantWhole = (whole: string, parts: readonly string[]): boolean =>
+  whole === '' || (parts.length === 1 && parts[0] === whole);
+
+export const identifierTermOf = (raw: string, parts: readonly string[]): string | undefined => {
+  if (!isIdentifierShaped(raw)) return undefined;
+  const whole = normalizeIdentifier(raw);
+  return isRedundantWhole(whole, parts) ? undefined : whole;
+};
+
+const identTokensOf = (raw: string): readonly string[] => {
+  const parts = porterFoldParts(raw);
+  const whole = identifierTermOf(raw, parts);
+  return whole === undefined ? parts : [whole, ...parts];
+};
+
+/**
+ * ONE composite stage rather than a list of them: the whole-token term and the
+ * parts belong to the SAME raw token, and a `Stage` chain sees only a flat token
+ * list, which loses that pairing after the first split. So this stage does its
+ * own whitespace split — the raw-token boundary — and runs the `porter-fold`
+ * stages per token internally.
+ */
+export const identPorterFoldStage: Stage = tokens =>
+  tokens
+    .flatMap(token => token.split(WHITESPACE_SPLIT_RE))
+    .filter(nonEmpty)
+    .flatMap(identTokensOf);
+
+/**
+ * The named analyzers. `porter-fold` IS the original behaviour —
+ * `analyze(text, 'porter-fold')` reproduces `tokenize(text).map(stemTerm)` token
+ * for token — three chains exist so folding and stemming can be switched off
+ * INDEPENDENTLY (what a non-English corpus needs to be measured against), and
+ * `ident-porter-fold` ADDS an unstemmed whole-token term for every
+ * identifier-shaped raw token beside the `porter-fold` parts it already emits.
  */
 export const ANALYZERS = {
-  'porter-fold': [splitTokens, lowercaseTokens, foldTokens, stemTokens],
+  'porter-fold': PORTER_FOLD_STAGES,
   'porter-nofold': [splitTokens, lowercaseTokens, stemTokens],
   'nostem-fold': [splitTokens, lowercaseTokens, foldTokens],
   'nostem-nofold': [splitTokens, lowercaseTokens],
+  'ident-porter-fold': [identPorterFoldStage],
 } as const satisfies Readonly<Record<string, readonly Stage[]>>;
 
 /** The name of a chain in `ANALYZERS`. */
 export type AnalyzerId = keyof typeof ANALYZERS;
 
-/** Today's chain: the default everywhere, so nothing changes until a caller opts out. */
-export const DEFAULT_ANALYZER: AnalyzerId = 'porter-fold';
+/** The default everywhere; `porter-fold` is the chain it is a superset of. */
+export const DEFAULT_ANALYZER: AnalyzerId = 'ident-porter-fold';
 
 /** Run `text` through the named chain: enter as `[text]`, reduce the stages in order. */
 export const analyze = (text: string, id: AnalyzerId = DEFAULT_ANALYZER): readonly string[] =>
