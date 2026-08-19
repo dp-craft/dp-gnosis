@@ -42,6 +42,7 @@ import {
 } from '../../dp-gnosis/src/cli/adapter.js';
 import {
   ATOM_MAX_CHARS,
+  DEFAULT_EXCLUDED_TYPES,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
   RERANK_DOC_MAX_CHARS,
@@ -94,6 +95,7 @@ import {
   currentGitSha,
   type DatasetResult,
   HISTORY_FILE,
+  NO_TYPE_FILTER,
   readHistory,
   recordDataset,
   type RunProvenance,
@@ -218,6 +220,14 @@ export interface CliOptions {
    * row like `analyzer`, because every run either applied it or did not.
    */
   readonly queryAdjacency: boolean;
+  /**
+   * Whether the run projects the FULL vault — every atom type — instead of the
+   * SERVABLE subset the CLI shows. Same name and same meaning as the CLI's flag.
+   * OFF aligns the bench with serving: the excluded types are subtracted at the
+   * DERIVE step (`fetch/vault.ts`), the one place the atom's type still exists,
+   * because the BEIR projection carries `{id,title,text}` alone.
+   */
+  readonly includeHistory: boolean;
 }
 
 /** A scorable query: judged by the qrels, so it can contribute a non-zero mean. */
@@ -293,6 +303,19 @@ const checkAnalyzerAdapter = (adapter: AdapterName, analyzer: AnalyzerId): Analy
     `dp-gnosis-bench: adapter "${adapter}" does not honour --analyzer "${analyzer}" — ` +
       `only "${ANALYZER_AWARE_ADAPTER}" builds its index with the named chain`
   );
+};
+
+const INCLUDE_HISTORY_FLAG = '--include-history';
+
+/**
+ * The TREATMENT string a run stamps: the types its corpus EXCLUDED, sorted so
+ * two runs of one arm stamp the same value, and derived from the engine's own
+ * `DEFAULT_EXCLUDED_TYPES` so no list is restated here. A run that excluded
+ * nothing stamps `NO_TYPE_FILTER`, which is what every legacy row means.
+ */
+export const typeFilterOf = (includeHistory: boolean): string => {
+  const excluded = includeHistory ? [] : [...DEFAULT_EXCLUDED_TYPES].sort();
+  return excluded.length === 0 ? NO_TYPE_FILTER : excluded.join(',');
 };
 
 const QUERY_ADJACENCY_FLAG = '--query-adjacency';
@@ -569,7 +592,7 @@ export const RUN_FLAGS: FlagSpec = {
     HYBRID_WEIGHT_FLAG,
     ...GATE_VALUE_FLAGS,
   ],
-  boolean: ['--compare', '--help', '--rerank', QUERY_ADJACENCY_FLAG],
+  boolean: ['--compare', '--help', '--rerank', QUERY_ADJACENCY_FLAG, INCLUDE_HISTORY_FLAG],
 };
 
 export const parseArgs = (argv: readonly string[]): CliOptions => {
@@ -604,6 +627,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     ),
     analyzer: checkAnalyzerAdapter(adapter, parseAnalyzer(flagValue(argv, '--analyzer'))),
     queryAdjacency: checkAdjacencyAdapter(adapter, argv.includes(QUERY_ADJACENCY_FLAG)),
+    includeHistory: argv.includes(INCLUDE_HISTORY_FLAG),
   };
 };
 
@@ -631,8 +655,8 @@ export const datasetDir = (entry: DatasetEntry): string => {
  * Above the declared floor the derivation then REFUSES (exit 3) instead of
  * letting the run score a corpus that has lost the documents it is judged on.
  */
-const deriveVault = (entry: BeirDataset): void => {
-  const derived = ensureVaultDataset(entry, SUITE_ROOT);
+const deriveVault = (entry: BeirDataset, includeHistory: boolean): void => {
+  const derived = ensureVaultDataset(entry, SUITE_ROOT, includeHistory);
   process.stdout.write(`${describeDerivation(entry.id, derived)}\n`);
   assertGoldReachable(entry.id, derived);
 };
@@ -642,10 +666,15 @@ const deriveVault = (entry: BeirDataset): void => {
  * the layout. `beir-local` points at a directory the repo already carries, so
  * there is nothing to fetch and a missing one is an error, not a download.
  */
-export const ensureDataset = async (entry: DatasetEntry): Promise<string> => {
+export const ensureDataset = async (
+  entry: DatasetEntry,
+  includeHistory = false
+): Promise<string> => {
   if (entry.format === 'bright') await ensureBrightDataset(entry, DATA_DIR);
   if (entry.format === 'beir-zip') await ensureBeirDataset(entry, DATA_DIR);
-  if (entry.format === 'beir-local' && entry.derive !== undefined) deriveVault(entry);
+  if (entry.format === 'beir-local' && entry.derive !== undefined) {
+    deriveVault(entry, includeHistory);
+  }
   return datasetDir(entry);
 };
 
@@ -1074,7 +1103,7 @@ const topicsFor = (
 };
 
 const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
-  const dir = await ensureDataset(entry);
+  const dir = await ensureDataset(entry, options.includeHistory);
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
   const topics = topicsFor(dir, entry.id, qrels);
   const prepared = await prepareOf({
@@ -1287,6 +1316,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
   queryAdjacency: options.queryAdjacency,
+  typeFilter: typeFilterOf(options.includeHistory),
 });
 
 /** The headline; the other three metrics are read off the delta line above it. */

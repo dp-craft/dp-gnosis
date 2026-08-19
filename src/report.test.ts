@@ -9,6 +9,7 @@ import {
   type DatasetResult,
   HISTORY_FILE,
   type HistoryRow,
+  NO_TYPE_FILTER,
   readHistory,
   recordDataset,
   renderPerTopicTsv,
@@ -55,6 +56,7 @@ const provenance: RunProvenance = {
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
   queryAdjacency: false,
+  typeFilter: NO_TYPE_FILTER,
 };
 
 const result: DatasetResult = {
@@ -188,6 +190,7 @@ describe('writeRunReport', () => {
         'rPrecisionTopics',
         'rbpResidual',
         'queryAdjacency',
+        'typeFilter',
         'rerank',
         'perTopicPath',
         'runPath',

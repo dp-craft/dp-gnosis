@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   ATOM_MAX_CHARS,
+  DEFAULT_EXCLUDED_TYPES,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
   RERANK_DOC_MAX_CHARS,
@@ -30,6 +31,7 @@ import type { Qrel } from './metrics.js';
 import {
   type DatasetResult,
   HISTORY_FILE,
+  NO_TYPE_FILTER,
   readHistory,
   recordDataset,
   type RunProvenance
@@ -75,6 +77,7 @@ describe('parseArgs', () => {
       rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
       analyzer: DEFAULT_ANALYZER,
       queryAdjacency: false,
+      includeHistory: false,
     });
   });
 
@@ -91,6 +94,7 @@ describe('parseArgs', () => {
         rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
         analyzer: DEFAULT_ANALYZER,
         queryAdjacency: false,
+        includeHistory: false,
       });
   });
 
@@ -307,6 +311,19 @@ describe('parseArgs', () => {
 
   it('leaves the flagless invocation on a non-fts5 adapter alone — every legacy run', () => {
     expect(parseArgs(['--adapter', 'linear']).queryAdjacency).toBe(false);
+  });
+
+  /**
+   * The bench measures what the CLI SERVES: the excluded types are subtracted at
+   * the DERIVE step, so an unflagged run no longer projects an atom no user can
+   * be shown. OFF is the aligned default; the flag restores the full corpus.
+   */
+  it('defaults --include-history OFF, so the run measures the SERVABLE corpus', () => {
+    expect(parseArgs([]).includeHistory).toBe(false);
+  });
+
+  it('reads --include-history as a switch, restoring the full corpus arm', () => {
+    expect(parseArgs(['--include-history']).includeHistory).toBe(true);
   });
 
   it('reads --layer as the suite layer to run', () => {
@@ -645,6 +662,18 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
     expect(provenanceOf(parseArgs(['--query-adjacency']), 'sha').queryAdjacency).toBe(true);
     expect(provenanceOf(parseArgs([]), 'sha').queryAdjacency).toBe(false);
   });
+
+  /**
+   * The EXCLUDED types are what the row has to name: they are the atoms the arm
+   * could never return, and they are unrecoverable from the metrics afterwards.
+   * Sorted, so two runs of the same arm stamp the same string.
+   */
+  it('records the effective EXCLUDED types as the typeFilter treatment, on both arms', () => {
+    expect(provenanceOf(parseArgs([]), 'sha').typeFilter).toBe(
+      [...DEFAULT_EXCLUDED_TYPES].sort().join(',')
+    );
+    expect(provenanceOf(parseArgs(['--include-history']), 'sha').typeFilter).toBe(NO_TYPE_FILTER);
+  });
 });
 
 /**
@@ -811,6 +840,7 @@ const testProvenance: RunProvenance = {
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
   queryAdjacency: false,
+  typeFilter: NO_TYPE_FILTER,
 };
 
 /**

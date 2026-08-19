@@ -118,7 +118,21 @@ export interface RunProvenance {
    * omitting it could not be told apart from one measured under the other arm.
    */
   readonly queryAdjacency: boolean;
+  /**
+   * The types the run's corpus EXCLUDED, sorted and comma-joined, or
+   * {@link NO_TYPE_FILTER} when it excluded none. Required for the reason
+   * `analyzer` is: every run projected one type set or the other, and the set is
+   * unrecoverable from the metrics afterwards.
+   */
+  readonly typeFilter: string;
 }
+
+/**
+ * What a run that filtered NOTHING stamps — the full corpus, which is what every
+ * row recorded before the filter existed measured and what `--include-history`
+ * measures today. The two therefore compare EQUAL rather than as two arms.
+ */
+export const NO_TYPE_FILTER = 'none';
 
 /** One dataset's outcome plus the provenance that is specific to that dataset. */
 export interface DatasetResult {
@@ -302,6 +316,14 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * one.
    */
   readonly queryAdjacency?: boolean;
+  /**
+   * The types this row's corpus excluded — TREATMENT provenance (`compare.ts`),
+   * so aligning the bench with serving is labelled an arm comparison instead of
+   * being subtracted. Absent on every row recorded before the filter existed;
+   * those measured the full corpus, which is {@link NO_TYPE_FILTER}, and that is
+   * how `compare.ts` reads an absent one.
+   */
+  readonly typeFilter?: string;
   readonly topics: number;
   readonly docCount: number;
   readonly atomCount: number;
@@ -473,6 +495,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   embedModel: provenance.embedModel,
   analyzer: provenance.analyzer,
   queryAdjacency: provenance.queryAdjacency,
+  typeFilter: provenance.typeFilter,
   ...descriptorFields(result),
   ...costFields(result),
   rPrecisionTopics: result.rPrecisionTopics,

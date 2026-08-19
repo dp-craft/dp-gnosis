@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_EXCLUDED_TYPES } from '../../../dp-gnosis/src/config.js';
 import type { BeirDataset } from '../manifest.js';
 import {
   assertGoldReachable,
@@ -16,8 +17,14 @@ import {
   UNREACHABLE_GOLD_FLOOR
 } from './vault.js';
 
+const typedAtom = (id: string, title: string, body: string, type: string): string =>
+  `---\ntype: ${type}\nid: ${id}\ntitle: ${title}\nx_domain: docs\nstatus: stable\nsources:\n  - src/${id}.md\n---\n${body}`;
+
 const atom = (id: string, title: string, body: string): string =>
-  `---\ntype: knowledge\nid: ${id}\ntitle: ${title}\nx_domain: docs\nstatus: stable\nsources:\n  - src/${id}.md\n---\n${body}`;
+  typedAtom(id, title, body, 'knowledge');
+
+/** An excluded type, read off the engine constant so no list is restated here. */
+const EXCLUDED_TYPE: string = DEFAULT_EXCLUDED_TYPES[0] ?? '';
 
 const stage = (): string => {
   const root = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-vault-'));
@@ -135,6 +142,92 @@ describe('ensureVaultDataset', () => {
 
     expect(derived.docCount).toBe(3);
     expect(readFileSync(resolve(derived.dir, 'corpus.jsonl'), 'utf8')).toContain('"gamma"');
+  });
+});
+
+/**
+ * THE SERVING ALIGNMENT. The CLI subtracts the profile's `defaultExcludedTypes`
+ * from every `retrieve`, so an atom of one of those types can never be shown —
+ * yet the bench measured them, and on the real vault they were 7584 of 14127
+ * atoms occupying top-10 slots no judgment could ever mark correct. They are
+ * dropped HERE, before `corpus.jsonl`, because the BEIR projection carries only
+ * `{id,title,text}`: the type does not survive to the index, so no filter
+ * downstream of this step can read it.
+ *
+ * This is NOT bit-equivalent to serving: BM25 collection statistics are computed
+ * over the servable subset here, where serving computes them over the full index
+ * and filters during the scan. The divergence is accepted and MUST NOT be
+ * described as reproducing the served ranking.
+ */
+describe('ensureVaultDataset — the type filter', () => {
+  const stageWithExcluded = (): string => {
+    const root = stage();
+    writeFileSync(
+      resolve(root, 'atoms', 'delta.md'),
+      typedAtom('delta', 'Delta', 'delta body\n', EXCLUDED_TYPE)
+    );
+    return root;
+  };
+
+  /** An empty excluded set would make every case below pass vacuously. */
+  it('has a non-empty excluded set to test against', () => {
+    expect(DEFAULT_EXCLUDED_TYPES.length).toBeGreaterThan(0);
+    expect(EXCLUDED_TYPE.length).toBeGreaterThan(0);
+  });
+
+  it('drops an atom of an excluded type before it reaches the corpus', () => {
+    const root = stageWithExcluded();
+
+    const derived = ensureVaultDataset(entryFor(root), resolve(root, 'suite'));
+
+    expect(derived.docCount).toBe(2);
+    expect(derived.excludedCount).toBe(1);
+    expect(readFileSync(resolve(derived.dir, 'corpus.jsonl'), 'utf8')).not.toContain('"delta"');
+  });
+
+  /**
+   * `unparsedCount` is a DEFECT diagnostic — atom files the engine's parser
+   * refused. Counting a deliberate exclusion into it would report the alignment
+   * as 7584 corrupt files.
+   */
+  it('counts an exclusion apart from an unparsed file, never as one', () => {
+    const root = stageWithExcluded();
+    writeFileSync(resolve(root, 'atoms', 'broken.md'), 'no frontmatter at all\n');
+
+    const derived = ensureVaultDataset(entryFor(root), resolve(root, 'suite'));
+
+    expect(derived.excludedCount).toBe(1);
+    expect(derived.unparsedCount).toBe(1);
+    expect(describeDerivation('vault', derived)).toContain('1 excluded');
+  });
+
+  it('restores the full corpus under --include-history, excluding nothing', () => {
+    const root = stageWithExcluded();
+
+    const derived = ensureVaultDataset(entryFor(root), resolve(root, 'suite'), true);
+
+    expect(derived.docCount).toBe(3);
+    expect(derived.excludedCount).toBe(0);
+    expect(readFileSync(resolve(derived.dir, 'corpus.jsonl'), 'utf8')).toContain('"delta"');
+  });
+
+  /**
+   * The live control: every `vault-hu` atom is `type: knowledge`, which no
+   * profile excludes, so its projection MUST be byte-identical to today's — the
+   * alignment moves the `vault` numbers alone.
+   */
+  it('changes NOTHING on a corpus that holds no excluded type — byte-identical', () => {
+    const filteredRoot = stage();
+    const fullRoot = stage();
+
+    const filtered = ensureVaultDataset(entryFor(filteredRoot), resolve(filteredRoot, 'suite'));
+    const full = ensureVaultDataset(entryFor(fullRoot), resolve(fullRoot, 'suite'), true);
+
+    expect(filtered.excludedCount).toBe(0);
+    expect(filtered.docCount).toBe(full.docCount);
+    expect(readFileSync(resolve(filtered.dir, 'corpus.jsonl'), 'utf8')).toBe(
+      readFileSync(resolve(full.dir, 'corpus.jsonl'), 'utf8')
+    );
   });
 });
 

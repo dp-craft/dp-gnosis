@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   type HistoryRow,
+  NO_TYPE_FILTER,
   PER_TOPIC_DIR,
   perTopicRelPath,
   reportStem,
@@ -63,6 +64,7 @@ const asProvenance = (run: HistoryRow): RunProvenance => ({
   ...run,
   analyzer: run.analyzer ?? DEFAULT_ANALYZER,
   queryAdjacency: run.queryAdjacency ?? false,
+  typeFilter: run.typeFilter ?? NO_TYPE_FILTER,
 });
 
 const row = (overrides: Partial<HistoryRow>): HistoryRow => {

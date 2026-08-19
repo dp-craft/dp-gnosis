@@ -25,6 +25,7 @@
  * | treatment | `embedModel` | a different ENCODER behind the dense leg |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
+ * | treatment | `typeFilter` | a different CORPUS PROJECTION — the atom types the run could return at all |
  *
  * A moved SCALE is still refused: the two numbers are not on one axis and no
  * label can rescue them. A moved TREATMENT is the experiment, so it is compared
@@ -43,7 +44,7 @@ import {
   type RerankFusion
 } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
-import type { HistoryRow } from './report.js';
+import { type HistoryRow, NO_TYPE_FILTER } from './report.js';
 
 const DELTA_DIGITS = 4;
 
@@ -80,6 +81,7 @@ export const TREATMENT_FIELDS = [
   'embedModel',
   'analyzer',
   'queryAdjacency',
+  'typeFilter',
 ] as const;
 
 export type ScaleField = (typeof SCALE_FIELDS)[number];
@@ -193,6 +195,11 @@ const LEGACY_RERANK_RRF_WEIGHT = 0.5;
  * `queryAdjacency` likewise: no row recorded before the flag existed applied the
  * adjacency phrase, so absence reads as OFF rather than as a moved treatment.
  *
+ * `typeFilter` likewise: every row recorded before the bench was aligned with
+ * serving projected the FULL corpus, which is what `NO_TYPE_FILTER` names — so
+ * an old row and an `--include-history` row compare equal, as they must, since
+ * they measured the same atoms.
+ *
  * `hybridWeight` likewise: every row recorded before the leg weight was
  * settable fused at `HYBRID_FUSION`'s weight, and it applies to every row alike,
  * so a non-hybrid pair still compares equal on it.
@@ -219,6 +226,7 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   rerankDocMaxChars: LEGACY_RERANK_DOC_MAX_CHARS,
   rerankExtract: LEGACY_RERANK_EXTRACT,
   rerankWeight: LEGACY_RERANK_RRF_WEIGHT,
+  typeFilter: NO_TYPE_FILTER,
 };
 
 /**

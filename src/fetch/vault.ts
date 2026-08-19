@@ -26,6 +26,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 import { parseAtom } from '../../../dp-gnosis/src/atom.js';
+import { DEFAULT_EXCLUDED_TYPES } from '../../../dp-gnosis/src/config.js';
 import type { BeirDoc } from '../beir.js';
 import type { BeirDataset, VaultDerivationSource } from '../manifest.js';
 
@@ -72,6 +73,12 @@ export interface VaultDerivation {
   readonly recallCeiling: number;
   /** Atom files the engine's own parser refused; they carry no document. */
   readonly unparsedCount: number;
+  /**
+   * Atoms dropped because their type is one the CLI never serves. Counted APART
+   * from `unparsedCount`: that one is a defect diagnostic, and folding a
+   * deliberate exclusion into it would report the alignment as corrupt files.
+   */
+  readonly excludedCount: number;
 }
 
 const fail = (problem: string, fix: string): never => {
@@ -127,18 +134,37 @@ const stripTitleHeading = (body: string, title: string): string => {
   return rest.startsWith('\n') ? rest.slice(1) : rest;
 };
 
-const toDoc = (atomsDir: string, relPath: string): BeirDoc | undefined => {
+/**
+ * One parsed atom, with the frontmatter `type` kept BESIDE its projection. The
+ * type has to be read here or nowhere: `BeirDoc` is `{id,title,text}` and
+ * `corpus.ts` re-labels every bench atom `vendor-doc` at ingest, so nothing
+ * downstream of this function can tell a `review` atom from a `standard` one.
+ */
+interface TypedDoc {
+  readonly doc: BeirDoc;
+  readonly type: string;
+}
+
+const toTypedDoc = (atomsDir: string, relPath: string): TypedDoc | undefined => {
   const parsed = parseAtom(readFileSync(resolve(atomsDir, relPath), 'utf8'));
   if (!parsed.ok) return undefined;
-  const { title } = parsed.atom.frontmatter;
+  const { title, type } = parsed.atom.frontmatter;
   return {
-    id: basename(relPath, MARKDOWN_EXT),
-    title,
-    text: stripTitleHeading(parsed.atom.body, title),
+    doc: {
+      id: basename(relPath, MARKDOWN_EXT),
+      title,
+      text: stripTitleHeading(parsed.atom.body, title),
+    },
+    type,
   };
 };
 
-const isDoc = (value: BeirDoc | undefined): value is BeirDoc => value !== undefined;
+const isTypedDoc = (value: TypedDoc | undefined): value is TypedDoc => value !== undefined;
+
+/** The types the CLI hides from every `retrieve`, read as plain strings. */
+const EXCLUDED_TYPES: readonly string[] = DEFAULT_EXCLUDED_TYPES;
+
+const isServable = (typed: TypedDoc): boolean => !EXCLUDED_TYPES.includes(typed.type);
 
 const markdownPaths = (atomsDir: string): readonly string[] =>
   [
@@ -157,15 +183,35 @@ const assertUniqueIds = (docs: readonly BeirDoc[], atomsDir: string): void => {
   }
 };
 
-const docsFrom = (atomsDir: string, relPaths: readonly string[]): readonly BeirDoc[] => {
-  const docs = relPaths.map(relPath => toDoc(atomsDir, relPath)).filter(isDoc);
-  assertUniqueIds(docs, atomsDir);
-  return docs;
+/** What one projection produced: the kept documents, and how many were excluded. */
+interface DerivedDocs {
+  readonly docs: readonly BeirDoc[];
+  readonly excludedCount: number;
+}
+
+/**
+ * Project every parsed atom, then subtract the types the CLI never serves.
+ * Uniqueness is asserted over the PARSED set, not the kept one, so a duplicate
+ * filename still fails exactly as it did before the filter existed.
+ */
+const docsFrom = (
+  atomsDir: string,
+  relPaths: readonly string[],
+  includeHistory: boolean
+): DerivedDocs => {
+  const parsed = relPaths.map(relPath => toTypedDoc(atomsDir, relPath)).filter(isTypedDoc);
+  assertUniqueIds(parsed.map(typed => typed.doc), atomsDir);
+  const kept = includeHistory ? parsed : parsed.filter(isServable);
+  return { docs: kept.map(typed => typed.doc), excludedCount: parsed.length - kept.length };
 };
 
-/** Every atom under `atomsDir`, recursively, as a BEIR document. */
+/**
+ * Every atom under `atomsDir`, recursively, as a BEIR document — UNFILTERED, the
+ * whole directory. The forensics inspector reads it to explain what the vault
+ * holds, which is a different question from what an arm measures.
+ */
 export const readAtomDocs = (atomsDir: string): readonly BeirDoc[] =>
-  docsFrom(atomsDir, markdownPaths(atomsDir));
+  docsFrom(atomsDir, markdownPaths(atomsDir), true).docs;
 
 const jsonl = (rows: readonly Readonly<Record<string, string>>[]): string =>
   `${rows.map(row => JSON.stringify(row)).join('\n')}\n`;
@@ -252,11 +298,15 @@ const sourceOf = (entry: BeirDataset): VaultDerivationSource =>
  * `entry.source`, and report what came out. Paths in `derive` are resolved
  * against `suiteRoot`, like every other path in the manifest.
  */
-export const ensureVaultDataset = (entry: BeirDataset, suiteRoot: string): VaultDerivation => {
+export const ensureVaultDataset = (
+  entry: BeirDataset,
+  suiteRoot: string,
+  includeHistory = false
+): VaultDerivation => {
   const derive = sourceOf(entry);
   const atomsDir = resolve(suiteRoot, derive.atoms);
   const paths = markdownPaths(atomsDir);
-  const docs = docsFrom(atomsDir, paths);
+  const { docs, excludedCount } = docsFrom(atomsDir, paths, includeHistory);
   const queries = parseGoldenSet(
     JSON.parse(readFileSync(resolve(suiteRoot, derive.golden), 'utf8')) as unknown,
     derive.golden
@@ -270,7 +320,8 @@ export const ensureVaultDataset = (entry: BeirDataset, suiteRoot: string): Vault
     judgmentCount: queries.reduce((total, query) => total + query.relevantAtomIds.length, 0),
     unreachableCount: countUnreachable(queries, docs),
     recallCeiling: mean(reachableShares(queries, docs)),
-    unparsedCount: paths.length - docs.length,
+    unparsedCount: paths.length - docs.length - excludedCount,
+    excludedCount,
   };
 };
 
@@ -361,7 +412,8 @@ export const assertIndexedGoldReachable = (facts: IndexedGoldFacts): void => {
 
 /** Kept for the run's stdout line; the refusal above is what stops a bad corpus. */
 export const describeDerivation = (id: string, derived: VaultDerivation): string =>
-  `${id}: derived ${derived.docCount} docs (${derived.unparsedCount} atom files unparsed), ` +
+  `${id}: derived ${derived.docCount} docs (${derived.unparsedCount} atom files unparsed, ` +
+  `${derived.excludedCount} excluded as unservable types), ` +
   `${derived.queryCount} queries, ${derived.judgmentCount} judgments — ` +
   `${derived.unreachableCount} unreachable ` +
   `(${share(derived.unreachableCount, derived.judgmentCount)} of gold has no atom file; ` +

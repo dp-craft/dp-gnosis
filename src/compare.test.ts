@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { EMBED_MODEL_ID, HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import {
+  DEFAULT_EXCLUDED_TYPES,
+  EMBED_MODEL_ID,
+  HYBRID_FUSION,
+  RERANK_MODEL_ID
+} from '../../dp-gnosis/src/config.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   compareAll,
@@ -10,7 +15,7 @@ import {
   SCALE_FIELDS,
   TREATMENT_FIELDS
 } from './compare.js';
-import type { HistoryRow } from './report.js';
+import { type HistoryRow, NO_TYPE_FILTER } from './report.js';
 
 /** What an absent rerank doc window on a row means — the values that always held. */
 const LEGACY_RERANK_DOC_CHARS = 2000;
@@ -259,6 +264,42 @@ describe('compareLastTwo', () => {
   it('reads an ABSENT query adjacency as OFF, not as a changed treatment', () => {
     const result = compareLastTwo(
       [row({}), row({ gitSha: 'bbb2222', queryAdjacency: false, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  it('guards the type filter as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('typeFilter');
+    expect(SCALE_FIELDS).not.toContain('typeFilter');
+  });
+
+  it('COMPARES a type-filter change as an arm comparison, never subtracting it', () => {
+    const result = compareLastTwo(
+      [
+        row({ typeFilter: NO_TYPE_FILTER }),
+        row({
+          gitSha: 'bbb2222',
+          typeFilter: [...DEFAULT_EXCLUDED_TYPES].sort().join(','),
+          ndcg10: 0.65,
+        }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['typeFilter']);
+    expect(formatComparison(result)).toContain('typeFilter');
+  });
+
+  /**
+   * Every row recorded before the filter existed measured the FULL corpus, which
+   * is exactly what `--include-history` measures — so the two must compare EQUAL
+   * rather than as an arm the older run never ran.
+   */
+  it('reads an ABSENT typeFilter as `none`, equal to an --include-history row', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', typeFilter: NO_TYPE_FILTER, ndcg10: 0.65 })],
       'scifact'
     );
     expect(result.kind).toBe('delta');
