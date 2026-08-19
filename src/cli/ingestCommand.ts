@@ -6,6 +6,7 @@
  * how a caller ends up querying a vault that is quietly missing documents.
  */
 import { CORPUS_ROOTS_ENV_VAR } from '../config.js';
+import { loadJudgedAtomIds } from '../goldenIds.js';
 import type { IngestSkip, IngestSummary } from '../ingest.js';
 import { ingest } from '../ingest.js';
 import type { CommandContext } from './context.js';
@@ -38,6 +39,11 @@ const summarize = (summary: IngestSummary): CommandOutcome => ({
   text: ingestText(summary),
 });
 
+/**
+ * `goldIds` comes from the engine's OWN golden directory, as the benchmark
+ * already did: without it the exact-body dedupe is gold-BLIND and drops the
+ * judged copy of a mirrored pair whenever its twin sorts first.
+ */
 const ingestCorpus = async (context: CommandContext): Promise<CommandOutcome> =>
   summarize(
     await ingest({
@@ -45,6 +51,7 @@ const ingestCorpus = async (context: CommandContext): Promise<CommandOutcome> =>
       outputDir: context.atomsDir,
       repoRoot: context.repoRoot,
       profile: context.profile,
+      goldIds: loadJudgedAtomIds(),
     })
   );
 

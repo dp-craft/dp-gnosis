@@ -87,7 +87,10 @@ export const BENCH_WORK_DIR: string = resolve(RUNTIME_ROOT, 'bench');
  * not derived state, and regenerating it from a retriever's output would make
  * the measurement circular.
  */
-export const GOLDEN_SET_PATH: string = resolve(SRC_DIR, '..', 'golden', 'golden-set.v1.json');
+export const GOLDEN_DIR: string = resolve(SRC_DIR, '..', 'golden');
+
+/** The one golden set the shipped loader reads; every other version sits beside it. */
+export const GOLDEN_SET_PATH: string = resolve(GOLDEN_DIR, 'golden-set.v1.json');
 
 /**
  * The SHIPPED ingest profile: the vocabularies and the path→label tables ingest

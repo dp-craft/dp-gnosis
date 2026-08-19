@@ -2,6 +2,11 @@ import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
+import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
+import type { CommandContext } from '../src/cli/context.js';
+import { runIngestCommand } from '../src/cli/ingestCommand.js';
+import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 
 /**
@@ -115,5 +120,53 @@ describe('exact-body dedupe', () => {
     expect(summary.skipped.map(skip => skip.reasons.join(''))).toEqual([
       `duplicate-body-of:${ALPHA_ID}`,
     ]);
+  });
+});
+
+/**
+ * The same property, measured through the CLI COMMAND rather than through
+ * `ingest` directly: the pure function honoured `goldIds` from the start, and
+ * the defect was that the production `gnosis -- ingest` path never supplied
+ * them, so it deduped gold-blind and orphaned judged documents.
+ */
+const GOLD_STEM = '60-debugging';
+const GOLD_HEADING = 'Debugging';
+const GOLD_ID = `${GOLD_STEM}-debugging`;
+const MIRROR_ID = `00-mirror-${GOLD_HEADING.toLowerCase()}`;
+
+const GOLD_DOC = `# ${GOLD_HEADING}\n\n${SHARED_BODY}\n`;
+
+/** The JUDGED copy sorts SECOND by source path, so path order alone would drop it. */
+const stageJudgedSecond = async (): Promise<Fixture> => {
+  const root = await mkdtemp(join(tmpdir(), 'gnosis-cli-gold-'));
+  const standards = join(root, 'claude-artifacts', 'standards');
+  const docsDir = join(root, 'docs');
+  await mkdir(standards, { recursive: true });
+  await mkdir(docsDir, { recursive: true });
+  await writeFile(join(standards, '00-mirror.md'), GOLD_DOC, 'utf8');
+  await writeFile(join(docsDir, `${GOLD_STEM}.md`), GOLD_DOC, 'utf8');
+  return { root, out: join(root, 'out') };
+};
+
+const contextFor = (fixture: Fixture): CommandContext => ({
+  positionals: [],
+  flags: {},
+  adapter: DEFAULT_ADAPTER,
+  atomsDir: fixture.out,
+  indexPath: join(fixture.root, 'index'),
+  repoRoot: fixture.root,
+  corpusRoots: [...ROOTS],
+  profile: DEFAULT_INGEST_PROFILE,
+});
+
+describe('CLI ingest dedupe', () => {
+  it('keeps the judged copy of a byte-identical group', async () => {
+    expect(loadJudgedAtomIds()).toContain(GOLD_ID);
+    const fixture = await stageJudgedSecond();
+
+    await runIngestCommand(contextFor(fixture));
+
+    expect(await writtenAtoms(fixture.out)).toEqual([`${GOLD_ID}.md`]);
+    expect(await writtenAtoms(fixture.out)).not.toContain(`${MIRROR_ID}.md`);
   });
 });

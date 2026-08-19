@@ -221,6 +221,15 @@ describe('shipped default profile', () => {
       'docs/tmp/',
       'docs/benchmarks/',
       'doc/_meta/corpus-digest.md',
+      // Nested duplicate of this repo's own claude-artifacts tree (26 .md files) whose
+      // basename-derived atom ids COLLIDE with the canonical ones, which silently
+      // destroyed 4 gold judgments; excluding it took unreachable gold from 4 to 0.
+      'claude-artifacts/python-init-files/',
+      // Machine-generated per-query benchmark dumps that quote the golden query text
+      // verbatim, matching the benchmark's own queries trivially: 250 atoms occupying
+      // 188/600 top-10 slots (31.3%) across 42/60 topics, dropping vault nDCG@10
+      // 0.4721 -> 0.3019 while R@100 barely moved (-0.0082).
+      'docs/analysis/2026-08-09-1126-adapter-outputs/',
     ]);
     expect(shipped.defaultExcludedTypes).toEqual([
       'feature-log',
