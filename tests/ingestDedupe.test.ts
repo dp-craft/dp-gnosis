@@ -1,0 +1,87 @@
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
+
+/**
+ * Exact-body dedupe, measured from the outside: which copy of a MIRRORED
+ * document survives. The two properties under test are the ones the T2.1 gate
+ * regression traced to — a survivor chosen by sorted source path is permuted by
+ * the corpus root set, and it can be the copy the golden set does not judge.
+ */
+const SHARED_BODY =
+  'the debugging rules describe how an investigation is bounded, which evidence is admissible, and ' +
+  'when an escalation is mandatory, and this paragraph is long enough on its own to clear both the ' +
+  'chunker fold threshold and the exact-body dedupe floor so the two mirrored copies below form one ' +
+  'byte-identical duplicate group rather than two independent atoms of the corpus';
+
+const DOC = `# Shared Title\n\n${SHARED_BODY}\n`;
+
+const ROOTS = ['claude-artifacts/standards', 'docs'] as const;
+
+interface Fixture {
+  readonly root: string;
+  readonly out: string;
+}
+
+/** One document, mirrored: `standardsName` under the standards root, `docsName` under `docs/`. */
+const stage = async (standardsName: string, docsName: string): Promise<Fixture> => {
+  const root = await mkdtemp(join(tmpdir(), 'gnosis-dedupe-'));
+  const standards = join(root, 'claude-artifacts', 'standards');
+  const docsDir = join(root, 'docs');
+  await mkdir(standards, { recursive: true });
+  await mkdir(docsDir, { recursive: true });
+  await writeFile(join(standards, standardsName), DOC, 'utf8');
+  await writeFile(join(docsDir, docsName), DOC, 'utf8');
+  return { root, out: join(root, 'out') };
+};
+
+const writtenAtoms = async (out: string): Promise<readonly string[]> =>
+  [...(await readdir(out))].filter(name => name !== ATOMS_OWNER_FILE).sort();
+
+const ALPHA_ID = 'alpha-doc-shared-title';
+const ZETA_ID = 'zeta-doc-shared-title';
+
+describe('exact-body dedupe', () => {
+  it('keeps the same copy however the mirrored pair is spread over the corpus roots', async () => {
+    const zetaInStandards = await stage('zeta-doc.md', 'alpha-doc.md');
+    const alphaInStandards = await stage('alpha-doc.md', 'zeta-doc.md');
+
+    await ingest({ corpusRoots: [...ROOTS], outputDir: zetaInStandards.out, repoRoot: zetaInStandards.root });
+    await ingest({ corpusRoots: [...ROOTS], outputDir: alphaInStandards.out, repoRoot: alphaInStandards.root });
+
+    expect(await writtenAtoms(zetaInStandards.out)).toEqual([`${ALPHA_ID}.md`]);
+    expect(await writtenAtoms(alphaInStandards.out)).toEqual([`${ALPHA_ID}.md`]);
+  });
+
+  it('keeps the copy the golden set judges when one is named', async () => {
+    const fixture = await stage('alpha-doc.md', 'zeta-doc.md');
+
+    const summary = await ingest({
+      corpusRoots: [...ROOTS],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+      goldIds: [ZETA_ID],
+    });
+
+    expect(await writtenAtoms(fixture.out)).toEqual([`${ZETA_ID}.md`]);
+    expect(summary.duplicates).toBe(1);
+    expect(summary.skipped.map(skip => skip.reasons.join(''))).toEqual([
+      `duplicate-body-of:${ZETA_ID}`,
+    ]);
+  });
+
+  it('ignores a gold id that names no member of the duplicate group', async () => {
+    const fixture = await stage('alpha-doc.md', 'zeta-doc.md');
+
+    await ingest({
+      corpusRoots: [...ROOTS],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+      goldIds: ['some-other-atom'],
+    });
+
+    expect(await writtenAtoms(fixture.out)).toEqual([`${ALPHA_ID}.md`]);
+  });
+});

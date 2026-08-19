@@ -76,6 +76,20 @@ export interface IngestOptions {
    * shipped profile, which is what the repo's own corpus is ingested with.
    */
   readonly profile?: IngestProfile;
+  /**
+   * Ids a golden set judges. Read by the exact-body dedupe ONLY, to decide
+   * which copy of a mirrored document survives. Absent — the default, and what
+   * every caller that does not measure retrieval passes — leaves the dedupe
+   * gold-blind, so no existing run changes shape by adding the field.
+   *
+   * An id is matched against the atom id AND against the source basename,
+   * because the two consumers name a gold document differently: the vault's
+   * golden sets name the ATOM FILENAME (= the atom id), while the benchmark
+   * scores a retrieved atom through its source basename
+   * (`dp-gnosis-bench/src/score.ts`), which is the id of the materialized
+   * document it re-ingests.
+   */
+  readonly goldIds?: readonly string[];
 }
 
 /** One refused chunk or source, with the reasons naming its correction. */
@@ -596,16 +610,56 @@ const bodyKey = (planned: PlannedAtom): string | undefined => {
 };
 
 /**
- * body hash → the id of the FIRST atom carrying it. `planned` arrives sorted by
- * source path, and a `Map` built from a list keeps the LAST write per key, so
- * the pairs are reversed to make the first one win — which is what keeps the
- * kept copy stable across runs.
+ * A gold id names either the ATOM or the SOURCE FILE, and both spellings are
+ * accepted — see `IngestOptions.goldIds` for why the two consumers differ.
  */
-const firstByBody = (planned: readonly PlannedAtom[]): ReadonlyMap<string, string> => {
-  const pairs = planned.flatMap((entry): readonly (readonly [string, string])[] => {
-    const key = bodyKey(entry);
-    return key === undefined ? [] : [[key, entry.atom.frontmatter.id]];
-  });
+const isJudged = (planned: PlannedAtom, gold: ReadonlySet<string>): boolean =>
+  gold.has(planned.atom.frontmatter.id) ||
+  gold.has(basename(planned.candidate.sourcePath, MD_SUFFIX));
+
+/**
+ * WHICH COPY SURVIVES. Judged first, then the lexicographically smallest atom
+ * id — and the earlier rule, "the first by sorted SOURCE PATH", is what this
+ * replaces.
+ *
+ * A source path LEADS WITH ITS CORPUS ROOT, so ordering by it orders by root:
+ * every copy under one root outranks every copy under a later-sorting one, and
+ * adding a root re-decides whole groups at once. Measured at T2.1: 8 benchmark
+ * topics lost `recall@100` outright because the surviving copy moved to the
+ * mirror the golden set does not judge, and the direction FLIPPED between the
+ * two root sets in play. An atom id carries no root-derived component — it is
+ * `basename + heading chain` with a fingerprint over the chunk's own
+ * coordinates — so which root a copy lives under is worth nothing in the order,
+ * and moving a document between roots cannot permute the outcome.
+ *
+ * `isJudged` is the clause that matters for a measured corpus: it pins the
+ * survivor to the copy the golden set can credit, whatever else joins the
+ * group. What neither clause can promise is invariance to a NEW group member
+ * with a smaller id; unreachable gold is caught downstream by the benchmark's
+ * derive refusal rather than papered over here.
+ */
+const byPreference =
+  (gold: ReadonlySet<string>) =>
+    (left: PlannedAtom, right: PlannedAtom): number => {
+      if (isJudged(left, gold) !== isJudged(right, gold)) return isJudged(left, gold) ? -1 : 1;
+      return left.atom.frontmatter.id.localeCompare(right.atom.frontmatter.id);
+    };
+
+/**
+ * body hash → the id of the surviving atom. A `Map` built from a list keeps the
+ * LAST write per key, so the preference-sorted pairs are reversed to make the
+ * most preferred one win.
+ */
+const keptByBody = (
+  planned: readonly PlannedAtom[],
+  gold: ReadonlySet<string>
+): ReadonlyMap<string, string> => {
+  const pairs = [...planned]
+    .sort(byPreference(gold))
+    .flatMap((entry): readonly (readonly [string, string])[] => {
+      const key = bodyKey(entry);
+      return key === undefined ? [] : [[key, entry.atom.frontmatter.id]];
+    });
   return new Map([...pairs].reverse());
 };
 
@@ -625,19 +679,25 @@ const countDuplicates = (refused: readonly CheckedAtom[]): number =>
   refused.filter(entry => entry.reasons.some(reason => reason.startsWith(DUPLICATE_REASON_PREFIX)))
     .length;
 
+/** The run's policy inputs for the checks: the labelling vocabulary, and what gold judges. */
+interface CheckContext {
+  readonly profile: IngestProfile;
+  readonly gold: ReadonlySet<string>;
+}
+
 const checkAtoms = (
   planned: readonly PlannedAtom[],
   existing: ReadonlySet<string>,
-  profile: IngestProfile
+  context: CheckContext
 ): readonly CheckedAtom[] => {
   const reserved = foreignIds(existing, new Set(planned.map(entry => entry.atom.frontmatter.id)));
-  const keptByBody = firstByBody(planned);
+  const kept = keptByBody(planned, context.gold);
   return planned.map(entry => ({
     ...entry,
     reasons: [
-      ...validateAtom(entry.atom, reserved, profile),
+      ...validateAtom(entry.atom, reserved, context.profile),
       ...emptyBodyReasons(entry),
-      ...duplicateReasons(entry, keptByBody),
+      ...duplicateReasons(entry, kept),
     ],
   }));
 };
@@ -647,6 +707,16 @@ const checkAtoms = (
  * and never silently defaulted; the write set is always fully valid.
  */
 const profileOf = (options: IngestOptions): IngestProfile => options.profile ?? DEFAULT_INGEST_PROFILE;
+
+/** Absent gold is an EMPTY set, which leaves the dedupe exactly as it was before the field. */
+const goldOf = (options: IngestOptions): ReadonlySet<string> => new Set(options.goldIds ?? []);
+
+/** Sources no declared root claims — reported, never written. */
+const unmappedSkips = (
+  loaded: readonly LoadedSource[],
+  profile: IngestProfile
+): readonly IngestSkip[] =>
+  loaded.filter(source => source.domain === undefined).map(source => unmappedSkip(source, profile));
 
 /** Everything the run puts on disk: the atoms, the owner marker, the manifest. */
 interface WritePhase {
@@ -676,11 +746,12 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
   const repoRoot = options.repoRoot ?? REPO_ROOT;
   const profile = profileOf(options);
   const loaded = await loadCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots(), profile);
-  const unmapped = loaded
-    .filter(source => source.domain === undefined)
-    .map(source => unmappedSkip(source, profile));
+  const unmapped = unmappedSkips(loaded, profile);
   const candidates = [...loaded.flatMap(source => toCandidates(source, profile))].sort(byOrder);
-  const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), profile);
+  const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), {
+    profile,
+    gold: goldOf(options),
+  });
   const writable = checked.filter(entry => entry.reasons.length === 0);
   const refused = checked.filter(entry => entry.reasons.length > 0);
   const skipped = [...unmapped, ...refused.map(toSkip)];
