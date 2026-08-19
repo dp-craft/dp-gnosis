@@ -454,12 +454,18 @@ interface BudgetedResult {
    */
   readonly poolSize: number;
   /**
-   * How many atoms the calibrated floor removed. Zero on every run that named
-   * no floor, so an unfiltered run reports nothing new.
+   * How many atoms the calibrated floor removed BECAUSE THEY SCORED BELOW IT.
+   * Zero on every run that named no floor, so an unfiltered run reports nothing
+   * new. An atom dropped for carrying no score at all is counted by `unscored`
+   * instead — the two are different facts and only one is a measurement.
    */
   readonly belowFloor: number;
+  /** Atoms the floor dropped that carried NO calibrated score to judge. */
+  readonly unscored: number;
   /** The floor those atoms fell below; `undefined` when none was in effect. */
   readonly minRelevance: number | undefined;
+  /** `false` when a floor was named but deliberately not run — see {@link applyFloor}. */
+  readonly floorApplied: boolean;
 }
 
 /**
@@ -486,9 +492,100 @@ const skipText = (budgeted: BudgetedResult): readonly string[] =>
 const floorWarning = (budgeted: BudgetedResult): string =>
   `retrieve: ${budgeted.belowFloor} atom(s) scored below the ${budgeted.minRelevance} calibrated relevance floor and were dropped — lower \`${MIN_RELEVANCE_FLAG} <p>\` or drop the flag to see them`;
 
+/**
+ * An atom with no calibrated score was NOT scored below the floor — it was
+ * never scored. Saying otherwise asserts a measurement that did not happen and
+ * offers a remedy (lower the floor) that cannot reach it.
+ */
+const unscoredWarning = (budgeted: BudgetedResult): string =>
+  `retrieve: ${budgeted.unscored} atom(s) were dropped by the ${budgeted.minRelevance} floor with NO calibrated score — they were never scored, not scored below it`;
+
+/**
+ * The floor was named and deliberately not run. Stated in full, because the
+ * delivered ranking is the un-floored first pass: a caller that believed the
+ * floor had run would read an unfiltered answer as a filtered one.
+ */
+const unappliedFloorNote = (budgeted: BudgetedResult): string =>
+  `retrieve: the ${budgeted.minRelevance} calibrated relevance floor was NOT applied — the rerank was refused, so no atom carries a calibrated score and nothing could be judged against the floor; the atoms below are the un-floored first pass`;
+
+const appliedFloorNotes = (budgeted: BudgetedResult): readonly string[] => [
+  ...(budgeted.belowFloor > 0 ? [floorWarning(budgeted)] : []),
+  ...(budgeted.unscored > 0 ? [unscoredWarning(budgeted)] : []),
+];
+
 /** Empty on every run that named no floor, so nothing new is rendered. */
-const floorNotes = (budgeted: BudgetedResult): readonly string[] =>
-  budgeted.belowFloor > 0 ? [floorWarning(budgeted)] : [];
+const floorNotes = (budgeted: BudgetedResult): readonly string[] => {
+  if (budgeted.minRelevance === undefined) return [];
+  return budgeted.floorApplied ? appliedFloorNotes(budgeted) : [unappliedFloorNote(budgeted)];
+};
+
+/**
+ * `count: 0` is a VALID answer — "it is not in the vault" — so it stays exit 0.
+ * What it MUST NOT be is unactionable: a run emptied by the type filter and a
+ * run whose terms matched nothing read identically from the count, and their
+ * remedies are different. The note names which of the two happened, and the
+ * correction for that one.
+ *
+ * The phrasing lever itself is NOT restated here: the rules live where the
+ * caller executes them, and a second copy would drift from them.
+ */
+const NOTHING_MATCHED = 'retrieve: nothing in the vault matched these terms';
+
+const REPHRASE_REMEDY =
+  'the largest lever is the keyword phrasing — rewrite the query per `tools/dp-gnosis/README.md` § Query rephrasing and retrieve again';
+
+/** No filter ran, so the whole vault was searched and phrasing is all that is left. */
+const unfilteredEmptyNote = (): string =>
+  `${NOTHING_MATCHED}, and no type filter was in effect — ${REPHRASE_REMEDY}`;
+
+/**
+ * A filtered run says WHICH filter ran and how to widen it, then falls back to
+ * the phrasing lever. It states nothing about what the excluded types hold —
+ * nothing measured that, and claiming it would invent evidence.
+ */
+const filteredEmptyNote = (filter: string, remedy: string): string =>
+  `${NOTHING_MATCHED} within the type filter in effect (${filter}) — ${remedy}; if widening it changes nothing, ${REPHRASE_REMEDY}`;
+
+const WIDEN_ALL = `pass ${INCLUDE_HISTORY_FLAG} to search every type`;
+
+/**
+ * Which filter is in force, read from argv rather than from the resolved list:
+ * the kept set alone cannot say whether the caller named it or the profile
+ * default did, and only the caller-named case is widened by editing a flag.
+ */
+const filteredNote = (flags: FlagValues): string => {
+  const named = stringFlag(flags, TYPE_FLAG);
+  if (named !== undefined) {
+    return filteredEmptyNote(`${TYPE_FLAG} ${named}`, `widen or drop ${TYPE_FLAG}`);
+  }
+  const excluded = stringFlag(flags, EXCLUDE_TYPE_FLAG);
+  if (excluded !== undefined) {
+    return filteredEmptyNote(
+      `${EXCLUDE_TYPE_FLAG} ${excluded}`,
+      `drop a value from ${EXCLUDE_TYPE_FLAG}, or ${WIDEN_ALL}`
+    );
+  }
+  return filteredEmptyNote(
+    `the profile default excludes ${DEFAULT_EXCLUDED_TYPES.join(', ')}`,
+    WIDEN_ALL
+  );
+};
+
+const emptyNote = (request: RetrieveRequest): string =>
+  request.types === undefined ? unfilteredEmptyNote() : filteredNote(request.context.flags);
+
+/**
+ * Fires on the FIRST PASS being empty, not on the delivered count: a count of
+ * zero behind a non-empty pool was produced by the floor or the budget, and
+ * those notes already say so — claiming "nothing matched" there would be false.
+ * An `unavailable` run is excluded outright; nothing was searched, so the vault
+ * is not evidence about anything.
+ */
+const emptyNotes = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult
+): readonly string[] =>
+  budgeted.poolSize === 0 && !isUnavailable(budgeted.result) ? [emptyNote(request)] : [];
 
 /**
  * The rewrite is stated in FULL, both sides: the ranking is evidence about the
@@ -564,6 +661,7 @@ const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): strin
     ...result.atoms.flatMap(atomLines),
     ...skipText(budgeted),
     ...floorNotes(budgeted),
+    ...emptyNotes(request, budgeted),
   ].join('\n');
 };
 
@@ -669,11 +767,10 @@ const noteLines = (
   budgeted: BudgetedResult
 ): readonly string[] => {
   const refusals = refusalsOf(request);
-  if (refusals.length > 0) return [...refusals, ...floorNotes(budgeted)];
-  if (hasSkips(budgeted)) return [budgetWarning(budgeted), ...floorNotes(budgeted)];
-  return isUnavailable(budgeted.result)
-    ? [noCorpusNote(request.context.adapter)]
-    : floorNotes(budgeted);
+  const trailing = [...floorNotes(budgeted), ...emptyNotes(request, budgeted)];
+  if (refusals.length > 0) return [...refusals, ...trailing];
+  if (hasSkips(budgeted)) return [budgetWarning(budgeted), ...trailing];
+  return isUnavailable(budgeted.result) ? [noCorpusNote(request.context.adapter)] : trailing;
 };
 
 const noteField = (
@@ -757,8 +854,10 @@ const rootAttributes = (request: RetrieveRequest, budgeted: BudgetedResult): str
 
 /**
  * An `unavailable` run emits the SAME empty block plus a `<note>`, so a consumer
- * separates "searched, found nothing" (`count="0"`, no note) from "no search
- * happened" (`indexState="unavailable"` + note) without parsing prose.
+ * separates "searched, found nothing" from "no search happened" without parsing
+ * prose: `indexState` carries the discrimination, and each case states its own
+ * `<note>` — the empty search names the filter and the phrasing lever, the
+ * unavailable one names the build command.
  */
 /**
  * A skipped atom is an EMPTY element beside the documents: it has no content to
@@ -787,6 +886,7 @@ const retrieveXml = (request: RetrieveRequest, budgeted: BudgetedResult): string
       : []),
     ...skipXml(budgeted, request.context.repoRoot),
     ...floorXml(budgeted),
+    ...emptyNotes(request, budgeted).map(note => `  <note>${escapeXml(note)}</note>`),
     ...budgeted.result.atoms.map(atom => documentXml(atom, request.context.repoRoot)),
     '</retrieved_context>',
   ].join('\n');
@@ -849,8 +949,19 @@ const rankedResult = async (
 interface FlooredResult {
   readonly result: RetrievalResult;
   readonly belowFloor: number;
+  readonly unscored: number;
   readonly minRelevance: number | undefined;
+  readonly applied: boolean;
 }
+
+/** The ranking untouched, carrying the floor that was named but not run. */
+const unfloored = (result: RetrievalResult, floor: number | undefined): FlooredResult => ({
+  result,
+  belowFloor: 0,
+  unscored: 0,
+  minRelevance: floor,
+  applied: false,
+});
 
 const clearsFloor = (request: RetrieveRequest, floor: number, atom: RetrievedAtom): boolean => {
   const probability = calibratedOf(request, atom);
@@ -861,6 +972,12 @@ const clearsFloor = (request: RetrieveRequest, floor: number, atom: RetrievedAto
  * The calibrated floor, applied to the atoms AS DELIVERED — after the rerank and
  * after the `-k` slice, immediately before the budget.
  *
+ * It is SKIPPED ENTIRELY when the rerank was refused. Nothing was scored then,
+ * so every atom would be dropped for lacking a measurement that never happened
+ * — turning a transient server fault into `count: 0`, which the caller contract
+ * reads as "it is not in the vault". A refused rerank MUST NOT be able to assert
+ * a false negative about the corpus.
+ *
  * SUBTRACTIVE and nothing else: it filters the list in place, so the surviving
  * atoms keep their relative order, no atom is promoted out of the deeper pool to
  * replace a dropped one, and `poolSize` is untouched. An atom with no calibrated
@@ -869,12 +986,16 @@ const clearsFloor = (request: RetrieveRequest, floor: number, atom: RetrievedAto
  */
 const applyFloor = (request: RetrieveRequest, result: RetrievalResult): FlooredResult => {
   const floor = request.minRelevance;
-  if (floor === undefined) return { result, belowFloor: 0, minRelevance: undefined };
+  if (floor === undefined || request.rerankRefusal !== undefined) return unfloored(result, floor);
   const kept = result.atoms.filter(atom => clearsFloor(request, floor, atom));
+  const dropped = result.atoms.filter(atom => !clearsFloor(request, floor, atom));
+  const unscored = dropped.filter(atom => calibratedOf(request, atom) === undefined).length;
   return {
     result: { ...result, atoms: kept },
-    belowFloor: result.atoms.length - kept.length,
+    belowFloor: dropped.length - unscored,
+    unscored,
     minRelevance: floor,
+    applied: true,
   };
 };
 
@@ -895,7 +1016,9 @@ const applyBudget = (
     maxTokens,
     poolSize,
     belowFloor: floored.belowFloor,
+    unscored: floored.unscored,
     minRelevance: floored.minRelevance,
+    floorApplied: floored.applied,
   };
 };
 

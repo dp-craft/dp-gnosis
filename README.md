@@ -117,11 +117,21 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 |---|---|
 | `ingest` | `command`, `written`, `skipped[{source,title,reasons[]}]` |
 | `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note` |
-| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable` or a `--rephrase` / `--rerank` refusal degraded the run |
+| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable`, when a `--rephrase` / `--rerank` refusal degraded the run, or when `count` is `0` |
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
 | any usage failure | `error` |
 
 `indexState` ∈ `ready` (searched a current index) · `empty` (searched, corpus holds no atoms) · `stale` (searched, index older than the corpus — ranking may lag) · `unavailable` (**nothing was searched**). `unavailable` exits 3, never 0: a zero `count` under it is evidence about the index, not about the corpus.
+
+**`count: 0` with `confidence: none` is an ANSWER, not a failure — it means "it is not in the vault".** It exits **0**, and a caller MUST relay it as such rather than inventing an answer or falling back to its own memory. The `note` names the remedy to try first, and which of two situations produced the emptiness:
+
+| Situation | What the `note` names |
+|---|---|
+| Nothing matched, no type filter in effect (`--include-history`) | that the whole vault was searched, and the phrasing lever — § Query rephrasing |
+| Nothing matched WITHIN a type filter | the filter that ran — an explicit `--type` / `--exclude-type` list, or the profile's default exclusion when neither flag was passed — and how to widen it (`--include-history` for the default), then the phrasing lever |
+| `--min-relevance` dropped every atom | the floor and the count it removed (the pool was NOT empty — the query matched) |
+
+The note states nothing about what the excluded types hold; that would take a second retrieve, which the run does not do.
 
 #### Why an atom is in the answer
 

@@ -19,7 +19,7 @@ import { join } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
 import { explainAtoms, matchedTerms, snippetOf } from '../src/cli/explain.js';
-import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
+import { DEFAULT_EXCLUDED_TYPES, RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
 import type { RetrievedAtom } from '../src/port.js';
 import { analyze } from '../src/query.js';
 import { fuseRanking, resetRerankProbeCache } from '../src/rerank.js';
@@ -614,5 +614,239 @@ describe('--min-relevance refuses rather than filtering something it cannot cali
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('mxbai-rerank-large-v2');
     expect(result.stderr).toContain(RERANK_MODEL_ID);
+  });
+});
+
+/**
+ * `count: 0` — the ACTIONABLE empty answer.
+ *
+ * A zero count is a valid answer ("it is not in the vault"), so it stays exit 0
+ * and `confidence: none`. What it MUST also carry is WHY it is empty: a run
+ * whose type filter emptied it and a run whose terms matched nothing read
+ * identically otherwise, and their remedies are different.
+ */
+const NOTHING_MATCHED = 'nothing in the vault matched these terms';
+
+const NONSENSE = 'zzzqqxx flarbnorble wibblewobble';
+
+const retrieveEmpty = async (
+  fixture: Fixture,
+  extra: readonly string[]
+): Promise<CliResult> =>
+  await runCli([
+    'retrieve',
+    NONSENSE,
+    '--adapter',
+    'linear',
+    '--atoms-dir',
+    fixture.atomsDir,
+    '--repo-root',
+    fixture.repoRoot,
+    ...extra,
+  ]);
+
+const emptyPayload = async (
+  fixture: Fixture,
+  extra: readonly string[]
+): Promise<JsonPayload> =>
+  parsePayload((await retrieveEmpty(fixture, ['--json', ...extra])).stdout);
+
+const noteOf = async (fixture: Fixture, extra: readonly string[]): Promise<string> =>
+  (await emptyPayload(fixture, extra)).note ?? '';
+
+describe('an empty answer states WHY it is empty, and stays exit 0', () => {
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    resetRerankProbeCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('is exit 0 with confidence none on every empty variant', async () => {
+    const fixture = await makeFixture();
+
+    const variants = [[], ['--include-history'], ['--type', 'adr'], ['--exclude-type', 'adr']];
+    for (const extra of variants) {
+      const result = await retrieveEmpty(fixture, extra);
+      const payload = await emptyPayload(fixture, extra);
+      expect(result.exitCode).toBe(0);
+      expect(payload.count).toBe(0);
+      expect(payload.confidence).toBe('none');
+      expect(payload.note ?? '').toContain(NOTHING_MATCHED);
+    }
+  });
+
+  it('names the query phrasing, and no filter, when nothing was filtered', async () => {
+    const note = await noteOf(await makeFixture(), ['--include-history']);
+
+    expect(note).toContain(NOTHING_MATCHED);
+    expect(note).toContain('Query rephrasing');
+    expect(note).not.toContain('--type');
+    expect(note).not.toContain('--include-history');
+  });
+
+  it('names the PROFILE DEFAULT exclusion, and --include-history, when the caller passed no filter flag', async () => {
+    const note = await noteOf(await makeFixture(), []);
+
+    expect(note).toContain(NOTHING_MATCHED);
+    DEFAULT_EXCLUDED_TYPES.forEach(type => expect(note).toContain(type));
+    expect(note).toContain('--include-history');
+    expect(note).toContain('Query rephrasing');
+  });
+
+  it('names an explicit --type list and its own remedy', async () => {
+    const note = await noteOf(await makeFixture(), ['--type', 'adr,plan']);
+
+    expect(note).toContain('--type adr,plan');
+    expect(note).not.toContain(DEFAULT_EXCLUDED_TYPES[0] ?? 'feature-log');
+  });
+
+  it('names an explicit --exclude-type list and its own remedy', async () => {
+    const note = await noteOf(await makeFixture(), ['--exclude-type', 'adr,plan']);
+
+    expect(note).toContain('--exclude-type adr,plan');
+    expect(note).toContain('--include-history');
+  });
+
+  it('carries the note in all three renderings', async () => {
+    const fixture = await makeFixture();
+
+    const text = (await retrieveEmpty(fixture, [])).stdout;
+    const xml = (await retrieveEmpty(fixture, ['--format', 'xml'])).stdout;
+
+    expect(text).toContain(NOTHING_MATCHED);
+    expect(text).toContain('retrieve: confidence none');
+    expect(xml).toContain('count="0"');
+    expect(xml).toContain('confidence="none"');
+    expect(xml.split('\n').some(line => line.startsWith('  <note>') && line.includes(NOTHING_MATCHED))).toBe(true);
+  });
+
+  it('keeps a REFUSAL ahead of the empty note', async () => {
+    const fixture = await makeFixture();
+    vi.stubGlobal('fetch', async (): Promise<unknown> => {
+      throw new Error('connection refused');
+    });
+
+    const result = await retrieveEmpty(fixture, ['--json', '--rerank']);
+    const payload = parsePayload(result.stdout);
+
+    expect(result.exitCode).toBe(3);
+    expect(payload.note ?? '').toContain(NOTHING_MATCHED);
+    expect((payload.note ?? '').startsWith(NOTHING_MATCHED)).toBe(false);
+  });
+
+  it('reports an ABSENT corpus as "nothing was searched", never as "nothing matched"', async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), 'gnosis-empty-'));
+    const result = await runCli([
+      'retrieve',
+      NONSENSE,
+      '--adapter',
+      'linear',
+      '--atoms-dir',
+      join(repoRoot, 'no-atoms'),
+      '--repo-root',
+      repoRoot,
+      '--json',
+    ]);
+    const payload = parsePayload(result.stdout);
+
+    expect(result.exitCode).toBe(3);
+    expect(payload.note ?? '').toContain('nothing was searched');
+    expect(payload.note ?? '').not.toContain(NOTHING_MATCHED);
+  });
+
+  it('leaves a NON-EMPTY run without any of it', async () => {
+    const fixture = await makeFixture();
+
+    const payload = await json(fixture, []);
+    const text = (await retrieve(fixture, [])).stdout;
+    const xml = (await retrieve(fixture, ['--format', 'xml'])).stdout;
+
+    expect(payload.count).toBeGreaterThan(0);
+    expect(payload.note).toBeUndefined();
+    expect(text).not.toContain(NOTHING_MATCHED);
+    expect(xml).not.toContain('<note>');
+  });
+});
+
+/**
+ * A REFUSED rerank MUST NOT be floored.
+ *
+ * The floor filters on a calibrated cross-encoder probability. When the rerank
+ * was refused nothing carries one, so applying the floor drops every atom for
+ * lack of a measurement that never happened — and the resulting `count: 0` +
+ * `confidence: none` is exactly the shape the caller contract reads as "it is
+ * not in the vault". A transient network fault MUST NOT assert a false negative
+ * about the corpus.
+ */
+const SCORED_BELOW = 'scored below the';
+
+describe('the relevance floor is NOT applied when the rerank was refused', () => {
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+    resetRerankProbeCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const refusedFloor = async (fixture: Fixture): Promise<CliResult> => {
+    vi.stubGlobal('fetch', async (): Promise<unknown> => {
+      throw new Error('connection refused');
+    });
+    return await retrieve(fixture, ['--json', '--rerank', '--min-relevance', '0.5']);
+  };
+
+  it('delivers the un-floored first pass, weak, exit 3, and says the floor did not run', async () => {
+    const fixture = await makeFixture();
+    const unfloored = await json(fixture, []);
+
+    const result = await refusedFloor(fixture);
+    const payload = parsePayload(result.stdout);
+
+    expect(result.exitCode).toBe(3);
+    expect(payload.atoms.map(entry => entry.id)).toEqual(unfloored.atoms.map(entry => entry.id));
+    expect(payload.count).toBe(unfloored.count);
+    expect(payload.confidence).toBe('weak');
+    expect(payload.note ?? '').not.toContain(SCORED_BELOW);
+    expect(payload.note ?? '').toContain('0.5');
+    expect(payload.note ?? '').toContain('was NOT applied');
+    // The refusal still leads and still names its own cause.
+    expect((payload.note ?? '').startsWith('dp-gnosis/rerank-probe-failed')).toBe(true);
+  });
+
+  it('says it in the text and xml renderings too, and never claims a score', async () => {
+    const fixture = await makeFixture();
+    vi.stubGlobal('fetch', async (): Promise<unknown> => {
+      throw new Error('connection refused');
+    });
+
+    const text = (await retrieve(fixture, ['--rerank', '--min-relevance', '0.5'])).stdout;
+    const xml = (await retrieve(fixture, ['--format', 'xml', '--rerank', '--min-relevance', '0.5']))
+      .stdout;
+
+    expect(text).toContain('was NOT applied');
+    expect(text).not.toContain(SCORED_BELOW);
+    expect(text).toContain('retrieve: confidence weak');
+    expect(xml).toContain('was NOT applied');
+    expect(xml).not.toContain(SCORED_BELOW);
+    expect(xml).toContain('confidence="weak"');
+  });
+
+  it('leaves the HONEST scored-below case exactly as it was', async () => {
+    const fixture = await makeFixture();
+    stubScores([0.1, 0.2, 0.3, 0.4]);
+
+    const payload = await json(fixture, ['--rerank', '--min-relevance', '0.9']);
+
+    expect(payload.count).toBe(0);
+    expect(payload.confidence).toBe('none');
+    expect(payload.note ?? '').toContain(`${LABELS.length} atom(s) ${SCORED_BELOW} 0.9`);
+    expect(payload.note ?? '').not.toContain('was NOT applied');
   });
 });
