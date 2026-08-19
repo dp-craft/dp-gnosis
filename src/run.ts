@@ -64,7 +64,12 @@ import {
 } from './engine.js';
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
-import { describeDerivation, ensureVaultDataset } from './fetch/vault.js';
+import {
+  assertGoldReachable,
+  describeDerivation,
+  ensureVaultDataset,
+  UNREACHABLE_GOLD_CAUSE
+} from './fetch/vault.js';
 import { assertKnownFlags, type FlagSpec, GATE_VALUE_FLAGS } from './flags.js';
 import { GATE_EXIT_CODE, type GateOptions, gateReport, parseGateArgs } from './gate.js';
 import {
@@ -109,6 +114,19 @@ export const BENCH_DEFAULT_ADAPTER: AdapterName = 'fts5';
 const DEFAULT_DEPTH = 100;
 const METRIC_DIGITS = 4;
 const FAILURE_EXIT_CODE = 1;
+
+/**
+ * A REFUSAL, distinct from a dataset failure: the run could have measured, and
+ * declines to, because what it would measure is not the thing the numbers claim
+ * (CLAUDE.md § Script Exit-Code Contract). Exit 1 already means "a dataset
+ * failed, the rest are recorded", which is the opposite reading.
+ */
+export const REFUSAL_EXIT_CODE = 3;
+
+const REFUSAL_CAUSES: readonly string[] = [UNREACHABLE_GOLD_CAUSE];
+
+const isRefusal = (error: unknown): boolean =>
+  error instanceof Error && typeof error.cause === 'string' && REFUSAL_CAUSES.includes(error.cause);
 
 /** The flags `bench.sh` forwards. */
 export interface CliOptions {
@@ -593,12 +611,15 @@ export const datasetDir = (entry: DatasetEntry): string => {
  * A `beir-local` entry carrying `derive` is built from the repo's own atoms and
  * golden set on EVERY run — the inputs are local files, so a cache could only
  * make the run measure a vault that has since changed. The unreachable-gold
- * count is printed rather than returned: it caps recall for the dataset, and a
+ * count is printed BEFORE it is judged: it caps recall for the dataset, and a
  * ceiling that is not visible next to the number it bounds gets read as quality.
+ * Above the declared floor the derivation then REFUSES (exit 3) instead of
+ * letting the run score a corpus that has lost the documents it is judged on.
  */
 const deriveVault = (entry: BeirDataset): void => {
   const derived = ensureVaultDataset(entry, SUITE_ROOT);
   process.stdout.write(`${describeDerivation(entry.id, derived)}\n`);
+  assertGoldReachable(entry.id, derived);
 };
 
 /**
@@ -906,23 +927,63 @@ export interface PrepareArm {
 }
 
 /**
+ * A dataset the bench PROJECTS from the repo's own atoms plus a hand-authored
+ * golden set (`fetch/vault.ts`). Only such a dataset has a golden set the suite
+ * owns; every BEIR and BRIGHT entry ships its judgments with its corpus and is
+ * ingested exactly as it always was.
+ */
+export const isDerivedDataset = (entry: DatasetEntry): boolean =>
+  entry.format !== 'bright' && entry.derive !== undefined;
+
+/** A judged pair — grade 0 is a JUDGED non-relevant document and names no gold. */
+const isRelevant = (graded: readonly [string, number]): boolean => graded[1] > 0;
+
+const relevantIds = (qrels: ReadonlyMap<string, Qrel>): readonly string[] => [
+  ...new Set([...qrels.values()].flatMap(graded => [...graded].filter(isRelevant).map(pair => pair[0]))),
+];
+
+/**
+ * The gold the INGEST is told about, taken from the qrels the run SCORES —
+ * never from the golden JSON a second time, so the two can never disagree. The
+ * exact-body dedupe keeps one copy of a mirrored document, and gold-blind it
+ * kept the unjudged mirror on 8 `vault` topics, which lost their `recall@100`
+ * outright (GNOSIS-GUIDE § Known harness gaps).
+ *
+ * `undefined` for every dataset the bench does not derive: their dedupe stays
+ * gold-blind and their rows stay byte-comparable with every one recorded.
+ */
+export const goldIdsOf = (
+  entry: DatasetEntry,
+  qrels: ReadonlyMap<string, Qrel>
+): readonly string[] | undefined => (isDerivedDataset(entry) ? relevantIds(qrels) : undefined);
+
+/**
+ * What one dataset's preparation needs: where its BEIR layout is, the arm whose
+ * index gets built, and — for a derived dataset only — the ids its judgments
+ * name, so the ingest dedupe keeps the copy the run can credit.
+ */
+export interface PrepareRequest {
+  readonly entry: DatasetEntry;
+  readonly dir: string;
+  readonly arm: PrepareArm;
+  readonly goldIds?: readonly string[] | undefined;
+}
+
+/**
  * The arm is passed DOWN, not assumed: `prepareDataset` builds the index that
  * arm reads, so an adapter can never be measured over an index another adapter
  * built, nor an analyzer over an index another chain stamped. `sweep.ts` passes
  * its own fixed `linear`.
  */
-export const prepareOf = (
-  entry: DatasetEntry,
-  dir: string,
-  arm: PrepareArm
-): Promise<PreparedDataset> =>
+export const prepareOf = (request: PrepareRequest): Promise<PreparedDataset> =>
   prepareDataset({
-    id: entry.id,
-    docs: readCorpus(dir),
+    id: request.entry.id,
+    docs: readCorpus(request.dir),
     workRoot: WORK_ROOT,
-    atomMaxChars: entry.atomMaxChars,
-    adapter: arm.adapter,
-    analyzer: arm.analyzer,
+    atomMaxChars: request.entry.atomMaxChars,
+    adapter: request.arm.adapter,
+    analyzer: request.arm.analyzer,
+    ...(request.goldIds === undefined ? {} : { goldIds: request.goldIds }),
   });
 
 /**
@@ -965,9 +1026,11 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
   const dir = await ensureDataset(entry);
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
   const topics = topicsFor(dir, entry.id, qrels);
-  const prepared = await prepareOf(entry, dir, {
-    adapter: options.adapter,
-    analyzer: options.analyzer,
+  const prepared = await prepareOf({
+    entry,
+    dir,
+    arm: { adapter: options.adapter, analyzer: options.analyzer },
+    goldIds: goldIdsOf(entry, qrels),
   });
   // Before the dataset's FIRST rerank call, and before the port exists — a
   // refusal here has nothing to close. It doubles as the cold-load warm-up.
@@ -1032,6 +1095,7 @@ const attempt = async (
     run.record(result);
     return result;
   } catch (error) {
+    if (isRefusal(error)) throw error;
     process.stderr.write(`${entry.id}: FAILED — ${messageOf(error)}\n`);
     return undefined;
   }
@@ -1262,6 +1326,7 @@ export const RUN_HELP = [
   'exit codes:',
   '  0  every selected dataset ran and was recorded',
   '  1  at least one dataset failed (the rest are still recorded)',
+  `  ${REFUSAL_EXIT_CODE}  a dataset was REFUSED — its golden set names documents the corpus cannot reach`,
   `  ${GATE_EXIT_CODE}  the regression gate failed — a drop past --fail-under, or a pair it could not compare`,
   '',
 ].join('\n');
@@ -1308,6 +1373,24 @@ export const applyGate = (
   return code;
 };
 
+/**
+ * A refusal reaches here UNRECORDED — nothing measured, nothing to compare —
+ * so it becomes the exit code rather than a failed dataset's exit 1.
+ */
+const runOrRefuse = async (
+  entries: readonly DatasetEntry[],
+  options: CliOptions,
+  gitSha: string
+): Promise<number> => {
+  try {
+    return await runSelection(entries, options, gitSha);
+  } catch (error) {
+    if (!isRefusal(error)) throw error;
+    process.stderr.write(`${messageOf(error)}\n`);
+    return REFUSAL_EXIT_CODE;
+  }
+};
+
 export const main = async (argv: readonly string[], gitSha: string): Promise<number> => {
   if (argv.includes('--help')) {
     process.stdout.write(RUN_HELP);
@@ -1322,7 +1405,7 @@ export const main = async (argv: readonly string[], gitSha: string): Promise<num
     process.stderr.write(`${problem}\n`);
     return FAILURE_EXIT_CODE;
   }
-  return applyGate(gate, selection.entries, await runSelection(selection.entries, options, gitSha));
+  return applyGate(gate, selection.entries, await runOrRefuse(selection.entries, options, gitSha));
 };
 
 /** Guarded so the exported helpers stay importable from a test. */

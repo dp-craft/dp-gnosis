@@ -5,7 +5,15 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { BeirDataset } from '../manifest.js';
-import { describeDerivation, ensureVaultDataset, parseGoldenSet, readAtomDocs } from './vault.js';
+import {
+  assertGoldReachable,
+  describeDerivation,
+  ensureVaultDataset,
+  parseGoldenSet,
+  readAtomDocs,
+  UNREACHABLE_GOLD_CAUSE,
+  UNREACHABLE_GOLD_FLOOR
+} from './vault.js';
 
 const atom = (id: string, title: string, body: string): string =>
   `---\ntype: knowledge\nid: ${id}\ntitle: ${title}\nx_domain: docs\nstatus: stable\nsources:\n  - src/${id}.md\n---\n${body}`;
@@ -126,5 +134,50 @@ describe('ensureVaultDataset', () => {
 
     expect(derived.docCount).toBe(3);
     expect(readFileSync(resolve(derived.dir, 'corpus.jsonl'), 'utf8')).toContain('"gamma"');
+  });
+});
+
+describe('assertGoldReachable', () => {
+  it('declares a floor of zero unreachable judgments', () => {
+    expect(UNREACHABLE_GOLD_FLOOR).toBe(0);
+  });
+
+  it('refuses a derivation whose gold the corpus cannot reach', () => {
+    const root = stage();
+
+    const derived = ensureVaultDataset(entryFor(root), resolve(root, 'suite'));
+
+    expect(derived.unreachableCount).toBe(1);
+    expect(() => assertGoldReachable('vault', derived)).toThrow(
+      expect.objectContaining({ cause: UNREACHABLE_GOLD_CAUSE })
+    );
+  });
+
+  it('names the count, the ceiling and the correction in the refusal', () => {
+    const root = stage();
+    const derived = ensureVaultDataset(entryFor(root), resolve(root, 'suite'));
+
+    const message = (() => {
+      try {
+        assertGoldReachable('vault', derived);
+        return '';
+      } catch (error) {
+        return error instanceof Error ? error.message : '';
+      }
+    })();
+
+    expect(message).toContain('1 unreachable');
+    expect(message).toContain('0.7500');
+    expect(message).toContain('Re-point the golden set');
+  });
+
+  it('passes a derivation every judgment can reach', () => {
+    const root = stage();
+    writeFileSync(resolve(root, 'atoms', 'gone.md'), atom('gone', 'Gone', 'gone body\n'));
+
+    const derived = ensureVaultDataset(entryFor(root), resolve(root, 'suite'));
+
+    expect(derived.unreachableCount).toBe(0);
+    expect(() => assertGoldReachable('vault', derived)).not.toThrow();
   });
 });

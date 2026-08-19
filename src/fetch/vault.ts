@@ -240,6 +240,41 @@ const share = (part: number, whole: number): string =>
  * ceiling is the MACRO mean of each query's reachable share, matching the way
  * `score.ts` averages recall over topics.
  */
+/** `error.cause` when a derived dataset cannot reach gold the run is scored against. */
+export const UNREACHABLE_GOLD_CAUSE = 'dp-gnosis-bench/unreachable-gold';
+
+/**
+ * How many unreachable judgments a derivation may carry and still be measured.
+ * ZERO: a gold id with no atom file is a document that left the corpus, and
+ * every metric computed over it is scored against a ceiling below 1 that no
+ * arm can reach. The T2.1 gate read exactly that as a −0.0921 nDCG@10
+ * regression, because the count was PRINTED and the run continued.
+ *
+ * The floor is a constant and not a flag on purpose: a threshold an operator
+ * can raise from the command line is a threshold that gets raised on the run
+ * that trips it. Re-point the golden set, or fix what dropped the document.
+ */
+export const UNREACHABLE_GOLD_FLOOR = 0;
+
+const unreachableGoldMessage = (id: string, derived: VaultDerivation): string =>
+  `dp-gnosis-bench: refusing dataset "${id}" — ${describeDerivation(id, derived)}. ` +
+  `At most ${UNREACHABLE_GOLD_FLOOR} unreachable judgments may be measured: every one of them ` +
+  'caps recall at a ceiling no arm can reach, so the scores would understate every arm equally ' +
+  'and read as a regression. Re-point the golden set to the atoms the corpus now holds, ' +
+  'recording the from→to mapping, or restore the documents the ingest dropped.';
+
+/**
+ * REFUSE, do not warn. Separate from `ensureVaultDataset` so the derivation
+ * still reports its counts to a caller that wants them (the tests, a future
+ * inspector) while the RUN — the only caller that scores the result — cannot
+ * proceed past a corpus that has lost gold.
+ */
+export const assertGoldReachable = (id: string, derived: VaultDerivation): void => {
+  if (derived.unreachableCount <= UNREACHABLE_GOLD_FLOOR) return;
+  throw new Error(unreachableGoldMessage(id, derived), { cause: UNREACHABLE_GOLD_CAUSE });
+};
+
+/** Kept for the run's stdout line; the refusal above is what stops a bad corpus. */
 export const describeDerivation = (id: string, derived: VaultDerivation): string =>
   `${id}: derived ${derived.docCount} docs (${derived.unparsedCount} atom files unparsed), ` +
   `${derived.queryCount} queries, ${derived.judgmentCount} judgments — ` +

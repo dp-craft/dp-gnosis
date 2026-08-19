@@ -23,6 +23,7 @@ import type {
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY } from '../../dp-gnosis/src/rerank.js';
 import { SCALE_FIELDS, TREATMENT_FIELDS } from './compare.js';
+import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import type { Qrel } from './metrics.js';
 import {
@@ -39,6 +40,7 @@ import {
   collapsingTopicGroups,
   effectiveAtomMaxChars,
   firstPassDepth,
+  goldIdsOf,
   main,
   MANIFEST_PATH,
   measureAndRecordAll,
@@ -46,6 +48,7 @@ import {
   percentileMs,
   provenanceOf,
   queryDataset,
+  REFUSAL_EXIT_CODE,
   RERANK_POOL_BELOW_DEPTH_WARNING,
   rerankPoolOf,
   RUN_HELP,
@@ -824,6 +827,41 @@ describe('measureAndRecordAll', () => {
     expect(rows.every(row => existsSync(resolve(dir, row.perTopicPath ?? '')))).toBe(true);
     expect(rows.every(row => existsSync(resolve(dir, row.runPath ?? '')))).toBe(true);
   });
+
+  /**
+   * A dataset FAILURE is recorded and the run continues; a REFUSAL is not a
+   * failure of one dataset, it is a statement that the corpus cannot be scored.
+   * Swallowing it would exit 1 — "some dataset failed" — and hide the exit-3
+   * contract the unreachable-gold gate exists to state.
+   */
+  it('propagates a refusal instead of recording it as a dataset failure', async () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-refuse-'));
+    const entries = loadManifest(MANIFEST_PATH).slice(0, 2);
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+
+    const act = measureAndRecordAll(entries, {
+      measure: () => {
+        throw new Error('gold is unreachable', { cause: UNREACHABLE_GOLD_CAUSE });
+      },
+      record: result => {
+        recordDataset({ resultsDir: dir, provenance: testProvenance, result });
+      },
+    });
+
+    await expect(act).rejects.toThrow(
+      expect.objectContaining({ cause: UNREACHABLE_GOLD_CAUSE })
+    );
+    stdout.mockRestore();
+    stderr.mockRestore();
+  });
+});
+
+describe('the refusal exit code', () => {
+  it('is 3, and --help states it', () => {
+    expect(REFUSAL_EXIT_CODE).toBe(3);
+    expect(RUN_HELP).toContain('  3  ');
+  });
 });
 
 /**
@@ -1039,5 +1077,59 @@ describe('the regression gate wiring', () => {
   it('states in --help that the flags come in a pair', () => {
     expect(RUN_HELP).toContain('--baseline');
     expect(RUN_HELP).toContain('--fail-under');
+  });
+});
+
+/**
+ * THE ROUTE from the golden set to the ingest dedupe. `IngestOptions.goldIds`
+ * exists, but a field nobody passes changes nothing on the MEASURED path — the
+ * gate is which datasets get one, and the ids come from the qrels the run
+ * SCORES so the two can never name different documents.
+ */
+describe('goldIdsOf — which datasets tell the dedupe what is judged', () => {
+  const qrels = (): ReadonlyMap<string, Qrel> =>
+    new Map<string, Qrel>([
+      ['q-1', new Map([['ts-debugging-rules', 1], ['60-debugging', 1]])],
+      ['q-2', new Map([['ts-debugging-rules', 1], ['unjudged-neighbour', 0]])],
+    ]);
+
+  const beirLocal: DatasetEntry = {
+    id: 'scifact',
+    format: 'beir-local',
+    source: './data/scifact',
+    qrels: 'test',
+    domain: 'scientific-claims',
+    docShape: 'abstract',
+    enabled: true,
+    layers: [],
+  };
+
+  const derived: DatasetEntry = {
+    ...beirLocal,
+    id: 'vault',
+    derive: { atoms: './data/vault-atoms', golden: './golden-set.v2.json' },
+  };
+
+  const bright: DatasetEntry = {
+    id: 'bright-biology-passages',
+    format: 'bright',
+    split: 'biology',
+    granularity: 'passage',
+    domain: 'biology',
+    docShape: 'passage',
+    enabled: true,
+    layers: [],
+  };
+
+  it('hands a DERIVED dataset every judged id, deduplicated across topics', () => {
+    expect([...(goldIdsOf(derived, qrels()) ?? [])].sort()).toEqual([
+      '60-debugging',
+      'ts-debugging-rules',
+    ]);
+  });
+
+  it('passes NOTHING for a BEIR dataset, so its ingest is unchanged', () => {
+    expect(goldIdsOf(beirLocal, qrels())).toBeUndefined();
+    expect(goldIdsOf(bright, qrels())).toBeUndefined();
   });
 });

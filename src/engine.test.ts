@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, resolve } from 'node:path';
 
@@ -727,5 +727,61 @@ describe('assertRerankDiscriminates', () => {
     stubProbe([2.07, -11]);
 
     await expect(assertRerankDiscriminates({ model: OTHER_MODEL })).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * GOLD-AWARE DEDUPE, end to end. The exact-body dedupe keeps ONE copy of a
+ * mirrored document, and before `goldIds` it chose gold-blind: on `vault` it
+ * kept the mirror and dropped the copy the golden set judges, which cost 8
+ * topics their `recall@100` outright (GNOSIS-GUIDE § Known harness gaps). The
+ * ids therefore have to reach `ingest()` on the MEASURED path — the field
+ * existing on `IngestOptions` proves nothing while no bench caller passes it.
+ */
+describe('prepareDataset — the golden set decides which duplicate survives', () => {
+  const MIRROR_TITLE = 'Shared mirror body';
+  /** ≥ DEDUPE_MIN_BODY_CHARS (200), or the dedupe treats it as boilerplate. */
+  const MIRROR_TEXT =
+    'The two source documents below carry byte-identical prose so the exact-body dedupe groups ' +
+    'them together and keeps exactly one of the pair. Which one it keeps is the whole question: ' +
+    'the golden set judges only one of them, and the other is an unjudged mirror of it.';
+
+  /** `dup-aaa` wins the id tie-break, so gold-blind dedupe keeps it. */
+  const MIRRORS: readonly BeirDoc[] = [
+    { id: 'dup-aaa', title: MIRROR_TITLE, text: MIRROR_TEXT },
+    { id: 'dup-zzz', title: MIRROR_TITLE, text: MIRROR_TEXT },
+  ];
+
+  /** Enough distinct documents that dropping one duplicate clears the 90% coverage floor. */
+  const fillers: readonly BeirDoc[] = Array.from({ length: 10 }, (_unused, index) => ({
+    id: `filler-${index}`,
+    title: `Filler subject ${index}`,
+    text: `Distinct filler prose number ${index} about an unrelated subject entirely.`,
+  }));
+
+  const survivorsIn = (atomsDir: string): readonly string[] =>
+    readdirSync(atomsDir).filter(name => name.startsWith('dup-'));
+
+  it('keeps the JUDGED copy of a byte-identical pair and drops the unjudged mirror', async () => {
+    const scoped = await prepareDataset({
+      id: `${DATASET_ID}-gold`,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+      goldIds: ['dup-zzz'],
+    });
+    const survivors = survivorsIn(scoped.atomsDir);
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]).toMatch(/^dup-zzz/);
+  });
+
+  it('falls back to the id tie-break when no golden set names either copy', async () => {
+    const scoped = await prepareDataset({
+      id: `${DATASET_ID}-blind`,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+    });
+    const survivors = survivorsIn(scoped.atomsDir);
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]).toMatch(/^dup-aaa/);
   });
 });

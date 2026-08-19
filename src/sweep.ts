@@ -37,6 +37,7 @@ import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js'
 import { currentGitSha, runStamp } from './report.js';
 import {
   ensureDataset,
+  goldIdsOf,
   MANIFEST_PATH,
   parseArgs,
   prepareOf,
@@ -193,7 +194,7 @@ const contextFor = async (entry: DatasetEntry): Promise<DatasetContext> => {
     qrels,
     topics: topicsOf(readQueries(dir), qrels),
     excluded: readExcluded(dir),
-    prepared: await prepareOf(entry, dir, { adapter: ADAPTER }),
+    prepared: await prepareOf({ entry, dir, arm: { adapter: ADAPTER }, goldIds: goldIdsOf(entry, qrels) }),
   };
 };
 

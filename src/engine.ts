@@ -138,6 +138,17 @@ export interface PrepareDatasetOptions {
    * run can be told which analyzer produced it.
    */
   readonly analyzer?: AnalyzerId | undefined;
+  /**
+   * Document ids the dataset's golden set judges, handed to the engine's
+   * exact-body dedupe so a mirrored document keeps the copy the judgments can
+   * credit. The ids are the qrels' `corpus-id` column, which `materializeCorpus`
+   * writes as `<id>.md` and `ingest` matches on the source basename — the same
+   * spelling `score.ts` recovers a retrieved atom through.
+   *
+   * Absent — what every BEIR dataset passes — leaves the dedupe gold-blind, so
+   * those runs stay byte-identical to every row already recorded.
+   */
+  readonly goldIds?: readonly string[] | undefined;
 }
 
 /** What one dataset's ingest+index produced, and what querying it needs. */
@@ -328,7 +339,7 @@ const datasetPaths = (options: PrepareDatasetOptions): DatasetPaths => {
  */
 const ingestAndProbe = async (
   paths: DatasetPaths,
-  analyzer: AnalyzerId | undefined
+  options: PrepareDatasetOptions
 ): Promise<Omit<PreparationCost, 'adapter' | 'adapterBuildMs'>> => {
   const startedAt = Date.now();
   await ingest({
@@ -336,12 +347,13 @@ const ingestAndProbe = async (
     outputDir: paths.atomsDir,
     repoRoot: paths.workDir,
     profile: paths.profile,
+    ...(options.goldIds === undefined ? {} : { goldIds: options.goldIds }),
   });
   const ingestedAt = Date.now();
   buildFts5Index({
     atomsDir: paths.atomsDir,
     indexPath: paths.indexPath,
-    ...(analyzer === undefined ? {} : { analyzer }),
+    ...(options.analyzer === undefined ? {} : { analyzer: options.analyzer }),
   });
   return { ingestMs: ingestedAt - startedAt, probeMs: Date.now() - ingestedAt };
 };
@@ -482,7 +494,7 @@ export const prepareDataset = async (
   const adapter = options.adapter ?? ADAPTER;
   const paths = datasetPaths(options);
   const corpus = materializeChecked(options, paths);
-  const probed = await ingestAndProbe(paths, options.analyzer);
+  const probed = await ingestAndProbe(paths, options);
   const indexed = indexedAtomPaths(paths.indexPath);
   assertIngestSound({
     datasetId: options.id,
