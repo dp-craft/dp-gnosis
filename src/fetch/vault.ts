@@ -274,6 +274,48 @@ export const assertGoldReachable = (id: string, derived: VaultDerivation): void 
   throw new Error(unreachableGoldMessage(id, derived), { cause: UNREACHABLE_GOLD_CAUSE });
 };
 
+/** What the INDEXED-corpus refusal judges, separated so it can be tested without an index. */
+export interface IndexedGoldFacts {
+  readonly datasetId: string;
+  /** Document ids the run's judgments name — the qrels' `corpus-id` column. */
+  readonly goldDocIds: readonly string[];
+  /** Document ids the INDEXED atoms roll up to, via `score.ts:toDocumentRanking`. */
+  readonly reachableDocIds: readonly string[];
+}
+
+/** Judged documents no indexed atom rolls up to, deduplicated and ordered for a stable message. */
+export const unreachableGoldDocIds = (facts: IndexedGoldFacts): readonly string[] => {
+  const reachable = new Set(facts.reachableDocIds);
+  return [...new Set(facts.goldDocIds)].filter(docId => !reachable.has(docId)).sort();
+};
+
+/** How many missing ids the refusal spells out before it stops listing them. */
+const NAMED_MISSING_LIMIT = 10;
+
+const indexedGoldMessage = (facts: IndexedGoldFacts, missing: readonly string[]): string =>
+  `dp-gnosis-bench: refusing dataset "${facts.datasetId}" — the INDEXED corpus cannot reach ` +
+  `${missing.length} of ${new Set(facts.goldDocIds).size} judged documents ` +
+  `(${missing.slice(0, NAMED_MISSING_LIMIT).join(', ')}). They exist in the source projection ` +
+  'and were lost between it and the index — the exact-body dedupe and the frozen domain ' +
+  'vocabulary are the two paths that drop a document there. Every metric over them is scored ' +
+  'against a ceiling no arm can reach, so the run would read as a regression. Restore the ' +
+  'documents the ingest dropped, or re-point the golden set, recording the from→to mapping.';
+
+/**
+ * REFUSE on the corpus the engine ACTUALLY INDEXED. Sibling of
+ * `assertGoldReachable`, under the same cause and the same zero floor, and it
+ * exists because that one cannot see this loss: it is computed over the BEIR
+ * projection of the SOURCE atoms, before ingest, so it printed
+ * `0 unreachable (mean recall ceiling 1.0000)` over a run whose dedupe had just
+ * removed 9 judged documents. A check upstream of the stage that loses gold
+ * cannot detect the loss.
+ */
+export const assertIndexedGoldReachable = (facts: IndexedGoldFacts): void => {
+  const missing = unreachableGoldDocIds(facts);
+  if (missing.length <= UNREACHABLE_GOLD_FLOOR) return;
+  throw new Error(indexedGoldMessage(facts, missing), { cause: UNREACHABLE_GOLD_CAUSE });
+};
+
 /** Kept for the run's stdout line; the refusal above is what stops a bad corpus. */
 export const describeDerivation = (id: string, derived: VaultDerivation): string =>
   `${id}: derived ${derived.docCount} docs (${derived.unparsedCount} atom files unparsed), ` +

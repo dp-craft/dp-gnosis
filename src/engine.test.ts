@@ -36,6 +36,7 @@ import {
   rerankIfRequested,
   retrieveDocs
 } from './engine.js';
+import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
 
 /** A second reranker id — any id the shipped constant is not. */
 const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';
@@ -783,5 +784,37 @@ describe('prepareDataset — the golden set decides which duplicate survives', (
     const survivors = survivorsIn(scoped.atomsDir);
     expect(survivors).toHaveLength(1);
     expect(survivors[0]).toMatch(/^dup-aaa/);
+  });
+
+  /**
+   * The T2.1d case: BOTH members of a byte-identical group are judged, so keep-one
+   * would delete a gold document outright. Recorded on `vault`: 10 such groups, 9
+   * gold documents absent from the indexed corpus, 8 topics losing `recall@100`.
+   */
+  it('keeps BOTH copies when the golden set judges each side of the pair', async () => {
+    const scoped = await prepareDataset({
+      id: `${DATASET_ID}-double-gold`,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+      goldIds: ['dup-aaa', 'dup-zzz'],
+    });
+
+    expect(survivorsIn(scoped.atomsDir)).toHaveLength(2);
+  });
+
+  /**
+   * The refusal moved onto the INDEXED corpus. `fetch/vault.ts` derives its count
+   * from the SOURCE projection, before ingest runs, so it printed a 1.0000 recall
+   * ceiling over a corpus the dedupe had already stripped of gold.
+   */
+  it('REFUSES a dataset whose indexed atoms cannot reach a judged document', async () => {
+    await expect(
+      prepareDataset({
+        id: `${DATASET_ID}-lost-gold`,
+        docs: [...fillers],
+        workRoot: root,
+        goldIds: ['filler-0', 'never-ingested'],
+      })
+    ).rejects.toMatchObject({ cause: UNREACHABLE_GOLD_CAUSE });
   });
 });

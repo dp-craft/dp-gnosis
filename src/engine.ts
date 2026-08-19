@@ -74,6 +74,8 @@ import type { AnalyzerId } from '../../dp-gnosis/src/query.js';
 import { probeRerankDiscrimination, rerankAtoms } from '../../dp-gnosis/src/rerank.js';
 import type { BeirDoc } from './beir.js';
 import { buildProfile, materializeCorpus, type MaterializedCorpus } from './corpus.js';
+import { assertIndexedGoldReachable } from './fetch/vault.js';
+import { type RankedAtom, toDocumentRanking } from './score.js';
 
 const MARKDOWN_EXT = '.md';
 
@@ -292,8 +294,37 @@ const atomSources = (atomsDir: string, relPath: string): readonly string[] => {
  */
 const docIdOf = (originPath: string): string => basename(originPath, MARKDOWN_EXT);
 
-const coveredDocIds = (atomsDir: string, relPaths: readonly string[]): readonly string[] =>
-  relPaths.flatMap(rel => atomSources(atomsDir, rel)).map(docIdOf);
+/** The indexed atoms as `score.ts` reads them — origins only, read from disk ONCE. */
+const indexedOrigins = (atomsDir: string, relPaths: readonly string[]): readonly RankedAtom[] =>
+  relPaths.map(rel => ({ originPaths: atomSources(atomsDir, rel) }));
+
+const coveredDocIds = (origins: readonly RankedAtom[]): readonly string[] =>
+  origins.flatMap(atom => atom.originPaths).map(docIdOf);
+
+/**
+ * The documents the index can actually return, through the SAME rollup that
+ * scores a run (`originPaths[0]`'s basename, first occurrence wins). Anything
+ * else here would judge reachability on a mapping no metric uses.
+ */
+const reachableDocIds = (origins: readonly RankedAtom[]): readonly string[] =>
+  toDocumentRanking(origins);
+
+/**
+ * Gold is checked HERE, on the post-ingest corpus, because this is downstream of
+ * the stage that loses it. A dataset that names no gold (every BEIR corpus) is
+ * not judged: `goldIds` absent means the run measures no golden set of ours.
+ */
+const assertGoldIndexed = (
+  options: PrepareDatasetOptions,
+  origins: readonly RankedAtom[]
+): void => {
+  if (options.goldIds === undefined) return;
+  assertIndexedGoldReachable({
+    datasetId: options.id,
+    goldDocIds: options.goldIds,
+    reachableDocIds: reachableDocIds(origins),
+  });
+};
 
 const requirePath = (value: string | undefined, field: string): string =>
   value ?? fail(`dp-gnosis-bench: the generated profile declared no ${field}`, EMPTY_INDEX_CAUSE);
@@ -496,12 +527,14 @@ export const prepareDataset = async (
   const corpus = materializeChecked(options, paths);
   const probed = await ingestAndProbe(paths, options);
   const indexed = indexedAtomPaths(paths.indexPath);
+  const origins = indexedOrigins(paths.atomsDir, indexed);
   assertIngestSound({
     datasetId: options.id,
     indexedAtomCount: indexed.length,
-    coveredDocIds: coveredDocIds(paths.atomsDir, indexed),
+    coveredDocIds: coveredDocIds(origins),
     inputDocIds: [...corpus.fileNameById.keys()],
   });
+  assertGoldIndexed(options, origins);
   const built = await buildAdapterIndex({ adapter, datasetId: options.id, paths });
   return {
     atomsDir: paths.atomsDir,

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { BeirDataset } from '../manifest.js';
 import {
   assertGoldReachable,
+  assertIndexedGoldReachable,
   describeDerivation,
   ensureVaultDataset,
   parseGoldenSet,
@@ -179,5 +180,47 @@ describe('assertGoldReachable', () => {
 
     expect(derived.unreachableCount).toBe(0);
     expect(() => assertGoldReachable('vault', derived)).not.toThrow();
+  });
+});
+
+/**
+ * THE REFUSAL AT THE STAGE WHERE GOLD IS LOST. The derivation check reads the
+ * SOURCE projection, which is built before the engine ingests and dedupes — it
+ * reported "0 unreachable, mean recall ceiling 1.0000" over a run whose ingest
+ * had just destroyed 9 gold documents. This assert judges the corpus the engine
+ * actually INDEXED, rolled up to documents the way `score.ts` does.
+ */
+describe('assertIndexedGoldReachable', () => {
+  const facts = (reachableDocIds: readonly string[]): Parameters<typeof assertIndexedGoldReachable>[0] => ({
+    datasetId: 'vault',
+    goldDocIds: ['alpha', 'beta', 'gamma'],
+    reachableDocIds,
+  });
+
+  it('refuses an indexed corpus that lost a gold document the source projection holds', () => {
+    expect(() => assertIndexedGoldReachable(facts(['alpha', 'gamma']))).toThrow(
+      expect.objectContaining({ cause: UNREACHABLE_GOLD_CAUSE })
+    );
+  });
+
+  it('names the dataset, the missing document and the correction', () => {
+    const message = (() => {
+      try {
+        assertIndexedGoldReachable(facts(['alpha', 'gamma']));
+        return '';
+      } catch (error) {
+        return error instanceof Error ? error.message : '';
+      }
+    })();
+
+    expect(message).toContain('vault');
+    expect(message).toContain('beta');
+    expect(message).toContain('1 of 3');
+  });
+
+  it('passes an indexed corpus every gold document rolls up to', () => {
+    expect(() =>
+      assertIndexedGoldReachable(facts(['alpha', 'beta', 'gamma', 'unjudged']))
+    ).not.toThrow();
   });
 });
