@@ -26,13 +26,14 @@ import type { AtomDomain, AtomType } from '../config.js';
 import { ATOM_DOMAINS, ATOM_TYPES, BM25_IDF_SMOOTHING, DEFAULT_ATOM_TYPE } from '../config.js';
 import { ATOMS_DIR } from '../paths.js';
 import type {
+  AtomOrigin,
   IndexState,
   KnowledgePort,
   RetrievalResult,
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
-import { assertTypeFilter } from '../port.js';
+import { assertTypeFilter, atomOrigin } from '../port.js';
 import type { TermProcessor } from '../query.js';
 import { stemTerm, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
@@ -123,6 +124,8 @@ interface ScanContext {
 
 interface ScannedDoc {
   readonly id: string;
+  /** Carried whole so an absent field stays absent all the way to the port. */
+  readonly origin: AtomOrigin;
   readonly title: string;
   readonly domain: AtomDomain;
   readonly type: AtomType;
@@ -213,6 +216,7 @@ const fromAtom = (context: ScanContext, file: string, atom: Atom): ScannedDoc | 
     ? undefined
     : withFreq({
         id: atom.frontmatter.id,
+        origin: atomOrigin(atom.frontmatter),
         title: atom.frontmatter.title,
         domain,
         type: asType(atom.frontmatter.type),
@@ -390,6 +394,7 @@ const matchType = (doc: ScannedDoc, types: readonly AtomType[] | undefined): boo
 
 const toRetrieved = (scored: ScoredDoc): RetrievedAtom => ({
   id: scored.doc.id,
+  ...scored.doc.origin,
   title: scored.doc.title,
   domain: scored.doc.domain,
   type: scored.doc.type,

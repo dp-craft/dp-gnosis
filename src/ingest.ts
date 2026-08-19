@@ -132,6 +132,8 @@ interface Candidate {
   readonly docTitle: string;
   /** The document's declared summary, resolved once per source; absent when it declared none. */
   readonly summary: string | undefined;
+  /** How many chunks this source document produced, so `index` reads as `i of n`. */
+  readonly originCount: number;
   /** ` (i/n)` when the section emitted several chunks, else empty. */
   readonly part: string;
   /** The cap this run chunks and writes against; the profile's, else the shipped one. */
@@ -314,6 +316,7 @@ const toCandidates = (source: LoadedSource, profile: IngestProfile): readonly Ca
   return chunks.map((chunk, index) => ({
     sourcePath: source.sourcePath,
     index,
+    originCount: chunks.length,
     chunk,
     domain,
     type: typeForPath(profile, source.sourcePath),
@@ -405,6 +408,12 @@ const bodyWithHeading = (candidate: Candidate): string => {
     : composeBody([], body);
 };
 
+/** An empty chain writes NO key: an empty value would assert a section named "". */
+const headingChainField = (candidate: Candidate): Readonly<Record<string, string>> => {
+  const chain = headingPath(candidate.chunk.headingChain);
+  return chain.length === 0 ? {} : { heading_chain: chain };
+};
+
 const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({
   frontmatter: {
     type: candidate.type,
@@ -412,6 +421,9 @@ const toAtom = (candidate: Candidate, id: string, title: string): Atom => ({
     title,
     x_domain: candidate.domain,
     ...(candidate.summary === undefined ? {} : { summary: candidate.summary }),
+    ...headingChainField(candidate),
+    origin_index: candidate.index,
+    origin_count: candidate.originCount,
     status: 'stable',
     sources: [candidate.sourcePath],
   },
@@ -777,6 +789,61 @@ const unmappedSkips = (
 ): readonly IngestSkip[] =>
   loaded.filter(source => source.domain === undefined).map(source => unmappedSkip(source, profile));
 
+/**
+ * DENSE ORIGIN NUMBERING — a SECOND PASS, over the atoms that survived.
+ *
+ * `toAtom` numbers a candidate by its chunk position, which is what the chunker
+ * knows; by the time the write set is fixed, dedupe, the empty-body drop and
+ * validation have removed some of those chunks. Measured on a two-document
+ * fixture: `beta.md` kept ONE atom and still declared `origin_count: 2`, so a
+ * consumer rendering "1 of 2" sent a reader after an atom in no corpus. A count
+ * that overstates is worse than no count — it reads as INCOMPLETE evidence.
+ *
+ * So both fields are re-derived here against the write set: `origin_count` is
+ * how many atoms the source document actually WROTE, and `origin_index` their
+ * dense `0 .. count-1` position in source order (`byOrder`, preserved through
+ * planning and checking). The field therefore no longer names WHICH chunk of the
+ * source file an atom came from — accepted, deliberately: ordering and grouping
+ * the atoms a caller HOLDS is the job it exists for.
+ *
+ * Skips cannot be predicted during candidate build — dedupe is cross-document
+ * and decides a group only once every member is known — which is why this is a
+ * pass and not a field on `Candidate`.
+ */
+const sourceOf = (entry: CheckedAtom): string => entry.candidate.sourcePath;
+
+const countsBySource = (writable: readonly CheckedAtom[]): ReadonlyMap<string, number> =>
+  writable.reduce(
+    (counts, entry) => counts.set(sourceOf(entry), (counts.get(sourceOf(entry)) ?? 0) + 1),
+    new Map<string, number>()
+  );
+
+/** The running per-document ordinal of each entry, in the write set's own order. */
+const denseIndices = (writable: readonly CheckedAtom[]): readonly number[] => {
+  const seen = new Map<string, number>();
+  return writable.map(entry => {
+    const next = seen.get(sourceOf(entry)) ?? 0;
+    seen.set(sourceOf(entry), next + 1);
+    return next;
+  });
+};
+
+const renumbered = (entry: CheckedAtom, originIndex: number, originCount: number): CheckedAtom => ({
+  ...entry,
+  atom: {
+    ...entry.atom,
+    frontmatter: { ...entry.atom.frontmatter, origin_index: originIndex, origin_count: originCount },
+  },
+});
+
+const withDenseOrigin = (writable: readonly CheckedAtom[]): readonly CheckedAtom[] => {
+  const counts = countsBySource(writable);
+  const indices = denseIndices(writable);
+  return writable.map((entry, position) =>
+    renumbered(entry, indices[position] ?? 0, counts.get(sourceOf(entry)) ?? 0)
+  );
+};
+
 /** Everything the run puts on disk: the atoms, the owner marker, the manifest. */
 interface WritePhase {
   readonly outputDir: string;
@@ -811,7 +878,7 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
     profile,
     gold: goldOf(options),
   });
-  const writable = checked.filter(entry => entry.reasons.length === 0);
+  const writable = withDenseOrigin(checked.filter(entry => entry.reasons.length === 0));
   const refused = checked.filter(entry => entry.reasons.length > 0);
   const skipped = [...unmapped, ...refused.map(toSkip)];
   const duplicates = countDuplicates(refused);

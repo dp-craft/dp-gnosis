@@ -1,3 +1,4 @@
+import type { AtomFrontmatter } from './atom.js';
 import type { AtomDomain, AtomType } from './config.js';
 import { ATOM_TYPES } from './config.js';
 
@@ -16,8 +17,50 @@ import { ATOM_TYPES } from './config.js';
  */
 export type IndexState = 'ready' | 'empty' | 'stale' | 'unavailable';
 
+/**
+ * WHERE IN its source document an atom sits, carried verbatim from the
+ * frontmatter ingest wrote (snake_case on disk, camelCase on the port).
+ *
+ * Every field is ABSENT when the frontmatter did not carry it — an atom
+ * ingested before these existed states nothing rather than claiming position 0
+ * of 0 in a section named "". Presence is therefore itself the signal, exactly
+ * as with `rerankScore`.
+ *
+ * None of them enters scoring, matching or ordering: they are what a consumer
+ * needs to ORDER and GROUP the atoms it was already given.
+ */
+export interface AtomOrigin {
+  /** `0`-based position among the atoms the source document produced. */
+  readonly originIndex?: number;
+  readonly originCount?: number;
+  /** The `>`-joined section path, e.g. `Rerank > Fusion > RRF`. */
+  readonly headingChain?: string;
+  /** The source document's own one-line summary. */
+  readonly summary?: string;
+}
+
+/**
+ * The origin fields of one atom's frontmatter, as a spreadable fragment: an
+ * absent field stays absent rather than becoming an explicit `undefined`. Shared
+ * by every adapter so the port's key set cannot diverge per adapter.
+ */
+const originPosition = (frontmatter: AtomFrontmatter): AtomOrigin => ({
+  ...(frontmatter.origin_index === undefined ? {} : { originIndex: frontmatter.origin_index }),
+  ...(frontmatter.origin_count === undefined ? {} : { originCount: frontmatter.origin_count }),
+});
+
+const originContext = (frontmatter: AtomFrontmatter): AtomOrigin => ({
+  ...(frontmatter.heading_chain === undefined ? {} : { headingChain: frontmatter.heading_chain }),
+  ...(frontmatter.summary === undefined ? {} : { summary: frontmatter.summary }),
+});
+
+export const atomOrigin = (frontmatter: AtomFrontmatter): AtomOrigin => ({
+  ...originPosition(frontmatter),
+  ...originContext(frontmatter),
+});
+
 /** One atom returned by a retrieval call. */
-export interface RetrievedAtom {
+export interface RetrievedAtom extends AtomOrigin {
   readonly id: string;
   readonly title: string;
   readonly domain: AtomDomain;

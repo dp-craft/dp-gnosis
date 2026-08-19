@@ -61,7 +61,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
-import { assertTypeFilter } from '../port.js';
+import { assertTypeFilter, atomOrigin } from '../port.js';
 import { stemTerm, type TermProcessor, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
@@ -260,6 +260,7 @@ const fromAtom = (atom: Atom, hit: SearchHit, sourcePath: string): RetrievedAtom
         title: atom.frontmatter.title,
         domain,
         type: asType(atom.frontmatter.type),
+        ...atomOrigin(atom.frontmatter),
         body: atom.body,
         score: hit.score,
         sourcePath,

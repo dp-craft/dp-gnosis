@@ -34,6 +34,21 @@ export interface AtomFrontmatter {
   readonly x_domain: string;
   /** The source document's own one-line summary, when it declared one. */
   readonly summary?: string;
+  /**
+   * The section path this atom was cut from, `>`-joined — e.g.
+   * `Rerank > Fusion > RRF`. A SCALAR, not a list: the closed subset has exactly
+   * one block form (`sources`), and a second one would double the grammar for a
+   * value no consumer reads element-wise.
+   */
+  readonly heading_chain?: string;
+  /**
+   * This atom's position among the atoms its SOURCE DOCUMENT produced, and how
+   * many that was — `0`-based, so `origin_index` 0 is a real position and never
+   * an absent field. Together they let a consumer restore author order and see
+   * how much of a document it is holding.
+   */
+  readonly origin_index?: number;
+  readonly origin_count?: number;
   readonly status: AtomStatus;
   readonly stale_after?: string;
   readonly sources: readonly string[];
@@ -59,9 +74,19 @@ const DELIMITER = '---';
 const SOURCES_KEY = 'sources:';
 const SOURCE_ITEM_PREFIX = '  - ';
 const REQUIRED_SCALARS = ['type', 'id', 'title', 'x_domain', 'status'] as const;
-const OPTIONAL_SCALARS = ['summary', 'stale_after', 'verified_by', 'verified_at'] as const;
+const OPTIONAL_SCALARS = [
+  'summary',
+  'heading_chain',
+  'origin_index',
+  'origin_count',
+  'stale_after',
+  'verified_by',
+  'verified_at',
+] as const;
 const KNOWN_SCALARS: readonly string[] = [...REQUIRED_SCALARS, ...OPTIONAL_SCALARS];
 const DATE_SCALARS = ['stale_after', 'verified_at'] as const;
+/** Scalars carried as text on disk and read back as numbers. */
+const COUNT_SCALARS = ['origin_index', 'origin_count'] as const;
 
 /** `---\n` … `---\n`; the closing delimiter MUST be newline-terminated. */
 const DOCUMENT_RE = /^---\r?\n((?:[^\n]*\n)*?)---\r?\n/;
@@ -71,6 +96,8 @@ const SCALAR_LINE_RE = /^([a-z_][a-z0-9_]*): (\S|\S.*\S)$/;
 const MAPPING_ITEM_RE = /^[A-Za-z_][A-Za-z0-9_-]*:(?: |$)/;
 const TIDY_SCALAR_RE = /^(\S|\S.*\S)$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** No sign, no fraction, no leading zero — one spelling per value, so it round-trips. */
+const COUNT_RE = /^(0|[1-9]\d*)$/;
 const TRAILING_CR_RE = /\r$/;
 
 const NESTED_SOURCES_ERROR =
@@ -195,6 +222,16 @@ const dateError = (map: ReadonlyMap<string, string>): string | undefined => {
   return bad === undefined ? undefined : `field "${bad}" MUST be an absolute YYYY-MM-DD date`;
 };
 
+const isBadCount = (map: ReadonlyMap<string, string>, key: string): boolean => {
+  const value = map.get(key);
+  return value !== undefined && !COUNT_RE.test(value);
+};
+
+const countError = (map: ReadonlyMap<string, string>): string | undefined => {
+  const bad = COUNT_SCALARS.find(key => isBadCount(map, key));
+  return bad === undefined ? undefined : `field "${bad}" MUST be a non-negative integer`;
+};
+
 const sourceCountError = (count: number): string =>
   count === 0
     ? 'missing required field "sources" — at least one flat source string is required'
@@ -206,7 +243,8 @@ const sourcesError = (sources: readonly string[]): string | undefined =>
 const validationError = (
   map: ReadonlyMap<string, string>,
   sources: readonly string[]
-): string | undefined => requiredError(map) ?? dateError(map) ?? sourcesError(sources);
+): string | undefined =>
+  requiredError(map) ?? dateError(map) ?? countError(map) ?? sourcesError(sources);
 
 const required = (map: ReadonlyMap<string, string>, key: string): string => map.get(key) ?? '';
 
@@ -219,6 +257,15 @@ const optionalField = (
   return value === undefined ? {} : { [key]: value };
 };
 
+/** The numeric twin of `optionalField`; the value is already known well-formed. */
+const optionalCount = (
+  map: ReadonlyMap<string, string>,
+  key: string
+): Readonly<Record<string, number>> => {
+  const value = map.get(key);
+  return value === undefined ? {} : { [key]: Number(value) };
+};
+
 const composeFrontmatter = (
   map: ReadonlyMap<string, string>,
   status: AtomStatus,
@@ -229,6 +276,9 @@ const composeFrontmatter = (
   title: required(map, 'title'),
   x_domain: required(map, 'x_domain'),
   ...optionalField(map, 'summary'),
+  ...optionalField(map, 'heading_chain'),
+  ...optionalCount(map, 'origin_index'),
+  ...optionalCount(map, 'origin_count'),
   status,
   ...optionalField(map, 'stale_after'),
   sources,
@@ -270,12 +320,19 @@ export const parseAtom = (text: string): ParseAtomResult => {
 const optionalLine = (key: string, value: string | undefined): readonly string[] =>
   value === undefined ? [] : [`${key}: ${value}`];
 
+/** `0` is a value, not an absence — the check is on `undefined` alone. */
+const optionalCountLine = (key: string, value: number | undefined): readonly string[] =>
+  value === undefined ? [] : [`${key}: ${value}`];
+
 const frontmatterLines = (frontmatter: AtomFrontmatter): readonly string[] => [
   `type: ${frontmatter.type}`,
   `id: ${frontmatter.id}`,
   `title: ${frontmatter.title}`,
   `x_domain: ${frontmatter.x_domain}`,
   ...optionalLine('summary', frontmatter.summary),
+  ...optionalLine('heading_chain', frontmatter.heading_chain),
+  ...optionalCountLine('origin_index', frontmatter.origin_index),
+  ...optionalCountLine('origin_count', frontmatter.origin_count),
   `status: ${frontmatter.status}`,
   ...optionalLine('stale_after', frontmatter.stale_after),
   SOURCES_KEY,
