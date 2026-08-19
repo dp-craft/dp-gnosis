@@ -1,0 +1,1024 @@
+{
+  "provenance": {
+    "ts": "2026-08-19T11:09:11.720Z",
+    "gitSha": "de689da1",
+    "adapter": "fts5",
+    "depth": 100,
+    "rerank": true,
+    "rerankProfile": "shipped",
+    "rerankWeight": 0.25,
+    "rerankModel": "qwen3-reranker-4b",
+    "rerankPool": 100,
+    "rerankDocMaxChars": 2000,
+    "rerankExtract": "head",
+    "analyzer": "porter-fold",
+    "queryAdjacency": false
+  },
+  "results": [
+    {
+      "dataset": "vault",
+      "domain": "project-vault",
+      "docShape": "atom",
+      "queryShape": "keyword-and-question",
+      "corpusBytes": 14508819,
+      "corpusLines": 11345,
+      "atomMaxChars": 4000,
+      "topics": 60,
+      "docCount": 11345,
+      "atomCount": 11058,
+      "ingestMs": 5904,
+      "queryMs": 624138,
+      "queryP50Ms": 11059,
+      "queryP95Ms": 21379,
+      "metrics": {
+        "ndcg10": 0.5009173211763819,
+        "recall10": 0.5419890873015873,
+        "recall20": 0.6435863095238095,
+        "recall100": 0.8040757275132275,
+        "mrr10": 0.6685648148148149,
+        "precision5": 0.28666666666666657,
+        "precision10": 0.20333333333333323,
+        "allGoldInTop10": 0.31666666666666665,
+        "map": 0.4078273021169612,
+        "rPrecision": 0.3444080687830688,
+        "rbpResidual": 0.7450372468307441
+      },
+      "metricsSd": {
+        "ndcg10": 0.3053464318091195,
+        "recall10": 0.3708145127106398,
+        "recall20": 0.3639924133634777,
+        "recall100": 0.2888281888908904,
+        "mrr10": 0.4118632389476254,
+        "precision5": 0.1995475107325271,
+        "precision10": 0.13773798100897727,
+        "allGoldInTop10": 0.46910179830729853,
+        "map": 0.29615309828199315,
+        "rPrecision": 0.289375280429215,
+        "rbpResidual": 0.15913601950065015
+      },
+      "rPrecisionTopics": 60,
+      "perTopic": [
+        {
+          "queryId": "q-001",
+          "metrics": {
+            "ndcg10": 0.9270192549176082,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.6,
+            "precision10": 0.5,
+            "allGoldInTop10": 1,
+            "map": 0.8083333333333332,
+            "rPrecision": 0.6,
+            "rbpResidual": 0.43012096000000005
+          }
+        },
+        {
+          "queryId": "q-002",
+          "metrics": {
+            "ndcg10": 0.6713860725233041,
+            "recall10": 0.6666666666666666,
+            "recall20": 0.6666666666666666,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.5,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.6976
+          }
+        },
+        {
+          "queryId": "q-003",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "allGoldInTop10": 0,
+            "map": 0.11734006734006734,
+            "rPrecision": 0,
+            "rbpResidual": 0.9711392601311126
+          }
+        },
+        {
+          "queryId": "q-004",
+          "metrics": {
+            "ndcg10": 0.933819260234181,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.6,
+            "precision10": 0.5,
+            "allGoldInTop10": 1,
+            "map": 0.8142857142857143,
+            "rPrecision": 0.6,
+            "rbpResidual": 0.43272765440000005
+          }
+        },
+        {
+          "queryId": "q-005",
+          "metrics": {
+            "ndcg10": 0.5012658353418871,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.25,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 1,
+            "map": 0.325,
+            "rPrecision": 0,
+            "rbpResidual": 0.8156800000000001
+          }
+        },
+        {
+          "queryId": "q-006",
+          "metrics": {
+            "ndcg10": 0.8927537907700456,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.6,
+            "precision10": 0.4,
+            "allGoldInTop10": 1,
+            "map": 0.7708333333333333,
+            "rPrecision": 0.75,
+            "rbpResidual": 0.5040640000000001
+          }
+        },
+        {
+          "queryId": "q-007",
+          "metrics": {
+            "ndcg10": 0.8854598815714874,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.6,
+            "precision10": 0.3,
+            "allGoldInTop10": 1,
+            "map": 0.7555555555555555,
+            "rPrecision": 0.6666666666666666,
+            "rbpResidual": 0.5900800000000002
+          }
+        },
+        {
+          "queryId": "q-008",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 1,
+            "map": 1,
+            "rPrecision": 1,
+            "rbpResidual": 0.8000000000000002
+          }
+        },
+        {
+          "queryId": "q-009",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 1,
+            "map": 1,
+            "rPrecision": 1,
+            "rbpResidual": 0.8
+          }
+        },
+        {
+          "queryId": "q-010",
+          "metrics": {
+            "ndcg10": 0.6713860725233041,
+            "recall10": 0.6666666666666666,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.5909090909090909,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.6761251635199997
+          }
+        },
+        {
+          "queryId": "q-011",
+          "metrics": {
+            "ndcg10": 0.8710785440003369,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 1,
+            "map": 0.7222222222222222,
+            "rPrecision": 0.6666666666666666,
+            "rbpResidual": 0.6064639999999998
+          }
+        },
+        {
+          "queryId": "q-012",
+          "metrics": {
+            "ndcg10": 0.8385465274895063,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 1,
+            "map": 0.6666666666666666,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.6320639999999997
+          }
+        },
+        {
+          "queryId": "q-013",
+          "metrics": {
+            "ndcg10": 0.6713860725233041,
+            "recall10": 0.6666666666666666,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.576923076923077,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.6838561046527996
+          }
+        },
+        {
+          "queryId": "q-014",
+          "metrics": {
+            "ndcg10": 0.7039180890341347,
+            "recall10": 0.6666666666666666,
+            "recall20": 0.6666666666666666,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.5555555555555555,
+            "rPrecision": 0.6666666666666666,
+            "rbpResidual": 0.6719999999999997
+          }
+        },
+        {
+          "queryId": "q-015",
+          "metrics": {
+            "ndcg10": 0.41183384043543503,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.16666666666666666,
+            "precision5": 0,
+            "precision10": 0.2,
+            "allGoldInTop10": 1,
+            "map": 0.20833333333333331,
+            "rPrecision": 0,
+            "rbpResidual": 0.8925209600000001
+          }
+        },
+        {
+          "queryId": "q-016",
+          "metrics": {
+            "ndcg10": 0.9197207891481876,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 1,
+            "map": 0.8333333333333333,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.6719999999999997
+          }
+        },
+        {
+          "queryId": "q-017",
+          "metrics": {
+            "ndcg10": 0.23719771276929622,
+            "recall10": 0.5,
+            "recall20": 0.5,
+            "recall100": 1,
+            "mrr10": 0.2,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.12777777777777777,
+            "rPrecision": 0,
+            "rbpResidual": 0.9179988703615857
+          }
+        },
+        {
+          "queryId": "q-018",
+          "metrics": {
+            "ndcg10": 0.6366824387328317,
+            "recall10": 0.5,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.5631410256410256,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.6370761578636143
+          }
+        },
+        {
+          "queryId": "q-019",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0.3333333333333333,
+            "recall100": 0.6666666666666666,
+            "mrr10": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "allGoldInTop10": 0,
+            "map": 0.04738562091503268,
+            "rPrecision": 0,
+            "rbpResidual": 0.9931899088450695
+          }
+        },
+        {
+          "queryId": "q-020",
+          "metrics": {
+            "ndcg10": 0.38685280723454163,
+            "recall10": 0.5,
+            "recall20": 0.5,
+            "recall100": 0.5,
+            "mrr10": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.25,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.8400000000000003
+          }
+        },
+        {
+          "queryId": "q-021",
+          "metrics": {
+            "ndcg10": 0.15101961822780524,
+            "recall10": 0.25,
+            "recall20": 0.25,
+            "recall100": 0.75,
+            "mrr10": 0.2,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.08284566838783707,
+            "rPrecision": 0,
+            "rbpResidual": 0.9157741547292222
+          }
+        },
+        {
+          "queryId": "q-022",
+          "metrics": {
+            "ndcg10": 0.7315682114753617,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.5,
+            "precision5": 0.6,
+            "precision10": 0.4,
+            "allGoldInTop10": 1,
+            "map": 0.6083333333333333,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.5645439999999996
+          }
+        },
+        {
+          "queryId": "q-023",
+          "metrics": {
+            "ndcg10": 0.7928654229965442,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.3,
+            "allGoldInTop10": 1,
+            "map": 0.5873015873015873,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.6820351999999998
+          }
+        },
+        {
+          "queryId": "q-024",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0,
+            "recall100": 0,
+            "mrr10": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "allGoldInTop10": 0,
+            "map": 0,
+            "rPrecision": 0,
+            "rbpResidual": 1.0000000000000002
+          }
+        },
+        {
+          "queryId": "q-025",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0,
+            "recall100": 0.5,
+            "mrr10": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "allGoldInTop10": 0,
+            "map": 0.013888888888888888,
+            "rPrecision": 0,
+            "rbpResidual": 0.9999188703615856
+          }
+        },
+        {
+          "queryId": "q-026",
+          "metrics": {
+            "ndcg10": 0.4599715079731103,
+            "recall10": 0.4,
+            "recall20": 0.4,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.31587301587301586,
+            "rPrecision": 0.2,
+            "rbpResidual": 0.7339695405854866
+          }
+        },
+        {
+          "queryId": "q-027",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "allGoldInTop10": 0,
+            "map": 0.15573380867498515,
+            "rPrecision": 0,
+            "rbpResidual": 0.9595959713362086
+          }
+        },
+        {
+          "queryId": "q-028",
+          "metrics": {
+            "ndcg10": 0.5805485932475565,
+            "recall10": 0.75,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.5,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 0,
+            "map": 0.49999999999999994,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.629284130816
+          }
+        },
+        {
+          "queryId": "q-029",
+          "metrics": {
+            "ndcg10": 0.3903800499921017,
+            "recall10": 0.25,
+            "recall20": 0.5,
+            "recall100": 0.75,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.3125,
+            "rPrecision": 0.25,
+            "rbpResidual": 0.791782533961516
+          }
+        },
+        {
+          "queryId": "q-030",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.6,
+            "precision10": 0.3,
+            "allGoldInTop10": 1,
+            "map": 1,
+            "rPrecision": 1,
+            "rbpResidual": 0.5120000000000001
+          }
+        },
+        {
+          "queryId": "q-031",
+          "metrics": {
+            "ndcg10": 0.8667163765466583,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.6,
+            "precision10": 0.4,
+            "allGoldInTop10": 1,
+            "map": 0.7095238095238094,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.5376512
+          }
+        },
+        {
+          "queryId": "q-032",
+          "metrics": {
+            "ndcg10": 0.6131471927654584,
+            "recall10": 0.5,
+            "recall20": 0.5,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.5384615384615384,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.7992444213627407
+          }
+        },
+        {
+          "queryId": "q-033",
+          "metrics": {
+            "ndcg10": 0.2960819109658652,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 0.3333333333333333,
+            "mrr10": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.16666666666666666,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.8400000000000003
+          }
+        },
+        {
+          "queryId": "q-034",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0,
+            "recall100": 1,
+            "mrr10": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "allGoldInTop10": 0,
+            "map": 0.03125,
+            "rPrecision": 0,
+            "rbpResidual": 0.9998019295937145
+          }
+        },
+        {
+          "queryId": "q-035",
+          "metrics": {
+            "ndcg10": 0.31546487678572877,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.125,
+            "precision5": 0,
+            "precision10": 0.1,
+            "allGoldInTop10": 1,
+            "map": 0.125,
+            "rPrecision": 0,
+            "rbpResidual": 0.9580569600000001
+          }
+        },
+        {
+          "queryId": "q-036",
+          "metrics": {
+            "ndcg10": 0.18457569677956817,
+            "recall10": 0.5,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.1111111111111111,
+            "precision5": 0,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.10818713450292397,
+            "rPrecision": 0,
+            "rbpResidual": 0.9628426882981037
+          }
+        },
+        {
+          "queryId": "q-037",
+          "metrics": {
+            "ndcg10": 0,
+            "recall10": 0,
+            "recall20": 0,
+            "recall100": 0.5,
+            "mrr10": 0,
+            "precision5": 0,
+            "precision10": 0,
+            "allGoldInTop10": 0,
+            "map": 0.023809523809523808,
+            "rPrecision": 0,
+            "rbpResidual": 0.9976941569907866
+          }
+        },
+        {
+          "queryId": "q-038",
+          "metrics": {
+            "ndcg10": 0.46927872602275644,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 0.3333333333333333,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.3333333333333333,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.7999999999999998
+          }
+        },
+        {
+          "queryId": "q-039",
+          "metrics": {
+            "ndcg10": 0.38364913903790027,
+            "recall10": 0.6666666666666666,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.25,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.2692982456140351,
+            "rPrecision": 0,
+            "rbpResidual": 0.8120771202981039
+          }
+        },
+        {
+          "queryId": "q-040",
+          "metrics": {
+            "ndcg10": 1,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 1,
+            "map": 1,
+            "rPrecision": 1,
+            "rbpResidual": 0.7999999999999998
+          }
+        },
+        {
+          "queryId": "q-041",
+          "metrics": {
+            "ndcg10": 0.46927872602275644,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 0.6666666666666666,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.3422222222222222,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.7999999865200265
+          }
+        },
+        {
+          "queryId": "q-042",
+          "metrics": {
+            "ndcg10": 0.6713860725233041,
+            "recall10": 0.6666666666666666,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.5714285714285714,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.6866048837222397
+          }
+        },
+        {
+          "queryId": "q-043",
+          "metrics": {
+            "ndcg10": 0.46927872602275644,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 0.3333333333333333,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.3333333333333333,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.7999999999999998
+          }
+        },
+        {
+          "queryId": "q-044",
+          "metrics": {
+            "ndcg10": 0.46927872602275644,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.3731431966726084,
+            "rPrecision": 0.3333333333333333,
+            "rbpResidual": 0.7998386891795859
+          }
+        },
+        {
+          "queryId": "q-045",
+          "metrics": {
+            "ndcg10": 0.6739577727076379,
+            "recall10": 0.6,
+            "recall20": 0.8,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 0,
+            "map": 0.6072100313479625,
+            "rPrecision": 0.4,
+            "rbpResidual": 0.552602307257723
+          }
+        },
+        {
+          "queryId": "q-046",
+          "metrics": {
+            "ndcg10": 0.4034698846650846,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 0.5,
+            "mrr10": 1,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.23152709359605908,
+            "rPrecision": 0.16666666666666666,
+            "rbpResidual": 0.7471843437377231
+          }
+        },
+        {
+          "queryId": "q-047",
+          "metrics": {
+            "ndcg10": 0.4543191686050796,
+            "recall10": 0.625,
+            "recall20": 0.75,
+            "recall100": 1,
+            "mrr10": 0.25,
+            "precision5": 0.4,
+            "precision10": 0.5,
+            "allGoldInTop10": 0,
+            "map": 0.4012409771600948,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.6558204023720594
+          }
+        },
+        {
+          "queryId": "q-048",
+          "metrics": {
+            "ndcg10": 0.5026317885449211,
+            "recall10": 0.375,
+            "recall20": 0.375,
+            "recall100": 0.5,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 0,
+            "map": 0.3256578947368421,
+            "rPrecision": 0.375,
+            "rbpResidual": 0.5744120770314144
+          }
+        },
+        {
+          "queryId": "q-049",
+          "metrics": {
+            "ndcg10": 0.9747429528567879,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 1,
+            "precision5": 0.8,
+            "precision10": 0.5,
+            "allGoldInTop10": 1,
+            "map": 0.9266666666666665,
+            "rPrecision": 0.8,
+            "rbpResidual": 0.36454400000000015
+          }
+        },
+        {
+          "queryId": "q-050",
+          "metrics": {
+            "ndcg10": 0.41253177989255346,
+            "recall10": 0.25,
+            "recall20": 0.5,
+            "recall100": 0.75,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.33447728889943074,
+            "rPrecision": 0.25,
+            "rbpResidual": 0.627135310442448
+          }
+        },
+        {
+          "queryId": "q-051",
+          "metrics": {
+            "ndcg10": 0.31488013066763093,
+            "recall10": 0.14285714285714285,
+            "recall20": 0.21428571428571427,
+            "recall100": 0.21428571428571427,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.11974789915966387,
+            "rPrecision": 0.14285714285714285,
+            "rbpResidual": 0.6919705004657866
+          }
+        },
+        {
+          "queryId": "q-052",
+          "metrics": {
+            "ndcg10": 0.14126697285982898,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 1,
+            "mrr10": 0.1111111111111111,
+            "precision5": 0,
+            "precision10": 0.1,
+            "allGoldInTop10": 0,
+            "map": 0.07946127946127945,
+            "rPrecision": 0,
+            "rbpResidual": 0.9662762226392302
+          }
+        },
+        {
+          "queryId": "q-053",
+          "metrics": {
+            "ndcg10": 0.17096843307907036,
+            "recall10": 0.25,
+            "recall20": 0.25,
+            "recall100": 0.25,
+            "mrr10": 0.2,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.05,
+            "rPrecision": 0.125,
+            "rbpResidual": 0.8912364544000001
+          }
+        },
+        {
+          "queryId": "q-054",
+          "metrics": {
+            "ndcg10": 0.5912352048230277,
+            "recall10": 1,
+            "recall20": 1,
+            "recall100": 1,
+            "mrr10": 0.5,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "allGoldInTop10": 1,
+            "map": 0.39285714285714285,
+            "rPrecision": 0.5,
+            "rbpResidual": 0.7875711999999996
+          }
+        },
+        {
+          "queryId": "q-055",
+          "metrics": {
+            "ndcg10": 0.2214161691338287,
+            "recall10": 0.3333333333333333,
+            "recall20": 0.3333333333333333,
+            "recall100": 1,
+            "mrr10": 0.25,
+            "precision5": 0.2,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.15292717776168221,
+            "rPrecision": 0.16666666666666666,
+            "rbpResidual": 0.863384438736323
+          }
+        },
+        {
+          "queryId": "q-056",
+          "metrics": {
+            "ndcg10": 0.3510684246681534,
+            "recall10": 0.15625,
+            "recall20": 0.46875,
+            "recall100": 0.96875,
+            "mrr10": 0.16666666666666666,
+            "precision5": 0,
+            "precision10": 0.5,
+            "allGoldInTop10": 0,
+            "map": 0.5881690234622219,
+            "rPrecision": 0.6875,
+            "rbpResidual": 0.67655110930569
+          }
+        },
+        {
+          "queryId": "q-057",
+          "metrics": {
+            "ndcg10": 0.2710884709729799,
+            "recall10": 0.05357142857142857,
+            "recall20": 0.10714285714285714,
+            "recall100": 0.21428571428571427,
+            "mrr10": 0.3333333333333333,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 0,
+            "map": 0.06090397647823515,
+            "rPrecision": 0.17857142857142858,
+            "rbpResidual": 0.7004561205589056
+          }
+        },
+        {
+          "queryId": "q-058",
+          "metrics": {
+            "ndcg10": 0.3589542101716347,
+            "recall10": 0.08333333333333333,
+            "recall20": 0.08333333333333333,
+            "recall100": 0.125,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.2,
+            "allGoldInTop10": 0,
+            "map": 0.08556547619047618,
+            "rPrecision": 0.08333333333333333,
+            "rbpResidual": 0.6399990646389518
+          }
+        },
+        {
+          "queryId": "q-059",
+          "metrics": {
+            "ndcg10": 0.36885567213865283,
+            "recall10": 0.08333333333333333,
+            "recall20": 0.16666666666666666,
+            "recall100": 0.5277777777777778,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 0,
+            "map": 0.18874830704329182,
+            "rPrecision": 0.3611111111111111,
+            "rbpResidual": 0.6578338903644404
+          }
+        },
+        {
+          "queryId": "q-060",
+          "metrics": {
+            "ndcg10": 0.36885567213865283,
+            "recall10": 0.08333333333333333,
+            "recall20": 0.16666666666666666,
+            "recall100": 0.5277777777777778,
+            "mrr10": 1,
+            "precision5": 0.4,
+            "precision10": 0.3,
+            "allGoldInTop10": 0,
+            "map": 0.18874830704329182,
+            "rPrecision": 0.3611111111111111,
+            "rbpResidual": 0.6578338903644404
+          }
+        }
+      ]
+    }
+  ]
+}
