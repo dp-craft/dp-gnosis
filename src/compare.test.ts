@@ -285,6 +285,30 @@ describe('compareLastTwo', () => {
     expect(result.arms.map(change => change.field)).toEqual(['rerank']);
   });
 
+  /**
+   * The `6f87ca08` lesson: an ingest dedupe removed 296 `vault` atoms while
+   * `corpusBytes` / `corpusLines` — which describe the SOURCE corpus file, not
+   * the atoms indexed — stayed byte-identical. The subtraction that followed
+   * reported corpus destruction as a -0.0921 quality regression.
+   */
+  it('REFUSES a delta when atomCount moved under an unchanged corpus file', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', atomCount: 4906, ndcg10: 0.5079 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('provenance-changed');
+    if (result.kind !== 'provenance-changed') return;
+    expect(result.changed.map(change => change.field)).toEqual(['atomCount']);
+    expect(result.changed[0]?.previous).toBe(5202);
+    expect(result.changed[0]?.latest).toBe(4906);
+    expect(formatComparison(result)).toContain('atomCount');
+  });
+
+  it('guards the INDEXED atom count as a measuring scale, never as a treatment', () => {
+    expect(SCALE_FIELDS).toContain('atomCount');
+    expect(TREATMENT_FIELDS).not.toContain('atomCount');
+  });
+
   it('guards the rerank POOL as a measuring scale, never as a treatment', () => {
     expect(SCALE_FIELDS).toContain('rerankPool');
     expect(TREATMENT_FIELDS).not.toContain('rerankPool');

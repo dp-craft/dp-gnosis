@@ -40,13 +40,22 @@ import type { HistoryRow } from './report.js';
 
 const DELTA_DIGITS = 4;
 
-/** Fields that change WHAT is measured; a move invalidates any subtraction. */
+/**
+ * Fields that change WHAT is measured; a move invalidates any subtraction.
+ *
+ * `atomCount` is the number of atoms actually INDEXED, which `corpusBytes` /
+ * `corpusLines` cannot stand in for — those describe the SOURCE `corpus.jsonl`
+ * and hold still across an ingest-rule change. At `6f87ca08` a dedupe dropped
+ * 296 `vault` atoms under a byte-identical corpus and the subtraction reported
+ * -0.0921, p=0.0005: corpus destruction dressed as a quality regression.
+ */
 export const SCALE_FIELDS = [
   'atomMaxChars',
   'depth',
   'rerankPool',
   'corpusBytes',
   'corpusLines',
+  'atomCount',
 ] as const;
 
 /** Fields that name the TREATMENT under measurement; a move IS the experiment. */
