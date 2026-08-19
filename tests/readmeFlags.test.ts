@@ -14,6 +14,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { FLAGS } from '../src/cli/args.js';
+import {
+  DEFAULT_OWNERS,
+  defaultCellDrift,
+  phantomSkillFlags,
+  readSkillOrFail,
+  SKILL_REFUSED_FLAGS,
+  skillFlagTokens
+} from './flagDocsLock.js';
 
 const README_PATH = fileURLToPath(new URL('../README.md', import.meta.url));
 
@@ -97,5 +105,77 @@ describe('a value flag is documented with its value and default', () => {
     const row = rows.find(([name]) => name === flag)?.[1];
     expect(row, `no README row documents ${flag}`).toBeDefined();
     expect(cellsOf(row ?? '').filter(cell => cell === '')).toEqual([]);
+  });
+});
+
+/**
+ * Gap (b), measured: this file locked flag NAMES bidirectionally and asserted a
+ * value flag has no empty cell, but never read the DEFAULT cell's CONTENT — so
+ * the README advertised `--rerank-weight` default `0.5` for a day after
+ * `RERANK_RRF_WEIGHT` became `0.75`, with every gate green. The binding below is
+ * DECLARED, not guessed: `DEFAULT_OWNERS` names, per flag, the constant that
+ * owns its default or states deliberately that no constant does, and it is
+ * asserted EXHAUSTIVE over `FLAGS` — a new flag cannot be added without stating
+ * which case it is. That exhaustiveness is what makes it a lock.
+ */
+describe('README § Flags default cells are locked to the constants that own them', () => {
+  const cellByFlag = new Map(
+    rows.map(([flag, row]) => [flag, cellsOf(row).at(-1) ?? ''] as const)
+  );
+
+  it('declares an owner for every flag, and no flag that does not exist', () => {
+    const declared = new Set(Object.keys(DEFAULT_OWNERS));
+    expect(
+      diffFlags(declared, implemented),
+      'DEFAULT_OWNERS must stay exhaustive over FLAGS — declare the new flag as ' +
+        '{ kind: \'constant\' } or { kind: \'unowned\', why }'
+    ).toEqual({ undocumented: [], nonexistent: [] });
+  });
+
+  it('states every documented default that a constant owns', () => {
+    expect(defaultCellDrift(cellByFlag, DEFAULT_OWNERS)).toEqual([]);
+  });
+
+  it('catches a default cell that disagrees with its constant', () => {
+    const drifted = new Map([['--rerank-weight', 'the stale `0.5` this lock exists for']]);
+    const owners = {
+      '--rerank-weight': { kind: 'constant', constant: 'RERANK_RRF_WEIGHT', value: '0.75' },
+    } as const;
+    expect(defaultCellDrift(drifted, owners)).toEqual([
+      expect.stringContaining('--rerank-weight') as unknown as string,
+    ]);
+  });
+});
+
+/**
+ * Gap (a): `.claude/skills/dp-gnosis-search/SKILL.md` names flags in PROSE with
+ * no lock at all, so a renamed flag leaves the skill telling its caller to pass
+ * something the CLI now exits 2 on. One direction only — the skill deliberately
+ * does not mention every flag.
+ */
+describe('the dp-gnosis-search skill names only flags the CLI accepts', () => {
+  it('finds its subject, and says so by path when it is absent', () => {
+    expect(readSkillOrFail().length).toBeGreaterThan(0);
+  });
+
+  it('names no flag outside FLAGS', () => {
+    expect(phantomSkillFlags(readSkillOrFail(), implemented, SKILL_REFUSED_FLAGS)).toEqual([]);
+  });
+
+  it('parses a non-empty flag vocabulary, so an empty match cannot pass vacuously', () => {
+    expect(skillFlagTokens(readSkillOrFail()).length).toBeGreaterThan(5);
+  });
+
+  it('catches prose naming a flag that does not exist', () => {
+    const prose = 'pass `--nope 3` and `--rerank` to the CLI';
+    expect(phantomSkillFlags(prose, new Set(['--rerank']), [])).toEqual(['--nope']);
+  });
+
+  it('ignores dashes outside a code span, so prose cannot mint a phantom flag', () => {
+    expect(phantomSkillFlags('a well-known trade-off — not a flag', new Set(), [])).toEqual([]);
+  });
+
+  it('declares as refused only tokens the CLI really refuses', () => {
+    expect(SKILL_REFUSED_FLAGS.filter(flag => flag in FLAGS)).toEqual([]);
   });
 });
