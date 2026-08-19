@@ -186,7 +186,7 @@ export const RERANK_DOC_MAX_CHARS = 2000;
 /**
  * The RRF rank constant, and the weight the RERANKED order carries against the
  * first-pass order (the first pass carries `1 - weight`):
- * `score(d) = 0.5/(20 + rank_rerank(d)) + 0.5/(20 + rank_firstpass(d))`.
+ * `score(d) = 0.75/(20 + rank_rerank(d)) + 0.25/(20 + rank_firstpass(d))`.
  *
  * FUSED, not pure — these three numbers are measured, not taste. Pure
  * reranking REGRESSES MRR (0.6078 → 0.5737); the fused cell improves all four
@@ -197,8 +197,16 @@ export const RERANK_DOC_MAX_CHARS = 2000;
  */
 export const RERANK_RRF_K = 20;
 
-/** See {@link RERANK_RRF_K} — the two are one measured pair. */
-export const RERANK_RRF_WEIGHT = 0.5;
+/**
+ * See {@link RERANK_RRF_K} — the two are one measured pair.
+ *
+ * 0.75 since 2026-08-19, ADOPTED off a pre-registered held-out arm: scifact
+ * n=300, nDCG@10 +0.0297 (p=0.0002) over the 0.5 it replaced. Every row
+ * recorded BEFORE that fused at 0.5 and stamps no weight, so `compare.ts`
+ * backfills an absent `rerankWeight` to 0.5 and labels the pair an ARM
+ * COMPARISON rather than subtracting two different fusions.
+ */
+export const RERANK_RRF_WEIGHT = 0.75;
 
 /**
  * How the reranked order is combined with the first-pass order.
@@ -300,7 +308,7 @@ export const EMBED_BATCH_SIZE = 32;
 /**
  * The DENSE leg's weight in the hybrid fusion; the lexical leg carries
  * `1 - weight`. Its OWN parameter, deliberately not {@link RERANK_RRF_WEIGHT}:
- * the two happen to share a value but are measured independently, and reading
+ * the two are measured independently — they once shared a value, and reading
  * one from the other made tuning the reranker move the hybrid route silently.
  *
  * 0.5 is the value EVERY recorded `lancedb-hybrid` row was measured at. A

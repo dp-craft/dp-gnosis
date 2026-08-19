@@ -3,10 +3,11 @@
  *
  * The first test is the load-bearing one: `SHIPPED_RANKING` was captured by
  * running this exact fixture against the code BEFORE fusion became a parameter,
- * and it pins ids AND full-precision scores. Every recorded rerank number was
- * measured under that arm, so a change that moves it invalidates the baselines
- * rather than improving them. It fails on any drift in the RRF constants, the
- * fusion arithmetic, the first-pass floor, or the default preset.
+ * and it pins ids AND full-precision scores. Every rerank number recorded before
+ * `RERANK_RRF_WEIGHT` moved to 0.75 was measured under that arm, so it is run as
+ * an EXPLICIT `--rerank-weight 0.5` arm — the weight is now the only parameter
+ * of it the default does not supply. It still fails on any drift in `RERANK_RRF_K`,
+ * the fusion arithmetic, or the first-pass floor.
  *
  * No live server: `fetch` is stubbed, so both llama-swap calls are answered
  * in-process and an offline run still passes.
@@ -37,7 +38,8 @@ const RERANK_ORDER = [3, 0, 5, 1, 4] as const;
 
 /**
  * Captured 2026-08-15 from `retrieve --rerank -k 6` on the fixture below, at the
- * commit before this file existed. `[id, score]`, best-first.
+ * commit before this file existed. `[id, score]`, best-first — at the weight
+ * that held then, 0.5, which the arm below names explicitly.
  */
 const SHIPPED_RANKING: readonly (readonly [string, number])[] = [
   ['hotel-zestful-retrieval-hotel', 0.046536796536796536],
@@ -160,17 +162,29 @@ describe('retrieve --rerank default arm', () => {
     vi.unstubAllGlobals();
   });
 
-  it('reproduces the pre-parameterisation ranking exactly — ids and scores', async () => {
+  it('reproduces the pre-parameterisation ranking exactly at w=0.5 — ids and scores', async () => {
     const fixture = await makeFixture();
     stubServer(RERANK_ORDER);
 
-    expect(await rankingOf(fixture)).toEqual(SHIPPED_RANKING);
+    expect(await rankingOf(fixture, ['--rerank-weight', '0.5'])).toEqual(SHIPPED_RANKING);
+  });
+
+  /**
+   * The adopted weight is a DIFFERENT arm, and it must be visibly different —
+   * a default that still reproduced the 0.5 ranking would mean the constant is
+   * read from somewhere else.
+   */
+  it('does NOT reproduce that ranking at the shipped weight, which moved to 0.75', async () => {
+    const fixture = await makeFixture();
+    stubServer(RERANK_ORDER);
+
+    expect(await rankingOf(fixture)).not.toEqual(SHIPPED_RANKING);
   });
 });
 
 describe('resolveRerankFusion', () => {
-  it('defaults to the shipped RRF preset — K=20, w=0.5', () => {
-    expect(resolveRerankFusion()).toEqual({ kind: 'rrf', rrfK: 20, rerankWeight: 0.5 });
+  it('defaults to the shipped RRF preset — K=20, w=0.75', () => {
+    expect(resolveRerankFusion()).toEqual({ kind: 'rrf', rrfK: 20, rerankWeight: 0.75 });
   });
 
   it('resolves beir-ce to pure replacement', () => {
@@ -209,10 +223,21 @@ describe('fuseRanking under beir-ce', () => {
     expect(fused[2]?.score).toBeLessThan(fused[1]?.score ?? 0);
   });
 
-  it('differs from the shipped preset on the same input', () => {
-    const shipped = fuseRanking(['a', 'b', 'c', 'd'], [3, 1, 0, 2], RERANK_FUSION_PRESETS.shipped);
+  /**
+   * TEN items, not four: at `w=0.75` the reranked order dominates a list short
+   * enough that its rank gaps exceed the whole first-pass spread, so the two
+   * rules AGREE there. The disagreement the shipped preset exists for needs a
+   * first-pass rank far enough from the reranked one to outweigh one rerank step.
+   */
+  const TEN = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'] as const;
 
-    expect(shipped.map(entry => entry.item)).not.toEqual(['d', 'b', 'a', 'c']);
+  it('differs from the shipped preset on the same input', () => {
+    const order = [9, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+    const replaced = fuseRanking([...TEN], order, RERANK_FUSION_PRESETS['beir-ce']);
+    const shipped = fuseRanking([...TEN], order, RERANK_FUSION_PRESETS.shipped);
+
+    expect(replaced.map(entry => entry.item).slice(0, 2)).toEqual(['j', 'a']);
+    expect(shipped.map(entry => entry.item).slice(0, 2)).toEqual(['a', 'j']);
   });
 });
 
@@ -277,7 +302,7 @@ describe('HYBRID_DENSE_LEG_WEIGHT', () => {
     expect(source).toMatch(/export const HYBRID_DENSE_LEG_WEIGHT\s*=\s*0\.5/);
     expect(declaration).toContain('HYBRID_DENSE_LEG_WEIGHT');
     expect(declaration.slice(0, declaration.indexOf('}'))).not.toContain('RERANK_RRF_WEIGHT');
-    expect(RERANK_RRF_WEIGHT).toBe(0.5);
+    expect(RERANK_RRF_WEIGHT).toBe(0.75);
   });
 });
 

@@ -119,20 +119,20 @@ const stubServer = (models: readonly string[], order: readonly number[]): string
 };
 
 describe('fuseRanking — the shipped preset', () => {
-  it('fuses the reranked order with the first-pass order at K=20, w=0.5', () => {
+  it('fuses the reranked order with the first-pass order at K=20, w=0.75', () => {
     const fused = fuseRanking(['a', 'b', 'c', 'd'], [1, 2, 3, 0], RERANK_FUSION_PRESETS.shipped);
 
     // 'b': first-pass rank 2 and rerank rank 1 beats 'a' at first-pass 1, rerank 4.
-    expect(fused.map(entry => entry.item)).toEqual(['b', 'a', 'c', 'd']);
-    expect(fused[0]?.score).toBeCloseTo(0.5 / 22 + 0.5 / 21, 10);
-    expect(fused[1]?.score).toBeCloseTo(0.5 / 21 + 0.5 / 24, 10);
+    expect(fused.map(entry => entry.item)).toEqual(['b', 'c', 'a', 'd']);
+    expect(fused[0]?.score).toBeCloseTo(0.25 / 22 + 0.75 / 21, 10);
+    expect(fused[1]?.score).toBeCloseTo(0.25 / 23 + 0.75 / 22, 10);
   });
 
   it('scores an entry the reranker did not return from the first pass alone', () => {
     const fused = fuseRanking(['a', 'b'], [1], RERANK_FUSION_PRESETS.shipped);
 
     expect(fused.map(entry => entry.item)).toEqual(['b', 'a']);
-    expect(fused[1]?.score).toBeCloseTo(0.5 / 21, 10);
+    expect(fused[1]?.score).toBeCloseTo(0.25 / 21, 10);
   });
 });
 
@@ -176,7 +176,7 @@ describe('retrieve --rerank', () => {
     const reranked = parsePayload((await retrieve(fixture, ['--rerank'])).stdout);
 
     const ids = baseline.atoms.map(atom => atom.id);
-    expect(reranked.atoms.map(atom => atom.id)).toEqual([ids[1], ids[0], ids[2], ids[3]]);
+    expect(reranked.atoms.map(atom => atom.id)).toEqual([ids[1], ids[2], ids[0], ids[3]]);
   });
 
   it('applies the token budget AFTER fusion', async () => {
@@ -192,7 +192,7 @@ describe('retrieve --rerank', () => {
     const ids = baseline.atoms.map(atom => atom.id);
     // The fusion winner is kept; the first-pass winner is the one skipped first.
     expect(reranked.atoms.map(atom => atom.id)).toEqual([ids[1]]);
-    expect(reranked.skipped.map(atom => atom.id)).toEqual([ids[0], ids[2], ids[3]]);
+    expect(reranked.skipped.map(atom => atom.id)).toEqual([ids[2], ids[0], ids[3]]);
   });
 
   it('reports an unreachable server, naming the model and the URL', async () => {
