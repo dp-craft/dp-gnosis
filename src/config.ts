@@ -315,6 +315,33 @@ export const RERANK_CALIBRATION: Readonly<Record<string, RerankCalibration>> = {
 };
 
 /**
+ * The calibrated probability at or above which a run may claim `confidence: ok`
+ * — the DEFAULT abstain floor, applied to the top delivered atom only.
+ *
+ * Evidence — sweep of 2026-08-20 at the champion config (fts5 first pass +
+ * `qwen3-reranker-4b`, pool 100, `-k 10 --rerank --include-history`), 127
+ * topics and 0 failures: 60 `vault` gold, 31 `vault-hu` gold, 18 EN and 18 HU
+ * negatives (`golden/golden-set-negatives[-hu].v1.json`). `qwen3-reranker-4b`
+ * calibrates as `identity`, so the raw score IS the probability.
+ *
+ *   floor   fires on all 36 neg   fires on the 30 retrieving   rank-1 gold kept
+ *   0.25    83.3 %                80.0 %                       100 %
+ *   0.40    88.9 %                86.7 %                       100 %
+ *   0.50    91.7 %                90.0 %                       100 %
+ *   0.60    94.4 %                93.3 %                        98.2 %
+ *
+ * Both acceptance criteria — fire on >=80 % of the negatives, remove NO rank-1
+ * gold — hold across the whole [0.25, 0.50] window. 0.4 is the chosen point: it
+ * sits 0.1341 below 0.5341, the LOWEST top-1 probability among the 57 topics
+ * whose gold atom ranks first, and 0.096 below the nearest negative it does not
+ * fire on, while firing on 86.7 % of the negatives that retrieve anything.
+ *
+ * It decides the VERDICT and nothing else. Dropping atoms stays gated on the
+ * explicit `--min-relevance`, which overrides this value for both.
+ */
+export const ABSTAIN_FLOOR = 0.4;
+
+/**
  * The rewriter behind `retrieve --rephrase`, overridden by
  * {@link REPHRASE_MODEL_ENV_VAR}. A CHAT model, not a reranker — but it is
  * served by the SAME llama-swap instance, so it reuses

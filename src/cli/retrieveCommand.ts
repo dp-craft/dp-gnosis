@@ -13,6 +13,7 @@ import type { AtomMeasure, SkippedAtom } from '../budget.js';
 import { byteMeasure, fitToTokenBudget } from '../budget.js';
 import type { AtomType, BudgetMode } from '../config.js';
 import {
+  ABSTAIN_FLOOR,
   ATOM_TYPES,
   BUDGET_MODES,
   DEFAULT_BUDGET_MODE,
@@ -755,17 +756,17 @@ const rerankLines = (request: RetrieveRequest): readonly string[] =>
 /**
  * How much CALIBRATED evidence stands behind the delivered atoms.
  *
- * Three values and no numeric band — the band is not measured yet, and inventing
- * one here would publish a threshold nobody measured:
+ * Three values, judged against the MEASURED {@link ABSTAIN_FLOOR} unless
+ * `--min-relevance` named its own:
  *
  *   `none` nothing was delivered, so there is nothing to be confident about;
- *   `ok`   a floor was in effect and the top delivered atom clears it;
- *   `weak` atoms were delivered with no calibrated evidence behind them — no
- *          rerank, an uncalibrated model, or no floor asked for.
+ *   `ok`   the top delivered atom's calibrated probability clears the floor;
+ *   `weak` atoms were delivered whose best calibrated probability is below the
+ *          floor, or that carry no calibrated evidence at all — no rerank, a
+ *          refused rerank, or an uncalibrated model.
  *
- * `ok` is therefore UNREACHABLE by default today, deliberately: it requires
- * `--min-relevance`, which is opt-in and has no default value until the
- * calibrated floors are measured. A default `ok` would be an unmeasured claim.
+ * The verdict alone reads the default floor. A run that delivers atoms delivers
+ * exactly the same atoms whatever this says; only `--min-relevance` DROPS.
  */
 export type RetrieveConfidence = 'none' | 'weak' | 'ok';
 
@@ -795,10 +796,20 @@ const topCalibrated = (
   return top === undefined ? undefined : calibratedOf(request, top);
 };
 
+/**
+ * The floor the VERDICT is judged against: the explicit `--min-relevance` when
+ * one was passed, else the measured {@link ABSTAIN_FLOOR}.
+ *
+ * Only the verdict reads this. Every DROP path keeps reading
+ * `minRelevance` alone, so the default floor changes what a run CLAIMS and
+ * never what it delivers.
+ */
+const verdictFloor = (budgeted: BudgetedResult): number =>
+  budgeted.minRelevance ?? ABSTAIN_FLOOR;
+
 const meetsFloor = (request: RetrieveRequest, budgeted: BudgetedResult): boolean => {
-  const floor = budgeted.minRelevance;
   const top = topCalibrated(request, budgeted);
-  return floor !== undefined && top !== undefined && top >= floor;
+  return top !== undefined && top >= verdictFloor(budgeted);
 };
 
 const confidenceOf = (
