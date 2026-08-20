@@ -76,7 +76,7 @@ export const HELP_TEXT: string = [
   'JSON keys with --json (plus exitCode on every object):',
   '  ingest    command, written, skipped[{source,title,reasons}]',
   '  index     command, adapter, built, indexPath, note',
-  '  retrieve  command, adapter, query, queryRewritten (with --rephrase only), k, mode, indexState, count, poolSize (first-pass size, before -k), confidence (none|weak|ok),',
+  '  retrieve  command, adapter, query, queryRewritten (with --rephrase only), k, mode, indexState, count, poolSize (first-pass size, before -k), budgetMode, confidence (none|weak|ok),',
   '            atoms[{id,title,domain,body,score,firstPassScore + rerankScore (with --rerank only),sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}],',
   '            skipped[{id,sourcePath,estimatedTokens}], note',
   '  bench     command, markdownPath, jsonPath, adapters[], skippedAdapters[{name,reason}], corpora[], goldenSet',
