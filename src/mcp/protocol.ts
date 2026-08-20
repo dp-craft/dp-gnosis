@@ -57,12 +57,20 @@ export type AnswerRunner = (input: AnswerInput) => Promise<CliResult>;
  * The ONE argv the tool ever runs. `-k` is OMITTED when the caller states no
  * `k` — inventing a second default here would let the MCP surface and the CLI
  * answer the same question with different depths.
+ *
+ * `--rerank` is UNCONDITIONAL and deliberately NOT a tool parameter: both
+ * consumer surfaces — this one and the runner's nav path — now serve the
+ * measured champion configuration, so a caller cannot end up with first-pass
+ * BM25 (vault nDCG@10 0.4894 vs champion 0.5791; vault-hu 0.4868 vs 0.7699).
+ * A refused rerank still returns the first-pass pack as EXIT_PARTIAL, so this
+ * never turns an answer into a failure.
  */
 export const answerArgv = (input: AnswerInput): readonly string[] => [
   'answer',
   input.question,
   ...(input.k === undefined ? [] : ['-k', String(input.k)]),
   '--json',
+  '--rerank',
   ...(input.domain === undefined ? [] : ['--domain', input.domain]),
 ];
 

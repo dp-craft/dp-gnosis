@@ -150,14 +150,19 @@ describe('the exit code is the contract, mirrored not flattened', () => {
     expect(firstText(response)).toContain('unknown --domain value');
   });
 
+  // AC delta: the argv now carries --rerank unconditionally. The MCP surface
+  // used to serve first-pass BM25 (vault nDCG@10 0.4894 vs champion 0.5791;
+  // vault-hu 0.4868 vs 0.7699) while the runner nav path reranked — two
+  // consumer surfaces answering the same question at different quality.
   it('omits -k entirely when the caller states no k, leaving the default to the CLI', () => {
-    expect(answerArgv({ question: 'why' })).toEqual(['answer', 'why', '--json']);
+    expect(answerArgv({ question: 'why' })).toEqual(['answer', 'why', '--json', '--rerank']);
     expect(answerArgv({ question: 'why', k: 3, domain: 'runner' })).toEqual([
       'answer',
       'why',
       '-k',
       '3',
       '--json',
+      '--rerank',
       '--domain',
       'runner',
     ]);
@@ -192,6 +197,19 @@ const tinyCorpus = async (): Promise<string> => {
 };
 
 describe('ONE code path — the tool text IS the CLI pack', () => {
+  // A closed port: this suite MUST NOT depend on a served cross-encoder (a cold
+  // llama-swap load has measured 1 m 59 s). The refusal is what both surfaces
+  // then share, so the byte-identity claim is about the argv, not the network.
+  const CLOSED_RERANK_URL = 'http://127.0.0.1:9';
+
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', CLOSED_RERANK_URL);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('returns byte-for-byte the pack field of a direct answer --json', async () => {
     const profilePath = await tinyCorpus();
     const scoped: AnswerRunner = async (input: AnswerInput) =>
@@ -204,15 +222,26 @@ describe('ONE code path — the tool text IS the CLI pack', () => {
       '-k',
       '3',
       '--json',
+      '--rerank',
       '--profile',
       profilePath,
     ]);
-    const pack = (JSON.parse(direct.stdout) as Json)['pack'];
+    const payload = JSON.parse(direct.stdout) as Json;
+    const pack = payload['pack'];
+    const note = payload['note'];
 
-    expect(direct.exitCode).toBe(0);
+    // AC delta: both surfaces now pass --rerank, and this test pins the reranker
+    // to a closed port so the refusal is deterministic and offline. A refused
+    // rerank is EXIT_PARTIAL (3), not a failure — the first-pass pack is still
+    // rendered, identically on both surfaces, and the note names the refusal
+    // (which is what proves the MCP argv asked for the rerank at all).
+    expect(direct.exitCode).toBe(3);
     expect(typeof pack).toBe('string');
     expect(String(pack)).toContain('mcpknowledge');
-    expect(firstText(response)).toBe(pack);
+    expect(String(note)).toContain('rerank');
+    // Byte-identity under the PARTIAL contract (protocol.ts packText): the pack
+    // verbatim, then the note. Nothing is re-rendered here.
+    expect(firstText(response)).toBe(`${String(pack)}\n\n${String(note)}`);
   });
 });
 
