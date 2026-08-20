@@ -11,6 +11,7 @@
  * three small files over node builtins, and the protocol constants below are
  * MIRRORED from it rather than imported.
  */
+import type { GnosisAnswer } from '../api.js';
 import type { CliResult } from '../cli/cli.js';
 import { EXIT_PARTIAL, EXIT_USAGE } from '../cli/outcome.js';
 
@@ -205,23 +206,59 @@ const packText = (
 ): string =>
   exitCode === EXIT_PARTIAL && note !== undefined ? `${pack}\n\n${note}` : pack;
 
+/**
+ * Names every key this surface READS that the re-parsed payload does not
+ * soundly carry. Empty means the projection below is sound at runtime.
+ */
+const answerDefects = (payload: Readonly<Record<string, unknown>>): readonly string[] => [
+  ...(typeof payload['pack'] === 'string' ? [] : ['pack']),
+  ...(payload['note'] === undefined || typeof payload['note'] === 'string' ? [] : ['note']),
+];
+
+/**
+ * The ONE narrowing between the CLI's stdout and this tool's text.
+ *
+ * A re-parse cannot be made type-safe by DECLARATION — bytes arrive at runtime,
+ * so a `parsePayload` merely ANNOTATED `GnosisAnswer` would read as a fix while
+ * still handing a missing key on as `undefined`. This checks instead, and
+ * returns `null` — never `{}`, never a half-filled object — when the check
+ * fails, so a caller cannot mistake a broken payload for an empty answer.
+ *
+ * What it verifies is exactly the slice this surface consumes: `pack` present
+ * and a string, `note` a string when present. The remaining keys of
+ * {@link GnosisAnswer} are the PRODUCER's declared contract (`answerCommand.ts`
+ * `payload`) and are neither read nor re-checked here — re-verifying them would
+ * make this file a second, drifting copy of that contract.
+ */
+const asAnswer = (payload: Readonly<Record<string, unknown>>): GnosisAnswer | null =>
+  answerDefects(payload).length === 0 ? (payload as GnosisAnswer) : null;
+
+/** A refused payload MUST NOT read as an empty answer, so it names the keys. */
+const defectText = (defects: readonly string[], stdout: string): string =>
+  defects.length === 0
+    ? stdout
+    : `dp-gnosis returned no usable answer: its --json payload is missing ${defects.join(', ')}. Raw stdout: ${stdout}`;
+
 /** A usage failure MUST NOT read as an empty answer, so it names the refusal. */
 const failureText = (
   payload: Readonly<Record<string, unknown>>,
   stdout: string
-): string => stringField(payload, 'error') ?? stringField(payload, 'note') ?? stdout;
+): string =>
+  stringField(payload, 'error') ??
+  stringField(payload, 'note') ??
+  defectText(answerDefects(payload), stdout);
 
 /**
  * The exit code IS the contract and is mirrored, never flattened: 0 and 3 both
- * deliver the pack, 2 — or any payload carrying no pack at all — is an error.
+ * deliver the pack, 2 — or any payload the narrowing refuses — is an error.
  * The pack is READ OUT of the `--json` payload and never re-rendered here.
  */
 const toolResult = (result: CliResult): unknown => {
   const payload = parsePayload(result.stdout);
-  const pack = stringField(payload, 'pack');
-  return pack === undefined || result.exitCode === EXIT_USAGE
+  const answer = asAnswer(payload);
+  return answer === null || result.exitCode === EXIT_USAGE
     ? content(failureText(payload, result.stdout), true)
-    : content(packText(pack, result.exitCode, stringField(payload, 'note')), false);
+    : content(packText(answer.pack, result.exitCode, answer.note), false);
 };
 
 /**

@@ -169,6 +169,54 @@ describe('the exit code is the contract, mirrored not flattened', () => {
   });
 });
 
+/**
+ * A JSON re-parse cannot be made type-safe by DECLARING a type over it — the
+ * bytes arrive at runtime. What is proved here is that the narrowing is a real
+ * runtime check and that its refusal is LOUD: it names the key it wanted. The
+ * `6fa79b54` defect class is a mirrored/misread key rendering as empty output,
+ * so "not empty" is asserted beside "names the key".
+ */
+describe('the re-parsed payload is NARROWED, and refuses loudly', () => {
+  it('names the missing key when the payload carries no pack at all', async () => {
+    const response = await reply(call({ question: 'q' }), runner(cli(0, { count: 0 })));
+
+    expect(resultOf(response)['isError']).toBe(true);
+    expect(firstText(response)).toContain('pack');
+    expect(firstText(response).length).toBeGreaterThan(0);
+  });
+
+  it('names the missing key when stdout is not JSON at all', async () => {
+    const response = await reply(
+      call({ question: 'q' }),
+      runner({ exitCode: 0, stdout: 'npm run banner\n', stderr: '' })
+    );
+
+    expect(resultOf(response)['isError']).toBe(true);
+    expect(firstText(response)).toContain('pack');
+    expect(firstText(response)).toContain('npm run banner');
+  });
+
+  it('refuses an empty stdout with a message, never with an empty answer', async () => {
+    const response = await reply(
+      call({ question: 'q' }),
+      runner({ exitCode: 0, stdout: '', stderr: '' })
+    );
+
+    expect(resultOf(response)['isError']).toBe(true);
+    expect(firstText(response)).toContain('pack');
+  });
+
+  it('refuses a payload whose note is not a string instead of dropping it', async () => {
+    const response = await reply(
+      call({ question: 'q' }),
+      runner(cli(3, { pack: 'PACK BODY', note: 42 }))
+    );
+
+    expect(resultOf(response)['isError']).toBe(true);
+    expect(firstText(response)).toContain('note');
+  });
+});
+
 const DOC = (term: string): string =>
   `# ${term} handbook\n\nprose about ${term} written at enough length that this section stands on its own as an atom of the corpus rather than folding into a neighbour, carrying real sentences about the ${term} subject matter\n`;
 
@@ -240,8 +288,11 @@ describe('ONE code path — the tool text IS the CLI pack', () => {
     expect(String(pack)).toContain('mcpknowledge');
     expect(String(note)).toContain('rerank');
     // Byte-identity under the PARTIAL contract (protocol.ts packText): the pack
-    // verbatim, then the note. Nothing is re-rendered here.
+    // verbatim, then the note. Nothing is re-rendered here — and the narrowing
+    // that now stands between the two MUST NOT turn a real pack into a refusal,
+    // so the absence of isError is asserted beside the bytes.
     expect(firstText(response)).toBe(`${String(pack)}\n\n${String(note)}`);
+    expect(resultOf(response)['isError']).toBeUndefined();
   });
 });
 
