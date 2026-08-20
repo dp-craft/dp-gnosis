@@ -57,7 +57,7 @@ const touchAhead = (file: string): void => {
   utimesSync(resolve(atomsDir, file), when, when);
 };
 
-const build = (): Promise<boolean> => buildMiniSearchIndex({ atomsDir, indexPath });
+const build = (): Promise<number | undefined> => buildMiniSearchIndex({ atomsDir, indexPath });
 
 const port = (): KnowledgePort => createMiniSearchAdapter({ atomsDir, indexPath, now: NOW });
 
@@ -545,7 +545,7 @@ describe('createMiniSearchAdapter', () => {
     expect(availability.reason?.length).toBeGreaterThan(0);
     expect(result.indexState).toBe('unavailable');
     expect(result.atoms).toEqual([]);
-    expect(await reloaded.buildMiniSearchIndex({ atomsDir, indexPath })).toBe(false);
+    expect(await reloaded.buildMiniSearchIndex({ atomsDir, indexPath })).toBeUndefined();
     vi.doUnmock('minisearch');
     vi.resetModules();
   });

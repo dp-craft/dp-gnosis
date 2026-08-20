@@ -34,6 +34,8 @@ A bare invocation, `--help` or `-h` prints help and exits 0. An **unknown flag i
 
 Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried blindly.
 
+`index` adds one exit-3 case of its own: the build wrote an index holding **0 atoms** while the atoms directory holds at least one `.md` file — `reason: index-empty`. An EMPTY atoms directory is an empty corpus, not this case, and stays 0.
+
 Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER `--budget-mode` — real atoms were delivered and real atoms were refused) · `indexState unavailable` · `indexState mismatched` (**the index is REFUSED — no search ran**) · a refused `--rephrase` (raw query searched) · a refused `--rerank` (**first-pass ranking returned**, `mode` keeps NO `+rerank` suffix, refusal in `note`). A rerank refusal is never exit 2 — `RERANK_K_INIT` is 100, so discarding the run would bin a full 100-candidate first pass over an unreachable reranker.
 
 ### Commands
@@ -174,7 +176,7 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 | Command | Keys |
 |---|---|
 | `ingest` | `command`, `written`, `skipped[{source,title,reasons[]}]` |
-| `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note` |
+| `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note`, `reason` (present ONLY on the `index-empty` exit 3 — an index WAS built, so `built` stays `true`, and it holds no atoms) |
 | `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable`, when a `--rephrase` / `--rerank` refusal degraded the run, or when `count` is `0` |
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
 | any usage failure | `error` |

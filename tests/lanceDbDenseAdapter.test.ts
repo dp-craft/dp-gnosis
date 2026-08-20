@@ -136,7 +136,7 @@ const stubDownServer = (): void => {
   });
 };
 
-const buildDense = (route: DenseRoute): Promise<boolean> =>
+const buildDense = (route: DenseRoute): Promise<number | undefined> =>
   buildLanceDbDenseIndex({ atomsDir, indexDir, route });
 
 const densePort = (route: DenseRoute, hybridWeight?: number): KnowledgePort =>
@@ -199,7 +199,7 @@ describe('the dense LanceDB routes', () => {
   it(
     'embeds the RAW body at build time and the RAW query at retrieve time',
     async () => {
-      expect(await buildDense('vec')).toBe(true);
+      expect(await buildDense('vec')).toBeGreaterThan(0);
       expect(wireInputs.some(text => text.includes(ALPHA_BODY))).toBe(true);
       expect(wireInputs.some(text => text.includes('zest '))).toBe(false);
 
@@ -359,7 +359,7 @@ describe('the dense LanceDB routes', () => {
     'leaves the frozen lancedb route lexical: no vector column, same ranking',
     async () => {
       const frozenDir = resolve(root, 'index', 'atoms-lancedb');
-      expect(await buildLanceDbIndex({ atomsDir, indexDir: frozenDir })).toBe(true);
+      expect(await buildLanceDbIndex({ atomsDir, indexDir: frozenDir })).toBeGreaterThan(0);
 
       const db = await connect(frozenDir);
       const table = await db.openTable('atoms');

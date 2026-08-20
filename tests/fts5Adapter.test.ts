@@ -56,7 +56,7 @@ const touchAhead = (file: string): void => {
   utimesSync(resolve(atomsDir, file), when, when);
 };
 
-const build = (): void => buildFts5Index({ atomsDir, indexPath });
+const build = (): number => buildFts5Index({ atomsDir, indexPath });
 
 /** A SECOND corpus + index in the same root, deliberately left stale. */
 const staleSiblingPort = (): KnowledgePort => {

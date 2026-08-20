@@ -60,7 +60,7 @@ const touchAhead = (file: string): void => {
   utimesSync(resolve(atomsDir, file), when, when);
 };
 
-const build = (): Promise<boolean> => buildLanceDbIndex({ atomsDir, indexDir });
+const build = (): Promise<number | undefined> => buildLanceDbIndex({ atomsDir, indexDir });
 
 const port = (): KnowledgePort => createLanceDbAdapter({ atomsDir, indexDir, now: NOW });
 
@@ -737,7 +737,7 @@ describe('createLanceDbAdapter', () => {
       expect(availability.reason?.length).toBeGreaterThan(0);
       expect(result.indexState).toBe('unavailable');
       expect(result.atoms).toEqual([]);
-      expect(await reloaded.buildLanceDbIndex({ atomsDir, indexDir })).toBe(false);
+      expect(await reloaded.buildLanceDbIndex({ atomsDir, indexDir })).toBeUndefined();
       vi.doUnmock('@lancedb/lancedb');
       vi.resetModules();
     },

@@ -198,25 +198,31 @@ const indexOptions = (options: BuildMiniSearchIndexOptions): Options<IndexDoc> =
   processTerm: processTermOf(options),
 });
 
-const writeIndex = (ctor: MiniSearchCtor, options: BuildMiniSearchIndexOptions): true => {
+const writeIndex = (ctor: MiniSearchCtor, options: BuildMiniSearchIndexOptions): number => {
   const index = new ctor(indexOptions(options));
-  index.addAll(collectDocs(options.atomsDir));
+  const docs = collectDocs(options.atomsDir);
+  index.addAll(docs);
   rmSync(options.indexPath, { force: true });
   mkdirSync(dirname(options.indexPath), { recursive: true });
   writeFileSync(options.indexPath, JSON.stringify(index), 'utf8');
-  return true;
+  return docs.length;
 };
 
 /**
- * Rebuild the index wholesale from `atomsDir` and persist it. Returns `false`
- * — never throws — when the optional dependency is unavailable, so a caller
- * skips this leg instead of failing.
+ * Rebuild the index wholesale from `atomsDir` and persist it. Returns HOW MANY
+ * atoms were indexed, so a caller can tell a built-but-EMPTY index from a
+ * populated one — a distinction a bare success flag erases, and one that costs
+ * every query its answer with no error anywhere.
+ *
+ * `undefined` — never a throw — when the optional dependency is unavailable, so
+ * a caller skips this leg instead of failing. The two outcomes are different
+ * facts: nothing COULD be built, versus nothing WAS.
  */
 export const buildMiniSearchIndex = async (
   options: BuildMiniSearchIndexOptions
-): Promise<boolean> => {
+): Promise<number | undefined> => {
   const loaded = await loadMiniSearch();
-  return loaded.ok ? writeIndex(loaded.ctor, options) : false;
+  return loaded.ok ? writeIndex(loaded.ctor, options) : undefined;
 };
 
 const asRecord = (value: unknown): Readonly<Record<string, unknown>> | undefined =>

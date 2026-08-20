@@ -260,7 +260,10 @@ const purgePlaceholder = async (table: Table, count: number): Promise<void> => {
   await (count === 0 ? table.delete(PLACEHOLDER_PREDICATE) : Promise.resolve());
 };
 
-const writeIndex = async (lance: LanceModule, options: BuildLanceDbIndexOptions): Promise<true> => {
+const writeIndex = async (
+  lance: LanceModule,
+  options: BuildLanceDbIndexOptions
+): Promise<number> => {
   const entries = collectEntries(options.atomsDir);
   rmSync(options.indexDir, { recursive: true, force: true });
   mkdirSync(dirname(options.indexDir), { recursive: true });
@@ -269,20 +272,26 @@ const writeIndex = async (lance: LanceModule, options: BuildLanceDbIndexOptions)
   await purgePlaceholder(table, entries.length);
   await table.createIndex(BODY_FIELD, { config: lance.Index.fts(FTS_INDEX_OPTIONS) });
   db.close();
-  return true;
+  return entries.length;
 };
 
 /**
  * Rebuild the dataset wholesale from `atomsDir` and persist it. Wholesale
  * rather than incremental because reproducibility is the property under test.
- * Returns `false` — never throws — when the optional dependency is unavailable,
- * so a caller skips this leg instead of failing.
+ *
+ * Returns HOW MANY atoms were indexed, so a caller can tell a built-but-EMPTY
+ * dataset from a populated one — a bare success flag reports the empty one as a
+ * working index and every query then answers nothing with no error anywhere.
+ *
+ * `undefined` — never a throw — when the optional dependency is unavailable, so
+ * a caller skips this leg instead of failing. The two outcomes are different
+ * facts: nothing COULD be built, versus nothing WAS.
  */
 export const buildLanceDbIndex = async (
   options: BuildLanceDbIndexOptions
-): Promise<boolean> => {
+): Promise<number | undefined> => {
   const loaded = await loadLance();
-  return loaded.ok ? writeIndex(loaded.lance, options) : false;
+  return loaded.ok ? await writeIndex(loaded.lance, options) : undefined;
 };
 
 /**

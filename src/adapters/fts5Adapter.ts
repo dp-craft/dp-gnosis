@@ -272,8 +272,13 @@ const writeEntries = (
  * incremental because reproducibility is the property under test: the same
  * corpus MUST produce the same rowids and therefore the same ranking, whatever
  * order the files were created in.
+ *
+ * Returns HOW MANY atoms were indexed. A build that reads a directory full of
+ * atoms and writes zero rows is the project's worst failure shape — an index
+ * that answers every query with nothing and reports success — so the count is
+ * returned rather than discarded, and the caller gates on it.
  */
-export const buildFts5Index = (options: BuildFts5IndexOptions): void => {
+export const buildFts5Index = (options: BuildFts5IndexOptions): number => {
   const entries = collectEntries(options.atomsDir);
   rmSync(options.indexPath, { force: true });
   mkdirSync(dirname(options.indexPath), { recursive: true });
@@ -286,6 +291,7 @@ export const buildFts5Index = (options: BuildFts5IndexOptions): void => {
     corpusDigest: readManifestDigest(options.atomsDir),
   });
   db.close();
+  return entries.length;
 };
 
 /** A stamped id outside `ANALYZERS` REFUSES — a silent fallback would analyze

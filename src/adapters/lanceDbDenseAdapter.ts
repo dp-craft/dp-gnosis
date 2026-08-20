@@ -311,7 +311,7 @@ const indexLexical = async (
 const writeIndex = async (
   lance: LanceModule,
   options: BuildLanceDbDenseIndexOptions
-): Promise<true> => {
+): Promise<number> => {
   const entries = collectEntries(options.atomsDir);
   const rows = await rowsFor(entries, createEmbeddingCache(options.indexDir, EMBED_MODEL_ID));
   rmSync(options.indexDir, { recursive: true, force: true });
@@ -321,13 +321,17 @@ const writeIndex = async (
   await purgePlaceholder(table, entries.length);
   await indexLexical(lance, table, options.route);
   db.close();
-  return true;
+  return entries.length;
 };
 
 /**
  * Rebuild the dataset wholesale from `atomsDir` and persist it.
  *
- * Returns `false` — never throws — when the optional LanceDB dependency is
+ * Returns HOW MANY atoms were indexed, so a caller can tell a built-but-EMPTY
+ * dataset from a populated one — a bare success flag reports the empty one as a
+ * working index and every query then answers nothing with no error anywhere.
+ *
+ * `undefined` — never a throw — when the optional LanceDB dependency is
  * unavailable, so a caller skips this leg exactly as it does for the frozen
  * route. An embedding failure is the OPPOSITE case and THROWS: the dependency
  * being absent means this leg cannot be measured, while a refused embedding
@@ -335,9 +339,9 @@ const writeIndex = async (
  */
 export const buildLanceDbDenseIndex = async (
   options: BuildLanceDbDenseIndexOptions
-): Promise<boolean> => {
+): Promise<number | undefined> => {
   const loaded = await loadLance();
-  return loaded.ok ? await writeIndex(loaded.lance, options) : false;
+  return loaded.ok ? await writeIndex(loaded.lance, options) : undefined;
 };
 
 /**
