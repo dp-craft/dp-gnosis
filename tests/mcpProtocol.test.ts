@@ -355,3 +355,57 @@ describe('zero dependency — the guard', () => {
     ]);
   });
 });
+
+/**
+ * A4 — grounding, not answer material. Byte-identity above is a RELATIVE claim:
+ * it holds just as well if both surfaces render bare ids. This is the absolute
+ * one — the text this surface hands a client carries, for every atom the same
+ * run delivered in `atoms[]`, that atom's own body under its own `[^id]`.
+ *
+ * The atoms come from the direct `--json` run rather than from a fixture, so
+ * the claim is about what the tool actually delivered, not about what the test
+ * hoped it would.
+ */
+interface DeliveredAtom {
+  readonly id: string;
+  readonly body: string;
+  readonly snippet: string;
+}
+
+describe('the MCP text grounds every atom the run delivered', () => {
+  const CLOSED_RERANK_URL = 'http://127.0.0.1:9';
+
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', CLOSED_RERANK_URL);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('carries each delivered atom body under its citation, never a bare id', async () => {
+    const profilePath = await tinyCorpus();
+    const scoped: AnswerRunner = async (input: AnswerInput) =>
+      await runCli([...answerArgv(input), '--profile', profilePath]);
+
+    const response = await reply(call({ question: 'mcpknowledge handbook', k: 3 }), scoped);
+    const direct = await runCli([
+      'answer',
+      'mcpknowledge handbook',
+      '-k',
+      '3',
+      '--json',
+      '--rerank',
+      '--profile',
+      profilePath,
+    ]);
+    const atoms = (JSON.parse(direct.stdout) as Json)['atoms'] as readonly DeliveredAtom[];
+    const text = firstText(response);
+
+    expect(atoms.length).toBeGreaterThan(0);
+    expect(atoms.filter(atom => atom.body === '' && atom.snippet === '').map(atom => atom.id))
+      .toEqual([]);
+    expect(atoms.filter(atom => !text.includes(`[^${atom.id}]`)).map(atom => atom.id)).toEqual([]);
+    expect(atoms.filter(atom => !text.includes(atom.body)).map(atom => atom.id)).toEqual([]);
+  });
+});

@@ -295,3 +295,46 @@ describe('answer honours --domain the way retrieve does', () => {
     expect(parsed(result)['count']).toBe(0);
   });
 });
+
+/**
+ * A4 — grounding, not answer material. `GnosisAtom.snippet` (`api.d.ts`) states
+ * that every delivered atom carries a snippet or a body, never a bare handle.
+ *
+ * Asserted as the NEGATIVE — the ids delivered with no grounding text at all —
+ * because the positive is what the payload happens to do today and would read
+ * as satisfied by a field that exists but says nothing. The snippet is also
+ * checked to be a VERBATIM slice of that atom's own body: grounding a caller
+ * cannot trace back to the atom it is filed under is not grounding.
+ */
+interface DeliveredAtom {
+  readonly id: string;
+  readonly sourcePath: string;
+  readonly body?: string;
+  readonly snippet?: string;
+}
+
+const groundingOf = (atom: DeliveredAtom): string =>
+  [atom.snippet ?? '', atom.body ?? ''].find(text => text.length > 0) ?? '';
+
+/** The delivered atoms carrying an id and a path and nothing to read. */
+const bareHandles = (atoms: readonly DeliveredAtom[]): readonly string[] =>
+  atoms.filter(atom => groundingOf(atom) === '').map(atom => atom.id);
+
+const snippetOutsideBody = (atom: DeliveredAtom): boolean =>
+  atom.snippet === undefined || atom.body === undefined || !atom.body.includes(atom.snippet);
+
+describe('answer --json — every delivered atom carries grounding, never a bare handle', () => {
+  it('delivers a non-empty snippet cut from that atom own body', async () => {
+    const payload = parsed(await answer(atomsDir, ['--json']));
+    const atoms = payload['atoms'] as readonly DeliveredAtom[];
+
+    expect(atoms.length).toBeGreaterThan(1);
+    expect(bareHandles(atoms)).toEqual([]);
+    expect(atoms.filter(snippetOutsideBody).map(atom => atom.id)).toEqual([]);
+    expect(atoms.filter(atom => (atom.snippet ?? '') === '').map(atom => atom.id)).toEqual([]);
+  });
+
+  it('flags an atom reduced to its id and its path', () => {
+    expect(bareHandles([{ id: 'handle', sourcePath: '/atoms/handle.md' }])).toEqual(['handle']);
+  });
+});

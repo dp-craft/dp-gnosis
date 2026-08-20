@@ -280,3 +280,60 @@ describe('atomChunk and packChrome — what the budget charges', () => {
     );
   });
 });
+
+/**
+ * A4 — grounding, not answer material. The contract (`api.d.ts`,
+ * `GnosisAtom.snippet`) is that every DELIVERED atom carries grounding text: a
+ * snippet or a body, never a bare handle. Stated as the NEGATIVE, because the
+ * positive is trivially true of this renderer and would assert nothing: the
+ * pack renders bodies, so "the pack carries a body" can never fail here. What
+ * CAN fail is an atom whose citation stands alone with nothing under it.
+ *
+ * The detector is proved on a body-less atom in the second test, so the first
+ * test's empty expectation is known to be an achievable failure and not a
+ * predicate that returns `[]` by construction.
+ */
+const BLOCK_END = (line: string): boolean =>
+  line.startsWith('[^') || line.startsWith('## ') || line === '---';
+
+/** What renders UNDER one atom's citation, up to whatever ends its block. */
+const groundingUnder = (text: string, id: string): string => {
+  const lines = text.split('\n');
+  const start = lines.findIndex(line => line.startsWith(`[^${id}]`));
+  if (start === -1) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex(BLOCK_END);
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
+};
+
+/** The ids the pack cites with no grounding text of their own beneath them. */
+const bareHandles = (text: string, atoms: readonly RetrievedAtom[]): readonly string[] =>
+  atoms.filter(item => groundingUnder(text, item.id) === '').map(item => item.id);
+
+describe('renderPack — every delivered atom carries grounding, never a bare handle', () => {
+  const grounded: readonly RetrievedAtom[] = [
+    atom('g0', 'G.md', { index: 0, count: 2, body: 'distinctive prose of g0 on selector stability' }),
+    atom('g1', 'G.md', { index: 1, count: 2, body: 'distinctive prose of g1 on shallow comparison' }),
+    atom('h0', 'H.md', { body: 'distinctive prose of h0 on store subscriptions' }),
+  ];
+
+  it('renders each cited id over that atom own grounding text', () => {
+    const { text, citations } = renderPack(input(grounded));
+
+    expect(citations).toEqual(['g0', 'g1', 'h0']);
+    expect(bareHandles(text, grounded)).toEqual([]);
+    expect(grounded.map(item => groundingUnder(text, item.id))).toEqual(
+      grounded.map(item => item.body)
+    );
+  });
+
+  it('detects the bare handle a body-less atom would deliver', () => {
+    const bare = atom('bare', 'H.md', { body: '' });
+    const delivered = [...grounded, bare];
+
+    const { text } = renderPack(input(delivered));
+
+    expect(text).toContain('[^bare]');
+    expect(bareHandles(text, delivered)).toEqual(['bare']);
+  });
+});
