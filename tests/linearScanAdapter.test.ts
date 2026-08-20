@@ -186,7 +186,7 @@ describe('createLinearScanAdapter', () => {
 
     const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
       k: 10,
-      domain: 'standards',
+      domains: ['standards'],
     });
 
     expect(ids(result)).toEqual(['standards-atom']);

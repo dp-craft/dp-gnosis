@@ -32,8 +32,9 @@ const selectAtoms = (
   atoms: readonly RetrievedAtom[],
   opts: RetrieveOptions
 ): readonly RetrievedAtom[] => {
-  const domain = opts.domain;
-  const filtered = domain === undefined ? atoms : atoms.filter(atom => atom.domain === domain);
+  const domains = opts.domains;
+  const filtered =
+    domains === undefined ? atoms : atoms.filter(atom => domains.includes(atom.domain));
   return filtered.slice(0, opts.k);
 };
 

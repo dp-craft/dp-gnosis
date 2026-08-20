@@ -60,7 +60,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
-import { assertTypeFilter, atomOrigin } from '../port.js';
+import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import { stemTerm, type TermProcessor, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 
@@ -279,8 +279,8 @@ const readHit = (options: MiniSearchAdapterOptions, hit: SearchHit): RetrievedAt
 const byScoreThenId = (a: RetrievedAtom, b: RetrievedAtom): number =>
   b.score - a.score || compareStrings(a.id, b.id);
 
-const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boolean =>
-  domain === undefined || atom.domain === domain;
+const matchDomain = (atom: RetrievedAtom, domains: readonly AtomDomain[] | undefined): boolean =>
+  domains === undefined || domains.includes(atom.domain);
 
 const matchType = (atom: RetrievedAtom, types: readonly AtomType[] | undefined): boolean =>
   types === undefined || types.includes(atom.type);
@@ -295,7 +295,7 @@ const selectAtoms = (
     .filter(isDefined)
     .map(hit => readHit(options, hit))
     .filter(isDefined)
-    .filter(atom => matchDomain(atom, opts.domain))
+    .filter(atom => matchDomain(atom, opts.domains))
     .filter(atom => matchType(atom, opts.types))
     .sort(byScoreThenId)
     .slice(0, opts.k);
@@ -468,6 +468,7 @@ export const createMiniSearchAdapter = (options: MiniSearchAdapterOptions): Know
     name: MINISEARCH_MODE,
     retrieve: async (query: string, opts: RetrieveOptions): Promise<RetrievalResult> => {
       assertTypeFilter(opts.types);
+      assertDomainFilter(opts.domains);
       return await retrieveFrom(self, { query, opts });
     },
     close: (): void => {

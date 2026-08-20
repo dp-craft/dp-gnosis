@@ -33,7 +33,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
-import { assertTypeFilter, atomOrigin } from '../port.js';
+import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import type { TermProcessor } from '../query.js';
 import { stemTerm, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
@@ -386,8 +386,8 @@ const scoreDoc = (doc: ScannedDoc, terms: readonly string[], corpus: Corpus): nu
 const byScoreThenId = (a: ScoredDoc, b: ScoredDoc): number =>
   b.score - a.score || compareStrings(a.doc.id, b.doc.id);
 
-const inDomain = (doc: ScannedDoc, domain: AtomDomain | undefined): boolean =>
-  domain === undefined || doc.domain === domain;
+const inDomain = (doc: ScannedDoc, domains: readonly AtomDomain[] | undefined): boolean =>
+  domains === undefined || domains.includes(doc.domain);
 
 const matchType = (doc: ScannedDoc, types: readonly AtomType[] | undefined): boolean =>
   types === undefined || types.includes(doc.type);
@@ -406,7 +406,7 @@ const toRetrieved = (scored: ScoredDoc): RetrievedAtom => ({
 
 const rank = (corpus: Corpus, terms: readonly string[], opts: RetrieveOptions): readonly ScoredDoc[] =>
   corpus.docs
-    .filter(doc => inDomain(doc, opts.domain))
+    .filter(doc => inDomain(doc, opts.domains))
     .filter(doc => matchType(doc, opts.types))
     .map(doc => ({ doc, score: scoreDoc(doc, terms, corpus) }))
     .filter(scored => scored.score > 0)
@@ -477,6 +477,7 @@ export const createLinearScanAdapter = (
   name: ADAPTER_NAME,
   retrieve: async (query, opts): Promise<RetrievalResult> => {
     assertTypeFilter(opts.types);
+    assertDomainFilter(opts.domains);
     return await retrieve(contextFor(atomsDir, options), query, opts);
   },
 });

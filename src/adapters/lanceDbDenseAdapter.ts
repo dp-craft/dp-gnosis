@@ -78,7 +78,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
-import { assertTypeFilter, atomOrigin } from '../port.js';
+import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import { stemText } from '../query.js';
 import { fuseLegs } from '../rerank.js';
 import { isRetrievable } from '../retrievability.js';
@@ -445,8 +445,8 @@ const readHit = (
 const byScoreThenId = (a: RetrievedAtom, b: RetrievedAtom): number =>
   b.score - a.score || compareStrings(a.id, b.id);
 
-const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boolean =>
-  domain === undefined || atom.domain === domain;
+const matchDomain = (atom: RetrievedAtom, domains: readonly AtomDomain[] | undefined): boolean =>
+  domains === undefined || domains.includes(atom.domain);
 
 const matchType = (atom: RetrievedAtom, types: readonly AtomType[] | undefined): boolean =>
   types === undefined || types.includes(atom.type);
@@ -464,7 +464,7 @@ const selectCandidates = (
   hits
     .map(hit => readHit(options, hit))
     .filter(isDefined)
-    .filter(atom => matchDomain(atom, opts.domain))
+    .filter(atom => matchDomain(atom, opts.domains))
     .filter(atom => matchType(atom, opts.types))
     .sort(byScoreThenId);
 
@@ -700,7 +700,7 @@ const poolSize = (opts: RetrieveOptions): number => opts.k * OVERFETCH_FACTOR;
  * shape that can starve, and therefore the only one that escalates.
  */
 const isFiltered = (opts: RetrieveOptions): boolean =>
-  opts.domain !== undefined || opts.types !== undefined;
+  opts.domains !== undefined || opts.types !== undefined;
 
 /** Widen the pool until `k` survivors are held or the engine is exhausted. */
 const readUntilSettled = async (
@@ -838,6 +838,7 @@ export const createLanceDbDenseAdapter = (
     name: ROUTE_MODES[options.route],
     retrieve: async (query: string, opts: RetrieveOptions): Promise<RetrievalResult> => {
       assertTypeFilter(opts.types);
+      assertDomainFilter(opts.domains);
       return await retrieveFrom(self, { query, opts });
     },
     close: (): void => release(self.cell),

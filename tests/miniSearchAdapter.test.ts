@@ -246,7 +246,7 @@ describe('createMiniSearchAdapter', () => {
     writeAtom({ file: 'b.md', id: 'atom-b', domain: 'standards', body: 'shared token here' });
     await build();
 
-    const result = await port().retrieve('shared token', { k: 5, domain: 'standards' });
+    const result = await port().retrieve('shared token', { k: 5, domains: ['standards'] });
 
     expect(ids(result.atoms)).toEqual(['atom-b']);
   });
@@ -271,7 +271,7 @@ describe('createMiniSearchAdapter', () => {
     starvedPoolCorpus();
     await build();
 
-    const result = await port().retrieve('widget', { k: 2, domain: 'standards' });
+    const result = await port().retrieve('widget', { k: 2, domains: ['standards'] });
 
     expect(ids(result.atoms)).toEqual(['atom-s0', 'atom-s1']);
   });

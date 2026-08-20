@@ -81,7 +81,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
-import { assertTypeFilter, atomOrigin } from '../port.js';
+import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import {
   analyze,
   type AnalyzerId,
@@ -563,8 +563,8 @@ const readRow = (options: Fts5AdapterOptions, row: IndexRow): RetrievedAtom | un
 const byScoreThenId = (a: RetrievedAtom, b: RetrievedAtom): number =>
   b.score - a.score || compareStrings(a.id, b.id);
 
-const matchDomain = (atom: RetrievedAtom, domain: AtomDomain | undefined): boolean =>
-  domain === undefined || atom.domain === domain;
+const matchDomain = (atom: RetrievedAtom, domains: readonly AtomDomain[] | undefined): boolean =>
+  domains === undefined || domains.includes(atom.domain);
 
 const matchType = (atom: RetrievedAtom, types: readonly AtomType[] | undefined): boolean =>
   types === undefined || types.includes(atom.type);
@@ -576,7 +576,7 @@ const survivorOf = (
   opts: RetrieveOptions
 ): RetrievedAtom | undefined => {
   const atom = readRow(options, row);
-  return atom !== undefined && matchDomain(atom, opts.domain) && matchType(atom, opts.types)
+  return atom !== undefined && matchDomain(atom, opts.domains) && matchType(atom, opts.types)
     ? atom
     : undefined;
 };
@@ -795,6 +795,7 @@ export const createFts5Adapter = (options: Fts5AdapterOptions): KnowledgePort =>
     name: FTS5_MODE,
     retrieve: async (query: string, opts: RetrieveOptions): Promise<RetrievalResult> => {
       assertTypeFilter(opts.types);
+      assertDomainFilter(opts.domains);
       return retrieveFrom(self, query, opts);
     },
     close: self.handle.close,

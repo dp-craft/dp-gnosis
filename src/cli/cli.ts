@@ -32,6 +32,7 @@ import { resolveLocations } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import {
+  DOMAIN_FLAG,
   EXCLUDE_TYPE_FLAG,
   FLAT_FLAG,
   INCLUDE_HISTORY_FLAG,
@@ -145,6 +146,7 @@ const RETRIEVAL_COMMANDS: readonly string[] = [RETRIEVE_COMMAND, ANSWER_COMMAND]
 const RETRIEVAL_FLAGS: readonly string[] = [
   FORMAT_FLAG,
   TYPE_FLAG,
+  DOMAIN_FLAG,
   EXCLUDE_TYPE_FLAG,
   INCLUDE_HISTORY_FLAG,
   MAX_TOKENS_FLAG,

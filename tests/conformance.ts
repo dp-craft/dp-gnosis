@@ -249,7 +249,7 @@ export const describeConformance = (adapterName: string, createAdapter: AdapterF
         { file: 'b.md', id: 'atom-b', domain: 'standards', body: 'shared token here' },
       ]);
 
-      const result = await port.retrieve('shared token', { k: 5, domain: 'standards' });
+      const result = await port.retrieve('shared token', { k: 5, domains: ['standards'] });
 
       expect(idsOf(result.atoms)).toEqual(['atom-b']);
     });

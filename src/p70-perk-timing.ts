@@ -58,7 +58,7 @@ const measureOneK = async (
   for (const query of goldenSet.queries) {
     const domain = asDomain(query.domain);
     const start = performance.now();
-    const result = await port.retrieve(query.query, domain === undefined ? { k } : { k, domain });
+    const result = await port.retrieve(query.query, domain === undefined ? { k } : { k, domains: [domain] });
     latencies.push(performance.now() - start);
 
     const recall = recallAtK(result.atoms.map(a => a.id), query.relevantAtomIds, k);

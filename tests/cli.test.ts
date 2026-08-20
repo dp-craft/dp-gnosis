@@ -90,6 +90,45 @@ const availableAdapters = async (): Promise<readonly string[]> => {
   return ['linear', 'fts5', ...probes.filter(([, ok]) => ok).map(([name]) => name)];
 };
 
+/**
+ * A second corpus root the shipped domain table maps to `standards`. Two
+ * domains are the smallest fixture in which a domain filter can be proved to
+ * SELECT — over a single-domain corpus an unfiltered run and a filtered one are
+ * indistinguishable. The prose is distinct from {@link DOC} because ingest
+ * dedupes by body hash, so a copy would be skipped rather than ingested.
+ */
+const STANDARDS_DOC = [
+  '# Retrieval Standards',
+  '',
+  'standards prose about retrieval conventions and how a knowledge domain is labelled, carrying enough sentences of its own that this section stands alone as an atom of the corpus rather than folding into a neighbouring one',
+  '',
+].join('\n');
+
+/** Widen the scope to both roots through the documented override. */
+const withStandardsDoc = async (fixture: Fixture): Promise<void> => {
+  const dir = join(fixture.repoRoot, 'claude-artifacts');
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'STD.md'), STANDARDS_DOC, 'utf8');
+  vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc,claude-artifacts');
+};
+
+/** Every delivered atom's domain, in delivery order. */
+const domainsOf = (data: Record<string, unknown>): readonly string[] =>
+  (data['atoms'] as readonly Record<string, unknown>[]).map(atom => String(atom['domain']));
+
+const retrieveWide = (fixture: Fixture, extra: readonly string[]): readonly string[] => [
+  'retrieve',
+  'retrieval',
+  '-k',
+  '6',
+  '--adapter',
+  'linear',
+  '--atoms-dir',
+  fixture.atomsDir,
+  '--json',
+  ...extra,
+];
+
 const parseJson = (stdout: string): Record<string, unknown> =>
   JSON.parse(stdout) as Record<string, unknown>;
 
@@ -286,6 +325,31 @@ describe('runCli', () => {
       expect(parseJson(result.stdout)['count']).toBeGreaterThan(0);
     });
 
+    it('selects only atoms of the domain --domain names', async () => {
+      const fixture = await makeFixture();
+      await withStandardsDoc(fixture);
+      await runCli(ingestArgv(fixture));
+
+      const result = await runCli(retrieveWide(fixture, ['--domain', 'standards']));
+
+      expect(result.exitCode).toBe(0);
+      expect(domainsOf(parseJson(result.stdout))).toEqual(['standards']);
+    });
+
+    it('selects both domains of a comma-separated --domain list', async () => {
+      const fixture = await makeFixture();
+      await withStandardsDoc(fixture);
+      await runCli(ingestArgv(fixture));
+
+      const result = await runCli(retrieveWide(fixture, ['--domain', 'standards,docs']));
+
+      expect(result.exitCode).toBe(0);
+      expect([...new Set(domainsOf(parseJson(result.stdout)))].sort()).toEqual([
+        'docs',
+        'standards',
+      ]);
+    });
+
     /**
      * The budget SKIPS an atom it cannot fit and keeps going, and the skip is
      * reported — id, source path and estimated size — so the LLM reading the
@@ -418,6 +482,22 @@ describe('runCli', () => {
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('--type');
+    });
+
+    it('rejects a --domain value outside the vocabulary, naming it and the vocabulary', async () => {
+      const result = await runCli(['retrieve', 'x', '--domain', 'docs,nonsense']);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('nonsense');
+      expect(result.stderr).toContain('standards');
+      expect(result.stdout).toBe('');
+    });
+
+    it('refuses --domain outside retrieve the way an unknown flag is refused', async () => {
+      const result = await runCli(['index', '--domain', 'docs']);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--domain');
     });
 
     it('rejects an unknown flag with exit 2 and names the valid flags', async () => {

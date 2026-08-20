@@ -211,7 +211,7 @@ describe('createFts5Adapter', () => {
     writeAtom({ file: 'b.md', id: 'atom-b', domain: 'standards', body: 'shared token here' });
     build();
 
-    const result = await port().retrieve('shared token', { k: 5, domain: 'standards' });
+    const result = await port().retrieve('shared token', { k: 5, domains: ['standards'] });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-b']);
   });
@@ -532,7 +532,7 @@ describe('createFts5Adapter', () => {
     });
     build();
 
-    const result = await port().retrieve('zustand', { k: 2, domain: 'standards' });
+    const result = await port().retrieve('zustand', { k: 2, domains: ['standards'] });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-s1', 'atom-s2']);
   });

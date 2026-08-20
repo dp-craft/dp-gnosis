@@ -4,6 +4,7 @@
  * survives without parsing output.
  */
 import {
+  ATOM_DOMAINS,
   ATOM_TYPES,
   DEFAULT_EXCLUDED_TYPES,
   DEFAULT_RERANK_PRESET,
@@ -44,6 +45,9 @@ export const HELP_TEXT: string = [
   `  the CLI path only — never ingest, never the bench — leaves ${DEFAULT_EXCLUDED_TYPES.join(' | ')} out of an unfiltered retrieve, so a question is answered from knowledge rather than from the project's own history`,
   `  --exclude-type <type[,type]> REPLACES that default exclusion with the types you name; --include-history restores everything and searches the whole vocabulary`,
   `  --type, --exclude-type and --include-history each state the filter in a different way, so pass at most one — two together is a usage error (exit 2)`,
+  `Domains: --domain <domain[,domain]> on \`retrieve\` and \`answer\` — an atom passes when its domain is in the list; omit it to search every domain`,
+  `  vocabulary: ${ATOM_DOMAINS.join(' | ')}`,
+  `  it is the LOADED profile's vocabulary, so --profile <file> selects a different one and a value outside it is a usage error (exit 2)`,
   `Budget: --max-tokens <n> on \`retrieve\` only (default ${RETRIEVE_TOKEN_BUDGET}) — a CONSERVATIVE UPPER BOUND on tokens, estimated as UTF-8 byte length, never an exact token count`,
   `  it over-reserves: measured 2026-08-18, real atoms run 3.93 bytes/token, so the ${RETRIEVE_TOKEN_BUDGET} default admits roughly 16000 real tokens — size the flag ~4x the window you mean to fill`,
   '  an atom over the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size',

@@ -1,6 +1,6 @@
 import type { AtomFrontmatter } from './atom.js';
 import type { AtomDomain, AtomType } from './config.js';
-import { ATOM_TYPES } from './config.js';
+import { ATOM_DOMAINS, ATOM_TYPES } from './config.js';
 
 /**
  * Whether a retrieval leg actually ran, and against what.
@@ -125,7 +125,14 @@ export interface RetrievedAtom extends AtomOrigin {
 /** Caller-supplied retrieval knobs. */
 export interface RetrieveOptions {
   readonly k: number;
-  readonly domain?: AtomDomain;
+  /**
+   * A candidate passes when its domain is a MEMBER of this list. Absent means
+   * unfiltered — every domain passes. An EMPTY list is refused rather than read
+   * as "match nothing": a caller that computed an empty filter asked for a
+   * result no query can produce, and silently returning zero atoms would
+   * present that bug as an empty corpus.
+   */
+  readonly domains?: readonly AtomDomain[];
   /**
    * A candidate passes when its type is a MEMBER of this list. Absent means
    * unfiltered — every type passes. An EMPTY list is refused rather than read as
@@ -151,6 +158,19 @@ export const EMPTY_TYPES_MESSAGE =
 /** Refuse an empty `types` at the port boundary, before any candidate is read. */
 export const assertTypeFilter = (types: readonly AtomType[] | undefined): void => {
   if (types !== undefined && types.length === 0) throw new Error(EMPTY_TYPES_MESSAGE);
+};
+
+/**
+ * The same wording on the domain axis. The vocabulary it prints is the LOADED
+ * profile's, so a caller running under `--profile` is corrected with the domains
+ * that instance really declares rather than the shipped ones.
+ */
+export const EMPTY_DOMAINS_MESSAGE =
+  `retrieve: "domains" MUST name at least one domain — omit it to search every domain, or pass one of: ${ATOM_DOMAINS.join(' | ')}`;
+
+/** Refuse an empty `domains` at the port boundary, before any candidate is read. */
+export const assertDomainFilter = (domains: readonly AtomDomain[] | undefined): void => {
+  if (domains !== undefined && domains.length === 0) throw new Error(EMPTY_DOMAINS_MESSAGE);
 };
 
 /** The outcome of one retrieval call. */

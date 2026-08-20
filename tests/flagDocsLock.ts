@@ -58,6 +58,7 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '-k': unowned('DEFAULT_K is a module-private literal in src/cli/retrieveCommand.ts'),
   '--format': unowned('the default output mode is a literal in the formatter, not a config constant'),
   '--type': unowned('unset by default — the vocabulary is profile-derived and printed by --help'),
+  '--domain': unowned('unset by default — the vocabulary is the loaded profile\'s and printed by --help'),
   '--exclude-type': owned('DEFAULT_EXCLUDED_TYPES (src/config.ts)', DEFAULT_EXCLUDED_TYPES.join(', ')),
   '--include-history': unowned('boolean, off by default'),
   '--budget-mode': owned('DEFAULT_BUDGET_MODE (src/config.ts)', DEFAULT_BUDGET_MODE),

@@ -11,7 +11,7 @@ import { relative } from 'node:path';
 
 import type { AtomMeasure, SkippedAtom } from '../budget.js';
 import { fitToTokenBudget } from '../budget.js';
-import type { AtomType, BudgetMode } from '../config.js';
+import type { AtomDomain, AtomType, BudgetMode } from '../config.js';
 import {
   ABSTAIN_FLOOR,
   ATOM_TYPES,
@@ -75,6 +75,15 @@ const resolveK = (flags: FlagValues): number | undefined => {
 
 /** The type filter belongs to `retrieve` alone; `cli.ts` refuses it elsewhere. */
 export const TYPE_FLAG = '--type';
+
+/**
+ * The domain filter, `retrieve` and `answer` alone; `cli.ts` refuses it
+ * elsewhere. Its vocabulary is the LOADED profile's `domains`, never the
+ * module-level {@link ATOM_DOMAINS}: a `--profile` instance carries its own
+ * knowledge domains, and validating against the shipped tuple would refuse the
+ * only domains that instance has.
+ */
+export const DOMAIN_FLAG = '--domain';
 
 /**
  * The exclusion override, `retrieve` only; `cli.ts` refuses it elsewhere. It
@@ -391,6 +400,40 @@ const resolveTypes = (flags: FlagValues): TypesResult => {
   return offender === undefined
     ? { ok: true, types: requested.flatMap(value => asType(value) ?? []) }
     : { ok: false, error: typeError(offender) };
+};
+
+/**
+ * `domains: undefined` = no filter reaches the port at all, exactly as with
+ * {@link TypesResult}: the unfiltered call is the path every recorded number was
+ * measured on, and spelling the whole vocabulary out instead would change the
+ * candidate walk.
+ */
+export type DomainsResult =
+  | { readonly ok: true; readonly domains: readonly AtomDomain[] | undefined }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * A value outside the vocabulary is a REFUSAL, never a silently dropped filter,
+ * for the same reason `--type` refuses one: an unfiltered ranking read as a
+ * filtered one is a wrong answer under a success code. The message names the
+ * offending value AND the accepted vocabulary, which is the one the LOADED
+ * profile declares, so a `--profile` caller is corrected with its own domains.
+ */
+const domainError = (offender: string, vocabulary: readonly AtomDomain[]): string =>
+  `${DOMAIN_FLAG} value "${offender}" is outside the closed vocabulary — replace it with one of ${vocabulary.join(' | ')}; pass several as \`${DOMAIN_FLAG} ${vocabulary.slice(0, 2).join(',')}\``;
+
+/** Absent flag reads as "unfiltered"; every named value must be in the vocabulary. */
+export const resolveDomainFilter = (
+  flags: FlagValues,
+  vocabulary: readonly AtomDomain[]
+): DomainsResult => {
+  const raw = stringFlag(flags, DOMAIN_FLAG);
+  if (raw === undefined) return { ok: true, domains: undefined };
+  const requested = splitTypes(raw);
+  const offender = requested.find(value => !vocabulary.includes(value));
+  return offender === undefined
+    ? { ok: true, domains: requested }
+    : { ok: false, error: domainError(offender, vocabulary) };
 };
 
 /**
@@ -869,6 +912,7 @@ type ArgsResult =
     readonly maxTokens: number;
     readonly budgetMode: BudgetMode;
     readonly types: readonly AtomType[] | undefined;
+    readonly domains: readonly AtomDomain[] | undefined;
     /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
     readonly maxPerDoc: number | undefined;
     readonly rerank: boolean;
@@ -884,6 +928,7 @@ interface ResolvedValues {
   readonly maxTokens: number;
   readonly budgetMode: BudgetMode;
   readonly types: readonly AtomType[] | undefined;
+  readonly domains: readonly AtomDomain[] | undefined;
   /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
   readonly maxPerDoc: number | undefined;
 }
@@ -957,31 +1002,54 @@ type PresentationResult =
   | {
     readonly ok: true;
     readonly types: readonly AtomType[] | undefined;
+    readonly domains: readonly AtomDomain[] | undefined;
     readonly maxPerDoc: number | undefined;
   }
   | { readonly ok: false; readonly error: string };
 
-/** WHAT is searched and HOW the answer is arranged — neither one scores. */
-const resolvePresentation = (flags: FlagValues): PresentationResult => {
-  const types = resolveTypeFilter(flags);
+/** The two search filters, once each has parsed — carried together so the
+ * arrangement step below states one shape rather than a growing parameter list. */
+interface SearchFilters {
+  readonly types: readonly AtomType[] | undefined;
+  readonly domains: readonly AtomDomain[] | undefined;
+}
+
+/** The arrangement, added to filters that already parsed. */
+const withMaxPerDoc = (flags: FlagValues, filters: SearchFilters): PresentationResult => {
   const maxPerDoc = resolveMaxPerDoc(flags);
-  if (!types.ok) return { ok: false, error: types.error };
   return maxPerDoc.ok
-    ? { ok: true, types: types.types, maxPerDoc: maxPerDoc.maxPerDoc }
+    ? { ok: true, ...filters, maxPerDoc: maxPerDoc.maxPerDoc }
     : { ok: false, error: maxPerDoc.error };
 };
 
+/**
+ * WHAT is searched and HOW the answer is arranged — neither one scores. The
+ * domain vocabulary is the invocation's own profile, so a `--profile` run is
+ * validated against the domains it actually declares.
+ */
+const resolvePresentation = (
+  flags: FlagValues,
+  vocabulary: readonly AtomDomain[]
+): PresentationResult => {
+  const types = resolveTypeFilter(flags);
+  const domains = resolveDomainFilter(flags, vocabulary);
+  if (!types.ok) return { ok: false, error: types.error };
+  if (!domains.ok) return { ok: false, error: domains.error };
+  return withMaxPerDoc(flags, { types: types.types, domains: domains.domains });
+};
+
 /** Every value flag, resolved together so the command states one refusal path. */
-const resolveArgs = (flags: FlagValues): ArgsResult => {
+const resolveArgs = (flags: FlagValues, vocabulary: readonly AtomDomain[]): ArgsResult => {
   const counts = resolveCounts(flags);
   if (!counts.ok) return { ok: false, error: counts.error };
-  const presentation = resolvePresentation(flags);
+  const presentation = resolvePresentation(flags, vocabulary);
   if (!presentation.ok) return { ok: false, error: presentation.error };
   return withRerankArgs(flags, {
     k: counts.k,
     maxTokens: counts.maxTokens,
     budgetMode: counts.budgetMode,
     types: presentation.types,
+    domains: presentation.domains,
     maxPerDoc: presentation.maxPerDoc,
   });
 };
@@ -995,6 +1063,12 @@ export interface RetrieveRequest {
   readonly budgetMode: BudgetMode;
   /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
   readonly types: readonly AtomType[] | undefined;
+  /**
+   * The knowledge domains to search, as `--domain` named them against THIS
+   * invocation's profile. `undefined` = unfiltered; never an empty list, which
+   * the port refuses.
+   */
+  readonly domains: readonly AtomDomain[] | undefined;
   /**
    * At most this many atoms from one source document, and the answer arranged by
    * document. `undefined` = `--flat`: no cap, no grouping, no position marker.
@@ -1196,10 +1270,15 @@ const cappedPoolK = (request: RetrieveRequest): number => {
 const firstPassK = (request: RetrieveRequest): number =>
   request.rerank ? Math.max(cappedPoolK(request), RERANK_K_INIT) : cappedPoolK(request);
 
-const retrieveOptions = (request: RetrieveRequest): RetrieveOptions => {
-  const k = firstPassK(request);
-  return request.types === undefined ? { k } : { k, types: request.types };
-};
+/**
+ * Each filter is OMITTED rather than sent as `undefined`, so an adapter cannot
+ * read "no filter asked for" as "filter on nothing".
+ */
+const retrieveOptions = (request: RetrieveRequest): RetrieveOptions => ({
+  k: firstPassK(request),
+  ...(request.types === undefined ? {} : { types: request.types }),
+  ...(request.domains === undefined ? {} : { domains: request.domains }),
+});
 
 /** The ranking to render, plus the reranker's refusal when there was one. */
 interface RankedOutcome {
@@ -1481,6 +1560,17 @@ const search = async (
 
 type ResolvedArgs = Extract<ArgsResult, { readonly ok: true }>;
 
+/**
+ * The three fields NO argv can state: each one is written later by the leg that
+ * produces it, and starting them absent is what lets a reader tell "did not run"
+ * from "ran and refused".
+ */
+const UNRESOLVED = {
+  queryRewritten: undefined,
+  rephraseRefusal: undefined,
+  rerankRefusal: undefined,
+} as const;
+
 /** The request as argv described it — every refusal field still unresolved. */
 const initialRequest = (
   context: CommandContext,
@@ -1493,14 +1583,13 @@ const initialRequest = (
   maxTokens: args.maxTokens,
   budgetMode: args.budgetMode,
   types: args.types,
+  domains: args.domains,
   maxPerDoc: args.maxPerDoc,
   rerank: args.rerank,
   rerankOptions: args.rerankOptions,
   minRelevance: args.minRelevance,
   rephrase: args.rephrase,
-  queryRewritten: undefined,
-  rephraseRefusal: undefined,
-  rerankRefusal: undefined,
+  ...UNRESOLVED,
 });
 
 /**
@@ -1543,7 +1632,7 @@ export const performRetrieval = async (
   overhead?: string
 ): Promise<RetrievalOutcome> => {
   const query = context.positionals.join(' ');
-  const args = resolveArgs(context.flags);
+  const args = resolveArgs(context.flags, context.profile.domains);
   if (query.length === 0) return { ok: false, outcome: usageError(NO_QUERY) };
   if (!args.ok) return { ok: false, outcome: usageError(args.error) };
   return await searchWithBudget(initialRequest(context, query, args), charged, overhead);

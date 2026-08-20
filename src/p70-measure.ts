@@ -136,7 +136,7 @@ const measureAdapter = async (
   const perQuery = await mapSequential(goldenSet.queries, async query => {
     const domain = asDomain(query.domain);
     const start = performance.now();
-    const result: RetrievalResult = await port.retrieve(query.query, domain === undefined ? { k: RETRIEVE_K } : { k: RETRIEVE_K, domain });
+    const result: RetrievalResult = await port.retrieve(query.query, domain === undefined ? { k: RETRIEVE_K } : { k: RETRIEVE_K, domains: [domain] });
     const latencyMs = performance.now() - start;
     return scoreMultiK(query, result.atoms.map(atom => atom.id), latencyMs);
   });

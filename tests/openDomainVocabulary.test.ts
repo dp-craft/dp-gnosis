@@ -62,6 +62,21 @@ interface AtomRow {
 const atomsOf = (payload: Record<string, unknown>): readonly AtomRow[] =>
   payload['atoms'] as readonly AtomRow[];
 
+/** One retrieval against a named instance, with whatever extra flags a case adds. */
+const retrieveFrom = (
+  instance: Instance,
+  extra: readonly string[]
+): readonly string[] => [
+  'retrieve',
+  'vatszabaly',
+  '--adapter',
+  'fts5',
+  '--profile',
+  instance.profilePath,
+  '--json',
+  ...extra,
+];
+
 describe('a domain the shipped profile never declares', () => {
   it('ingests, indexes and retrieves from a profile file alone, with no TypeScript edit', async () => {
     const instance = await makeInstance();
@@ -91,5 +106,25 @@ describe('a domain the shipped profile never declares', () => {
     expect(found['indexState']).toBe('ready');
     expect(found['count']).toBeGreaterThan(0);
     expect(atomsOf(found).map(atom => atom.domain)).toContain(FOREIGN_DOMAIN);
+  });
+  /**
+   * The vocabulary `--domain` is validated against MUST be the loaded profile's,
+   * not the shipped tuple: an instance can only filter on the domains it
+   * declares, and the shipped names are exactly the ones it must refuse.
+   */
+  it('accepts its own domain in --domain and exits 2 on a shipped one it never declared', async () => {
+    const instance = await makeInstance();
+    await runCli(['ingest', '--profile', instance.profilePath, '--json']);
+    await runCli(['index', '--adapter', 'fts5', '--profile', instance.profilePath, '--json']);
+
+    const own = await runCli(retrieveFrom(instance, ['--domain', FOREIGN_DOMAIN]));
+    const foreign = await runCli(retrieveFrom(instance, ['--domain', 'docs']));
+
+    expect(own.exitCode).toBe(0);
+    expect(atomsOf(jsonOf(own.stdout)).map(atom => atom.domain)).toContain(FOREIGN_DOMAIN);
+    expect(foreign.exitCode).toBe(2);
+    // Under `--json` the refusal is the payload's `error`, not stderr.
+    expect(String(jsonOf(foreign.stdout)['error'])).toContain('docs');
+    expect(String(jsonOf(foreign.stdout)['error'])).toContain(FOREIGN_DOMAIN);
   });
 });

@@ -405,12 +405,12 @@ describe('golden-query filters reach the port', () => {
   it('combines domain and type independently', async () => {
     const calls = await optionsSeen([filtered('q-both', 'runner', 'adr')]);
 
-    expect(calls).toContainEqual({ k: 3, domain: 'runner', types: ['adr'] });
+    expect(calls).toContainEqual({ k: 3, domains: ['runner'], types: ['adr'] });
   });
 
   it('keeps a domain-only query free of a type filter', async () => {
     const calls = await optionsSeen([filtered('q-domain', 'runner', null)]);
 
-    expect(calls).toContainEqual({ k: 3, domain: 'runner' });
+    expect(calls).toContainEqual({ k: 3, domains: ['runner'] });
   });
 });

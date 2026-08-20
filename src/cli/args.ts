@@ -33,6 +33,10 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--format': { kind: 'value', placeholder: '<text|json|xml>' },
   // `retrieve` only, refused elsewhere through the same unknown-flag path.
   '--type': { kind: 'value', placeholder: '<type[,type]>' },
+  // `retrieve` and `answer` only: the knowledge domains to search. The
+  // vocabulary is the LOADED profile's, so `--profile` changes what is
+  // accepted and `--help` prints it rather than this table stating it.
+  '--domain': { kind: 'value', placeholder: '<domain[,domain]>' },
   // `retrieve` only: REPLACES the profile's default type exclusion, so the
   // caller states the whole exclusion rather than adding to an invisible one.
   '--exclude-type': { kind: 'value', placeholder: '<type[,type]>' },

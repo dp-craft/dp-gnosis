@@ -215,3 +215,21 @@ describe('answer under a small --max-tokens', () => {
     expect(result.stdout.trimEnd().split('\n').at(-1)).toBe(PACK_CLOSE);
   });
 });
+
+/**
+ * `answer` runs the SAME pipeline as `retrieve`, so a filter it silently
+ * ignored would hand a caller a pack wider than the one it asked for.
+ */
+describe('answer honours --domain the way retrieve does', () => {
+  it('packs the atoms when their own domain is named', async () => {
+    const result = await answer(atomsDir, ['--json', '--domain', 'docs']);
+
+    expect(parsed(result)['count']).toBeGreaterThan(0);
+  });
+
+  it('packs nothing when a domain the corpus does not carry is named', async () => {
+    const result = await answer(atomsDir, ['--json', '--domain', 'adr']);
+
+    expect(parsed(result)['count']).toBe(0);
+  });
+});

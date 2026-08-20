@@ -53,7 +53,7 @@ describe('createFakeAdapter', () => {
   it('excludes foreign-domain atoms when a domain filter is set', async () => {
     const result = await createFakeAdapter([RUNNER_A, STANDARDS_C, RUNNER_B]).retrieve('q', {
       k: 10,
-      domain: 'standards',
+      domains: ['standards'],
     });
 
     expect(result.atoms).toEqual([STANDARDS_C]);
@@ -62,7 +62,7 @@ describe('createFakeAdapter', () => {
   it('applies the domain filter before truncating to k', async () => {
     const result = await createFakeAdapter([STANDARDS_C, RUNNER_A, RUNNER_B]).retrieve('q', {
       k: 2,
-      domain: 'runner',
+      domains: ['runner'],
     });
 
     expect(result.atoms).toEqual([RUNNER_A, RUNNER_B]);

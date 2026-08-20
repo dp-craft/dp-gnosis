@@ -184,7 +184,7 @@ const measureReranker = async (
     // First-pass: retrieve K_INIT candidates via fts5
     const retrieval: RetrievalResult = await fts5Port.retrieve(
       query.query,
-      domain === undefined ? { k: K_INIT } : { k: K_INIT, domain }
+      domain === undefined ? { k: K_INIT } : { k: K_INIT, domains: [domain] }
     );
 
     // Extract atom bodies for reranker input, truncated per strategy
