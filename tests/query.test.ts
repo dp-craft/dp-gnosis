@@ -192,8 +192,10 @@ describe('analyzer chains', () => {
     expect(mismatched).toHaveLength(0);
   });
 
-  it('defaults to the ident-porter-fold chain, a superset of porter-fold on prose', () => {
-    expect(DEFAULT_ANALYZER).toBe('ident-porter-fold');
+  // `ident-porter-fold` held this default until it was measured and reverted
+  // (`vault` nDCG@10 -0.0155, p=0.0478); it stays selectable, not default.
+  it('defaults to the porter-fold chain', () => {
+    expect(DEFAULT_ANALYZER).toBe('porter-fold');
     expect(analyze('Café Résumés')).toEqual(analyze('Café Résumés', 'porter-fold'));
     expect(analyzeToText('Café Résumés')).toBe(stemText('Café Résumés'));
   });

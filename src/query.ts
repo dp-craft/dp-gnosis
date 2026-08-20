@@ -143,7 +143,16 @@ const porterFoldParts = (raw: string): readonly string[] =>
   PORTER_FOLD_STAGES.reduce<readonly string[]>((tokens, stage) => stage(tokens), [raw]);
 
 const WHITESPACE_SPLIT_RE = /\s+/;
-const IDENTIFIER_SHAPE_RE = /[/:_.-]|[a-z][A-Z]/;
+/**
+ * A separator counts ONLY when it is INTERNAL — alphanumeric on both sides. A
+ * trailing `.` or `:` on a prose word (`pack.`, `them:`, `numbers.**`) is
+ * punctuation, not an identifier, and a markdown table rule (`|---|---|`) is
+ * neither; admitting them made 14.7 % of body tokens identifier-shaped and
+ * doubled the token stream for half of those with no retrieval gain — measured
+ * harm on `scifact` (nDCG@10 −0.0188, p=0.0178) and `vault` (−0.0162). Requiring
+ * the separator to be internal drops the same sample to 7.5 %.
+ */
+const IDENTIFIER_SHAPE_RE = /[a-zA-Z0-9][/:_.-]+[a-zA-Z0-9]|[a-z][A-Z]/;
 const NON_SLUG_RE = /[^a-z0-9]+/g;
 const EDGE_UNDERSCORE_RE = /^_+|_+$/g;
 const AT_SIGN = '@';
@@ -152,10 +161,11 @@ const AT_WORD = 'at';
 /**
  * Does this RAW token look like an identifier — a path, a flag, a screaming
  * constant, a dotted call, a camelCase symbol? Prose never carries `/ : _ - .`
- * inside a token and never runs a lowercase letter straight into an uppercase
- * one, so those six shapes separate code-shaped tokens from words without a
- * dictionary. Accents and digits are NOT a signal: `bevallás` and `018` are
- * ordinary words a Hungarian or a version query supplies.
+ * BETWEEN two alphanumerics and never runs a lowercase letter straight into an
+ * uppercase one, so those six shapes separate code-shaped tokens from words
+ * without a dictionary. An edge separator does NOT count — see
+ * `IDENTIFIER_SHAPE_RE`. Accents and digits are NOT a signal: `bevallás` and
+ * `018` are ordinary words a Hungarian or a version query supplies.
  */
 export const isIdentifierShaped = (raw: string): boolean => IDENTIFIER_SHAPE_RE.test(raw);
 
@@ -229,8 +239,19 @@ export const ANALYZERS = {
 /** The name of a chain in `ANALYZERS`. */
 export type AnalyzerId = keyof typeof ANALYZERS;
 
-/** The default everywhere; `porter-fold` is the chain it is a superset of. */
-export const DEFAULT_ANALYZER: AnalyzerId = 'ident-porter-fold';
+/**
+ * The default everywhere.
+ *
+ * `ident-porter-fold` shipped as the default, was measured against it on the
+ * post-boundary corpus (BM25 first stage, both arms at one sha, after one
+ * tightening pass) and REVERTED: `vault` nDCG@10 -0.0155, p=0.0478, 95% CI
+ * [-0.0317, -0.0014] — significant harm on the primary corpus, with `scifact`
+ * -0.0097 (p=0.1286) and `nfcorpus` null beside it. It stays reachable as an
+ * explicit `--analyzer ident-porter-fold` (it carries a non-significant
+ * Hungarian signal, `vault-hu` +0.0416, p=0.1557); MUST NOT be re-proposed as
+ * the default without a new measurement.
+ */
+export const DEFAULT_ANALYZER: AnalyzerId = 'porter-fold';
 
 /** Run `text` through the named chain: enter as `[text]`, reduce the stages in order. */
 export const analyze = (text: string, id: AnalyzerId = DEFAULT_ANALYZER): readonly string[] =>

@@ -656,7 +656,7 @@ describe('fts5 analyzer stamp', () => {
   };
 
   // `porter-fold` is named EXPLICITLY: it is the chain the pre-stamp writer used,
-  // and it stopped being the default when `ident-porter-fold` was added.
+  // and naming it keeps this case pinned to that chain however the default moves.
   it('answers a porter-fold build exactly as the pre-stamp writer did, rows and ranking alike', async () => {
     writeFixture();
     buildFts5Index({ atomsDir, indexPath, analyzer: 'porter-fold' });
@@ -674,7 +674,7 @@ describe('fts5 analyzer stamp', () => {
 
     buildFts5Index({ atomsDir, indexPath });
 
-    expect(readStamp()).toBe('ident-porter-fold');
+    expect(readStamp()).toBe('porter-fold');
   });
 
   it('round-trips a named analyzer: stamped on build, read back on query', async () => {

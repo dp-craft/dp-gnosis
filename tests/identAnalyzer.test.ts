@@ -126,6 +126,25 @@ describe('isIdentifierShaped', () => {
   it.each(['zustand', '018', 'bevallás', 'HTTP'])('treats %s as prose', raw => {
     expect(isIdentifierShaped(raw)).toBe(false);
   });
+
+  it.each(['a.b', 'a_b', 'a:b', 'a/b', 'adr-018'])(
+    'treats the internal separator in %s as identifier shaped',
+    raw => {
+      expect(isIdentifierShaped(raw)).toBe(true);
+    }
+  );
+
+  /**
+   * AN EDGE SEPARATOR IS PUNCTUATION. Prose carrying a trailing `.` or `:` is
+   * the bulk of what the loose predicate admitted, and every admitted token
+   * injected a second, unstemmed copy of itself into the index.
+   */
+  it.each(['pack.', 'them:', 'sequence.', 'numbers.**', '-leading', 'trailing-', '|---|---|'])(
+    'treats the edge separator in %s as prose',
+    raw => {
+      expect(isIdentifierShaped(raw)).toBe(false);
+    }
+  );
 });
 
 describe('ident-porter-fold token stream', () => {
@@ -152,6 +171,18 @@ describe('ident-porter-fold token stream', () => {
   it('emits nothing extra when the token normalizes to nothing', () => {
     expect(analyze('--', 'ident-porter-fold')).toEqual([]);
   });
+
+  /**
+   * THE REGRESSION THIS TIGHTENING EXISTS TO PREVENT: a prose token with a
+   * trailing period must analyse byte-identically under BOTH chains, so it
+   * contributes exactly one term to the index instead of two.
+   */
+  it.each(['pack.', 'them: the sequence.', 'a row of numbers.**'])(
+    'analyses %s byte-identically to porter-fold',
+    text => {
+      expect(analyze(text, 'ident-porter-fold')).toEqual(analyze(text, 'porter-fold'));
+    }
+  );
 
   /**
    * INDEX-SIDE SYMMETRY: a body carrying `@/features/chat` holds the whole-token
