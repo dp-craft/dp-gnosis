@@ -8,6 +8,7 @@
  * delimited containment block in `pack.ts` — and the two flags a pack cannot
  * honour.
  */
+import type { GnosisAnswer } from '../api.js';
 import type { RetrievedAtom } from '../port.js';
 import { fabricatedCitations, synthesizeAnswer } from '../synthesize.js';
 import { stringFlag } from './args.js';
@@ -91,7 +92,7 @@ const packOf = (run: RetrievalRun, extra: readonly string[]): Pack =>
   });
 
 /** Omitted entirely when no rewrite happened, mirroring `retrieve`'s payload. */
-const rewrittenField = (request: RetrieveRequest): Readonly<Record<string, string>> =>
+const rewrittenField = (request: RetrieveRequest): Pick<GnosisAnswer, 'queryRewritten'> =>
   request.queryRewritten === undefined ? {} : { queryRewritten: request.queryRewritten };
 
 /**
@@ -126,7 +127,7 @@ const extraNotes = (synthesis: Synthesis): readonly string[] =>
  * for a run that never asked for a synthesis stays byte-identical, so the
  * documented key set of a plain `answer` is unchanged.
  */
-const synthesisFields = (synthesis: Synthesis): Readonly<Record<string, unknown>> =>
+const synthesisFields = (synthesis: Synthesis): Pick<GnosisAnswer, 'synthesized' | 'answer'> =>
   synthesis.requested
     ? { synthesized: synthesis.answer !== null, answer: synthesis.answer }
     : {};
@@ -165,13 +166,27 @@ const synthesisFor = async (run: RetrievalRun, pack: Pack): Promise<Synthesis> =
 const noteField = (
   run: RetrievalRun,
   extra: readonly string[]
-): Readonly<Record<string, string>> => {
+): Pick<GnosisAnswer, 'note'> => {
   const lines = notesOf(run.request, run.budgeted, extra);
   return lines.length > 0 ? { note: lines.join('\n') } : {};
 };
 
 /** The run's own facts, stated once and shared by both halves of the payload. */
-const runFields = (run: RetrievalRun): Readonly<Record<string, unknown>> => ({
+const runFields = (
+  run: RetrievalRun
+): Pick<
+  GnosisAnswer,
+  | 'command'
+  | 'adapter'
+  | 'query'
+  | 'queryRewritten'
+  | 'k'
+  | 'mode'
+  | 'indexState'
+  | 'count'
+  | 'documents'
+  | 'poolSize'
+> => ({
   command: ANSWER_COMMAND,
   adapter: run.request.context.adapter,
   query: run.request.query,
@@ -193,7 +208,7 @@ const payload = (
   run: RetrievalRun,
   pack: Pack,
   synthesis: Synthesis
-): Readonly<Record<string, unknown>> => ({
+): GnosisAnswer => ({
   ...runFields(run),
   budgetMode: run.request.budgetMode,
   maxTokens: run.budgeted.maxTokens,

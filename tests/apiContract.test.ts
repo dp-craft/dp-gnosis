@@ -32,7 +32,12 @@ describe('api.d.ts is a leaf declaration module', () => {
   it('still declares the exported contract after comment stripping', () => {
     const code = withoutComments(readFileSync(API_PATH, 'utf8'));
 
-    expect(code).toContain('export interface GnosisAnswer');
+    // The ALIAS form is load-bearing, not a style choice: an `interface` gets no
+    // implicit index signature, so `GnosisAnswer` would stop being assignable to
+    // `CommandOutcome.data` (`Readonly<Record<string, unknown>>`) and `payload`
+    // could only be bound to it through a cast. An alias is also closed to
+    // declaration merging, which is what a published contract wants.
+    expect(code).toContain('export type GnosisAnswer');
     expect(code).toContain('export type GnosisExitCode');
   });
 });

@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import type { CliResult } from '../src/cli/cli.js';
 import { runCli } from '../src/cli/cli.js';
 import { PACK_CLOSE, PACK_OPEN } from '../src/cli/pack.js';
+import { REPHRASE_MODEL_ID, SYNTHESIZE_MODEL_ID } from '../src/config.js';
 
 const SUMMARY = '<!-- LLM-PRIMARY: how the layered test model divides the suite -->';
 const INTRO =
@@ -145,6 +146,67 @@ describe('answer --json', () => {
     expect(payload['maxTokens']).toBe(16000);
     expect(payload['packTokens']).toBeGreaterThan(0);
     expect(payload['packTokens']).toBeLessThanOrEqual(16000);
+  });
+});
+
+/**
+ * The declared `GnosisAnswer` contract, variant by variant. The key SET is what
+ * a consumer binds to, and the two conditional groups are what make it three
+ * sets rather than one: `--rephrase` adds `queryRewritten`, `--synthesize` adds
+ * `synthesized` and `answer`. Asserted as the WHOLE sorted set, so a key gained
+ * or lost anywhere fails here.
+ *
+ * `note` is in all three: this fixture's four matches hit the default
+ * `--max-per-doc 2`, and every variant reports that cap.
+ */
+const sortedKeys = (result: CliResult): readonly string[] => Object.keys(parsed(result)).sort();
+
+const okResponse = (body: unknown): unknown => ({
+  ok: true,
+  status: 200,
+  text: async (): Promise<string> => JSON.stringify(body),
+});
+
+/** Answers both llama-swap endpoints in-process: no server, no network. */
+const stubServer = (model: string, content: string): void => {
+  vi.stubGlobal('fetch', async (url: string): Promise<unknown> =>
+    url.endsWith('/v1/models')
+      ? okResponse({ data: [{ id: model }] })
+      : okResponse({ choices: [{ message: { role: 'assistant', content } }] })
+  );
+};
+
+describe('answer --json — the key set of every variant', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('plain: the required keys and the note, with no synthesis or rewrite key', async () => {
+    expect(sortedKeys(await answer(atomsDir, ['--json']))).toEqual(
+      [...REQUIRED_KEYS, 'note'].sort()
+    );
+  });
+
+  it('--rephrase: adds queryRewritten', async () => {
+    stubServer(REPHRASE_MODEL_ID, 'layered test model tier');
+    // Pinned to a temp path: the rewrite cache is written beside the index.
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'gnosis-answer-rephrase-'));
+    const result = await answer(atomsDir, [
+      '--json',
+      '--rephrase',
+      '--index-path',
+      join(cacheRoot, 'index.sqlite'),
+    ]);
+
+    expect(sortedKeys(result)).toEqual([...REQUIRED_KEYS, 'note', 'queryRewritten'].sort());
+  });
+
+  it('--synthesize: adds synthesized and answer', async () => {
+    stubServer(SYNTHESIZE_MODEL_ID, 'INSUFFICIENT');
+
+    expect(sortedKeys(await answer(atomsDir, ['--json', '--synthesize']))).toEqual(
+      [...REQUIRED_KEYS, 'note', 'answer', 'synthesized'].sort()
+    );
   });
 });
 

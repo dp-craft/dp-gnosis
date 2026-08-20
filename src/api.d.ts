@@ -12,7 +12,7 @@
 export type GnosisExitCode = 0 | 2 | 3;
 
 /** What a caller asks for. Every field but `query` is optional. */
-export interface GnosisRequest {
+export type GnosisRequest = {
   readonly query: string;
   readonly k?: number;
   readonly adapter?: string;
@@ -25,21 +25,21 @@ export interface GnosisRequest {
   readonly minRelevance?: number;
   readonly maxPerDoc?: number;
   readonly synthesize?: boolean;
-}
+};
 
 /**
  * One atom the budget could not admit. It states the SIZE beside the identity:
  * a caller deciding whether to raise the budget or read the file directly is
  * making a decision about magnitude.
  */
-export interface GnosisSkippedAtom {
+export type GnosisSkippedAtom = {
   readonly id: string;
   readonly sourcePath: string;
   readonly estimatedTokens: number;
-}
+};
 
 /** One delivered atom. */
-export interface GnosisAtom {
+export type GnosisAtom = {
   readonly id: string;
   readonly title: string;
   /** Widened to `string`: the atom-domain vocabulary is runtime-derived. */
@@ -67,10 +67,10 @@ export interface GnosisAtom {
   readonly originStartLine?: number;
   /** Reserved for R4.2 — not populated yet. */
   readonly originEndLine?: number;
-}
+};
 
 /** The `--json` payload of `answer`. */
-export interface GnosisAnswer {
+export type GnosisAnswer = {
   readonly command: string;
   readonly adapter: string;
   readonly query: string;
@@ -95,4 +95,4 @@ export interface GnosisAnswer {
   readonly synthesized?: boolean;
   readonly answer?: string | null;
   readonly note?: string;
-}
+};
