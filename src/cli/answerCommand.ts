@@ -9,6 +9,7 @@
  * honour.
  */
 import type { RetrievedAtom } from '../port.js';
+import { fabricatedCitations, synthesizeAnswer } from '../synthesize.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
 import type { ChargedText } from './counting.js';
@@ -16,7 +17,7 @@ import { explainAtoms } from './explain.js';
 import { FORMAT_FLAG } from './format.js';
 import { groupByDocument } from './grouping.js';
 import type { CommandOutcome } from './outcome.js';
-import { usageError } from './outcome.js';
+import { EXIT_PARTIAL, usageError } from './outcome.js';
 import type { Pack } from './pack.js';
 import { atomChunk, packChrome, renderPack, soleGroup } from './pack.js';
 import type { BudgetedResult, RetrievalRun, RetrieveRequest } from './retrieveCommand.js';
@@ -65,27 +66,107 @@ const flagRefusal = (context: CommandContext): string | undefined => {
 const packCharge: ChargedText = (atom: RetrievedAtom): string =>
   atomChunk(atom, true, soleGroup(atom));
 
-const packOf = (request: RetrieveRequest, budgeted: BudgetedResult, confidence: string): Pack =>
+/**
+ * Every note the pack and the payload report, from the run's own notes plus
+ * whatever the synthesis added. One helper, because a refusal the pack prints
+ * and the `note` key omits — or the reverse — would make the two renderings
+ * disagree about the same run.
+ */
+const notesOf = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult,
+  extra: readonly string[]
+): readonly string[] => [...noteLines(request, budgeted), ...extra];
+
+const packOf = (run: RetrievalRun, extra: readonly string[]): Pack =>
   renderPack({
-    query: request.query,
-    atoms: budgeted.result.atoms,
-    confidence,
-    tokens: budgeted.usedTokens,
-    maxTokens: budgeted.maxTokens,
-    budgetMode: request.budgetMode,
-    skipped: budgeted.skipped,
-    notes: noteLines(request, budgeted),
+    query: run.request.query,
+    atoms: run.budgeted.result.atoms,
+    confidence: run.confidence,
+    tokens: run.budgeted.usedTokens,
+    maxTokens: run.budgeted.maxTokens,
+    budgetMode: run.request.budgetMode,
+    skipped: run.budgeted.skipped,
+    notes: notesOf(run.request, run.budgeted, extra),
   });
 
 /** Omitted entirely when no rewrite happened, mirroring `retrieve`'s payload. */
 const rewrittenField = (request: RetrieveRequest): Readonly<Record<string, string>> =>
   request.queryRewritten === undefined ? {} : { queryRewritten: request.queryRewritten };
 
+/**
+ * `answer` only, OPT-IN: synthesise an answer over the pack with a local chat
+ * model. Refused on every other command through the unknown-flag path — a
+ * `retrieve` has no pack to synthesise over, and a flag that did nothing under
+ * a success code is the failure that path exists to prevent.
+ */
+export const SYNTHESIZE_FLAG = '--synthesize';
+
+/**
+ * What the synthesis contributed. `answer` is `null` whenever nothing may be
+ * rendered — the flag was absent, or the model was refused — and `refusal`
+ * carries the message the run reports for it.
+ */
+interface Synthesis {
+  /** Whether `--synthesize` was passed at all — what gates the reported keys. */
+  readonly requested: boolean;
+  readonly answer: string | null;
+  readonly refusal: string | undefined;
+}
+
+/** The flag was not passed: nothing synthesised, nothing refused, nothing reported. */
+const NO_SYNTHESIS: Synthesis = { requested: false, answer: null, refusal: undefined };
+
+/** A refusal is a note the pack prints and the payload's `note` key carries. */
+const extraNotes = (synthesis: Synthesis): readonly string[] =>
+  synthesis.refusal === undefined ? [] : [synthesis.refusal];
+
+/**
+ * Reported only when the flag was PASSED, mirroring `queryRewritten`: a payload
+ * for a run that never asked for a synthesis stays byte-identical, so the
+ * documented key set of a plain `answer` is unchanged.
+ */
+const synthesisFields = (synthesis: Synthesis): Readonly<Record<string, unknown>> =>
+  synthesis.requested
+    ? { synthesized: synthesis.answer !== null, answer: synthesis.answer }
+    : {};
+
+/**
+ * The hard fail. An answer citing an id the pack does not contain is DISCARDED
+ * whole — not printed, not put in the payload — because a fabricated `[^id]`
+ * reads exactly like a sourced claim and the reader has no way to tell them
+ * apart. The pack is still real output and the synthesis was refused, which is
+ * precisely what {@link EXIT_PARTIAL} means; rendering it under exit 0 is the
+ * failure this check exists to prevent.
+ */
+const fabricatedRefusal = (ids: readonly string[]): string =>
+  `${SYNTHESIZE_FLAG}: the synthesised answer was DISCARDED — it cited ${ids.length} footnote id(s) that this knowledge pack does not contain (${ids.join(', ')}); every [^atom-id] MUST be copied verbatim from the pack, so the answer is not shown and only the pack below is; re-run to synthesise again, or drop ${SYNTHESIZE_FLAG} to take the pack alone`;
+
+/**
+ * `INSUFFICIENT` needs no citation and passes here untouched: an answer citing
+ * nothing fabricates nothing, and refusing to answer from a pack that does not
+ * hold the answer is the correct outcome, not a fault.
+ */
+const validated = (answer: string, citations: readonly string[]): Synthesis => {
+  const fabricated = fabricatedCitations(answer, citations);
+  return fabricated.length === 0
+    ? { requested: true, answer, refusal: undefined }
+    : { requested: true, answer: null, refusal: fabricatedRefusal(fabricated) };
+};
+
+/** The question as TYPED — a rewrite is a search string, never what was asked. */
+const synthesisFor = async (run: RetrievalRun, pack: Pack): Promise<Synthesis> => {
+  const outcome = await synthesizeAnswer(run.request.query, pack.text);
+  return outcome.ok
+    ? validated(outcome.answer, pack.citations)
+    : { requested: true, answer: null, refusal: outcome.error };
+};
+
 const noteField = (
-  request: RetrieveRequest,
-  budgeted: BudgetedResult
+  run: RetrievalRun,
+  extra: readonly string[]
 ): Readonly<Record<string, string>> => {
-  const lines = noteLines(request, budgeted);
+  const lines = notesOf(run.request, run.budgeted, extra);
   return lines.length > 0 ? { note: lines.join('\n') } : {};
 };
 
@@ -108,7 +189,11 @@ const runFields = (run: RetrievalRun): Readonly<Record<string, unknown>> => ({
  * built from, so a caller can paste the block or read the fields, and every
  * `[^id]` in the block resolves to an entry of `atoms[]`.
  */
-const payload = (run: RetrievalRun, pack: Pack): Readonly<Record<string, unknown>> => ({
+const payload = (
+  run: RetrievalRun,
+  pack: Pack,
+  synthesis: Synthesis
+): Readonly<Record<string, unknown>> => ({
   ...runFields(run),
   budgetMode: run.request.budgetMode,
   maxTokens: run.budgeted.maxTokens,
@@ -119,16 +204,36 @@ const payload = (run: RetrievalRun, pack: Pack): Readonly<Record<string, unknown
   atoms: explainAtoms(effectiveQuery(run.request), run.budgeted.result.atoms),
   skipped: run.budgeted.skipped,
   neutralised: pack.neutralised,
-  ...noteField(run.request, run.budgeted),
+  ...synthesisFields(synthesis),
+  ...noteField(run, extraNotes(synthesis)),
 });
 
 /**
  * The pack is the text rendering: there is no second human form. `xml` is
  * absent, and the command refuses `--format xml` rather than falling back.
+ *
+ * A synthesised answer renders ABOVE the pack, separated by a blank line: the
+ * answer is what was asked for and the pack below it is the evidence for it,
+ * in the order a reader checks them. The pack's own bytes are untouched.
  */
-const rendered = (run: RetrievalRun): CommandOutcome => {
-  const pack = packOf(run.request, run.budgeted, run.confidence);
-  return { exitCode: run.exitCode, data: payload(run, pack), text: pack.text };
+const rendered = (run: RetrievalRun, synthesis: Synthesis): CommandOutcome => {
+  const pack = packOf(run, extraNotes(synthesis));
+  return {
+    exitCode: synthesis.refusal === undefined ? run.exitCode : EXIT_PARTIAL,
+    data: payload(run, pack, synthesis),
+    text: synthesis.answer === null ? pack.text : `${synthesis.answer}\n\n${pack.text}`,
+  };
+};
+
+/**
+ * The synthesis step, or the absence of one. `requested` is carried separately
+ * from the result because a run WITHOUT the flag must stay byte-identical: it
+ * reports no `synthesized` / `answer` keys at all, exactly as an unrephrased
+ * run reports no `queryRewritten`.
+ */
+const answered = async (run: RetrievalRun, requested: boolean): Promise<CommandOutcome> => {
+  if (!requested) return rendered(run, NO_SYNTHESIS);
+  return rendered(run, await synthesisFor(run, packOf(run, [])));
 };
 
 /**
@@ -141,5 +246,6 @@ export const runAnswerCommand = async (context: CommandContext): Promise<Command
   if (refusal !== undefined) return usageError(refusal);
   const chrome = packChrome(context.positionals.join(' '));
   const outcome = await performRetrieval(context, packCharge, chrome);
-  return outcome.ok ? rendered(outcome.run) : outcome.outcome;
+  if (!outcome.ok) return outcome.outcome;
+  return await answered(outcome.run, context.flags[SYNTHESIZE_FLAG] === true);
 };

@@ -380,6 +380,35 @@ export const REPHRASE_MAX_TOKENS = 120;
 export const REPHRASE_PROMPT_VERSION = 'v2';
 
 /**
+ * The synthesiser behind `answer --synthesize`, overridden by
+ * {@link SYNTHESIZE_MODEL_ENV_VAR}. Served by the SAME llama-swap instance as
+ * the reranker and the rewriter, so it reuses {@link RERANK_DEFAULT_URL} /
+ * {@link RERANK_URL_ENV_VAR} rather than owning a second address that could
+ * drift from them.
+ *
+ * The `-sharp-` suffix is LOAD-BEARING and verified against the running
+ * catalogue: llama-swap serves the template-suffixed variants only. An id
+ * missing the suffix is refused by `GET /v1/models`, which is exactly the
+ * "model not served" refusal a caller then has to debug by hand.
+ */
+export const SYNTHESIZE_MODEL_ID = 'qwen38-27b-q4kxl-ctx130k-mtp-sharp-coding';
+
+/** Environment override for {@link SYNTHESIZE_MODEL_ID}, read in `resolveSynthesizeModel` alone. */
+export const SYNTHESIZE_MODEL_ENV_VAR = 'DP_GNOSIS_SYNTHESIZE_MODEL';
+
+/**
+ * As generous as {@link REPHRASE_TIMEOUT_MS} and for the same reason: a COLD
+ * llama-swap load of a 27B measured 69 s, and a synthesis over a full pack is
+ * a longer generation than a keyword line. A ceiling that expired mid-answer
+ * would present as a call failure and discard a pack the caller already paid
+ * the retrieval for.
+ */
+export const SYNTHESIZE_TIMEOUT_MS = 600_000;
+
+/** Prose over a pack, not a keyword line — but bounded, so a runaway answer ends. */
+export const SYNTHESIZE_MAX_TOKENS = 2_000;
+
+/**
  * The embedding model the dense leg calls, served by llama-swap under this id.
  * One id, one model: vectors from two encoders are not comparable, and the
  * embedding cache keys on this id so a change MISSES rather than serving one

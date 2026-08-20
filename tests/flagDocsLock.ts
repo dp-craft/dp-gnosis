@@ -70,6 +70,7 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--rephrase': unowned('boolean, off by default'),
   '--max-per-doc': owned('DEFAULT_MAX_PER_DOC (src/cli/grouping.ts)', DEFAULT_MAX_PER_DOC),
   '--flat': unowned('boolean, off by default — grouping is on unless it is passed'),
+  '--synthesize': unowned('boolean, off by default'),
   '--json': unowned('boolean, off by default'),
   '--help': unowned('boolean, off by default'),
   '-h': unowned('boolean, off by default'),

@@ -74,6 +74,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `--min-relevance` | `0`…`1` — **`retrieve` and `answer`**, OPT-IN calibrated relevance floor. Drops every delivered atom whose calibrated probability is below it — strictly SUBTRACTIVE, so it never reorders and never changes `poolSize`; each drop is reported. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** and a reranker carrying a measured scale (`RERANK_CALIBRATION`, `src/config.ts`) | unset — no floor, and every retrieved atom is delivered |
 | `--max-per-doc` | non-negative integer — **`retrieve` and `answer`**, at most this many atoms from any ONE source document. The cap is applied to the POOL before the `-k` slice, so a dropped atom frees a slot a lower-ranked document takes; the pool is deepened to `max(k * cap, GROUPED_POOL_FLOOR)` (100) so a tighter cap reaches the extra documents it needs, and when the cap still leaves fewer than `-k` atoms the run says so in `note` rather than under-delivering silently. `--max-per-doc 0` caps nothing. Non-integer or negative FAILS loudly. Exit 2 alongside `--flat` — flat means ungrouped, so a per-document cap would have nothing to cap | `2` — `DEFAULT_MAX_PER_DOC` (`src/cli/grouping.ts`) |
 | `--flat` | boolean — **`retrieve` only** (`answer` refuses it, exit 2), deliver the ranking ungrouped: no per-document cap, no reading-order arrangement and no `(i/n)` position marker, byte for byte the rendering that preceded grouping | off |
+| `--synthesize` | boolean — **`answer` only**, synthesize an answer over the pack with the 27B. Every `[^atom-id]` MUST resolve or the command hard-fails; `INSUFFICIENT` is an allowed answer | off |
 | `--help` / `-h` | boolean | off |
 
 **An unfiltered `retrieve` excludes `defaultExcludedTypes`** — the exclusion is a CLI default only, applied on no other path: never on ingest, never in the bench, so every recorded benchmark number is unaffected. Those types stay ingested and indexed, and `--include-history` searches them.
@@ -143,6 +144,28 @@ confidence: ok   documents: 2   atoms: 4   tokens: 5120 of 64000 (bytes)
 | Contained | every corpus-derived string — body, summary, document title, origin path, query — has each chat-template marker (`<\|im_start\|>`, `[INST]`, `<<SYS>>`, a pack delimiter, a leading `System:` …) wrapped as `[[neutralised:<marker>]]` and counted in `neutralised`. Lossy but VISIBLE: deleting it silently would be an edit of the corpus |
 | Budgeted as what it EMITS | the budget charges each atom the chunk the pack renders — header, citation and body — and the fixed chrome is reserved from `--max-tokens` before the fit, so the ceiling bounds the block. The skip and note report is outside that reserve: it exists because the budget ran out, and hiding it would hide the one thing to act on |
 | Reported | `--json` adds `documents`, `maxTokens`, `packTokens`, `pack` (the whole block), `citations[]` and `neutralised` to the retrieve key set, and keeps `command`, `adapter`, `query`, `queryRewritten`, `k`, `mode`, `indexState`, `count`, `poolSize`, `budgetMode`, `confidence`, `atoms[]`, `skipped[]`, `note` |
+
+#### `--synthesize` — an answer over the pack, or nothing
+
+`answer --synthesize` sends the rendered pack and the question AS TYPED to a local chat model and prints its answer ABOVE the pack; the pack follows unchanged, as the evidence for it. Off by default — without the flag the `answer` path is byte-identical, including its `--json` key set.
+
+| | |
+|---|---|
+| Model | `SYNTHESIZE_MODEL_ID` (`qwen38-27b-q4kxl-ctx130k-mtp-sharp-coding`), overridable with `DP_GNOSIS_SYNTHESIZE_MODEL`. Same llama-swap instance as the reranker and the rewriter, so `DP_GNOSIS_RERANK_URL` selects the address |
+| Thinking mode | the request sends `chat_template_kwargs.enable_thinking: false`, and it is LOAD-BEARING: this is a REASONING model, and with thinking on `content` comes back EMPTY with the whole answer in `reasoning_content` — every synthesis would then refuse |
+| No cache | a synthesis depends on the WHOLE pack, so an honest key is a digest of it and would essentially never hit. `--rephrase` caches because a query repeats verbatim; this does not |
+
+Three outcomes, and only three:
+
+| Outcome | Rendering | Exit |
+|---|---|---|
+| An answer whose every `[^atom-id]` appears in `citations[]` | the answer, a blank line, then the pack | 0 |
+| `INSUFFICIENT` — the pack does not hold an answer | the word, then the pack. It cites nothing, and needs to | 0 |
+| A FABRICATED citation, or a refusal (server down, model not served, call failed, empty `content`) | the pack ALONE, with the offending ids or the refusal in `note` | **3** |
+
+**A fabricated citation discards the whole answer** — it reaches neither stdout nor `--json`. A `[^id]` that resolves to nothing reads exactly like a sourced claim, and the reader has no way to tell them apart; the pack is real output and the synthesis was refused, which is what exit 3 means. Showing it under exit 0 is the failure this check exists to prevent.
+
+With `--json`, `synthesized` (boolean) and `answer` (`string | null`, `null` when none was rendered) join the key set — with `--synthesize` only, exactly as `queryRewritten` appears with `--rephrase` only.
 
 ### `--json` key shape
 

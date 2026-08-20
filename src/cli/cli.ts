@@ -18,7 +18,7 @@ import type { IngestProfile } from '../ingestProfile.js';
 import { loadIngestProfile } from '../ingestProfile.js';
 import type { AdapterName } from './adapter.js';
 import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
-import { runAnswerCommand } from './answerCommand.js';
+import { runAnswerCommand, SYNTHESIZE_FLAG } from './answerCommand.js';
 import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
@@ -158,10 +158,26 @@ const RETRIEVAL_FLAGS: readonly string[] = [
   FLAT_FLAG,
 ];
 
-const misplacedFlag = (args: ParsedArgs): string | undefined =>
+/**
+ * `--synthesize` is narrower still: `answer` ALONE. `retrieve` produces a
+ * ranking, not a pack, so there is nothing for it to synthesise over — and it
+ * is refused through the SAME wording every misplaced flag gets, so the
+ * correction reads identically wherever the flag lands.
+ */
+const ANSWER_ONLY_FLAGS: readonly string[] = [SYNTHESIZE_FLAG];
+
+const misplacedRetrievalFlag = (args: ParsedArgs): string | undefined =>
   RETRIEVAL_COMMANDS.includes(args.command ?? '')
     ? undefined
     : RETRIEVAL_FLAGS.find(flag => args.flags[flag] !== undefined);
+
+const misplacedAnswerFlag = (args: ParsedArgs): string | undefined =>
+  args.command === ANSWER_COMMAND
+    ? undefined
+    : ANSWER_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
+
+const misplacedFlag = (args: ParsedArgs): string | undefined =>
+  misplacedRetrievalFlag(args) ?? misplacedAnswerFlag(args);
 
 const handlerFor = (command: string | undefined): CommandHandler | undefined =>
   command === undefined ? undefined : COMMANDS[command];

@@ -61,6 +61,9 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // `retrieve` only: render the ranking ungrouped and uncapped, as it was before
   // grouping existed. It contradicts a per-document cap, so the two together refuse.
   '--flat': { kind: 'boolean' },
+  // `answer` ONLY, OPT-IN: synthesise an answer over the pack. `retrieve` refuses
+  // it through the same unknown-flag path — it has no pack to synthesise over.
+  '--synthesize': { kind: 'boolean' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },

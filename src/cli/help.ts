@@ -14,7 +14,9 @@ import {
   RERANK_MODEL_ID,
   RERANK_PRESET_NAMES,
   RERANK_URL_ENV_VAR,
-  RETRIEVE_TOKEN_BUDGET
+  RETRIEVE_TOKEN_BUDGET,
+  SYNTHESIZE_MODEL_ENV_VAR,
+  SYNTHESIZE_MODEL_ID
 } from '../config.js';
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
@@ -64,6 +66,10 @@ export const HELP_TEXT: string = [
   '  the block carries each atom body under its source document with a [^atom-id] footnote to cite, and reports confidence, documents, atoms and tokens in its footer',
   '  every chat-template marker found in the corpus text is wrapped as [[neutralised:...]] and counted, so retrieved text cannot end the block or speak as the operator',
   '  the pack chrome is reserved from --max-tokens before the fit, so the ceiling bounds the whole block; --flat and --format xml are usage errors (exit 2) — the pack is grouped and delimited by construction',
+  `Synthesize: --synthesize on \`answer\` only, OFF by default — answers the question over the pack with ${SYNTHESIZE_MODEL_ID} (override with ${SYNTHESIZE_MODEL_ENV_VAR}) and prints it ABOVE the pack, which follows unchanged as the evidence`,
+  '  the model answers ONLY from the pack and cites every claim with the [^atom-id] it came from; INSUFFICIENT is an allowed answer and means the pack does not hold one',
+  '  a citation the pack does not contain DISCARDS the whole answer — it is shown nowhere, the offending ids are named in note, and the run exits 3 with the pack alone',
+  '  a refused synthesis (server down, model not served, call failed, empty content) behaves the same way: the pack is delivered, the refusal is in note, exit 3',
   'Profile: --profile <file> selects one named instance — its vocabulary, its labelling tables and its own repoRoot, corpusRoots, atomsDir and indexPath',
   '  precedence is flag > profile > default, so --atoms-dir / --index-path / --repo-root still override whatever the profile states',
   '  each profile MUST own its atomsDir AND its indexPath: an atoms directory is stamped with its owner and refuses a second profile',
@@ -85,7 +91,7 @@ export const HELP_TEXT: string = [
   '            atoms[{id,title,domain,body,score,firstPassScore + rerankScore (with --rerank only),sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}],',
   '            skipped[{id,sourcePath,estimatedTokens}], note',
   '  answer    command, adapter, query, queryRewritten (with --rephrase only), k, mode, indexState, count, documents, poolSize, budgetMode, maxTokens, packTokens, confidence,',
-  '            pack (the whole block), citations[], atoms[] (as retrieve), skipped[], neutralised, note',
+  '            pack (the whole block), citations[], atoms[] (as retrieve), skipped[], neutralised, synthesized + answer (with --synthesize only; answer is null when none was rendered), note',
   '  bench     command, markdownPath, jsonPath, adapters[], skippedAdapters[{name,reason}], corpora[], goldenSet',
   '  failure   error',
 ].join('\n');
