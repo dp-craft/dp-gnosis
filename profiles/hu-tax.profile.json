@@ -1,0 +1,25 @@
+{
+  "comment:purpose": "A second domain onboarded as data alone: `hu-tax`, a Hungarian tax vault, with no TypeScript edit anywhere. The PROFILE ships; the CORPUS does not — the documents it labels are the owner's and are not in this repository.",
+  "comment:mount-point": "`repoRoot` names a MOUNT POINT, not a directory this repo contains: the owner puts — or symlinks — their Hungarian vault at `dp-gnosis/corpora/hu-tax`, and the three `corpusRoots` (analizis, leiras, melo) are read underneath it. `--repo-root` outranks this key (flag > profile > default), so the same profile reads a vault mounted anywhere else without being edited. With NOTHING mounted, `ingest` REFUSES: it names the first corpus root that matched no markdown files and the mount point it looked under, and the process exits NON-ZERO before writing anything — so the profile cannot half-ingest into a wrong corpus. That is a REFUSED INGEST, and it is a different fact from BOTH an empty corpus and the `index-empty` exit 3, which reports an INDEX holding nothing over a NON-EMPTY atoms directory — the three must not be read as the same failure.",
+  "comment:locations": "This profile owns BOTH its `atomsDir` and its `indexPath` for the same two reasons the web-research profile does. The index default is per-ADAPTER, not per-profile, so two instances left on the default write the same index file and the later run overwrites the earlier one in silence. A shared atoms directory is worse than overwriting: `ingest` makes the tree hold EXACTLY the current run's write set, so whichever profile ingests last PRUNES the other's atoms. The `.dp-gnosis-owner` marker refuses a directory stamped by another profile, so the collision is caught rather than suffered — but the refusal is an error to avoid, and setting these two keys is how it is avoided.",
+  "comment:types": "knowledge, teaching, vendor-doc and meta are all names the SHIPPED type vocabulary already carries. Types are CLOSED while domains are open: `asType` falls back to the shipped `DEFAULT_ATOM_TYPE` for an unknown name and `--type` validates against the shipped `ATOM_TYPES`, so a profile-only type would be silently relabelled at read time and unusable as a filter. A new type must be added to the shipped vocabulary; this profile therefore invents none.",
+  "comment:rules": "`analizis` and `leiras` carry a type each — analysis is knowledge, descriptions are teaching — while `melo` (work material) is claimed for the domain only and falls to `defaultType` knowledge.",
+  "name": "hu-tax",
+  "domains": ["hu-tax"],
+  "types": ["knowledge", "teaching", "vendor-doc", "meta"],
+  "defaultType": "knowledge",
+  "domainRules": [
+    { "prefix": "analizis", "domain": "hu-tax" },
+    { "prefix": "leiras", "domain": "hu-tax" },
+    { "prefix": "melo", "domain": "hu-tax" }
+  ],
+  "typeRules": [
+    { "prefix": "analizis", "type": "knowledge" },
+    { "prefix": "leiras", "type": "teaching" }
+  ],
+  "segmentRules": [],
+  "repoRoot": "../../../dp-gnosis/corpora/hu-tax",
+  "corpusRoots": ["analizis", "leiras", "melo"],
+  "atomsDir": "../../../dp-gnosis/cache/atoms-hu-tax",
+  "indexPath": "../../../dp-gnosis/cache/index/atoms-hu-tax-fts5.db"
+}

@@ -351,6 +351,27 @@ That contract is enforced, not conventional. `ingest` stamps its output director
 
 The marker is not a `.md` file, so pruning and id-collision checks ignore it.
 
+#### Shipped profiles
+
+Three profiles ship. `web-research` and `hu-tax` are the worked proof that a new knowledge domain onboards with a **profile file alone** — neither required a TypeScript edit, because the domain vocabulary is read from the loaded profile.
+
+| Profile file | Domain(s) | Corpus it reads | Atoms dir · index path | Corpus ships? |
+|---|---|---|---|---|
+| `profiles/default.profile.json` | `runner` `standards` `adr` `docs` `claude` | repo `CORPUS_ROOTS` under the repository root | defaults — `dp-gnosis/vault/atoms` · per-adapter under `dp-gnosis/cache/index/` | yes (this repo) |
+| `profiles/web-research.profile.json` | `web-research` | `docs/research` under the repository root | `dp-gnosis/cache/atoms-web-research` · `dp-gnosis/cache/index/atoms-web-research-fts5.db` | yes (this repo) |
+| `profiles/hu-tax.profile.json` | `hu-tax` | `analizis` `leiras` `melo` under the mount point `dp-gnosis/corpora/hu-tax` | `dp-gnosis/cache/atoms-hu-tax` · `dp-gnosis/cache/index/atoms-hu-tax-fts5.db` | **no** — profile only |
+
+**`hu-tax` ships without its corpus.** Its `repoRoot` names a MOUNT POINT the owner puts or symlinks their Hungarian vault into; `--repo-root` outranks it (flag > profile > default), so the same file reads a vault mounted anywhere. With nothing mounted, `ingest` REFUSES and exits non-zero without writing anything, naming the unmatched corpus root and the mount point it looked under — `corpus root "analizis" matched no markdown files under <repoRoot> — fix or remove it in CORPUS_ROOTS …`. Three different facts, and only the last is exit 3: a REFUSED INGEST (this case — a misconfigured root, nothing written), an EMPTY CORPUS (roots that resolve but hold no atom-worthy content), and `index-empty` (exit 3 — an index holding nothing over a NON-EMPTY atoms directory).
+
+Both new profiles set `atomsDir` AND `indexPath` because the defaults are per-adapter, not per-profile (§ Operating contract above). Both name only types the shipped vocabulary already carries: **domains are open by profile, types are NOT** — `asType` falls back to the shipped `DEFAULT_ATOM_TYPE` for an unknown name and `--type` validates against the shipped `ATOM_TYPES`, so a profile-only type is silently relabelled at read time.
+
+Onboarding a new domain is two commands against the new file:
+
+```bash
+npm run gnosis -- ingest --profile tools/dp-gnosis/profiles/<name>.profile.json
+npm run gnosis -- index  --profile tools/dp-gnosis/profiles/<name>.profile.json
+```
+
 ## Query rephrasing (MANDATORY before every `retrieve`)
 
 This is a **lexical BM25 engine**. It matches stemmed tokens. It has no idea what a question means.

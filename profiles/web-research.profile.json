@@ -1,0 +1,17 @@
+{
+  "comment:purpose": "The WORKED PROOF that a knowledge domain onboards with a profile file alone. It declares `web-research` — a domain the shipped default.profile.json has never heard of — and needs no TypeScript edit to do it: domains are read from the LOADED profile, so a new one arrives as data. Every document under `docs/research` is claimed by this profile, labelled with its own domain, and kept in its own atoms directory and its own index.",
+  "comment:scope": "`corpusRoots` is the single root `docs/research`, and the one domain rule claims exactly that prefix — nothing else in the repo enters this instance's corpus. `repoRoot` is the repository root (the profile file lives in tools/dp-gnosis/profiles/, and every relative location resolves against THAT directory, so `../../..` is the repo root).",
+  "comment:locations": "This profile owns BOTH its `atomsDir` and its `indexPath`, and the two keys are set for different failure modes. The index default is per-ADAPTER, not per-profile: two instances run without an index location build the same file, and whichever indexes last silently overwrites the other's index while both keep reporting success. The atoms default is worse than overwriting — `ingest` makes its output tree hold EXACTLY the current run's write set, so a shared atoms directory is PRUNED of every atom the other profile wrote. The `.dp-gnosis-owner` marker REFUSES that second case rather than letting it happen, but a refusal is an error, not a working two-instance setup; these two keys are what make the setup work.",
+  "comment:types": "Every name here — research, knowledge, paper, vendor-doc — is already in the SHIPPED type vocabulary, and that is a hard requirement, not a coincidence. Types are CLOSED where domains are open: `asType` falls back to the shipped `DEFAULT_ATOM_TYPE` for a name it does not know, and `--type` validates against the shipped `ATOM_TYPES`, so a type invented in a profile alone would be silently relabelled at read time and would never be selectable from the CLI. A new TYPE needs the shipped vocabulary changed; a new DOMAIN does not.",
+  "name": "web-research",
+  "domains": ["web-research"],
+  "types": ["research", "knowledge", "paper", "vendor-doc"],
+  "defaultType": "research",
+  "domainRules": [{ "prefix": "docs/research", "domain": "web-research" }],
+  "typeRules": [{ "prefix": "docs/research", "type": "research" }],
+  "segmentRules": [],
+  "repoRoot": "../../..",
+  "corpusRoots": ["docs/research"],
+  "atomsDir": "../../../dp-gnosis/cache/atoms-web-research",
+  "indexPath": "../../../dp-gnosis/cache/index/atoms-web-research-fts5.db"
+}

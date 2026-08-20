@@ -1,0 +1,115 @@
+import { readdirSync } from 'node:fs';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { runCli } from '../src/cli/cli.js';
+import { ATOM_TYPES } from '../src/config.js';
+import type { IngestProfile } from '../src/ingestProfile.js';
+import { loadIngestProfile } from '../src/ingestProfile.js';
+import { INGEST_PROFILE_PATH } from '../src/paths.js';
+
+/** The shipped profiles directory — enumerated, so a future profile is covered too. */
+const PROFILES_DIR = dirname(INGEST_PROFILE_PATH);
+
+const profilePaths: readonly string[] = readdirSync(PROFILES_DIR)
+  .filter(name => name.endsWith('.json'))
+  .sort()
+  .map(name => join(PROFILES_DIR, name));
+
+const loaded: readonly (readonly [string, IngestProfile])[] = profilePaths.map(path => [
+  basename(path),
+  loadIngestProfile(path),
+]);
+
+const profileByName = (name: string): IngestProfile => {
+  const found = loaded.find(([, profile]) => profile.name === name);
+  if (found === undefined) throw new Error(`no shipped profile named "${name}"`);
+  return found[1];
+};
+
+/** The shipped type vocabulary, widened to string for a membership test. */
+const SHIPPED_TYPES: readonly string[] = ATOM_TYPES;
+
+const duplicatesOf = (values: readonly string[]): readonly string[] =>
+  values.filter((value, index) => values.indexOf(value) !== index);
+
+describe('shipped profiles', () => {
+  it('ships the two worked-proof profiles beside the default', () => {
+    const names = loaded.map(([file]) => file);
+    expect(names).toContain('web-research.profile.json');
+    expect(names).toContain('hu-tax.profile.json');
+  });
+
+  it('loads every shipped profile through loadIngestProfile without throwing', () => {
+    profilePaths.forEach(path => {
+      expect(() => loadIngestProfile(path)).not.toThrow();
+    });
+  });
+
+  it('declares a name, domains, an atomsDir and an indexPath on the new profiles', () => {
+    (['web-research', 'hu-tax'] as const).forEach(name => {
+      const profile = profileByName(name);
+      expect(profile.name).toBe(name);
+      expect(profile.domains.length).toBeGreaterThan(0);
+      expect(profile.atomsDir).toBeTruthy();
+      expect(profile.indexPath).toBeTruthy();
+    });
+  });
+
+  it('gives no two shipped profiles the same atomsDir', () => {
+    const dirs = loaded
+      .map(([, profile]) => profile.atomsDir)
+      .filter((value): value is string => value !== undefined)
+      .map(value => resolve(value));
+    expect(duplicatesOf(dirs)).toEqual([]);
+  });
+
+  it('gives no two shipped profiles the same indexPath', () => {
+    const paths = loaded
+      .map(([, profile]) => profile.indexPath)
+      .filter((value): value is string => value !== undefined)
+      .map(value => resolve(value));
+    expect(duplicatesOf(paths)).toEqual([]);
+  });
+
+  it('names only shipped ATOM_TYPES, so no type is silently relabelled at read time', () => {
+    loaded.forEach(([file, profile]) => {
+      const unknown = profile.types.filter(type => !SHIPPED_TYPES.includes(type));
+      expect({ file, unknown }).toEqual({ file, unknown: [] });
+    });
+  });
+
+  it('rejects (does not resolve) ingest when a corpus root matches no markdown, naming that root', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gnosis-unmounted-'));
+    const profilePath = join(dir, 'unmounted.profile.json');
+    await writeFile(
+      profilePath,
+      JSON.stringify({
+        name: 'unmounted',
+        domains: ['hu-tax'],
+        types: ['knowledge'],
+        defaultType: 'knowledge',
+        domainRules: [{ prefix: 'analizis', domain: 'hu-tax' }],
+        typeRules: [],
+        segmentRules: [],
+        repoRoot: dir,
+        corpusRoots: ['analizis'],
+        atomsDir: join(dir, 'atoms'),
+        indexPath: join(dir, 'index.db'),
+      }),
+      'utf8'
+    );
+    await expect(runCli(['ingest', '--profile', profilePath])).rejects.toThrow(
+      /corpus root "analizis" matched no markdown files/
+    );
+  });
+
+  it('lets web-research declare a domain the default profile does not know', () => {
+    const declared = profileByName('web-research').domains;
+    const shipped = profileByName('default').domains;
+    expect(declared.some(domain => !shipped.includes(domain))).toBe(true);
+  });
+});
