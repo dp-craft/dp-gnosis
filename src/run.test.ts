@@ -250,7 +250,7 @@ describe('parseArgs', () => {
 
   it('defaults --analyzer to the engine chain every recorded run was measured on', () => {
     expect(parseArgs([]).analyzer).toBe(DEFAULT_ANALYZER);
-    expect(DEFAULT_ANALYZER).toBe('ident-porter-fold');
+    expect(DEFAULT_ANALYZER).toBe('porter-fold');
   });
 
   it('reads --analyzer as the chain the index is built with', () => {
@@ -287,23 +287,26 @@ describe('parseArgs', () => {
     );
   });
 
-  it('REFUSES the engine DEFAULT named explicitly on an adapter that never runs it', () => {
-    const argv = ['--adapter', 'linear', '--analyzer', DEFAULT_ANALYZER];
+  it('REFUSES a chain such an adapter never runs, named explicitly', () => {
+    const argv = ['--adapter', 'linear', '--analyzer', 'ident-porter-fold'];
     expect(() => parseArgs(argv)).toThrow(/linear/);
-    expect(() => parseArgs(argv)).toThrow(new RegExp(DEFAULT_ANALYZER));
-    expect(() => parseArgs(['--adapter', 'lancedb', '--analyzer', DEFAULT_ANALYZER])).toThrow(
+    expect(() => parseArgs(argv)).toThrow(/ident-porter-fold/);
+    expect(() => parseArgs(['--adapter', 'lancedb', '--analyzer', 'ident-porter-fold'])).toThrow(
       /lancedb/
     );
   });
 
-  it('keeps the waiver OFF the moving default, so a default move cannot widen it', () => {
+  it('keeps the waiver on the LITERAL chain, so a default move cannot widen it', () => {
     // The waived chain is what `linear` / `minisearch` implement in code
     // (`tokenize` + `stemTerm` = `porter-fold`), never whatever `DEFAULT_ANALYZER`
-    // happens to name — the T4.1a move to `ident-porter-fold` is exactly the event
-    // that would otherwise have re-widened it.
+    // happens to name. The default currently names the same chain, so equality
+    // with it proves nothing: pin the LITERAL, and prove the waiver did not widen
+    // to a second chain the way it would if it followed the default.
     const waived = parseArgs(['--adapter', 'linear']).analyzer;
     expect(waived).toBe('porter-fold');
-    expect(waived).not.toBe(DEFAULT_ANALYZER);
+    expect(() => parseArgs(['--adapter', 'linear', '--analyzer', 'ident-porter-fold'])).toThrow(
+      /linear/
+    );
   });
 
   it('accepts a named analyzer on fts5, the one adapter that builds its index with it', () => {
