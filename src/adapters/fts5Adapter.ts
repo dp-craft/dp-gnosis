@@ -68,7 +68,6 @@ import Database from 'better-sqlite3';
 
 import { type Atom, parseAtom } from '../atom.js';
 import {
-  ATOM_DOMAINS,
   ATOM_TYPES,
   type AtomDomain,
   type AtomType,
@@ -186,9 +185,6 @@ interface IndexRow {
 
 const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-const asDomain = (value: string): AtomDomain | undefined =>
-  ATOM_DOMAINS.find(domain => domain === value);
-
 /**
  * An unknown or absent `type` falls back to the default rather than dropping the
  * atom: the type vocabulary classifies an atom, it does not gate indexing, so a
@@ -207,10 +203,10 @@ const markdownPaths = (atomsDir: string): readonly string[] =>
         .sort(compareStrings)
     : [];
 
-/** A file outside the closed frontmatter subset or domain vocabulary is SKIPPED. */
+/** A file outside the closed frontmatter subset is SKIPPED. */
 const toEntry = (atomsDir: string, rel: string): IndexEntry | undefined => {
   const parsed = parseAtom(readFileSync(resolve(atomsDir, rel), 'utf8'));
-  return parsed.ok && asDomain(parsed.atom.frontmatter.x_domain) !== undefined
+  return parsed.ok
     ? { id: parsed.atom.frontmatter.id, path: rel, body: parsed.atom.body }
     : undefined;
 };
@@ -535,22 +531,17 @@ const resolveState = (self: Fts5Instance, count: number): IndexState =>
   isStale(self) ? 'stale' : count === 0 ? 'empty' : 'ready';
 
 /** Score flips sign so larger is better, matching the port's `score DESC` order. */
-const fromAtom = (atom: Atom, row: IndexRow, sourcePath: string): RetrievedAtom | undefined => {
-  const domain = asDomain(atom.frontmatter.x_domain);
-  return domain === undefined
-    ? undefined
-    : {
-        id: row.id,
-        title: atom.frontmatter.title,
-        domain,
-        type: asType(atom.frontmatter.type),
-        ...atomOrigin(atom.frontmatter),
-        body: atom.body,
-        score: -row.rank,
-        sourcePath,
-        originPaths: atom.frontmatter.sources,
-      };
-};
+const fromAtom = (atom: Atom, row: IndexRow, sourcePath: string): RetrievedAtom => ({
+  id: row.id,
+  title: atom.frontmatter.title,
+  domain: atom.frontmatter.x_domain,
+  type: asType(atom.frontmatter.type),
+  ...atomOrigin(atom.frontmatter),
+  body: atom.body,
+  score: -row.rank,
+  sourcePath,
+  originPaths: atom.frontmatter.sources,
+});
 
 /** Body, title and retrievability come from DISK, so an edit lands immediately. */
 const readRow = (options: Fts5AdapterOptions, row: IndexRow): RetrievedAtom | undefined => {

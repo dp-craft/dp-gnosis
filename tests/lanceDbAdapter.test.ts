@@ -499,7 +499,7 @@ describe('createLanceDbAdapter', () => {
   );
 
   it(
-    'skips an atom whose x_domain is outside the closed vocabulary',
+    'indexes an atom whose x_domain is outside the SHIPPED vocabulary, carrying the label through',
     async () => {
       writeAtom({ file: 'a.md', id: 'atom-a', domain: 'invented', body: 'shared token here' });
       writeAtom({ file: 'b.md', id: 'atom-b', body: 'shared token here' });
@@ -507,7 +507,8 @@ describe('createLanceDbAdapter', () => {
 
       const result = await port().retrieve('shared token', { k: 5 });
 
-      expect(ids(result.atoms)).toEqual(['atom-b']);
+      expect([...ids(result.atoms)].sort()).toEqual(['atom-a', 'atom-b']);
+      expect(result.atoms.find(atom => atom.id === 'atom-a')?.domain).toBe('invented');
     },
     CASE_TIMEOUT_MS
   );

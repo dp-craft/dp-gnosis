@@ -279,14 +279,15 @@ describe('createFts5Adapter', () => {
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-good']);
   });
 
-  it('skips an atom whose x_domain is outside the closed vocabulary', async () => {
+  it('indexes an atom whose x_domain is outside the SHIPPED vocabulary, carrying the label through', async () => {
     writeAtom({ file: 'a.md', id: 'atom-a', domain: 'invented', body: 'shared token here' });
     writeAtom({ file: 'b.md', id: 'atom-b', body: 'shared token here' });
     build();
 
     const result = await port().retrieve('shared token', { k: 5 });
 
-    expect(result.atoms.map(atom => atom.id)).toEqual(['atom-b']);
+    expect([...result.atoms.map(atom => atom.id)].sort()).toEqual(['atom-a', 'atom-b']);
+    expect(result.atoms.find(atom => atom.id === 'atom-a')?.domain).toBe('invented');
   });
 
   it('produces identical ranking when the same files are created in a different order', async () => {

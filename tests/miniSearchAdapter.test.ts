@@ -364,14 +364,15 @@ describe('createMiniSearchAdapter', () => {
     expect(ids(result.atoms)).toEqual(['atom-good']);
   });
 
-  it('skips an atom whose x_domain is outside the closed vocabulary', async () => {
+  it('indexes an atom whose x_domain is outside the SHIPPED vocabulary, carrying the label through', async () => {
     writeAtom({ file: 'a.md', id: 'atom-a', domain: 'invented', body: 'shared token here' });
     writeAtom({ file: 'b.md', id: 'atom-b', body: 'shared token here' });
     await build();
 
     const result = await port().retrieve('shared token', { k: 5 });
 
-    expect(ids(result.atoms)).toEqual(['atom-b']);
+    expect([...ids(result.atoms)].sort()).toEqual(['atom-a', 'atom-b']);
+    expect(result.atoms.find(atom => atom.id === 'atom-a')?.domain).toBe('invented');
   });
 
   it('indexes only the injected atoms directory, never a sibling proposals directory', async () => {

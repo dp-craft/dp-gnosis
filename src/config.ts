@@ -548,14 +548,13 @@ export const resolveCorpusRoots = (
 export const DEFAULT_INGEST_PROFILE: IngestProfile = loadIngestProfile(INGEST_PROFILE_PATH);
 
 /**
- * The shipped vocabularies restated as literal tuples, and for ONE reason: they
- * are what gives `AtomDomain` / `AtomType` their union types, which every
- * filter, adapter and CLI flag is typed against. They decide nothing — the
- * profile is still the source, and `expectVocabulary` refuses to start when the
- * two disagree, so a value is added to the data file and mirrored here.
+ * The shipped TYPE vocabulary restated as a literal tuple, and for ONE reason:
+ * it is what gives `AtomType` its union type, which every filter, adapter and
+ * CLI flag is typed against. It decides nothing — the profile is still the
+ * source, and `expectVocabulary` refuses to start when the two disagree, so a
+ * type is added to the data file and mirrored here. Domains carry NO such
+ * mirror: they are open by profile, see `ATOM_DOMAINS`.
  */
-const DECLARED_DOMAINS = ['runner', 'standards', 'adr', 'docs', 'claude'] as const;
-
 const DECLARED_TYPES = [
   'knowledge',
   'feature-log',
@@ -599,14 +598,24 @@ const expectMember = <T extends string>(value: string, vocabulary: readonly T[],
 };
 
 /**
- * The closed `x_domain` vocabulary. An unknown domain is REFUSED at write
- * time: a free-form string fragments on typos and makes an atom silently
- * invisible to every domain-filtered query.
+ * The `x_domain` vocabulary of the LOADED profile — open by profile, so a new
+ * knowledge domain onboards with a profile file and no TypeScript edit. An
+ * unknown domain is still REFUSED, and twice: `parseIngestProfile` rejects a
+ * rule naming a label the profile never declares, and ingest rejects the label
+ * at write time, because a free-form string fragments on typos and makes an
+ * atom silently invisible to every domain-filtered query. Both refusals happen
+ * BEFORE an atom exists, so the index side does not re-check — a second check
+ * there, against the DEFAULT profile, dropped every atom of any other profile
+ * at index time with no diagnostic anywhere.
  */
-export const ATOM_DOMAINS = expectVocabulary(DEFAULT_INGEST_PROFILE.domains, DECLARED_DOMAINS, 'domains');
+export const ATOM_DOMAINS: readonly string[] = DEFAULT_INGEST_PROFILE.domains;
 
-/** A member of the closed domain vocabulary. */
-export type AtomDomain = (typeof ATOM_DOMAINS)[number];
+/**
+ * A domain label. Unbranded on purpose: the valid set is whatever profile is
+ * loaded, so no compile-time union can state it without lying about the other
+ * profiles.
+ */
+export type AtomDomain = string;
 
 /** One mechanical assignment rule: repo-relative path prefix → domain. */
 export interface SourceRootDomain {
@@ -636,9 +645,9 @@ export const domainForSource = (repoRelativePath: string): AtomDomain | undefine
 };
 
 /**
- * The closed `type` vocabulary. Same reasoning as `ATOM_DOMAINS`: an unknown
- * type is REFUSED at write time, because a typo would make the atom silently
- * invisible to every type-filtered query.
+ * The closed `type` vocabulary. Unlike `ATOM_DOMAINS` this one stays CLOSED —
+ * an unknown type is REFUSED at write time, because a typo would make the atom
+ * silently invisible to every type-filtered query.
  *
  * `knowledge` is the FALLBACK, not the norm — the directory an authored document
  * lives in already carries what kind of document it is (a decision record, a
