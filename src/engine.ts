@@ -419,8 +419,18 @@ const buildRefusedMessage = (adapter: AdapterName, datasetId: string): string =>
   'optional dependency did not load. Install it, or measure an arm whose adapter is available; ' +
   'querying without its own index would retrieve nothing and record an all-zero row as a result.';
 
-const requireBuilt = (built: boolean, adapter: AdapterName, datasetId: string): void => {
-  if (!built) fail(buildRefusedMessage(adapter, datasetId), ADAPTER_INDEX_CAUSE);
+/**
+ * `undefined` is the ONE refusal here — the adapter's optional dependency did
+ * not load, so nothing could be built. A count of 0 is a different fact (an
+ * index WAS built and holds nothing) and is caught downstream by the artefact
+ * and soundness probes, exactly as before this returned a flag.
+ */
+const requireBuilt = (
+  indexed: number | undefined,
+  adapter: AdapterName,
+  datasetId: string
+): void => {
+  if (indexed === undefined) fail(buildRefusedMessage(adapter, datasetId), ADAPTER_INDEX_CAUSE);
 };
 
 /**

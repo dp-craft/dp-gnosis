@@ -372,7 +372,7 @@ describe('probePortSoundness', () => {
     const atomsDir = resolve(root, 'empty-lancedb', 'atoms');
     const indexPath = resolve(root, 'empty-lancedb', 'index-lancedb');
     mkdirSync(atomsDir, { recursive: true });
-    expect(await buildLanceDbIndex({ atomsDir, indexDir: indexPath })).toBe(true);
+    expect(await buildLanceDbIndex({ atomsDir, indexDir: indexPath })).toBe(0);
     const empty: PreparedDataset = {
       atomsDir,
       indexPath,
