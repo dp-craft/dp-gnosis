@@ -372,6 +372,41 @@ npm run gnosis -- ingest --profile tools/dp-gnosis/profiles/<name>.profile.json
 npm run gnosis -- index  --profile tools/dp-gnosis/profiles/<name>.profile.json
 ```
 
+## MCP surface — one tool over stdio
+
+`npm run gnosis:mcp` serves the vault to any MCP client over stdio. Zero new dependencies: three files in `src/mcp/` over node builtins, and the protocol constants are MIRRORED from `@modelcontextprotocol/sdk` 1.27.1 rather than imported (default `2025-11-25`; the four older versions it lists are accepted and echoed).
+
+Framing is **newline-delimited JSON-RPC 2.0** — one object per line, NOT LSP `Content-Length` framing. **stdout is the protocol**: only response lines reach it, every diagnostic goes to stderr, and a notification (`notifications/initialized`) gets no response at all.
+
+| Tool | Argument | Meaning |
+|---|---|---|
+| `gnosis_answer` | `question` (string, REQUIRED) | The question, in the words it would be searched with — see § Query rephrasing |
+| | `k` (integer, optional) | Omit it to take the CLI's own default; this surface states no second default |
+| | `domain` (string, optional) | Validated against the LOADED profile's domain vocabulary, exactly as `--domain` is |
+
+The tool runs `answer <question> [-k <k>] --json [--domain <d>]` through `runCli` and reads the pack OUT of that payload — **one code path**, so the returned text is byte-identical to the `pack` field of the same `answer --json` invocation. It is asserted by `tests/mcpProtocol.test.ts`, not assumed; a second rendering would drift from the CLI's the first time either changed.
+
+The exit code is the contract and is mirrored, never flattened:
+
+| CLI exit | MCP result |
+|---|---|
+| 0 | `content[0].text` = the pack, no `isError` |
+| 3 | the SAME pack, with the payload's `note` appended — a PARTIAL is a real answer with something refused, and flagging it would discard a good pack |
+| 2, or a payload with no `pack` | `isError: true`, text = the payload's `error` — a usage failure MUST NOT read as an empty answer |
+
+A malformed line answers `-32700` (`id: null`), an unknown method `-32601`, an unknown tool name `-32602`. Acceptance over real stdio: `bash tools/dp-gnosis/scripts/mcp-smoke.sh [question]` — exit 0 when both handshake and call come back well formed.
+
+## Obsidian — usage contract
+
+Point a profile's `repoRoot` at the vault directory and its `corpusRoots` at the folders inside it to search. Everything else follows the profile rules above.
+
+| Rule | Why |
+|---|---|
+| dp-gnosis NEVER writes into the vault | Atoms are written to the profile's own `atomsDir`, outside the vault — which is exactly why each profile MUST own one (§ Profiles) |
+| Exclude `.obsidian` and every template folder through `excludePaths` | They are configuration and skeletons, not knowledge; an excluded prefix is dropped before read, so it enters no count and no `skipped[]`. Directory prefixes need a trailing slash |
+| Re-run `index` after editing the vault | The index is built WHOLESALE from the atoms; there is no incremental update, so an edited note is invisible until the rebuild |
+| A stale or foreign index is REFUSED at query time | `indexState` `stale` (the corpus moved under it) or `mismatched` (it belongs to another profile) refuses rather than answering from it — a plausible answer over yesterday's vault is worse than none |
+
 ## Query rephrasing (MANDATORY before every `retrieve`)
 
 This is a **lexical BM25 engine**. It matches stemmed tokens. It has no idea what a question means.
