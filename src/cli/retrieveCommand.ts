@@ -27,13 +27,14 @@ import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js
 import { rephraseQuery } from '../rephrase.js';
 import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
 import { calibrate, rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
+import type { TokenCountResult } from '../tokenize.js';
 import { createTokenCounter } from '../tokenize.js';
 import type { AdapterName } from './adapter.js';
 import { createPort, hasPersistentIndex } from './adapter.js';
 import type { FlagValues } from './args.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
-import type { ChargedText, CountAtoms } from './counting.js';
+import type { ChargedText, CountAtoms, CountOne } from './counting.js';
 import {
   bodyText,
   BUDGET_MODE_FLAG,
@@ -604,6 +605,12 @@ export interface BudgetedResult {
   readonly minRelevance: number | undefined;
   /** `false` when a floor was named but deliberately not run — see {@link applyFloor}. */
   readonly floorApplied: boolean;
+  /**
+   * What the KEPT atoms cost, plus the chrome a command reserved before the fit.
+   * It is the number a rendering states as "used of `maxTokens`"; `maxTokens`
+   * stays the FULL ceiling the caller passed, so the two are comparable.
+   */
+  readonly usedTokens: number;
 }
 
 /**
@@ -1330,7 +1337,23 @@ const poolFacts = (request: RetrieveRequest, pool: readonly RetrievedAtom[]): Po
 interface BudgetSpec {
   readonly maxTokens: number;
   readonly measure: AtomMeasure;
+  /**
+   * The chrome a command emits AROUND the atoms, already counted in the active
+   * measure. It is subtracted from `maxTokens` before the fit, so the ceiling
+   * bounds what is emitted rather than only the atoms inside it. `retrieve`
+   * reserves nothing and passes 0, keeping its fit byte-identical.
+   */
+  readonly overhead: number;
 }
+
+/**
+ * What the fit actually spent. The measure is re-run over the KEPT atoms rather
+ * than threaded out of `budget.ts`: it is a pure lookup or a byte count, so a
+ * second pass costs no I/O, and the alternative changes a return shape three
+ * other callers already assert against.
+ */
+const usedBy = (kept: readonly RetrievedAtom[], budget: BudgetSpec): number =>
+  kept.reduce((total, atom) => total + budget.measure(atom), budget.overhead);
 
 /**
  * The budget is applied HERE, between the floor and the renderings: the adapters
@@ -1342,11 +1365,13 @@ const applyBudget = (
   budget: BudgetSpec,
   pool: PoolFacts
 ): BudgetedResult => {
-  const fit = fitToTokenBudget(floored.result.atoms, budget.maxTokens, budget.measure);
+  const room = budget.maxTokens - budget.overhead;
+  const fit = fitToTokenBudget(floored.result.atoms, room, budget.measure);
   return {
     result: { ...floored.result, atoms: fit.kept },
     skipped: fit.skipped,
     maxTokens: budget.maxTokens,
+    usedTokens: usedBy(fit.kept, budget),
     poolSize: pool.size,
     cappedPool: pool.capped,
     belowFloor: floored.belowFloor,
@@ -1428,9 +1453,17 @@ const refused = (reason: string): RetrievalOutcome => ({
   outcome: budgetRefusalOutcome(RETRIEVE_COMMAND, reason),
 });
 
+/** The ceiling, the measure and the reserve — one decision, stated in one place. */
+const budgetSpec = (
+  request: RetrieveRequest,
+  measure: AtomMeasure,
+  overhead: number
+): BudgetSpec => ({ maxTokens: request.maxTokens, measure, overhead });
+
 const search = async (
   request: RetrieveRequest,
-  counting: CountAtoms
+  counting: CountAtoms,
+  overhead: number
 ): Promise<RetrievalOutcome> => {
   const { context } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
@@ -1441,7 +1474,7 @@ const search = async (
   const floored = applyFloor(reported, ranked.result);
   const measured = await counting(floored.result.atoms);
   if (!measured.ok) return refused(measured.reason);
-  const budget: BudgetSpec = { maxTokens: request.maxTokens, measure: measured.measure };
+  const budget = budgetSpec(request, measured.measure, overhead);
   const budgeted = applyBudget(floored, budget, poolFacts(request, result.atoms));
   return { ok: true, run: runOf(reported, ranked.result, budgeted) };
 };
@@ -1470,14 +1503,28 @@ const initialRequest = (
   rerankRefusal: undefined,
 });
 
+/**
+ * The chrome the run reserves, in the active measure. No overhead text means NO
+ * count at all — `retrieve` reserves nothing, so it makes no extra tokenizer
+ * call and its budget is the one it always had.
+ */
+const overheadCost = async (
+  countOne: CountOne,
+  overhead: string | undefined
+): Promise<TokenCountResult> =>
+  overhead === undefined ? { ok: true, count: 0 } : await countOne(overhead);
+
 /** Probe, then retrieve. The probe runs BEFORE the search, so a refusal costs none. */
 const searchWithBudget = async (
   request: RetrieveRequest,
-  charged: ChargedText
+  charged: ChargedText,
+  overhead: string | undefined
 ): Promise<RetrievalOutcome> => {
   const counting = await resolveCounting(request.budgetMode, createTokenCounter(), charged);
   if (!counting.ok) return refused(counting.reason);
-  return await search(await withRewrite(request), counting.counting);
+  const reserved = await overheadCost(counting.countOne, overhead);
+  if (!reserved.ok) return refused(reserved.reason);
+  return await search(await withRewrite(request), counting.counting, reserved.count);
 };
 
 /**
@@ -1486,17 +1533,20 @@ const searchWithBudget = async (
  *
  * Split out so a second command reuses the RANKING rather than re-deriving it.
  * `charged` states what that command will actually emit per atom, so its budget
- * charges the text it renders; `retrieve` charges the body, unchanged.
+ * charges the text it renders; `overhead` states the fixed chrome it emits
+ * AROUND them, subtracted from `maxTokens` before the fit. `retrieve` charges
+ * the body and reserves nothing, unchanged.
  */
 export const performRetrieval = async (
   context: CommandContext,
-  charged: ChargedText = bodyText
+  charged: ChargedText = bodyText,
+  overhead?: string
 ): Promise<RetrievalOutcome> => {
   const query = context.positionals.join(' ');
   const args = resolveArgs(context.flags);
   if (query.length === 0) return { ok: false, outcome: usageError(NO_QUERY) };
   if (!args.ok) return { ok: false, outcome: usageError(args.error) };
-  return await searchWithBudget(initialRequest(context, query, args), charged);
+  return await searchWithBudget(initialRequest(context, query, args), charged, overhead);
 };
 
 export const runRetrieveCommand = async (context: CommandContext): Promise<CommandOutcome> => {

@@ -60,7 +60,8 @@ export interface DocumentGroup {
  * a shared empty bucket — an empty `originPaths` is a fact about that atom, not
  * a document every such atom shares.
  */
-const documentOf = (atom: RetrievedAtom): string => atom.originPaths[0] ?? atom.sourcePath;
+export const documentOf = (atom: RetrievedAtom): string =>
+  atom.originPaths[0] ?? atom.sourcePath;
 
 /**
  * An atom carrying no `originIndex` sorts LAST rather than first: it states no

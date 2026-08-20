@@ -12,7 +12,7 @@ import type { AtomMeasure } from '../budget.js';
 import { estimateTokens } from '../budget.js';
 import type { BudgetMode } from '../config.js';
 import type { RetrievedAtom } from '../port.js';
-import type { TokenCounter } from '../tokenize.js';
+import type { TokenCounter, TokenCountResult } from '../tokenize.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_PARTIAL } from './outcome.js';
 
@@ -100,13 +100,17 @@ const tokenCounting = (counter: TokenCounter, charged: ChargedText): CountAtoms 
  * The one wording for "`--budget-mode tokens` was asked for and cannot be
  * honoured". It names the CONDITION and the correction; the run exits PARTIAL
  * rather than quietly enforcing the byte bound under a token label.
+ *
+ * The command NAMES itself rather than the prefix being fixed to `retrieve`: a
+ * second command's refusal that opened with another command's name would send
+ * the reader to a run that never happened.
  */
-export const budgetRefusal = (reason: string): string =>
-  `retrieve: ${BUDGET_MODE_FLAG} tokens could not count with the served tokenizer — ${reason}; re-run with \`${BUDGET_MODE_FLAG} bytes\` to budget by the conservative UTF-8 bound instead`;
+export const budgetRefusal = (command: string, reason: string): string =>
+  `${command}: ${BUDGET_MODE_FLAG} tokens could not count with the served tokenizer — ${reason}; re-run with \`${BUDGET_MODE_FLAG} bytes\` to budget by the conservative UTF-8 bound instead`;
 
 /** The command NAMES itself, so a second command's payload is not labelled `retrieve`. */
 export const budgetRefusalOutcome = (command: string, reason: string): CommandOutcome => {
-  const message = budgetRefusal(reason);
+  const message = budgetRefusal(command, reason);
   return {
     exitCode: EXIT_PARTIAL,
     data: { command, budgetMode: 'tokens', error: message },
@@ -114,8 +118,25 @@ export const budgetRefusalOutcome = (command: string, reason: string): CommandOu
   };
 };
 
+/**
+ * What ONE fixed text costs the budget, in the SAME measure the atoms are
+ * charged in. A command that emits chrome around the atoms — a delimited block,
+ * a preamble — reserves it with this, so the ceiling bounds what is emitted
+ * rather than only the atoms inside it.
+ */
+export type CountOne = (text: string) => Promise<TokenCountResult>;
+
+const byteCountOne: CountOne = async (text: string): Promise<TokenCountResult> => ({
+  ok: true,
+  count: estimateTokens(text),
+});
+
+/** One tokenizer call, never a per-atom walk: the reserve is a single string. */
+const tokenCountOne = (counter: TokenCounter): CountOne =>
+  async (text: string): Promise<TokenCountResult> => await counter.count(text);
+
 type CountingResult =
-  | { readonly ok: true; readonly counting: CountAtoms }
+  | { readonly ok: true; readonly counting: CountAtoms; readonly countOne: CountOne }
   | { readonly ok: false; readonly reason: string };
 
 /**
@@ -128,9 +149,11 @@ export const resolveCounting = async (
   counter: TokenCounter,
   charged: ChargedText
 ): Promise<CountingResult> => {
-  if (mode === 'bytes') return { ok: true, counting: byteCounting(charged) };
+  if (mode === 'bytes') {
+    return { ok: true, counting: byteCounting(charged), countOne: byteCountOne };
+  }
   const probe = await counter.probe();
   return probe.ok
-    ? { ok: true, counting: tokenCounting(counter, charged) }
+    ? { ok: true, counting: tokenCounting(counter, charged), countOne: tokenCountOne(counter) }
     : { ok: false, reason: probe.reason };
 };

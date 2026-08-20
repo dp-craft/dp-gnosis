@@ -18,6 +18,7 @@ import type { IngestProfile } from '../ingestProfile.js';
 import { loadIngestProfile } from '../ingestProfile.js';
 import type { AdapterName } from './adapter.js';
 import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
+import { runAnswerCommand } from './answerCommand.js';
 import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
@@ -57,6 +58,7 @@ const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   ingest: runIngestCommand,
   index: runIndexCommand,
   retrieve: runRetrieveCommand,
+  answer: runAnswerCommand,
   bench: runBenchCommand,
 };
 
@@ -124,14 +126,23 @@ const wantsHelp = (args: ParsedArgs): boolean =>
 
 /**
  * `--format`, `--type` with `--exclude-type` / `--include-history`, `--max-tokens`, `--rerank` with its three tuning flags,
- * `--rephrase`, and the two grouping flags belong to `retrieve` alone. Elsewhere they are refused
- * through the SAME message an unknown flag gets: a flag no command can honour
- * MUST NOT look accepted, and one wording keeps the correction identical either
- * way.
+ * `--rephrase`, and the two grouping flags belong to the RETRIEVAL commands —
+ * `retrieve` and `answer`, which run the same pipeline. On any other command
+ * they are refused through the SAME message an unknown flag gets: a flag no
+ * command can honour MUST NOT look accepted, and one wording keeps the
+ * correction identical either way.
+ *
+ * `--flat` is the exception that stays inside the list: it reaches `answer` so
+ * the command can refuse it by NAME — a pack is grouped by construction — at
+ * the same exit 2 the generic wording would have given, but saying why.
  */
 const RETRIEVE_COMMAND = 'retrieve';
 
-const RETRIEVE_ONLY_FLAGS: readonly string[] = [
+const ANSWER_COMMAND = 'answer';
+
+const RETRIEVAL_COMMANDS: readonly string[] = [RETRIEVE_COMMAND, ANSWER_COMMAND];
+
+const RETRIEVAL_FLAGS: readonly string[] = [
   FORMAT_FLAG,
   TYPE_FLAG,
   EXCLUDE_TYPE_FLAG,
@@ -148,9 +159,9 @@ const RETRIEVE_ONLY_FLAGS: readonly string[] = [
 ];
 
 const misplacedFlag = (args: ParsedArgs): string | undefined =>
-  args.command === RETRIEVE_COMMAND
+  RETRIEVAL_COMMANDS.includes(args.command ?? '')
     ? undefined
-    : RETRIEVE_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
+    : RETRIEVAL_FLAGS.find(flag => args.flags[flag] !== undefined);
 
 const handlerFor = (command: string | undefined): CommandHandler | undefined =>
   command === undefined ? undefined : COMMANDS[command];
