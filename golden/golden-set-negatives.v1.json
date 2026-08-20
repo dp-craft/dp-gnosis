@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "purpose": "calibration",
+  "note": "NEGATIVE topics: every query here is answerable by NO atom in the corpus, so `relevantAtomIds` is empty by construction. This file is CALIBRATION INPUT for the abstain floor (T3.1b-min) and is NOT a measurement set. It MUST NOT be merged into a measurement golden and MUST NOT be registered in `tools/dp-gnosis-bench/datasets.json` — a topic with no qrels rows is never queried by the bench harness (`run.ts` topicsOf iterates the qrels keys), so a registered negatives dataset would run zero topics and report green. The strict loader `src/goldenSet.ts` already refuses an empty `relevantAtomIds`, which is what keeps this file out of every measurement path. Topics are NEAR-MISSES: same register and vocabulary as the corpus, no true answer in it. Absence of each distinguishing term was verified by grep over the served atoms dir before the topic was accepted.",
+  "corpus": "vault",
+  "frozenAt": "dp-gnosis/vault/atoms",
+  "corpusAtomCount": 14269,
+  "queries": [
+    {
+      "id": "neg-001",
+      "axis": "rare-technical-token",
+      "query": "Spring Boot autoconfiguration starter",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`Spring Boot` = 0 occurrences and there is no JVM code. Deliberately NOT a Redux question: the corpus carries a \"Deep Dive: React State Management — Redux, Zustand, and Alternatives\" document with a \"How Each Works > Redux\" section, so a Redux query would not be negative. Near-miss on `configuration` and `starter`."
+    },
+    {
+      "id": "neg-002",
+      "axis": "multi-word-phrase",
+      "query": "GraphQL schema for the chat sessions API",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`GraphQL` = 0 occurrences. There is no server-side sessions API — sessions live in IndexedDB, client-only. Near-miss on `schema` and `sessions`."
+    },
+    {
+      "id": "neg-003",
+      "axis": "production-shaped-long-form",
+      "query": "How do I write the Kubernetes deployment manifest and configure the readiness probe for the chat backend?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "There is no backend service. `Kubernetes` occurs 4x, every one a name-drop inside a third-party paper about modern software development — none describes a manifest or a probe. Near-miss on `deployment`, `configure`, `probe`."
+    },
+    {
+      "id": "neg-004",
+      "axis": "multi-word-phrase",
+      "query": "Stripe webhook signature verification",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`Stripe` occurs 6x, only as a vendor name in a list of skill authors. No payment processing anywhere. Near-miss on `webhook` / `signature` / `verification`."
+    },
+    {
+      "id": "neg-005",
+      "axis": "multi-word-phrase",
+      "query": "SAML assertion signing certificate rotation",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`SAML` = 0 occurrences and there is no authentication feature of any kind. Deliberately NOT an OAuth question: OAuth IS covered (Copilot device flow, RFC 8628), so an OAuth query would not be negative."
+    },
+    {
+      "id": "neg-006",
+      "axis": "multi-word-phrase",
+      "query": "PostgreSQL connection pool sizing",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "Persistence is IndexedDB in the app and SQLite (`better-sqlite3`) in dp-gnosis. `PostgreSQL` occurs 5x, all inside third-party papers describing their own pipelines — none about pool sizing. A deliberate near-miss against real SQL content."
+    },
+    {
+      "id": "neg-007",
+      "axis": "multi-word-phrase",
+      "query": "Elasticsearch index sharding and replica count",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "Retrieval is fts5 / MiniSearch / LanceDB. `Elasticsearch` has one incidental occurrence. `index` is one of the highest-frequency corpus tokens, so the lexical overlap is strong and the answer still absent."
+    },
+    {
+      "id": "neg-008",
+      "axis": "multi-word-phrase",
+      "query": "MongoDB aggregation pipeline lookup stage",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`MongoDB` and `aggregation pipeline` = 0 occurrences. `pipeline` and `stage` are both very frequent here (speckit stages, gate pipeline), which is what makes it a hard negative rather than a stranger."
+    },
+    {
+      "id": "neg-009",
+      "axis": "multi-word-phrase",
+      "query": "Jetpack Compose state hoisting",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`Jetpack` = 0. No Android target. Near-miss on `state hoisting`, a concept the React docs discuss under other names."
+    },
+    {
+      "id": "neg-010",
+      "axis": "multi-word-phrase",
+      "query": "nginx reverse proxy upstream keepalive tuning",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`nginx` = 0 occurrences and there is no web server to configure. Deliberately NOT a deep-linking question: the corpus carries a \"Navigation and Deep-Link\" document, so that query would not be negative. Strong near-miss — `proxy` is real here (the Electron CORS proxy) and `upstream` is real (the llama-swap `/upstream/` passthrough), yet neither answers an nginx tuning question."
+    },
+    {
+      "id": "neg-011",
+      "axis": "rare-technical-token",
+      "query": "Terraform state locking DynamoDB",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "No infrastructure-as-code and no AWS. `Terraform` occurs twice, both inside a list of languages in a paper. Near-miss on `state locking`."
+    },
+    {
+      "id": "neg-012",
+      "axis": "multi-word-phrase",
+      "query": "gRPC bidirectional streaming deadline",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`gRPC` occurs twice as a transitive-dependency name-drop. `streaming` and `deadline` / `timeout` are heavily present in the LLM-streaming and runner docs, so this is a strong near-miss."
+    },
+    {
+      "id": "neg-013",
+      "axis": "rare-technical-token",
+      "query": "Kafka consumer group rebalancing",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`Kafka` = 0. No message broker. Near-miss on `consumer` and `group`, both frequent corpus tokens."
+    },
+    {
+      "id": "neg-014",
+      "axis": "multi-word-phrase",
+      "query": "Webpack module federation remote entry",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "The build is Vite; `module federation` = 0. Near-miss on `module`, `remote`, `entry`."
+    },
+    {
+      "id": "neg-015",
+      "axis": "synonym",
+      "query": "styled-components theme provider migration",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`styled-components` = 0. Styling is Tailwind v4 + shadcn/ui. `theme`, `provider` and `migration` all appear in other contexts."
+    },
+    {
+      "id": "neg-016",
+      "axis": "multi-word-phrase",
+      "query": "Angular hierarchical dependency injection",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`Angular` occurs 7x, only in TypeScript-adoption statistics. `dependency` and `injection` both appear with different meanings (dependency governance, knowledge injection), making this a near-miss."
+    },
+    {
+      "id": "neg-017",
+      "axis": "production-shaped-long-form",
+      "query": "What is the on-call escalation rotation and the incident severity SLA for this service?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "No operations, no on-call, no SLA. Every `on-call` grep hit is the substring inside `function-call`. `escalation` and `severity` are core runner vocabulary with different meanings."
+    },
+    {
+      "id": "neg-018",
+      "axis": "multi-word-phrase",
+      "query": "WebRTC ICE candidate gathering",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`WebRTC` and `ICE candidate` = 0. No real-time media. `candidate` alone is a frequent corpus token (candidate model, candidate atom), so the overlap is real."
+    }
+  ]
+}

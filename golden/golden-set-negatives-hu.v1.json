@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "purpose": "calibration",
+  "note": "NEGATIVE topics: every query here is answerable by NO atom in the corpus, so `relevantAtomIds` is empty by construction. This file is CALIBRATION INPUT for the abstain floor (T3.1b-min) and is NOT a measurement set. It MUST NOT be merged into a measurement golden and MUST NOT be registered in `tools/dp-gnosis-bench/datasets.json` — a topic with no qrels rows is never queried by the bench harness (`run.ts` topicsOf iterates the qrels keys), so a registered negatives dataset would run zero topics and report green. The strict loader `src/goldenSet.ts` already refuses an empty `relevantAtomIds`, which is what keeps this file out of every measurement path. Topics are NEAR-MISSES: same register and vocabulary as the corpus, no true answer in it. Absence of each distinguishing term was verified by grep over the served atoms dir before the topic was accepted.",
+  "corpus": "vault-hu",
+  "frozenAt": "dp-gnosis/cache/atoms-hu",
+  "corpusAtomCount": 454,
+  "queries": [
+    {
+      "id": "hu-neg-001",
+      "axis": "exact-keyword",
+      "query": "KIVA",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`KIVA` = 0 találat a korpuszban; a kisvállalati adó nincs tárgyalva. Közeli tévedés az ÁFA/adózás szókincsre."
+    },
+    {
+      "id": "hu-neg-002",
+      "axis": "exact-keyword",
+      "query": "KATA",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`kata` szóhatáros kereséssel 0 találat. A korpusz az ÁFA-bevallásról és az Odoo lokalizációról szól, a kisadózó tételes adóról nem."
+    },
+    {
+      "id": "hu-neg-003",
+      "axis": "rare-technical-token",
+      "query": "cégautóadó",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`cégautó` = 0 találat. Gépjárműadó nem szerepel; a `Ford.md` csak puszta számokat tartalmaz."
+    },
+    {
+      "id": "hu-neg-004",
+      "axis": "rare-technical-token",
+      "query": "transzferár-nyilvántartás",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`transzferár` = 0 találat. A kapcsolt vállalkozások árazása nincs dokumentálva."
+    },
+    {
+      "id": "hu-neg-005",
+      "axis": "multi-word-phrase",
+      "query": "helyi iparűzési adó bevallás",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`iparűzési` = 0 találat. A korpusz kizárólag a NAV ÁFA-bevallással (2665A/2665M, ANYK) foglalkozik, a HIPA-val nem."
+    },
+    {
+      "id": "hu-neg-006",
+      "axis": "multi-word-phrase",
+      "query": "társasági adóelőleg feltöltési kötelezettség",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`társasági adó` és `adóelőleg` = 0 találat. Csak ÁFA-oldali kötelezettségek szerepelnek."
+    },
+    {
+      "id": "hu-neg-007",
+      "axis": "multi-word-phrase",
+      "query": "öröklési illeték egyenes ági rokon esetén",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`öröklési` és `illeték` = 0 találat. Az illetékjog teljesen kívül esik a korpuszon."
+    },
+    {
+      "id": "hu-neg-008",
+      "axis": "multi-word-phrase",
+      "query": "Odoo gyártás modul anyagjegyzék beállítása",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`gyártás` és `anyagjegyzék` = 0 találat. Az Odoo-tartalom a könyvelési és ÁFA-modulokra korlátozódik."
+    },
+    {
+      "id": "hu-neg-009",
+      "axis": "multi-word-phrase",
+      "query": "többraktáras leltározás folyamata",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`raktár` és `leltár` = 0 találat. Készletkezelés nincs a korpuszban."
+    },
+    {
+      "id": "hu-neg-010",
+      "axis": "multi-word-phrase",
+      "query": "nyugdíjjárulék bevallása a 08-as nyomtatványon",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`nyugdíj` és `járulék` = 0 találat. A `nyomtatvány` szó 15-ször előfordul (ANYK-űrlapok), ezért ez erős közeli tévedés: az űrlap-szókincs jelen van, ez a konkrét bevallás nem."
+    },
+    {
+      "id": "hu-neg-011",
+      "axis": "synonym",
+      "query": "készletnyilvántartás vezetése raktáranként",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`készletnyilvántartás` = 0 találat, a `raktár` szintén. Szinonim megfogalmazás egy olyan témára, amelyet a korpusz sehol nem érint."
+    },
+    {
+      "id": "hu-neg-012",
+      "axis": "synonym",
+      "query": "munkabér közterheinek elszámolása",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`munkabér` és `közteher` = 0 találat. A bérrel kapcsolatos elszámolás hiányzik, miközben az `elszámolás` gyakori szó a korpuszban."
+    },
+    {
+      "id": "hu-neg-013",
+      "axis": "inflected-form",
+      "query": "Az iparűzési adóalapot hogyan osztjuk meg a telephelyek között?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`iparűzési` és `telephely` = 0 találat. Ragozott, kérdés formájú változat egy hiányzó témára; az `adóalap` viszont gyakori, ezért közeli tévedés."
+    },
+    {
+      "id": "hu-neg-014",
+      "axis": "inflected-form",
+      "query": "Milyen járulékokat vonunk le a megbízási díjból?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`járulék` és `megbízási` = 0 találat. Ragozott alak, a `levonás` szó viszont az ÁFA levonási hányad kapcsán gyakori."
+    },
+    {
+      "id": "hu-neg-015",
+      "axis": "production-shaped-long-form",
+      "query": "Hogyan konfigurálom az Odoo bérszámfejtés modult a magyar járulékok levonására?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`bérszámfejtés` és `járulék` = 0 találat. Az Odoo-modulkonfiguráció mint téma jelen van, ez a modul nincs."
+    },
+    {
+      "id": "hu-neg-016",
+      "axis": "production-shaped-long-form",
+      "query": "Hogyan integrálható egy Shopify webshop az Odoo értékesítési moduljával?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`Shopify` és `webshop` = 0 találat. Külső rendszer integrációja nincs dokumentálva."
+    },
+    {
+      "id": "hu-neg-017",
+      "axis": "production-shaped-long-form",
+      "query": "Milyen jelszóházirendet lehet kikényszeríteni az Odoo felhasználói fiókoknál?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`jelszó` = 0 találat. Jogosultság- és hozzáférés-kezelés nem szerepel a korpuszban."
+    },
+    {
+      "id": "hu-neg-018",
+      "axis": "production-shaped-long-form",
+      "query": "Hogyan állítom be a PostgreSQL streaming replikációt az Odoo adatbázishoz?",
+      "domain": null,
+      "type": null,
+      "relevantAtomIds": [],
+      "rationale": "`PostgreSQL` és `replikáció` = 0 találat. Az adatbázis-üzemeltetés kívül esik a korpuszon, miközben a `beállítás` és a `migráció` gyakori."
+    }
+  ]
+}
