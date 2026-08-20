@@ -42,7 +42,7 @@ export const estimateTokens = (text: string): number => Buffer.byteLength(text, 
 export interface SkippedAtom {
   readonly id: string;
   readonly sourcePath: string;
-  /** What {@link estimateTokens} charged for the body that did not fit. */
+  /** What the active measure charged for the body that did not fit. */
   readonly estimatedTokens: number;
 }
 
@@ -67,10 +67,22 @@ const skippedOf = (atom: RetrievedAtom, estimatedTokens: number): SkippedAtom =>
   estimatedTokens,
 });
 
+/**
+ * What one atom costs the budget. INJECTED so the measure can be a real
+ * tokenizer count without this module doing I/O: the counts are taken at the
+ * command boundary and handed in already resolved, which keeps every function
+ * here pure and synchronous.
+ */
+export type AtomMeasure = (atom: RetrievedAtom) => number;
+
+/** The default measure: {@link estimateTokens} over the body, i.e. UTF-8 bytes. */
+export const byteMeasure: AtomMeasure = (atom: RetrievedAtom): number =>
+  estimateTokens(atom.body);
+
 const admitIfFits =
-  (maxTokens: number) =>
+  (maxTokens: number, measure: AtomMeasure) =>
     (state: FitState, atom: RetrievedAtom): FitState => {
-      const cost = estimateTokens(atom.body);
+      const cost = measure(atom);
       return state.used + cost > maxTokens
         ? { ...state, skipped: [...state.skipped, skippedOf(atom, cost)] }
         : { ...state, kept: [...state.kept, atom], used: state.used + cost };
@@ -88,14 +100,17 @@ const admitIfFits =
  * of never learning it existed.
  *
  * @param atoms - Atoms in rank order.
- * @param maxTokens - Budget, measured with {@link estimateTokens}. Defaults to
+ * @param maxTokens - Budget, measured with `measure`. Defaults to
  *   {@link RETRIEVE_TOKEN_BUDGET}.
+ * @param measure - What one atom costs. Defaults to {@link byteMeasure}, so an
+ *   unflagged call is byte-identical to the behaviour that preceded injection.
  * @returns The kept atoms and the skipped ones with their sizes.
  */
 export const fitToTokenBudget = (
   atoms: readonly RetrievedAtom[],
-  maxTokens: number = RETRIEVE_TOKEN_BUDGET
+  maxTokens: number = RETRIEVE_TOKEN_BUDGET,
+  measure: AtomMeasure = byteMeasure
 ): BudgetFit => {
-  const { kept, skipped } = atoms.reduce(admitIfFits(maxTokens), EMPTY_FIT);
+  const { kept, skipped } = atoms.reduce(admitIfFits(maxTokens, measure), EMPTY_FIT);
   return { kept, skipped };
 };

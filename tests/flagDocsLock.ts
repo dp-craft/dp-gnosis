@@ -19,6 +19,7 @@ import { relative, resolve } from 'node:path';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import { DEFAULT_MAX_PER_DOC } from '../src/cli/grouping.js';
 import {
+  DEFAULT_BUDGET_MODE,
   DEFAULT_EXCLUDED_TYPES,
   DEFAULT_RERANK_PRESET,
   RERANK_MODEL_ID,
@@ -59,6 +60,7 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--type': unowned('unset by default — the vocabulary is profile-derived and printed by --help'),
   '--exclude-type': owned('DEFAULT_EXCLUDED_TYPES (src/config.ts)', DEFAULT_EXCLUDED_TYPES.join(', ')),
   '--include-history': unowned('boolean, off by default'),
+  '--budget-mode': owned('DEFAULT_BUDGET_MODE (src/config.ts)', DEFAULT_BUDGET_MODE),
   '--max-tokens': owned('RETRIEVE_TOKEN_BUDGET (src/config.ts)', RETRIEVE_TOKEN_BUDGET),
   '--min-relevance': unowned('unset by default — an opt-in floor with no constant'),
   '--rerank': unowned('boolean, off by default'),

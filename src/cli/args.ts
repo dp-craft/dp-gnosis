@@ -9,7 +9,7 @@
  * driven by an LLM can have. Every rejection names the valid alternatives.
  */
 
-import { RERANK_PRESET_NAMES } from '../config.js';
+import { BUDGET_MODES, RERANK_PRESET_NAMES } from '../config.js';
 import { ADAPTER_NAMES } from './adapter.js';
 
 type FlagSpec =
@@ -38,7 +38,10 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--exclude-type': { kind: 'value', placeholder: '<type[,type]>' },
   // `retrieve` only: search every type, default exclusion included.
   '--include-history': { kind: 'boolean' },
-  // `retrieve` only: the injection budget in estimated tokens (UTF-8 bytes).
+  // `retrieve` only: HOW `--max-tokens` is counted. `bytes` is the conservative
+  // UTF-8 upper bound; `tokens` counts with the served model's own tokenizer.
+  '--budget-mode': { kind: 'value', placeholder: `<${BUDGET_MODES.join('|')}>` },
+  // `retrieve` only: the injection budget, counted per `--budget-mode`.
   '--max-tokens': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only, OPT-IN: drop every delivered atom whose CALIBRATED
   // relevance probability falls below the floor. Subtractive, never reordering.

@@ -139,6 +139,27 @@ export const ATOM_MIN_CHARS = 200;
 export const RETRIEVE_TOKEN_BUDGET = 64000;
 
 /**
+ * How `--max-tokens` is COUNTED. `bytes` is {@link RETRIEVE_TOKEN_BUDGET}'s
+ * historical measure — the conservative UTF-8 upper bound of `estimateTokens`;
+ * `tokens` counts with the served model's own tokenizer over HTTP.
+ *
+ * A closed vocabulary: a value outside it is refused at exit 2, never resolved
+ * to a default, because a caller who mistyped the measure would otherwise read
+ * a byte-bounded answer as a token-counted one.
+ */
+export const BUDGET_MODES = ['bytes', 'tokens'] as const;
+
+/** One of {@link BUDGET_MODES}. */
+export type BudgetMode = (typeof BUDGET_MODES)[number];
+
+/**
+ * The measure an unflagged run enforces: the byte bound, unchanged. `tokens`
+ * needs a reachable llama-swap and is therefore OPT-IN — a default that depends
+ * on a running server would turn an offline retrieve into a refusal.
+ */
+export const DEFAULT_BUDGET_MODE: BudgetMode = 'bytes';
+
+/**
  * The reranker `retrieve --rerank` calls, served by llama-swap under this id.
  * One id, one model: a run that does not carry the id cannot be told from one
  * that used another model, so `--rerank-model` records what it selects.
@@ -153,6 +174,18 @@ export const RETRIEVE_TOKEN_BUDGET = 64000;
  * the champion row comes from the pool depth, not from this swap.
  */
 export const RERANK_MODEL_ID = 'qwen3-reranker-4b';
+
+/**
+ * The model `--budget-mode tokens` counts against — deliberately the SAME id as
+ * {@link RERANK_MODEL_ID}, not a smaller tokenizer-only model.
+ *
+ * llama-swap loads a model on demand and evicts the resident one to do it, so
+ * counting against any other id would swap the reranker OUT mid-query: the
+ * retrieve path has already made this model resident, and a `/tokenize` call
+ * against it costs no load. It is also the tokenizer whose budget the answer is
+ * actually spent under.
+ */
+export const TOKENIZE_MODEL_ID = RERANK_MODEL_ID;
 
 /** llama-swap's OpenAI-compatible base URL, overridden by {@link RERANK_URL_ENV_VAR}. */
 export const RERANK_DEFAULT_URL = 'http://127.0.0.1:9292';

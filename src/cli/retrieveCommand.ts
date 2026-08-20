@@ -9,11 +9,13 @@
  */
 import { relative } from 'node:path';
 
-import type { SkippedAtom } from '../budget.js';
-import { fitToTokenBudget } from '../budget.js';
-import type { AtomType } from '../config.js';
+import type { AtomMeasure, SkippedAtom } from '../budget.js';
+import { byteMeasure, fitToTokenBudget } from '../budget.js';
+import type { AtomType, BudgetMode } from '../config.js';
 import {
   ATOM_TYPES,
+  BUDGET_MODES,
+  DEFAULT_BUDGET_MODE,
   DEFAULT_EXCLUDED_TYPES,
   RERANK_CALIBRATION,
   RERANK_K_INIT,
@@ -24,6 +26,8 @@ import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js
 import { rephraseQuery } from '../rephrase.js';
 import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
 import { calibrate, rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
+import type { TokenCounter } from '../tokenize.js';
+import { createTokenCounter } from '../tokenize.js';
 import type { AdapterName } from './adapter.js';
 import { createPort, hasPersistentIndex } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -327,6 +331,22 @@ const resolveMaxTokens = (flags: FlagValues): number | undefined => {
   return raw === undefined ? RETRIEVE_TOKEN_BUDGET : parseMaxTokens(raw);
 };
 
+export const BUDGET_MODE_FLAG = '--budget-mode';
+
+/** A measure outside the closed vocabulary is BAD INPUT, refused at exit 2. */
+const budgetModeError = (raw: string): string =>
+  `${BUDGET_MODE_FLAG} value "${raw}" is outside the closed vocabulary — replace it with one of ${BUDGET_MODES.join(' | ')}`;
+
+const isBudgetMode = (raw: string): raw is BudgetMode =>
+  (BUDGET_MODES as readonly string[]).includes(raw);
+
+/** The measure argv selected; `undefined` marks a value this CLI refuses. */
+const resolveBudgetMode = (flags: FlagValues): BudgetMode | undefined => {
+  const raw = stringFlag(flags, BUDGET_MODE_FLAG);
+  if (raw === undefined) return DEFAULT_BUDGET_MODE;
+  return isBudgetMode(raw) ? raw : undefined;
+};
+
 /** The offending token as the caller typed it, for a message that quotes it. */
 const rawFlag = (flags: FlagValues, name: string): string => stringFlag(flags, name) ?? '';
 
@@ -489,9 +509,20 @@ const refusalsOf = (request: RetrieveRequest): readonly string[] =>
  * A refused rewrite or a refused rerank is PARTIAL, not success: the run did
  * retrieve, but not the way `--rephrase` / `--rerank` claimed it would, and a
  * caller that reads exit 0 would take the degraded ranking for the promised one.
+ *
+ * A budget SKIP is the same shape of answer: atoms were delivered AND atoms the
+ * ranking earned were refused for want of budget. It is a property of skipping,
+ * so it holds in both `--budget-mode` counts, and exit 0 would let a caller read
+ * a truncated context as the whole of what the vault holds.
  */
-const exitCodeFor = (request: RetrieveRequest, result: RetrievalResult): number =>
-  isUnsearched(result) || refusalsOf(request).length > 0 ? EXIT_PARTIAL : EXIT_OK;
+const exitCodeFor = (
+  request: RetrieveRequest,
+  result: RetrievalResult,
+  budgeted: BudgetedResult
+): number =>
+  isUnsearched(result) || refusalsOf(request).length > 0 || hasSkips(budgeted)
+    ? EXIT_PARTIAL
+    : EXIT_OK;
 
 const formatScore = (score: number): string => score.toFixed(SCORE_DIGITS);
 
@@ -781,11 +812,20 @@ const confidenceOf = (
 const confidenceLine = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
   `retrieve: confidence ${confidenceOf(request, budgeted)}`;
 
+/**
+ * WHICH measure was enforced, stated on every run. Without it a caller cannot
+ * tell a byte-bounded answer from a token-counted one, and the two admit
+ * different atoms at the same `--max-tokens`.
+ */
+const budgetLine = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
+  `retrieve: budget ${budgeted.maxTokens} counted as ${request.budgetMode}`;
+
 const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): string => {
   const { result } = budgeted;
   return [
     `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
     confidenceLine(request, budgeted),
+    budgetLine(request, budgeted),
     ...rephraseLines(request),
     ...rerankLines(request),
     ...unsearchedNotes(request, result),
@@ -802,6 +842,7 @@ type ArgsResult =
     readonly ok: true;
     readonly k: number;
     readonly maxTokens: number;
+    readonly budgetMode: BudgetMode;
     readonly types: readonly AtomType[] | undefined;
     /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
     readonly maxPerDoc: number | undefined;
@@ -816,6 +857,7 @@ type ArgsResult =
 interface ResolvedValues {
   readonly k: number;
   readonly maxTokens: number;
+  readonly budgetMode: BudgetMode;
   readonly types: readonly AtomType[] | undefined;
   /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
   readonly maxPerDoc: number | undefined;
@@ -851,18 +893,39 @@ const withRerankArgs = (flags: FlagValues, values: ResolvedValues): ArgsResult =
 };
 
 type CountsResult =
-  | { readonly ok: true; readonly k: number; readonly maxTokens: number }
+  | {
+    readonly ok: true;
+    readonly k: number;
+    readonly maxTokens: number;
+    readonly budgetMode: BudgetMode;
+  }
   | { readonly ok: false; readonly error: string };
 
-/** The two integer flags, refusing with the token the caller typed. */
-const resolveCounts = (flags: FlagValues): CountsResult => {
-  const k = resolveK(flags);
+type BudgetResult =
+  | { readonly ok: true; readonly maxTokens: number; readonly budgetMode: BudgetMode }
+  | { readonly ok: false; readonly error: string };
+
+/** The budget ceiling and its MEASURE, which are one decision, not two. */
+const resolveBudget = (flags: FlagValues): BudgetResult => {
   const maxTokens = resolveMaxTokens(flags);
-  if (k === undefined) return { ok: false, error: kError(rawFlag(flags, '-k')) };
+  const budgetMode = resolveBudgetMode(flags);
   if (maxTokens === undefined) {
     return { ok: false, error: maxTokensError(rawFlag(flags, MAX_TOKENS_FLAG)) };
   }
-  return { ok: true, k, maxTokens };
+  if (budgetMode === undefined) {
+    return { ok: false, error: budgetModeError(rawFlag(flags, BUDGET_MODE_FLAG)) };
+  }
+  return { ok: true, maxTokens, budgetMode };
+};
+
+/** The integer flags and the budget, refusing with the token the caller typed. */
+const resolveCounts = (flags: FlagValues): CountsResult => {
+  const k = resolveK(flags);
+  const budget = resolveBudget(flags);
+  if (k === undefined) return { ok: false, error: kError(rawFlag(flags, '-k')) };
+  return budget.ok
+    ? { ok: true, k, maxTokens: budget.maxTokens, budgetMode: budget.budgetMode }
+    : budget;
 };
 
 type PresentationResult =
@@ -892,6 +955,7 @@ const resolveArgs = (flags: FlagValues): ArgsResult => {
   return withRerankArgs(flags, {
     k: counts.k,
     maxTokens: counts.maxTokens,
+    budgetMode: counts.budgetMode,
     types: presentation.types,
     maxPerDoc: presentation.maxPerDoc,
   });
@@ -902,6 +966,8 @@ interface RetrieveRequest {
   readonly query: string;
   readonly k: number;
   readonly maxTokens: number;
+  /** How `maxTokens` is counted. REPORTED, so a reader knows which measure ran. */
+  readonly budgetMode: BudgetMode;
   /** `undefined` = unfiltered. Never an empty list — the port refuses that. */
   readonly types: readonly AtomType[] | undefined;
   /**
@@ -978,6 +1044,7 @@ const payload = (
   indexState: budgeted.result.indexState,
   count: budgeted.result.atoms.length,
   poolSize: budgeted.poolSize,
+  budgetMode: request.budgetMode,
   confidence: confidenceOf(request, budgeted),
   atoms: explainAtoms(effectiveQuery(request), budgeted.result.atoms),
   skipped: budgeted.skipped,
@@ -1229,6 +1296,111 @@ interface PoolFacts {
 }
 
 /**
+ * A resolved measure, or the named reason the run has none. There is no third
+ * case: falling back to the byte bound under `--budget-mode tokens` would
+ * report an upper bound as a real count.
+ */
+type MeasureResult =
+  | { readonly ok: true; readonly measure: AtomMeasure }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * Counting at the COMMAND boundary: every atom is measured here, once, and the
+ * budget layer receives a pure synchronous function. `budget.ts` does no I/O.
+ */
+type CountAtoms = (atoms: readonly RetrievedAtom[]) => Promise<MeasureResult>;
+
+/** `--budget-mode bytes`: the historical measure, resolved without a round trip. */
+const byteCounting: CountAtoms = async () => ({ ok: true, measure: byteMeasure });
+
+type CountedSoFar =
+  | { readonly ok: true; readonly counts: ReadonlyMap<string, number> }
+  | { readonly ok: false; readonly reason: string };
+
+const EMPTY_COUNTS: CountedSoFar = { ok: true, counts: new Map() };
+
+const countRefusal = (atom: RetrievedAtom, reason: string): string =>
+  `atom ${atom.id} could not be counted — ${reason}`;
+
+const withCount = async (
+  counter: TokenCounter,
+  soFar: CountedSoFar,
+  atom: RetrievedAtom
+): Promise<CountedSoFar> => {
+  if (!soFar.ok) return soFar;
+  const counted = await counter.count(atom.body);
+  return counted.ok
+    ? { ok: true, counts: new Map(soFar.counts).set(atom.id, counted.count) }
+    : { ok: false, reason: countRefusal(atom, counted.reason) };
+};
+
+/**
+ * One `/tokenize` call per atom, SEQUENTIALLY: a retrieve budgets at most ~100
+ * atoms and llama-swap serves one model at a time, so a parallel burst buys
+ * nothing and risks queueing behind itself. The first failure stops the walk.
+ */
+const countAll = async (
+  counter: TokenCounter,
+  atoms: readonly RetrievedAtom[]
+): Promise<CountedSoFar> =>
+  await atoms.reduce(
+    async (acc: Promise<CountedSoFar>, atom) => await withCount(counter, await acc, atom),
+    Promise.resolve(EMPTY_COUNTS)
+  );
+
+/**
+ * The pure measure the budget runs on. An atom absent from the map is
+ * unreachable — the map is built from the very atoms being budgeted — and is
+ * charged INFINITY rather than a byte bound, so an unmeasured atom can never be
+ * admitted under a count it never got.
+ */
+const measureFrom = (counts: ReadonlyMap<string, number>): AtomMeasure =>
+  (atom: RetrievedAtom): number => counts.get(atom.id) ?? Number.POSITIVE_INFINITY;
+
+const tokenCounting = (counter: TokenCounter): CountAtoms =>
+  async (atoms: readonly RetrievedAtom[]): Promise<MeasureResult> => {
+    const counted = await countAll(counter, atoms);
+    return counted.ok ? { ok: true, measure: measureFrom(counted.counts) } : counted;
+  };
+
+/**
+ * The one wording for "`--budget-mode tokens` was asked for and cannot be
+ * honoured". It names the CONDITION and the correction; the run exits PARTIAL
+ * rather than quietly enforcing the byte bound under a token label.
+ */
+const budgetRefusal = (reason: string): string =>
+  `retrieve: ${BUDGET_MODE_FLAG} tokens could not count with the served tokenizer — ${reason}; re-run with \`${BUDGET_MODE_FLAG} bytes\` to budget by the conservative UTF-8 bound instead`;
+
+const budgetRefusalOutcome = (reason: string): CommandOutcome => {
+  const message = budgetRefusal(reason);
+  return {
+    exitCode: EXIT_PARTIAL,
+    data: { command: 'retrieve', budgetMode: 'tokens', error: message },
+    text: message,
+  };
+};
+
+type CountingResult =
+  | { readonly ok: true; readonly counting: CountAtoms }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * The STARTUP probe. `--budget-mode tokens` proves the route answers before the
+ * run depends on it, so a dead tokenizer is a refusal rather than a surprise
+ * halfway through the atoms.
+ */
+const resolveCounting = async (
+  mode: BudgetMode,
+  counter: TokenCounter
+): Promise<CountingResult> => {
+  if (mode === 'bytes') return { ok: true, counting: byteCounting };
+  const probe = await counter.probe();
+  return probe.ok
+    ? { ok: true, counting: tokenCounting(counter) }
+    : { ok: false, reason: probe.reason };
+};
+
+/**
  * How many atoms of the pool survive the per-document cap. Read off the FIRST
  * PASS rather than the delivered slice: the count is order-invariant, so it is
  * the ceiling on what any arrangement of that pool could have delivered.
@@ -1240,20 +1412,28 @@ const poolFacts = (request: RetrieveRequest, pool: readonly RetrievedAtom[]): Po
 });
 
 /**
+ * The budget as resolved: the ceiling, and the measure that charges against it.
+ */
+interface BudgetSpec {
+  readonly maxTokens: number;
+  readonly measure: AtomMeasure;
+}
+
+/**
  * The budget is applied HERE, between the floor and the renderings: the adapters
  * rank, the CLI decides what fits the caller's window, and both halves of that
  * decision — kept and skipped — reach every rendering.
  */
 const applyBudget = (
   floored: FlooredResult,
-  maxTokens: number,
+  budget: BudgetSpec,
   pool: PoolFacts
 ): BudgetedResult => {
-  const fit = fitToTokenBudget(floored.result.atoms, maxTokens);
+  const fit = fitToTokenBudget(floored.result.atoms, budget.maxTokens, budget.measure);
   return {
     result: { ...floored.result, atoms: fit.kept },
     skipped: fit.skipped,
-    maxTokens,
+    maxTokens: budget.maxTokens,
     poolSize: pool.size,
     cappedPool: pool.capped,
     belowFloor: floored.belowFloor,
@@ -1281,7 +1461,22 @@ const withRewrite = async (request: RetrieveRequest): Promise<RetrieveRequest> =
     : { ...request, rephraseRefusal: outcome.error };
 };
 
-const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
+/** The three renderings of one budgeted run, plus the exit code they share. */
+const rendered = (
+  request: RetrieveRequest,
+  result: RetrievalResult,
+  budgeted: BudgetedResult
+): CommandOutcome => ({
+  exitCode: exitCodeFor(request, result, budgeted),
+  data: payload(request, budgeted),
+  text: retrieveText(request, budgeted),
+  xml: retrieveXml(request, budgeted),
+});
+
+const search = async (
+  request: RetrieveRequest,
+  counting: CountAtoms
+): Promise<CommandOutcome> => {
   const { context } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath);
   const result = await port.retrieve(effectiveQuery(request), retrieveOptions(request));
@@ -1289,13 +1484,10 @@ const search = async (request: RetrieveRequest): Promise<CommandOutcome> => {
   const ranked = await rankedResult(request, result);
   const reported: RetrieveRequest = { ...request, rerankRefusal: ranked.refusal };
   const floored = applyFloor(reported, ranked.result);
-  const budgeted = applyBudget(floored, request.maxTokens, poolFacts(request, result.atoms));
-  return {
-    exitCode: exitCodeFor(reported, ranked.result),
-    data: payload(reported, budgeted),
-    text: retrieveText(reported, budgeted),
-    xml: retrieveXml(reported, budgeted),
-  };
+  const measured = await counting(floored.result.atoms);
+  if (!measured.ok) return budgetRefusalOutcome(measured.reason);
+  const budget: BudgetSpec = { maxTokens: request.maxTokens, measure: measured.measure };
+  return rendered(reported, ranked.result, applyBudget(floored, budget, poolFacts(request, result.atoms)));
 };
 
 type ResolvedArgs = Extract<ArgsResult, { readonly ok: true }>;
@@ -1310,6 +1502,7 @@ const initialRequest = (
   query,
   k: args.k,
   maxTokens: args.maxTokens,
+  budgetMode: args.budgetMode,
   types: args.types,
   maxPerDoc: args.maxPerDoc,
   rerank: args.rerank,
@@ -1321,10 +1514,22 @@ const initialRequest = (
   rerankRefusal: undefined,
 });
 
+/** Probe, then retrieve. The probe runs BEFORE the search, so a refusal costs none. */
+const searchWithBudget = async (
+  context: CommandContext,
+  query: string,
+  args: ResolvedArgs
+): Promise<CommandOutcome> => {
+  const counting = await resolveCounting(args.budgetMode, createTokenCounter());
+  if (!counting.ok) return budgetRefusalOutcome(counting.reason);
+  const request = await withRewrite(initialRequest(context, query, args));
+  return await search(request, counting.counting);
+};
+
 export const runRetrieveCommand = async (context: CommandContext): Promise<CommandOutcome> => {
   const query = context.positionals.join(' ');
   const args = resolveArgs(context.flags);
   if (query.length === 0) return usageError(NO_QUERY);
   if (!args.ok) return usageError(args.error);
-  return await search(await withRewrite(initialRequest(context, query, args)));
+  return await searchWithBudget(context, query, args);
 };

@@ -558,7 +558,12 @@ describe('a run without --min-relevance changes only by the confidence field', (
       unknown
     >;
 
-    expect(Object.keys(payload).sort()).toEqual([...PRE_CONFIDENCE_KEYS, 'confidence'].sort());
+    // `budgetMode` joined it with `--budget-mode` (T3.3): the payload MUST say
+    // which measure the budget enforced, or a byte-bounded answer and a
+    // token-counted one are indistinguishable at the same `--max-tokens`.
+    expect(Object.keys(payload).sort()).toEqual(
+      [...PRE_CONFIDENCE_KEYS, 'confidence', 'budgetMode'].sort()
+    );
   });
 
   it('adds exactly one line to the text rendering, leaving every other line as it was', async () => {
@@ -568,7 +573,13 @@ describe('a run without --min-relevance changes only by the confidence field', (
     expect(lines.filter(line => line.includes('confidence'))).toEqual([
       'retrieve: confidence weak',
     ]);
-    const rest = lines.filter(line => !line.startsWith('retrieve: confidence'));
+    // The second added line is the budget measure (T3.3), pinned the same way.
+    expect(lines.filter(line => line.includes('counted as'))).toEqual([
+      'retrieve: budget 64000 counted as bytes',
+    ]);
+    const rest = lines.filter(
+      line => !line.startsWith('retrieve: confidence') && !line.startsWith('retrieve: budget')
+    );
     expect(rest[0]).toMatch(/^retrieve: mode [\w:-]+, indexState \w+, atoms \d+$/);
     rest.slice(1).forEach(line => expect(line).toMatch(/^ {2}\d+\.\d{4} {2}|^ {4}origin {2}/));
   });
