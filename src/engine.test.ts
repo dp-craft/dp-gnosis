@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, resolve } from 'node:path';
 
@@ -23,6 +23,7 @@ import {
   assertPortSound,
   assertRerankDiscriminates,
   attributedIngestMs,
+  auditDuplicates,
   CORPUS_MISMATCH_CAUSE,
   EMPTY_INDEX_CAUSE,
   LOW_COVERAGE_CAUSE,
@@ -37,6 +38,8 @@ import {
   retrieveDocs
 } from './engine.js';
 import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
+import { auditGold, type GoldAudit } from './goldAudit.js';
+import type { Qrel } from './metrics.js';
 
 /** A second reranker id — any id the shipped constant is not. */
 const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';
@@ -45,6 +48,18 @@ const DATASET_ID = 'fixture';
 const DEPTH = 5;
 
 const root = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-engine-'));
+
+/** Every file under `dir`, as `relative path → bytes` — the before/after evidence D1 needs. */
+const snapshotTree = (dir: string): readonly string[] =>
+  readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter(entry => entry.isFile())
+    .map(entry => {
+      const path = resolve(entry.parentPath, entry.name);
+      return `${path.slice(dir.length)}\u0000${readFileSync(path, 'utf8')}`;
+    })
+    .sort();
+
+const isAtomEntry = (row: string): boolean => row.includes('-atoms/');
 
 const docs: readonly BeirDoc[] = [
   {
@@ -816,5 +831,111 @@ describe('prepareDataset — the golden set decides which duplicate survives', (
         goldIds: ['filler-0', 'never-ingested'],
       })
     ).rejects.toMatchObject({ cause: UNREACHABLE_GOLD_CAUSE });
+  });
+});
+
+/**
+ * THE INSTRUMENT AUDIT. `run.ts:goldIdsOf` returns `undefined` for every
+ * non-derived dataset, so a BEIR corpus is deduped GOLD-BLIND and never reaches
+ * `assertGoldIndexed` — the orphaned judgments are real and invisible. This
+ * reports them without building an index, so the count costs one ingest and no
+ * GPU, and it MUST NOT change which copy the dedupe kept.
+ */
+describe('auditDuplicates — which document the dedupe orphaned, and where its body survived', () => {
+  const MIRROR_TITLE = 'Audited mirror body';
+  /** ≥ DEDUPE_MIN_BODY_CHARS (200), or the dedupe treats it as boilerplate. */
+  const MIRROR_TEXT =
+    'Two source documents carry byte-identical prose here so the exact-body dedupe groups them ' +
+    'and refuses one of the pair outright. The audit has to name the refused document and the ' +
+    'one whose copy of the body survived, at document granularity and not atom granularity.';
+
+  const MIRRORS: readonly BeirDoc[] = [
+    { id: 'aud-aaa', title: MIRROR_TITLE, text: MIRROR_TEXT },
+    { id: 'aud-zzz', title: MIRROR_TITLE, text: MIRROR_TEXT },
+  ];
+
+  const fillers: readonly BeirDoc[] = Array.from({ length: 10 }, (_unused, index) => ({
+    id: `audfill-${index}`,
+    title: `Audit filler subject ${index}`,
+    text: `Distinct audit filler prose number ${index} about an unrelated subject entirely.`,
+  }));
+
+  it('maps the gold-blind orphan to the id that won the tie-break', async () => {
+    const audited = await auditDuplicates({
+      id: `${DATASET_ID}-audit-blind`,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+    });
+    expect(audited.links).toEqual([{ orphanDocId: 'aud-zzz', survivorDocId: 'aud-aaa' }]);
+  });
+
+  it('follows the golden set when it decides which copy survives', async () => {
+    const audited = await auditDuplicates({
+      id: `${DATASET_ID}-audit-gold`,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+      goldIds: ['aud-zzz'],
+    });
+    expect(audited.links).toEqual([{ orphanDocId: 'aud-aaa', survivorDocId: 'aud-zzz' }]);
+  });
+
+  it('reports nothing for a corpus holding no byte-identical pair', async () => {
+    const audited = await auditDuplicates({
+      id: `${DATASET_ID}-audit-clean`,
+      docs: fillers,
+      workRoot: root,
+    });
+    expect(audited.links).toEqual([]);
+  });
+
+  it('builds no index — the audit is ingest-only', async () => {
+    const scoped = `${DATASET_ID}-audit-noindex`;
+    await auditDuplicates({ id: scoped, docs: fillers, workRoot: root });
+    expect(existsSync(resolve(root, scoped, `${scoped}-index`))).toBe(false);
+  });
+
+  /**
+   * D1. `ingest` WRITES and PRUNES its output directory, so an audit pointed at
+   * the dataset's own atoms dir re-ingests the measured corpus under different
+   * options and silently replaces it — measured on `vault`, 6628 → 6619 atoms.
+   * The dataset's work directory MUST come back byte-identical.
+   */
+  it('leaves the dataset\'s own atoms, index and manifest byte-unchanged', async () => {
+    const scoped = `${DATASET_ID}-audit-nonmutating`;
+    const prepared = await prepareDataset({
+      id: scoped,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+      goldIds: ['aud-zzz'],
+    });
+    const before = snapshotTree(resolve(root, scoped));
+    await auditDuplicates({ id: scoped, docs: [...MIRRORS, ...fillers], workRoot: root });
+    expect(snapshotTree(resolve(root, scoped))).toEqual(before);
+    expect(readdirSync(prepared.atomsDir)).toHaveLength(before.filter(isAtomEntry).length);
+  });
+
+  /**
+   * D2. The dedupe survivor rule is JUDGED FIRST, so an audit that ingests
+   * gold-blind reports orphans production never loses. Same fixture, same
+   * corpus: the goldIds are the whole difference.
+   */
+  it('reports no judged orphan when the golden set decides the survivor', async () => {
+    const judged = new Map<string, Qrel>([['q1', new Map([['aud-zzz', 1]])]]);
+    const corpusDocIds = [...MIRRORS, ...fillers].map(doc => doc.id);
+    const aware = await auditDuplicates({
+      id: `${DATASET_ID}-audit-aware`,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+      goldIds: ['aud-zzz'],
+    });
+    const blind = await auditDuplicates({
+      id: `${DATASET_ID}-audit-unaware`,
+      docs: [...MIRRORS, ...fillers],
+      workRoot: root,
+    });
+    const auditOf = (represented: readonly string[]): GoldAudit =>
+      auditGold({ datasetId: 'fixture', corpusDocIds, representedDocIds: represented, qrels: judged });
+    expect(auditOf(aware.representedDocIds).lostJudgments).toBe(0);
+    expect(auditOf(blind.representedDocIds).lostJudgments).toBe(1);
   });
 });

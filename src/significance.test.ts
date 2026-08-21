@@ -64,6 +64,7 @@ const asProvenance = (run: HistoryRow): RunProvenance => ({
   ...run,
   analyzer: run.analyzer ?? DEFAULT_ANALYZER,
   queryAdjacency: run.queryAdjacency ?? false,
+  prf: run.prf ?? false,
   typeFilter: run.typeFilter ?? NO_TYPE_FILTER,
 });
 

@@ -330,6 +330,7 @@ const provenanceOf = (args: ExternalArgs, suiteRoot: string): RunProvenance => (
   rerankPool: args.rerankPool,
   analyzer: EXTERNAL_ANALYZER,
   queryAdjacency: false,
+  prf: false,
   typeFilter: NO_TYPE_FILTER,
 });
 

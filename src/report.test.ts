@@ -56,6 +56,7 @@ const provenance: RunProvenance = {
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
   queryAdjacency: false,
+  prf: false,
   typeFilter: NO_TYPE_FILTER,
 };
 
@@ -190,6 +191,7 @@ describe('writeRunReport', () => {
         'rPrecisionTopics',
         'rbpResidual',
         'queryAdjacency',
+        'prf',
         'typeFilter',
         'rerank',
         'perTopicPath',
@@ -217,6 +219,28 @@ describe('writeRunReport', () => {
       results: [result],
     });
     expect(readHistory(resolve(dir, HISTORY_FILE))[0]?.queryAdjacency).toBe(true);
+  });
+
+  it('records the PRF treatment on the row, applied or not', () => {
+    const dir = tempResultsDir();
+    writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(row?.prf).toBe(false);
+    expect(row?.prfDocs).toBeUndefined();
+  });
+
+  it('records an APPLIED PRF treatment with the three knobs it ran', () => {
+    const dir = tempResultsDir();
+    writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, prf: true, prfDocs: 10, prfTerms: 20, prfAlpha: 0.5 },
+      results: [result],
+    });
+    const row = readHistory(resolve(dir, HISTORY_FILE))[0];
+    expect(row?.prf).toBe(true);
+    expect(row?.prfDocs).toBe(10);
+    expect(row?.prfTerms).toBe(20);
+    expect(row?.prfAlpha).toBe(0.5);
   });
 
   it('records the analysis chain on the row, so --compare can see an analyzer change', () => {

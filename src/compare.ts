@@ -25,6 +25,8 @@
  * | treatment | `embedModel` | a different ENCODER behind the dense leg |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
+ * | treatment | `prf` | the query was RM3-EXPANDED from its own first pass, or not |
+ * | treatment | `prfDocs` / `prfTerms` / `prfAlpha` | a different RM3 term model over the same first pass — guarded ONLY between two rows that both expanded |
  * | treatment | `typeFilter` | a different CORPUS PROJECTION — the atom types the run could return at all |
  *
  * A moved SCALE is still refused: the two numbers are not on one axis and no
@@ -43,6 +45,7 @@ import {
   RERANK_MODEL_ID,
   type RerankFusion
 } from '../../dp-gnosis/src/config.js';
+import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { type HistoryRow, NO_TYPE_FILTER } from './report.js';
 
@@ -81,6 +84,10 @@ export const TREATMENT_FIELDS = [
   'embedModel',
   'analyzer',
   'queryAdjacency',
+  'prf',
+  'prfDocs',
+  'prfTerms',
+  'prfAlpha',
   'typeFilter',
 ] as const;
 
@@ -213,6 +220,12 @@ const LEGACY_RERANK_RRF_WEIGHT = 0.5;
  * A `replace` protocol (`beir-ce`) has no weight term at all, which `appliesTo`
  * — not a default — is what answers.
  *
+ * `prf` likewise: no row recorded before the flag existed expanded its query, so
+ * absence reads as OFF rather than as a moved treatment. Its three knobs follow
+ * the `rerankWeight` rule one step over — they exist only where an expansion
+ * ran, which `appliesTo` answers, and an absent one on a row that DID expand
+ * means the engine's `DEFAULT_PRF_PARAMS`, the only model a stamped row ever ran.
+ *
  * `tokenBudget` / `servedK` have NO default and MUST NOT be given one: absence
  * means no cap was applied, which is a real arm rather than an older value, so a
  * budgeted row against an unbudgeted one is the experiment.
@@ -223,6 +236,10 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   hybridWeight: HYBRID_FUSION.rerankWeight,
   embedModel: EMBED_MODEL_ID,
   queryAdjacency: false,
+  prf: false,
+  prfDocs: DEFAULT_PRF_PARAMS.fbDocs,
+  prfTerms: DEFAULT_PRF_PARAMS.fbTerms,
+  prfAlpha: DEFAULT_PRF_PARAMS.alpha,
   rerankDocMaxChars: LEGACY_RERANK_DOC_MAX_CHARS,
   rerankExtract: LEGACY_RERANK_EXTRACT,
   rerankWeight: LEGACY_RERANK_RRF_WEIGHT,
@@ -259,6 +276,18 @@ const RERANK_ONLY_FIELDS: ReadonlySet<ProvenanceField> = new Set<ProvenanceField
   'rerankExtract',
 ]);
 
+/**
+ * The fields that describe an EXPANDED row and nothing else — the term model the
+ * RM3 pass built. A row that did not expand has none of them, so between it and
+ * a PRF row they come into existence rather than move, and `prf` alone names
+ * that flip — the same rule `RERANK_ONLY_FIELDS` states for the reranker.
+ */
+const PRF_ONLY_FIELDS: ReadonlySet<ProvenanceField> = new Set<ProvenanceField>([
+  'prfDocs',
+  'prfTerms',
+  'prfAlpha',
+]);
+
 const presetOf = (name: string): RerankFusion | undefined =>
   (RERANK_FUSION_PRESETS as Readonly<Record<string, RerankFusion>>)[name];
 
@@ -282,10 +311,15 @@ const rrfFused = (row: HistoryRow): boolean =>
  *
  * `rerankWeight` is the same rule one step narrower: a `replace` protocol has no
  * weight to move, so between it and an RRF row the weight comes into existence
- * and `rerankProfile` alone names that flip.
+ * and `rerankProfile` alone names that flip. The three RM3 knobs follow it
+ * against `prf`.
  */
+/** A row recorded before the flag existed expanded nothing (see {@link FIELD_DEFAULTS}). */
+const prfExpanded = (row: HistoryRow): boolean => row.prf ?? false;
+
 const appliesTo = (row: HistoryRow, field: ProvenanceField): boolean => {
   if (field === 'rerankWeight') return rrfFused(row);
+  if (PRF_ONLY_FIELDS.has(field)) return prfExpanded(row);
   return RERANK_ONLY_FIELDS.has(field) ? row.rerank : true;
 };
 

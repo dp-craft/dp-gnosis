@@ -50,6 +50,7 @@ import {
   RERANK_MODEL_ID,
   type RerankFusion } from '../../dp-gnosis/src/config.js';
 import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
+import { DEFAULT_PRF_PARAMS, type PrfParams } from '../../dp-gnosis/src/prf.js';
 import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
 import {
@@ -118,7 +119,8 @@ export const SUITE_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 export const MANIFEST_PATH = resolve(SUITE_ROOT, 'datasets.json');
 const RESULTS_DIR = resolve(SUITE_ROOT, 'results');
 const DATA_DIR = resolve(SUITE_ROOT, 'data');
-const WORK_ROOT = resolve(DATA_DIR, 'work');
+/** Where every dataset's throwaway corpus, atoms and index live — one subdir per id. */
+export const WORK_ROOT = resolve(DATA_DIR, 'work');
 const CORPUS_FILE = 'corpus.jsonl';
 
 /**
@@ -220,6 +222,20 @@ export interface CliOptions {
    * row like `analyzer`, because every run either applied it or did not.
    */
   readonly queryAdjacency: boolean;
+  /**
+   * RM3 pseudo-relevance feedback: the first pass builds a term model and the
+   * ranking is REPLACED by the weighted rescore. Recorded on every row like
+   * `queryAdjacency`, because every run either expanded or did not.
+   */
+  readonly prf: boolean;
+  /**
+   * The three RM3 knobs, each `undefined` meaning the engine's shipped
+   * `DEFAULT_PRF_PARAMS` — the model the flag alone measures. Meaningless
+   * without `--prf`, and refused there.
+   */
+  readonly prfDocs: number | undefined;
+  readonly prfTerms: number | undefined;
+  readonly prfAlpha: number | undefined;
   /**
    * Whether the run projects the FULL vault — every atom type — instead of the
    * SERVABLE subset the CLI shows. Same name and same meaning as the CLI's flag.
@@ -350,6 +366,74 @@ const checkAdjacencyAdapter = (adapter: AdapterName, adjacency: boolean): boolea
   throw new Error(
     `dp-gnosis-bench: adapter "${adapter}" does not honour ${QUERY_ADJACENCY_FLAG} — ` +
       `only "${ADJACENCY_AWARE_ADAPTER}" applies the adjacency phrase at query time`
+  );
+};
+
+const PRF_FLAG = '--prf';
+const PRF_DOCS_FLAG = '--prf-docs';
+const PRF_TERMS_FLAG = '--prf-terms';
+const PRF_ALPHA_FLAG = '--prf-alpha';
+
+/** The ONE adapter whose `retrieve` honours the RM3 option (`fts5Adapter.ts`). */
+const PRF_AWARE_ADAPTER: AdapterName = 'fts5';
+
+/**
+ * `--prf` on any other adapter REFUSES, before a dataset is prepared, exactly as
+ * `--query-adjacency` does: no other adapter reads the option — the engine
+ * refuses it too — so the row would record `prf`, a TREATMENT field `compare.ts`
+ * labels an arm, under an expansion the run never ran. Reaching the engine and
+ * hoping would cost the arm instead of the parse.
+ */
+const checkPrfAdapter = (adapter: AdapterName, prf: boolean): boolean => {
+  if (!prf || adapter === PRF_AWARE_ADAPTER) return prf;
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour ${PRF_FLAG} — ` +
+      `only "${PRF_AWARE_ADAPTER}" expands the query from its own first pass`
+  );
+};
+
+/** A feedback set or a term model of fewer than one member expands nothing. */
+const PRF_COUNT_MIN = 1;
+
+/** The interpolation's two ends: the unexpanded query, and the expansion alone. */
+const PRF_ALPHA_MIN = 0;
+const PRF_ALPHA_MAX = 1;
+
+/**
+ * An RM3 knob without `--prf` REFUSES, exactly as `--rerank-pool` does without
+ * `--rerank`: nothing would expand, yet the row would name a term model no query
+ * was ever rescored by.
+ */
+const requirePrf = (flag: string, value: string, prf: boolean): void => {
+  if (prf) return;
+  throw new Error(
+    `dp-gnosis-bench: ${flag} "${value}" requires ${PRF_FLAG} — ` +
+      'without it nothing expands and the row would name a model nothing ran'
+  );
+};
+
+/**
+ * A fractional, zero or negative count is a usage error, NOT something to clamp:
+ * a clamped cell records the model it was ASKED for while expanding under
+ * another, so two cells of one sweep would carry the same label.
+ */
+const parsePrfCount = (flag: string, value: string | undefined, prf: boolean): number | undefined => {
+  if (value === undefined) return undefined;
+  requirePrf(flag, value, prf);
+  const count = Number(value);
+  if (Number.isInteger(count) && count >= PRF_COUNT_MIN) return count;
+  throw positiveIntegerError(flag, PRF_COUNT_MIN, value);
+};
+
+/** An alpha outside `0…1` is a usage error for the reason `--hybrid-weight` is. */
+const parsePrfAlpha = (value: string | undefined, prf: boolean): number | undefined => {
+  if (value === undefined) return undefined;
+  requirePrf(PRF_ALPHA_FLAG, value, prf);
+  const alpha = Number(value);
+  if (alpha >= PRF_ALPHA_MIN && alpha <= PRF_ALPHA_MAX) return alpha;
+  throw new Error(
+    `dp-gnosis-bench: ${PRF_ALPHA_FLAG} expects a number from ${PRF_ALPHA_MIN} ` +
+      `(the unexpanded query) to ${PRF_ALPHA_MAX} (the expansion alone), got "${value}"`
   );
 };
 
@@ -605,9 +689,19 @@ export const RUN_FLAGS: FlagSpec = {
     RERANK_DOC_MAX_CHARS_FLAG,
     RERANK_EXTRACT_FLAG,
     HYBRID_WEIGHT_FLAG,
+    PRF_DOCS_FLAG,
+    PRF_TERMS_FLAG,
+    PRF_ALPHA_FLAG,
     ...GATE_VALUE_FLAGS,
   ],
-  boolean: ['--compare', '--help', '--rerank', QUERY_ADJACENCY_FLAG, INCLUDE_HISTORY_FLAG],
+  boolean: [
+    '--compare',
+    '--help',
+    '--rerank',
+    QUERY_ADJACENCY_FLAG,
+    PRF_FLAG,
+    INCLUDE_HISTORY_FLAG,
+  ],
 };
 
 export const parseArgs = (argv: readonly string[]): CliOptions => {
@@ -617,6 +711,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
   const adapter = parseAdapter(flagValue(argv, '--adapter'));
   const rerank = argv.includes('--rerank');
   const tokenBudget = parseTokenBudget(flagValue(argv, BUDGET_FLAG));
+  const prf = checkPrfAdapter(adapter, argv.includes(PRF_FLAG));
   return {
     tokenBudget,
     servedK: parseServedK(flagValue(argv, SERVED_K_FLAG), tokenBudget),
@@ -642,6 +737,10 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     ),
     analyzer: resolveAnalyzer(adapter, flagValue(argv, '--analyzer')),
     queryAdjacency: checkAdjacencyAdapter(adapter, argv.includes(QUERY_ADJACENCY_FLAG)),
+    prf,
+    prfDocs: parsePrfCount(PRF_DOCS_FLAG, flagValue(argv, PRF_DOCS_FLAG), prf),
+    prfTerms: parsePrfCount(PRF_TERMS_FLAG, flagValue(argv, PRF_TERMS_FLAG), prf),
+    prfAlpha: parsePrfAlpha(flagValue(argv, PRF_ALPHA_FLAG), prf),
     includeHistory: argv.includes(INCLUDE_HISTORY_FLAG),
   };
 };
@@ -848,6 +947,22 @@ export const rerankExtractOf = (options: CliOptions): ExtractStrategy =>
   options.rerankExtract ?? EXTRACT_STRATEGY;
 
 /**
+ * The RM3 model the run ACTUALLY expanded with — each knob the named one, else
+ * the engine's shipped `DEFAULT_PRF_PARAMS`. Resolved ONCE and read by both the
+ * retrieval path and the provenance stamp, so a row can never name a model the
+ * query was not rescored by. `undefined` without `--prf`: the port then receives
+ * no option at all and the call is what every recorded run made, byte for byte.
+ */
+export const prfParamsOf = (options: CliOptions): PrfParams | undefined =>
+  options.prf
+    ? {
+        fbDocs: options.prfDocs ?? DEFAULT_PRF_PARAMS.fbDocs,
+        fbTerms: options.prfTerms ?? DEFAULT_PRF_PARAMS.fbTerms,
+        alpha: options.prfAlpha ?? DEFAULT_PRF_PARAMS.alpha,
+      }
+    : undefined;
+
+/**
  * The PRESENTED atoms — what a consumer would actually receive.
  *
  * `fitToTokenBudget` is the CLI's presentation cap and is IMPORTED, never
@@ -881,7 +996,13 @@ interface TopicRanking {
 const rankTopic = async (context: RankContext, topic: Topic): Promise<TopicRanking> => {
   const { options } = context;
   const depth = rerankPoolOf(options);
-  const atoms = await retrieveDocs(context.port, topic.text, depth, options.queryAdjacency);
+  const atoms = await retrieveDocs(
+    context.port,
+    topic.text,
+    depth,
+    options.queryAdjacency,
+    prfParamsOf(options)
+  );
   const ordered = await rerankIfRequested(topic.text, atoms, options.rerank, {
     fusion: options.rerankFusion,
     model: options.rerankModel,
@@ -1313,6 +1434,19 @@ export const selectionError = (selection: Selection): string | undefined => {
  * for a measured run — the value is unrecoverable from the numbers, so what it
  * stamps is the property worth asserting.
  */
+/** The RESOLVED term model, stamped only where an expansion actually ran. */
+type PrfProvenance = Pick<RunProvenance, 'prf' | 'prfDocs' | 'prfTerms' | 'prfAlpha'>;
+
+const prfProvenance = (options: CliOptions): PrfProvenance => {
+  const params = prfParamsOf(options);
+  return {
+    prf: options.prf,
+    prfDocs: params?.fbDocs,
+    prfTerms: params?.fbTerms,
+    prfAlpha: params?.alpha,
+  };
+};
+
 export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
   ts: new Date().toISOString(),
   gitSha,
@@ -1331,6 +1465,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
   queryAdjacency: options.queryAdjacency,
+  ...prfProvenance(options),
   typeFilter: typeFilterOf(options.includeHistory),
 });
 

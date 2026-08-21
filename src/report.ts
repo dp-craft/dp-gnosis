@@ -119,6 +119,20 @@ export interface RunProvenance {
    */
   readonly queryAdjacency: boolean;
   /**
+   * Whether RM3 pseudo-relevance feedback expanded the query. Required for the
+   * reason `queryAdjacency` is: every run either expanded or did not, and the
+   * expansion is unrecoverable from the metrics afterwards.
+   */
+  readonly prf: boolean;
+  /**
+   * The three RM3 knobs the run RESOLVED — feedback documents, expansion terms
+   * and the interpolation. All absent on a run that did not expand: there is no
+   * term model to describe, so recording a default would name an arm nothing ran.
+   */
+  readonly prfDocs?: number | undefined;
+  readonly prfTerms?: number | undefined;
+  readonly prfAlpha?: number | undefined;
+  /**
    * The types the run's corpus EXCLUDED, sorted and comma-joined, or
    * {@link NO_TYPE_FILTER} when it excluded none. Required for the reason
    * `analyzer` is: every run projected one type set or the other, and the set is
@@ -317,6 +331,22 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    */
   readonly queryAdjacency?: boolean;
   /**
+   * Whether this row's queries were RM3-expanded — TREATMENT provenance
+   * (`compare.ts`), so switching it on is labelled an arm comparison instead of
+   * being subtracted. Absent on every row recorded before the flag existed; none
+   * of those expanded, which is how `compare.ts` reads an absent one.
+   */
+  readonly prf?: boolean;
+  /**
+   * The RM3 knobs this row expanded under — TREATMENT provenance
+   * (`compare.ts`), and they describe a PRF row alone. Absent on a row that did
+   * not expand, and on a PRF row recorded before a knob was stamped; the latter
+   * ran the engine's `DEFAULT_PRF_PARAMS`, which is how `compare.ts` reads it.
+   */
+  readonly prfDocs?: number;
+  readonly prfTerms?: number;
+  readonly prfAlpha?: number;
+  /**
    * The types this row's corpus excluded — TREATMENT provenance (`compare.ts`),
    * so aligning the bench with serving is labelled an arm comparison instead of
    * being subtracted. Absent on every row recorded before the filter existed;
@@ -495,6 +525,10 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   embedModel: provenance.embedModel,
   analyzer: provenance.analyzer,
   queryAdjacency: provenance.queryAdjacency,
+  prf: provenance.prf,
+  prfDocs: provenance.prfDocs,
+  prfTerms: provenance.prfTerms,
+  prfAlpha: provenance.prfAlpha,
   typeFilter: provenance.typeFilter,
   ...descriptorFields(result),
   ...costFields(result),

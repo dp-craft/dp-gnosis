@@ -16,6 +16,7 @@ import {
   RERANK_RRF_K,
   RERANK_RRF_WEIGHT
 } from '../../dp-gnosis/src/config.js';
+import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -77,6 +78,7 @@ describe('parseArgs', () => {
       rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
       analyzer: DEFAULT_ANALYZER,
       queryAdjacency: false,
+      prf: false,
       includeHistory: false,
     });
   });
@@ -94,6 +96,7 @@ describe('parseArgs', () => {
         rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
         analyzer: DEFAULT_ANALYZER,
         queryAdjacency: false,
+        prf: false,
         includeHistory: false,
       });
   });
@@ -340,6 +343,57 @@ describe('parseArgs', () => {
 
   it('leaves the flagless invocation on a non-fts5 adapter alone — every legacy run', () => {
     expect(parseArgs(['--adapter', 'linear']).queryAdjacency).toBe(false);
+  });
+
+  it('defaults --prf OFF, the treatment every recorded run was measured without', () => {
+    expect(parseArgs([]).prf).toBe(false);
+    expect(parseArgs([]).prfDocs).toBeUndefined();
+    expect(parseArgs([]).prfTerms).toBeUndefined();
+    expect(parseArgs([]).prfAlpha).toBeUndefined();
+  });
+
+  it('reads --prf as a switch', () => {
+    expect(parseArgs(['--prf']).prf).toBe(true);
+    expect(parseArgs(['--adapter', 'fts5', '--prf']).prf).toBe(true);
+  });
+
+  it('REFUSES --prf on an adapter that does not honour it, naming both', () => {
+    expect(() => parseArgs(['--adapter', 'linear', '--prf'])).toThrow(/linear/);
+    expect(() => parseArgs(['--adapter', 'linear', '--prf'])).toThrow(/--prf/);
+    expect(() => parseArgs(['--adapter', 'minisearch', '--prf'])).toThrow(/fts5/);
+  });
+
+  it('reads the three RM3 knobs when --prf names them', () => {
+    const options = parseArgs([
+      '--prf',
+      '--prf-docs',
+      '5',
+      '--prf-terms',
+      '8',
+      '--prf-alpha',
+      '0.3'
+    ]);
+    expect(options.prfDocs).toBe(5);
+    expect(options.prfTerms).toBe(8);
+    expect(options.prfAlpha).toBe(0.3);
+  });
+
+  it('REFUSES an RM3 knob without --prf — nothing would expand', () => {
+    expect(() => parseArgs(['--prf-docs', '5'])).toThrow(/--prf/);
+    expect(() => parseArgs(['--prf-terms', '8'])).toThrow(/--prf/);
+    expect(() => parseArgs(['--prf-alpha', '0.3'])).toThrow(/--prf/);
+  });
+
+  it('REFUSES a fractional, zero or negative feedback size rather than clamping it', () => {
+    expect(() => parseArgs(['--prf', '--prf-docs', '0'])).toThrow(/--prf-docs/);
+    expect(() => parseArgs(['--prf', '--prf-docs', '2.5'])).toThrow(/--prf-docs/);
+    expect(() => parseArgs(['--prf', '--prf-terms', '-1'])).toThrow(/--prf-terms/);
+  });
+
+  it('REFUSES an alpha outside 0…1 rather than clamping it', () => {
+    expect(() => parseArgs(['--prf', '--prf-alpha', '1.5'])).toThrow(/--prf-alpha/);
+    expect(() => parseArgs(['--prf', '--prf-alpha', '-0.1'])).toThrow(/--prf-alpha/);
+    expect(() => parseArgs(['--prf', '--prf-alpha', 'nope'])).toThrow(/--prf-alpha/);
   });
 
   /**
@@ -692,6 +746,26 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
     expect(provenanceOf(parseArgs([]), 'sha').queryAdjacency).toBe(false);
   });
 
+  it('records the PRF treatment on every row, applied or not', () => {
+    expect(provenanceOf(parseArgs(['--prf']), 'sha').prf).toBe(true);
+    expect(provenanceOf(parseArgs([]), 'sha').prf).toBe(false);
+  });
+
+  it('records the RESOLVED RM3 knobs only on a row that expanded', () => {
+    const on = provenanceOf(parseArgs(['--prf']), 'sha');
+    expect(on.prfDocs).toBe(DEFAULT_PRF_PARAMS.fbDocs);
+    expect(on.prfTerms).toBe(DEFAULT_PRF_PARAMS.fbTerms);
+    expect(on.prfAlpha).toBe(DEFAULT_PRF_PARAMS.alpha);
+    const off = provenanceOf(parseArgs([]), 'sha');
+    expect(off.prfDocs).toBeUndefined();
+    expect(off.prfTerms).toBeUndefined();
+    expect(off.prfAlpha).toBeUndefined();
+  });
+
+  it('records an OVERRIDDEN knob as the value the run measured', () => {
+    expect(provenanceOf(parseArgs(['--prf', '--prf-alpha', '0.25']), 'sha').prfAlpha).toBe(0.25);
+  });
+
   /**
    * The EXCLUDED types are what the row has to name: they are the atoms the arm
    * could never return, and they are unrecoverable from the metrics afterwards.
@@ -738,6 +812,19 @@ describe('queryDataset — the treatment reaches the port', () => {
 
   it('passes adjacency false when it is not', async () => {
     expect((await seenOptionsFor([]))[0]?.adjacency).toBe(false);
+  });
+
+  it('passes NO prf option when the flag is absent — the default path, byte for byte', async () => {
+    expect((await seenOptionsFor([]))[0]?.prf).toBeUndefined();
+  });
+
+  it('passes the DEFAULT RM3 params when --prf is set alone', async () => {
+    expect((await seenOptionsFor(['--prf']))[0]?.prf).toEqual(DEFAULT_PRF_PARAMS);
+  });
+
+  it('passes the OVERRIDDEN RM3 params the flags named', async () => {
+    const argv = ['--prf', '--prf-docs', '3', '--prf-terms', '7', '--prf-alpha', '0.9'];
+    expect((await seenOptionsFor(argv))[0]?.prf).toEqual({ fbDocs: 3, fbTerms: 7, alpha: 0.9 });
   });
 });
 
@@ -869,6 +956,7 @@ const testProvenance: RunProvenance = {
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
   queryAdjacency: false,
+  prf: false,
   typeFilter: NO_TYPE_FILTER,
 };
 

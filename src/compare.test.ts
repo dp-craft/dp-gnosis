@@ -6,6 +6,7 @@ import {
   HYBRID_FUSION,
   RERANK_MODEL_ID
 } from '../../dp-gnosis/src/config.js';
+import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   compareAll,
@@ -267,6 +268,83 @@ describe('compareLastTwo', () => {
       'scifact'
     );
     expect(result.kind).toBe('delta');
+  });
+
+  it('guards PRF and its three knobs as TREATMENTS, never as measuring scales', () => {
+    expect(TREATMENT_FIELDS).toContain('prf');
+    expect(TREATMENT_FIELDS).toContain('prfDocs');
+    expect(TREATMENT_FIELDS).toContain('prfTerms');
+    expect(TREATMENT_FIELDS).toContain('prfAlpha');
+    expect(SCALE_FIELDS).not.toContain('prf');
+    expect(SCALE_FIELDS).not.toContain('prfAlpha');
+  });
+
+  it('COMPARES a PRF change as an arm comparison, never subtracting it', () => {
+    const result = compareLastTwo(
+      [
+        row({ prf: false }),
+        row({
+          gitSha: 'bbb2222',
+          prf: true,
+          prfDocs: DEFAULT_PRF_PARAMS.fbDocs,
+          prfTerms: DEFAULT_PRF_PARAMS.fbTerms,
+          prfAlpha: DEFAULT_PRF_PARAMS.alpha,
+          ndcg10: 0.65,
+        }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['prf']);
+    expect(formatComparison(result)).toContain('prf');
+  });
+
+  it('COMPARES a moved RM3 knob between two PRF rows as an arm comparison', () => {
+    const result = compareLastTwo(
+      [
+        row({ prf: true, prfAlpha: 0.5 }),
+        row({ gitSha: 'bbb2222', prf: true, prfAlpha: 0.25, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['prfAlpha']);
+  });
+
+  /** Every row recorded before the flag existed retrieved without expansion. */
+  it('reads an ABSENT prf as OFF, not as a changed treatment', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', prf: false, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  /** The knobs describe a PRF row alone — between two BM25 rows they never fire. */
+  it('reads an ABSENT knob on a PRF row as the shipped default, exactly as rerankWeight does', () => {
+    const result = compareLastTwo(
+      [
+        row({ prf: true }),
+        row({ gitSha: 'bbb2222', prf: true, prfAlpha: DEFAULT_PRF_PARAMS.alpha, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  it('names ONLY prf when a BM25 row is compared against a PRF row carrying knobs', () => {
+    const result = compareLastTwo(
+      [
+        row({}),
+        row({ gitSha: 'bbb2222', prf: true, prfAlpha: 0.25, prfDocs: 3, ndcg10: 0.65 }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['prf']);
   });
 
   it('guards the type filter as a TREATMENT, never as a measuring scale', () => {

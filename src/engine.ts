@@ -37,7 +37,7 @@
  *    documents on disk to be ingested forever as distractors — invisible to
  *    rule 4, which validates gold reachability, not corpus identity.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
@@ -62,7 +62,7 @@ import {
   hasPersistentIndex
 } from '../../dp-gnosis/src/cli/adapter.js';
 import type { RerankFusion } from '../../dp-gnosis/src/config.js';
-import { ingest } from '../../dp-gnosis/src/ingest.js';
+import { ingest, type IngestSkip, type IngestSummary } from '../../dp-gnosis/src/ingest.js';
 import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
 import type {
   IndexState,
@@ -70,6 +70,7 @@ import type {
   RetrievalResult,
   RetrievedAtom
 } from '../../dp-gnosis/src/port.js';
+import type { PrfParams } from '../../dp-gnosis/src/prf.js';
 import type { AnalyzerId } from '../../dp-gnosis/src/query.js';
 import { probeRerankDiscrimination, rerankAtoms } from '../../dp-gnosis/src/rerank.js';
 import type { BeirDoc } from './beir.js';
@@ -83,7 +84,7 @@ const MARKDOWN_EXT = '.md';
 const ADAPTER = 'fts5' as const;
 
 /** `workRoot/<datasetId>/docs` — the generated markdown, inside the dataset's own dir. */
-const CORPUS_DIR_NAME = 'docs';
+export const CORPUS_DIR_NAME = 'docs';
 
 /** The index's own atom table (`fts5Adapter.ts:79`), read to count what was INDEXED. */
 const INDEXED_PATHS_SQL = 'SELECT path FROM atom_meta';
@@ -368,18 +369,24 @@ const datasetPaths = (options: PrepareDatasetOptions): DatasetPaths => {
  * existing file — a cached index carries the earlier chain's stamp, and the query
  * side would then analyze against a chain the run does not claim.
  */
-const ingestAndProbe = async (
+const runIngest = async (
   paths: DatasetPaths,
   options: PrepareDatasetOptions
-): Promise<Omit<PreparationCost, 'adapter' | 'adapterBuildMs'>> => {
-  const startedAt = Date.now();
-  await ingest({
+): Promise<IngestSummary> =>
+  ingest({
     corpusRoots: paths.profile.corpusRoots,
     outputDir: paths.atomsDir,
     repoRoot: paths.workDir,
     profile: paths.profile,
     ...(options.goldIds === undefined ? {} : { goldIds: options.goldIds }),
   });
+
+const ingestAndProbe = async (
+  paths: DatasetPaths,
+  options: PrepareDatasetOptions
+): Promise<Omit<PreparationCost, 'adapter' | 'adapterBuildMs'>> => {
+  const startedAt = Date.now();
+  await runIngest(paths, options);
   const ingestedAt = Date.now();
   buildFts5Index({
     atomsDir: paths.atomsDir,
@@ -555,6 +562,101 @@ export const prepareDataset = async (
     ingestMs: attributedIngestMs({ adapter, ...probed, adapterBuildMs: built.ms }),
     probeMs: probed.probeMs,
   };
+};
+
+/** The ingest skip reason that names a surviving atom, verbatim from `ingest.ts`. */
+const DUPLICATE_REASON_PREFIX = 'duplicate-body-of:';
+
+/**
+ * One document the exact-body dedupe refused, and the document whose copy of that
+ * body survived in its place. Both sides are DOCUMENT ids — `score.ts`'s rollup
+ * key — because a judgment credits a document, never an atom.
+ */
+export interface DuplicateLink {
+  readonly orphanDocId: string;
+  readonly survivorDocId: string;
+}
+
+const survivorAtomId = (skip: IngestSkip): string | undefined =>
+  skip.reasons
+    .find(reason => reason.startsWith(DUPLICATE_REASON_PREFIX))
+    ?.slice(DUPLICATE_REASON_PREFIX.length);
+
+/**
+ * The refused document → the surviving one, resolved through the SURVIVOR'S OWN
+ * atom file: its frontmatter `sources` is where the winning document id is
+ * recorded, and `atomSources` is the same reader `prepareDataset` judges gold
+ * reachability with. Nothing here re-hashes a body — the grouping decision stays
+ * the engine's, and this only reads back which side it took.
+ */
+const duplicateLink = (atomsDir: string, skip: IngestSkip): DuplicateLink | undefined => {
+  const atomId = survivorAtomId(skip);
+  if (atomId === undefined) return undefined;
+  const [source] = atomSources(atomsDir, `${atomId}${MARKDOWN_EXT}`);
+  return source === undefined
+    ? undefined
+    : { orphanDocId: docIdOf(skip.source), survivorDocId: docIdOf(source) };
+};
+
+const isLink = (link: DuplicateLink | undefined): link is DuplicateLink => link !== undefined;
+
+/**
+ * The audit's THROWAWAY parent, one level under the dataset's work dir and never
+ * beside its atoms. `ingest` writes AND prunes its output directory and
+ * `writeManifest` writes `corpus-manifest.json` to that directory's parent, so an
+ * audit run over the dataset's own `atomsDir` re-ingests the measured corpus
+ * under different options and replaces it — measured on `vault`, 6628 → 6619
+ * atoms, nine judged documents gone with no error anywhere (GNOSIS-GUIDE
+ * § Landmines, "shared work directory destroys corpora").
+ */
+const AUDIT_SCRATCH_DIR = 'gold-audit-scratch';
+
+const auditScratchDir = (options: PrepareDatasetOptions): string =>
+  resolve(options.workRoot, options.id, AUDIT_SCRATCH_DIR);
+
+/**
+ * The documents the WRITTEN atoms still point back to, read off the audit's own
+ * scratch atoms dir before it is removed. No index exists here, so the atom
+ * files themselves are the population — the same `sources` frontmatter
+ * `prepareDataset` judges reachability with.
+ */
+const representedDocIds = (atomsDir: string): readonly string[] =>
+  readdirSync(atomsDir)
+    .filter(name => name.endsWith(MARKDOWN_EXT))
+    .flatMap(name => atomSources(atomsDir, name))
+    .map(docIdOf);
+
+/** What one gold audit read off a corpus the dedupe has run over. */
+export interface DuplicateAudit {
+  readonly links: readonly DuplicateLink[];
+  /** Document ids an atom written by the audit's ingest still reaches. */
+  readonly representedDocIds: readonly string[];
+}
+
+/**
+ * MEASUREMENT ONLY: materialize and ingest, then report which documents the
+ * exact-body dedupe orphaned and where their body survived.
+ *
+ * No index is built and no adapter is opened, so this costs one ingest and zero
+ * GPU. It deliberately runs neither `assertIngestSound` nor `assertGoldIndexed`
+ * — the whole point is to quantify a corpus those gates would refuse or, for a
+ * gold-blind dataset, never look at.
+ */
+export const auditDuplicates = async (
+  options: PrepareDatasetOptions
+): Promise<DuplicateAudit> => {
+  const scratch = auditScratchDir(options);
+  const paths = datasetPaths({ ...options, workRoot: scratch });
+  try {
+    materializeChecked(options, paths);
+    const summary = await runIngest(paths, options);
+    return {
+      links: summary.skipped.map(skip => duplicateLink(paths.atomsDir, skip)).filter(isLink),
+      representedDocIds: representedDocIds(paths.atomsDir),
+    };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 };
 
 /**
@@ -763,6 +865,11 @@ export const probePortSoundness = async (request: PortProbeRequest): Promise<voi
  * The measured call. `rawQueryText` is the dataset's query VERBATIM — the same
  * string `retrieveCommand` hands the port.
  *
+ * `prf` is the RM3 term model the port builds from its OWN first pass — the
+ * bench names the three knobs and never computes a weight, so the expansion the
+ * engine ships is what gets measured. Absent, the option is `undefined` and the
+ * call is the one every recorded run made, byte for byte.
+ *
  * A port that reports an un-truncated pool (`lancedb-hybrid-full`) is measured on
  * THAT pool: it is the candidate set the arm exists to hand the reranker, and its
  * head is `result.atoms` by construction, so a BM25-only arm over the same port
@@ -777,9 +884,10 @@ export const retrieveDocs = async (
   port: KnowledgePort,
   rawQueryText: string,
   depth: number,
-  adjacency = false
+  adjacency = false,
+  prf?: PrfParams
 ): Promise<readonly RetrievedAtom[]> => {
-  const result = await port.retrieve(rawQueryText, { k: depth, adjacency });
+  const result = await port.retrieve(rawQueryText, { k: depth, adjacency, prf });
   return result.poolAtoms ?? result.atoms;
 };
 
