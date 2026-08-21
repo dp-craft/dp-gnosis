@@ -82,6 +82,8 @@ import type {
   RetrieveOptions
 } from '../port.js';
 import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
+import type { PrfFeedbackDoc, PrfParams } from '../prf.js';
+import { rm3Weights } from '../prf.js';
 import {
   analyze,
   type AnalyzerId,
@@ -483,6 +485,27 @@ export const toMatchExpression = (
   return disjuncts.length === 0 ? undefined : disjuncts.join(' OR ');
 };
 
+/**
+ * The RE-ENTRY path for terms read back OUT of an index: it QUOTES and joins,
+ * and analyzes NOTHING.
+ *
+ * This is deliberately NOT {@link toMatchExpression}, which analyzes whatever it
+ * is handed. MEASURED 2026-08-21 over every term in the shipped `nfcorpus`
+ * index: **822 of 19 098 terms (4.3 %) CHANGE under a second `analyze()`** —
+ * `abus` → `abu`, `accident` → `accid`, `absente` → `absent`. The analysis chain
+ * is not idempotent. An expansion term comes out of the index already analysed,
+ * so sending it through the normal query path would, for 4.3 % of terms, search
+ * for a string the index does not hold: zero rows, zero contribution, and a
+ * clean number reported — the "produced nothing, recorded as data" failure class
+ * this project keeps hitting, here invisible because RM3 would still "work",
+ * just weaker.
+ *
+ * Rule: any term read out of an index MUST re-enter it through this function.
+ * `undefined` for an empty list — an empty `MATCH` is a syntax error.
+ */
+export const toAnalyzedMatchExpression = (terms: readonly string[]): string | undefined =>
+  terms.length === 0 ? undefined : terms.map(escapeTerm).join(' OR ');
+
 const newestCorpusMs = (atomsDir: string): number =>
   existsSync(atomsDir)
     ? markdownPaths(atomsDir)
@@ -683,7 +706,11 @@ const openIndex = (indexPath: string): OpenIndex => {
 interface IndexHandle {
   /** Takes the RAW query: the match expression can only be built once the
    * index — and therefore its stamped analyzer — is open. */
-  readonly snapshot: (indexPath: string, query: string, adjacency: boolean) => IndexSnapshot;
+  readonly snapshot: (
+    indexPath: string,
+    query: string,
+    request: SnapshotRequest
+  ) => IndexSnapshot;
   /** The index-identity keys alone, so the stamp can be judged without searching. */
   readonly stamp: (indexPath: string) => IndexStamp;
   readonly close: () => void;
@@ -713,11 +740,139 @@ const acquire = (cell: HandleCell, indexPath: string): OpenIndex => {
     : reopen(cell, indexPath);
 };
 
-const snapshotOf = (index: OpenIndex, query: string, adjacency: boolean): IndexSnapshot => {
-  const match = toMatchExpression(query, index.analyzer, adjacency);
+/**
+ * The RM3 knobs plus the ONE piece of I/O the model needs — the text behind a
+ * first-pass row. Passed IN rather than read here, so `prf.ts` stays pure and
+ * this file keeps every file read in one place.
+ */
+interface PrfRequest {
+  readonly params: PrfParams;
+  readonly bodyOf: (row: IndexRow) => string | undefined;
+}
+
+/** What one retrieval asks of the index, beyond the query text itself. */
+interface SnapshotRequest {
+  readonly adjacency: boolean;
+  /** Absent = no feedback pass; the first pass IS the answer, as it always was. */
+  readonly prf: PrfRequest | undefined;
+}
+
+/** Everything the feedback pass needs, once the index — and its chain — is open. */
+interface PrfPass {
+  readonly index: OpenIndex;
+  readonly request: PrfRequest;
+  /** The query, analyzed with the INDEX's own chain. */
+  readonly queryTerms: readonly string[];
+}
+
+/**
+ * The feedback set: the top `fbDocs` rows, analyzed with the INDEX's OWN chain
+ * so the model's terms are the terms the index holds. An unreadable row is
+ * dropped rather than counted as an empty document, which would dilute every
+ * weight with mass drawn from nothing.
+ */
+const feedbackDocs = (pass: PrfPass, rows: readonly IndexRow[]): readonly PrfFeedbackDoc[] =>
+  rows
+    .slice(0, Math.max(pass.request.params.fbDocs, 0))
+    .map(row => {
+      const body = pass.request.bodyOf(row);
+      return body === undefined
+        ? undefined
+        : { terms: analyze(body, pass.index.analyzer), score: -row.rank };
+    })
+    .filter(isDefined);
+
+/**
+ * One weighted term's rows. The term is ALREADY ANALYSED — it came out of this
+ * very index — so it re-enters through {@link toAnalyzedMatchExpression}, never
+ * through `toMatchExpression`. See that function for the measurement.
+ */
+const termRows = (index: OpenIndex, term: string): readonly IndexRow[] => {
+  const match = toAnalyzedMatchExpression([term]);
+  return match === undefined ? [] : (index.search.all(match) as readonly IndexRow[]);
+};
+
+/** One candidate's running total: where it lives, and the mass it has gathered. */
+interface Accumulated {
+  readonly path: string;
+  readonly score: number;
+}
+
+const addTerm = (
+  acc: Map<string, Accumulated>,
+  index: OpenIndex,
+  entry: readonly [string, number]
+): Map<string, Accumulated> =>
+  termRows(index, entry[0]).reduce(
+    (map, row) =>
+      map.set(row.id, { path: row.path, score: (map.get(row.id)?.score ?? 0) + entry[1] * -row.rank }),
+    acc
+  );
+
+const byRankThenId = (a: IndexRow, b: IndexRow): number =>
+  a.rank - b.rank || compareStrings(a.id, b.id);
+
+/**
+ * The weighted rescore `score(d) = Σ_t w_t · (−bm25_t(d))`, one single-term
+ * query per weighted term, accumulated.
+ *
+ * MEASURED 2026-08-21 on the real `nfcorpus` index: `bm25()` is exactly additive
+ * across single-term fts5 queries to six decimals, so this IS fts5's own scorer
+ * — no BM25 is re-implemented here, and none may be. `SEARCH_SQL` carries no
+ * LIMIT, so each term contributes its FULL matching set and the sum is exact
+ * rather than truncated.
+ *
+ * A ZERO-weight term is dropped before it is queried. It would contribute no
+ * mass, yet its rows would still ENTER the candidate set at score 0 — a term
+ * that carries no evidence deciding which documents are ranked at all, which is
+ * this project's recurring failure class wearing a plausible number.
+ *
+ * The result is handed back as `IndexRow`s with `rank = −score`, because the
+ * rest of this adapter reads `rank` the way `bm25()` writes it: lower is better.
+ */
+const rescoredRows = (
+  index: OpenIndex,
+  weights: ReadonlyMap<string, number>
+): readonly IndexRow[] =>
+  [...[...weights]
+    .filter(([, weight]) => weight > 0)
+    .reduce((acc, entry) => addTerm(acc, index, entry), new Map<string, Accumulated>())]
+    .map(([id, cell]) => ({ id, path: cell.path, rank: -cell.score }))
+    .sort(byRankThenId);
+
+/**
+ * The RM3 pass. An EMPTY feedback set returns the first pass unchanged — there
+ * is nothing to expand from, and a rescore over no model would rank the corpus
+ * by the query alone at a different scale for no reason.
+ */
+const prfRows = (pass: PrfPass, rows: readonly IndexRow[]): readonly IndexRow[] => {
+  const feedback = feedbackDocs(pass, rows);
+  if (feedback.length === 0) return rows;
+  const weights = rm3Weights({
+    queryTerms: pass.queryTerms,
+    feedback,
+    params: pass.request.params,
+  });
+  return rescoredRows(pass.index, weights);
+};
+
+/** The pass a snapshot asks for, or `undefined` when no feedback was requested. */
+const prfPassOf = (index: OpenIndex, query: string, request: SnapshotRequest): PrfPass | undefined =>
+  request.prf === undefined
+    ? undefined
+    : { index, request: request.prf, queryTerms: analyze(query, index.analyzer) };
+
+const snapshotOf = (
+  index: OpenIndex,
+  query: string,
+  request: SnapshotRequest
+): IndexSnapshot => {
+  const match = toMatchExpression(query, index.analyzer, request.adjacency);
+  const rows = match === undefined ? [] : (index.search.all(match) as readonly IndexRow[]);
+  const pass = prfPassOf(index, query, request);
   return {
     count: (index.count.get() as { readonly n: number }).n,
-    rows: match === undefined ? [] : (index.search.all(match) as readonly IndexRow[]),
+    rows: pass === undefined ? rows : prfRows(pass, rows),
   };
 };
 
@@ -726,8 +881,8 @@ const createIndexHandle = (): IndexHandle => {
   return {
     close: (): void => release(cell),
     stamp: (indexPath: string): IndexStamp => acquire(cell, indexPath).stamp,
-    snapshot: (indexPath: string, query: string, adjacency: boolean): IndexSnapshot =>
-      snapshotOf(acquire(cell, indexPath), query, adjacency),
+    snapshot: (indexPath: string, query: string, request: SnapshotRequest): IndexSnapshot =>
+      snapshotOf(acquire(cell, indexPath), query, request),
   };
 };
 
@@ -738,8 +893,29 @@ interface Fts5Instance {
   readonly corpus: CorpusCell;
 }
 
+/**
+ * The body behind one row, read from DISK like every other atom read here, so a
+ * feedback document is the same text a delivered atom would carry.
+ */
+const bodyOfRow = (options: Fts5AdapterOptions, row: IndexRow): string | undefined => {
+  const sourcePath = resolve(options.atomsDir, row.path);
+  if (!existsSync(sourcePath)) return undefined;
+  const parsed = parseAtom(readFileSync(sourcePath, 'utf8'));
+  return parsed.ok ? parsed.atom.body : undefined;
+};
+
+/** Absent `prf` means NO feedback pass — the one branch that keeps the default
+ * path byte for byte what it was. */
+const prfRequest = (self: Fts5Instance, opts: RetrieveOptions): PrfRequest | undefined =>
+  opts.prf === undefined
+    ? undefined
+    : { params: opts.prf, bodyOf: (row: IndexRow) => bodyOfRow(self.options, row) };
+
 const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): RetrievalResult => {
-  const snapshot = self.handle.snapshot(self.options.indexPath, query, opts.adjacency === true);
+  const snapshot = self.handle.snapshot(self.options.indexPath, query, {
+    adjacency: opts.adjacency === true,
+    prf: prfRequest(self, opts),
+  });
   return {
     atoms: selectAtoms(self.options, snapshot.rows, opts),
     mode: FTS5_MODE,

@@ -19,6 +19,7 @@ import {
   SYNTHESIZE_MODEL_ENV_VAR,
   SYNTHESIZE_MODEL_ID
 } from '../config.js';
+import { DEFAULT_PRF_PARAMS } from '../prf.js';
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
 import { OUTPUT_FORMATS } from './format.js';
@@ -63,6 +64,9 @@ export const HELP_TEXT: string = [
   `Rephrase: --rephrase on \`retrieve\` only, OFF by default — rewrites the question into a BM25 keyword query with ${REPHRASE_MODEL_ID} (override with ${REPHRASE_MODEL_ENV_VAR}) before the first pass, then searches the rewrite`,
   '  the rewrite is cached on disk beside the index, so a repeated query costs no network; the reported query stays the one you typed, with the rewrite beside it as queryRewritten',
   '  a refused rewrite still retrieves with the query AS TYPED, but exits 3 with the refusal in note — a skipped rewrite never reports as a rephrased run',
+  `Feedback: --prf on \`retrieve\` and \`answer\`, OFF by default — RM3 pseudo-relevance feedback: the top ${DEFAULT_PRF_PARAMS.fbDocs} atoms of the first pass build a weighted term model and the ranking is rescored with it`,
+  `  --prf-docs <n> how many atoms feed the model (default ${DEFAULT_PRF_PARAMS.fbDocs}); --prf-terms <n> how many expansion terms survive (default ${DEFAULT_PRF_PARAMS.fbTerms}); --prf-alpha <a> the expansion's share of the mass, 0 to 1 (default ${DEFAULT_PRF_PARAMS.alpha}), never clamped`,
+  `  all three require --prf and are a usage error (exit 2) without it; --prf itself is a usage error on any adapter but ${DEFAULT_ADAPTER} — it rides that scorer's own bm25(), and it is never silently ignored`,
   `Grouping: --max-per-doc <n> on \`retrieve\` only (default ${DEFAULT_MAX_PER_DOC}) — atoms of one source document are delivered together in reading order, marked (i/n), and no document contributes more than n`,
   '  the cap applies to the POOL before the -k slice, so a dropped atom frees a slot a lower-ranked document takes; --max-per-doc 0 caps nothing',
   '  --flat delivers the ranking ungrouped — no cap, no arrangement, no marker — and is a usage error (exit 2) beside --max-per-doc, which would then have nothing to cap',

@@ -60,6 +60,13 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--rerank-weight': { kind: 'value', placeholder: '<w>' },
   // `retrieve` only, OPT-IN: rewrite the query into keywords before the first pass.
   '--rephrase': { kind: 'boolean' },
+  // `retrieve` and `answer`, OPT-IN: RM3 pseudo-relevance feedback over the first
+  // pass. The three below tune it and are meaningless without it, so each one
+  // REFUSES on its own — the rule `--rerank-model` already follows.
+  '--prf': { kind: 'boolean' },
+  '--prf-docs': { kind: 'value', placeholder: '<n>' },
+  '--prf-terms': { kind: 'value', placeholder: '<n>' },
+  '--prf-alpha': { kind: 'value', placeholder: '<a>' },
   // `retrieve` only: at most n atoms from any ONE source document; `0` caps nothing.
   '--max-per-doc': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only: render the ranking ungrouped and uncapped, as it was before

@@ -24,6 +24,8 @@ import {
   RETRIEVE_TOKEN_BUDGET
 } from '../config.js';
 import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
+import type { PrfParams } from '../prf.js';
+import { DEFAULT_PRF_PARAMS } from '../prf.js';
 import { rephraseQuery } from '../rephrase.js';
 import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
 import { calibrate, rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
@@ -329,6 +331,96 @@ const resolveMinRelevance = (
   if (floor === undefined) return { ok: false, error: minRelevanceError(raw) };
   if (!rerank) return { ok: false, error: orphanFloorError() };
   return calibratedFloor(floor, model);
+};
+
+/**
+ * RM3 pseudo-relevance feedback, OPT-IN: without it the query reaches the
+ * adapter exactly as typed and the first pass IS the ranking, byte for byte.
+ *
+ * It is honoured by `fts5` alone — the rescore rides fts5's own `bm25()`, which
+ * was MEASURED additive across single-term queries. Every other adapter REFUSES
+ * rather than ignoring it: an unexpanded ranking delivered under a `--prf` label
+ * is a wrong answer reported as a clean one.
+ */
+export const PRF_FLAG = '--prf';
+
+export const PRF_DOCS_FLAG = '--prf-docs';
+
+export const PRF_TERMS_FLAG = '--prf-terms';
+
+export const PRF_ALPHA_FLAG = '--prf-alpha';
+
+const PRF_TUNING_FLAGS: readonly string[] = [PRF_DOCS_FLAG, PRF_TERMS_FLAG, PRF_ALPHA_FLAG];
+
+/** The one adapter whose scorer carries the weighted rescore. */
+const PRF_ADAPTER: AdapterName = 'fts5';
+
+const orphanPrfFlagError = (flag: string): string =>
+  `${flag} requires ${PRF_FLAG} — without it nothing expands and the result would carry a feedback label it never earned`;
+
+const prfAdapterError = (adapter: AdapterName): string =>
+  `${PRF_FLAG} is honoured by the ${PRF_ADAPTER} adapter alone and this run selected "${adapter}" — pass \`--adapter ${PRF_ADAPTER}\` or drop ${PRF_FLAG}; it is never silently ignored, because an unexpanded ranking under a ${PRF_FLAG} label is a wrong answer reported as a clean one`;
+
+const prfCountError = (flag: string, raw: string, shipped: number): string =>
+  `${flag} must be a positive integer — got "${raw}"; pass e.g. \`${flag} ${shipped}\``;
+
+const prfAlphaError = (raw: string): string =>
+  `${PRF_ALPHA_FLAG} expects a number from 0 (the query alone) to 1 (the expansion alone) — got "${raw}"; it is never clamped`;
+
+type PrfNumberResult =
+  | { readonly ok: true; readonly value: number }
+  | { readonly ok: false; readonly error: string };
+
+const prfCountOf = (flags: FlagValues, flag: string, shipped: number): PrfNumberResult => {
+  const raw = stringFlag(flags, flag);
+  if (raw === undefined) return { ok: true, value: shipped };
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0
+    ? { ok: true, value }
+    : { ok: false, error: prfCountError(flag, raw, shipped) };
+};
+
+const isPrfAlpha = (value: number): boolean =>
+  Number.isFinite(value) && value >= 0 && value <= 1;
+
+/** Out of range REFUSES rather than clamping, the rule `--rerank-weight` set. */
+const prfAlphaOf = (flags: FlagValues): PrfNumberResult => {
+  const raw = stringFlag(flags, PRF_ALPHA_FLAG);
+  if (raw === undefined) return { ok: true, value: DEFAULT_PRF_PARAMS.alpha };
+  const value = Number(raw);
+  return isPrfAlpha(value) ? { ok: true, value } : { ok: false, error: prfAlphaError(raw) };
+};
+
+type PrfResult =
+  | { readonly ok: true; readonly prf: PrfParams | undefined }
+  | { readonly ok: false; readonly error: string };
+
+/** Absent tuning flags resolve to {@link DEFAULT_PRF_PARAMS}, so a bare `--prf`
+ * is the cell the offline forecast measured. */
+const prfParamsOf = (flags: FlagValues): PrfResult => {
+  const docs = prfCountOf(flags, PRF_DOCS_FLAG, DEFAULT_PRF_PARAMS.fbDocs);
+  if (!docs.ok) return docs;
+  const terms = prfCountOf(flags, PRF_TERMS_FLAG, DEFAULT_PRF_PARAMS.fbTerms);
+  if (!terms.ok) return terms;
+  const alpha = prfAlphaOf(flags);
+  return alpha.ok
+    ? { ok: true, prf: { fbDocs: docs.value, fbTerms: terms.value, alpha: alpha.value } }
+    : alpha;
+};
+
+/** The first tuning flag passed without `--prf`, or `undefined` when none was. */
+const orphanPrfFlag = (flags: FlagValues, on: boolean): string | undefined =>
+  on ? undefined : PRF_TUNING_FLAGS.find(flag => flags[flag] !== undefined);
+
+/** `undefined` = no feedback pass. Every other outcome is params or a refusal. */
+const resolvePrf = (flags: FlagValues, adapter: AdapterName): PrfResult => {
+  const on = flags[PRF_FLAG] === true;
+  const orphan = orphanPrfFlag(flags, on);
+  if (orphan !== undefined) return { ok: false, error: orphanPrfFlagError(orphan) };
+  if (!on) return { ok: true, prf: undefined };
+  return adapter === PRF_ADAPTER
+    ? prfParamsOf(flags)
+    : { ok: false, error: prfAdapterError(adapter) };
 };
 
 /** The rewrite cache sits beside the index it serves, like the embedding cache. */
@@ -919,6 +1011,8 @@ type ArgsResult =
     readonly rerankOptions: RerankOptions;
     readonly minRelevance: number | undefined;
     readonly rephrase: boolean;
+    /** `undefined` = no feedback pass; the first pass IS the ranking. */
+    readonly prf: PrfParams | undefined;
   }
   | { readonly ok: false; readonly error: string };
 
@@ -931,6 +1025,8 @@ interface ResolvedValues {
   readonly domains: readonly AtomDomain[] | undefined;
   /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
   readonly maxPerDoc: number | undefined;
+  /** `undefined` = no feedback pass. See {@link resolvePrf}. */
+  readonly prf: PrfParams | undefined;
 }
 
 /** The rerank leg as argv resolved it: how to score, and the floor to serve at. */
@@ -1038,20 +1134,35 @@ const resolvePresentation = (
   return withMaxPerDoc(flags, { types: types.types, domains: domains.domains });
 };
 
+/** The three resolutions, welded into the one shape the rerank step takes. */
+const resolvedValues = (
+  counts: Extract<CountsResult, { readonly ok: true }>,
+  presentation: Extract<PresentationResult, { readonly ok: true }>,
+  prf: PrfParams | undefined
+): ResolvedValues => ({
+  k: counts.k,
+  maxTokens: counts.maxTokens,
+  budgetMode: counts.budgetMode,
+  types: presentation.types,
+  domains: presentation.domains,
+  maxPerDoc: presentation.maxPerDoc,
+  prf,
+});
+
 /** Every value flag, resolved together so the command states one refusal path. */
-const resolveArgs = (flags: FlagValues, vocabulary: readonly AtomDomain[]): ArgsResult => {
+const resolveArgs = (
+  flags: FlagValues,
+  vocabulary: readonly AtomDomain[],
+  adapter: AdapterName
+): ArgsResult => {
   const counts = resolveCounts(flags);
   if (!counts.ok) return { ok: false, error: counts.error };
   const presentation = resolvePresentation(flags, vocabulary);
   if (!presentation.ok) return { ok: false, error: presentation.error };
-  return withRerankArgs(flags, {
-    k: counts.k,
-    maxTokens: counts.maxTokens,
-    budgetMode: counts.budgetMode,
-    types: presentation.types,
-    domains: presentation.domains,
-    maxPerDoc: presentation.maxPerDoc,
-  });
+  const prf = resolvePrf(flags, adapter);
+  return prf.ok
+    ? withRerankArgs(flags, resolvedValues(counts, presentation, prf.prf))
+    : { ok: false, error: prf.error };
 };
 
 export interface RetrieveRequest {
@@ -1080,6 +1191,11 @@ export interface RetrieveRequest {
   /** The calibrated relevance floor; `undefined` when no floor was asked for. */
   readonly minRelevance: number | undefined;
   readonly rephrase: boolean;
+  /**
+   * The RM3 knobs `--prf` resolved; `undefined` when no feedback pass was asked
+   * for, which is what keeps the default ranking byte for byte what it was.
+   */
+  readonly prf: PrfParams | undefined;
   /** The rewrite `--rephrase` produced; `undefined` when it was off or refused. */
   readonly queryRewritten: string | undefined;
   /** The rewriter's refusal, carried into the note and the PARTIAL exit code. */
@@ -1278,6 +1394,7 @@ const retrieveOptions = (request: RetrieveRequest): RetrieveOptions => ({
   k: firstPassK(request),
   ...(request.types === undefined ? {} : { types: request.types }),
   ...(request.domains === undefined ? {} : { domains: request.domains }),
+  ...(request.prf === undefined ? {} : { prf: request.prf }),
 });
 
 /** The ranking to render, plus the reranker's refusal when there was one. */
@@ -1589,6 +1706,7 @@ const initialRequest = (
   rerankOptions: args.rerankOptions,
   minRelevance: args.minRelevance,
   rephrase: args.rephrase,
+  prf: args.prf,
   ...UNRESOLVED,
 });
 
@@ -1632,7 +1750,7 @@ export const performRetrieval = async (
   overhead?: string
 ): Promise<RetrievalOutcome> => {
   const query = context.positionals.join(' ');
-  const args = resolveArgs(context.flags, context.profile.domains);
+  const args = resolveArgs(context.flags, context.profile.domains, context.adapter);
   if (query.length === 0) return { ok: false, outcome: usageError(NO_QUERY) };
   if (!args.ok) return { ok: false, outcome: usageError(args.error) };
   return await searchWithBudget(initialRequest(context, query, args), charged, overhead);

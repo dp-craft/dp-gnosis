@@ -27,6 +27,7 @@ import {
   RETRIEVE_TOKEN_BUDGET
 } from '../src/config.js';
 import { ATOMS_DIR, GOLDEN_SET_PATH, INDEX_DIR, REPO_ROOT } from '../src/paths.js';
+import { DEFAULT_PRF_PARAMS } from '../src/prf.js';
 
 /** Who owns a documented default: a constant, or deliberately nothing. */
 export type DefaultOwner =
@@ -69,6 +70,10 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--rerank-profile': owned('DEFAULT_RERANK_PRESET (src/config.ts)', DEFAULT_RERANK_PRESET),
   '--rerank-weight': owned('RERANK_RRF_WEIGHT (src/config.ts)', RERANK_RRF_WEIGHT),
   '--rephrase': unowned('boolean, off by default'),
+  '--prf': unowned('boolean, off by default'),
+  '--prf-docs': owned('DEFAULT_PRF_PARAMS.fbDocs (src/prf.ts)', DEFAULT_PRF_PARAMS.fbDocs),
+  '--prf-terms': owned('DEFAULT_PRF_PARAMS.fbTerms (src/prf.ts)', DEFAULT_PRF_PARAMS.fbTerms),
+  '--prf-alpha': owned('DEFAULT_PRF_PARAMS.alpha (src/prf.ts)', DEFAULT_PRF_PARAMS.alpha),
   '--max-per-doc': owned('DEFAULT_MAX_PER_DOC (src/cli/grouping.ts)', DEFAULT_MAX_PER_DOC),
   '--flat': unowned('boolean, off by default — grouping is on unless it is passed'),
   '--synthesize': unowned('boolean, off by default'),

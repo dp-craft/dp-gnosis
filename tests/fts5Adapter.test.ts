@@ -4,8 +4,14 @@ import { dirname, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
 
-import { buildFts5Index, createFts5Adapter, toMatchExpression } from '../src/adapters/fts5Adapter.js';
-import type { KnowledgePort } from '../src/port.js';
+import {
+  buildFts5Index,
+  createFts5Adapter,
+  toAnalyzedMatchExpression,
+  toMatchExpression
+} from '../src/adapters/fts5Adapter.js';
+import type { KnowledgePort, RetrieveOptions } from '../src/port.js';
+import { DEFAULT_PRF_PARAMS } from '../src/prf.js';
 import { stemText } from '../src/query.js';
 
 const NOW = new Date('2026-08-08T00:00:00.000Z');
@@ -823,5 +829,86 @@ describe('fts5 adjacency retrieval', () => {
     const result = await port().retrieve('adr-018', { k: 5, adjacency: false });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-adjacent']);
+  });
+});
+
+describe('pseudo-relevance feedback (--prf)', () => {
+  /**
+   * `atom-seed` is the only atom carrying the query term; the two `bridge` atoms
+   * share its vocabulary without carrying the query term at all, and `atom-far`
+   * shares nothing. RM3 must reach the bridges through the seed.
+   */
+  const writeCorpus = (): void => {
+    writeAtom({ file: 'a.md', id: 'atom-seed', body: 'zustand selector stability memo render' });
+    writeAtom({ file: 'b.md', id: 'atom-bridge-one', body: 'selector stability memo render' });
+    writeAtom({ file: 'c.md', id: 'atom-bridge-two', body: 'selector stability render' });
+    writeAtom({ file: 'd.md', id: 'atom-far', body: 'sqlite fts5 tokenizer unicode61' });
+    buildFts5Index({ atomsDir, indexPath });
+  };
+
+  const ids = async (opts: RetrieveOptions): Promise<readonly string[]> =>
+    (await port().retrieve('zustand', opts)).atoms.map(atom => atom.id);
+
+  it('leaves the default path untouched when prf is ABSENT', async () => {
+    writeCorpus();
+
+    expect(await ids({ k: 5 })).toEqual(['atom-seed']);
+  });
+
+  it('reaches atoms the raw query cannot match at all', async () => {
+    writeCorpus();
+
+    const expanded = await ids({ k: 5, prf: DEFAULT_PRF_PARAMS });
+
+    expect(expanded).toContain('atom-bridge-one');
+    expect(expanded).toContain('atom-bridge-two');
+  });
+
+  it('keeps an atom sharing no vocabulary with the feedback out of the ranking', async () => {
+    writeCorpus();
+
+    expect(await ids({ k: 5, prf: DEFAULT_PRF_PARAMS })).not.toContain('atom-far');
+  });
+
+  it('is the unexpanded ranking at alpha 0 — the whole mass stays on the query', async () => {
+    writeCorpus();
+
+    expect(await ids({ k: 5, prf: { ...DEFAULT_PRF_PARAMS, alpha: 0 } })).toEqual(['atom-seed']);
+  });
+
+  it('expands from NOTHING when the first pass matched nothing', async () => {
+    writeCorpus();
+
+    const result = await port().retrieve('nothingmatchesthis', { k: 5, prf: DEFAULT_PRF_PARAMS });
+
+    expect(result.atoms).toEqual([]);
+    expect(result.indexState).toBe('ready');
+  });
+
+  it('honours fbTerms — one expansion term reaches fewer atoms than twenty', async () => {
+    writeCorpus();
+
+    const narrow = await ids({ k: 5, prf: { ...DEFAULT_PRF_PARAMS, fbTerms: 1 } });
+
+    expect(narrow).toContain('atom-bridge-one');
+    expect(narrow).not.toContain('atom-bridge-two');
+  });
+});
+
+describe('toAnalyzedMatchExpression', () => {
+  it('quotes an already-analysed term and analyses nothing', () => {
+    expect(toAnalyzedMatchExpression(['abus'])).toBe('"abus"');
+  });
+
+  it('does NOT re-stem — the chain is not idempotent and would search a term the index lacks', () => {
+    expect(toAnalyzedMatchExpression(['abus'])).not.toBe(toMatchExpression('abus', 'porter-fold'));
+  });
+
+  it('joins several terms as a disjunction', () => {
+    expect(toAnalyzedMatchExpression(['a', 'b'])).toBe('"a" OR "b"');
+  });
+
+  it('is undefined for an empty list — an empty MATCH is a syntax error', () => {
+    expect(toAnalyzedMatchExpression([])).toBeUndefined();
   });
 });

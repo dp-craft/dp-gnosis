@@ -1,6 +1,7 @@
 import type { AtomFrontmatter } from './atom.js';
 import type { AtomDomain, AtomType } from './config.js';
 import { ATOM_DOMAINS, ATOM_TYPES } from './config.js';
+import type { PrfParams } from './prf.js';
 
 /**
  * Whether a retrieval leg actually ran, and against what.
@@ -149,6 +150,17 @@ export interface RetrieveOptions {
    * Absent or false is today's behaviour, byte for byte, on every adapter.
    */
   readonly adjacency?: boolean;
+  /**
+   * RM3 pseudo-relevance feedback, honoured by `fts5` alone. When present, the
+   * raw query runs first, the top `fbDocs` atoms of that pass build a weighted
+   * term model, and the ranking is REPLACED by the weighted rescore
+   * `Σ_t w_t · (−bm25_t(d))` over fts5's own scorer. Absent is today's
+   * behaviour, byte for byte, on every adapter — the first pass IS the answer.
+   *
+   * It changes the QUERY, so a run carrying it is a different arm from a run
+   * without it and MUST NOT be subtracted from a recorded baseline.
+   */
+  readonly prf?: PrfParams;
 }
 
 /** The single wording for "an empty type filter is a caller bug". */
