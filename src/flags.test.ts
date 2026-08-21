@@ -107,6 +107,6 @@ describe('declared flag sets cover every call site', () => {
     expect(parsedFlags('run.ts').length).toBeGreaterThan(10);
     expect(parsedFlags('gate.ts')).toEqual(['--baseline', '--fail-under']);
     expect(parsedFlags('sweep.ts').length).toBe(4);
-    expect(parsedFlags('pair.ts').length).toBe(5);
+    expect(parsedFlags('pair.ts').length).toBe(6);
   });
 });

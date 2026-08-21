@@ -72,6 +72,14 @@ export interface PairArgs {
   readonly b: string;
   readonly metrics: readonly MetricName[];
   readonly idsPath: string | undefined;
+  /**
+   * Which results directory to resolve `history.jsonl` and every `perTopicPath`
+   * against. Absent ⇒ the suite's own `results/`, so every existing invocation
+   * is unchanged. It exists so a run recorded OUTSIDE the tracked history — an
+   * external system's arm, which MUST NOT enter `results/history.jsonl` — can
+   * still be paired by exactly the same test, against a copy of the gnosis row.
+   */
+  readonly resultsDir: string | undefined;
 }
 
 /** What the CLI prints, and how it exits. `reasons` is the stderr half. */
@@ -91,12 +99,16 @@ export const PAIR_HELP = [
   'gnosis:pair — the paired permutation test between two named runs.',
   '',
   'usage: npm run gnosis:pair -- --a <selector> --b <selector> [--metric <csv>] [--ids <path>]',
+  '                              [--results-dir <path>]',
   '',
   '  --a / --b   a unique SUBSTRING of the run\'s recorded perTopicPath;',
   '              an ambiguous or unmatched selector fails loudly',
   '  --metric    which measures to test; default is every metric both runs measured',
   `              known: ${PER_TOPIC_METRIC_COLUMNS.join(', ')}`,
   '  --ids       a file of query ids, one per line — restricts the test to that subset',
+  '  --results-dir  which results directory to read history and per-topic files from;',
+  '              default `results/`. Use it to pair rows recorded OUTSIDE the tracked',
+  '              history — an external system\'s arm MUST NOT enter `results/history.jsonl`',
   '',
   'exit codes:',
   `  ${PAIR_EXIT_OK}  every requested metric produced a verdict`,
@@ -141,7 +153,7 @@ const required = (argv: readonly string[], name: string): string => {
  * test than the one asked for under the wider one's name.
  */
 export const PAIR_FLAGS: FlagSpec = {
-  value: ['--a', '--b', '--metric', '--ids'],
+  value: ['--a', '--b', '--metric', '--ids', '--results-dir'],
   boolean: ['--help'],
 };
 
@@ -152,6 +164,7 @@ export const parsePairArgs = (argv: readonly string[]): PairArgs => {
     b: required(argv, '--b'),
     metrics: csv(flagValue(argv, '--metric')).map(asMetric),
     idsPath: flagValue(argv, '--ids'),
+    resultsDir: flagValue(argv, '--results-dir'),
   };
 };
 
@@ -406,8 +419,9 @@ export const main = (argv: readonly string[], resultsDir: string): number => {
   }
   try {
     const args = parsePairArgs(argv);
-    const history = readHistory(resolve(resultsDir, HISTORY_FILE));
-    return emit(pairReport({ resultsDir, history, args }));
+    const dir = args.resultsDir === undefined ? resultsDir : resolve(args.resultsDir);
+    const history = readHistory(resolve(dir, HISTORY_FILE));
+    return emit(pairReport({ resultsDir: dir, history, args }));
   } catch (error) {
     process.stderr.write(`${messageOf(error)}\n`);
     return PAIR_EXIT_USAGE;
