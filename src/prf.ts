@@ -33,6 +33,19 @@ export interface PrfParams {
  */
 export const DEFAULT_PRF_PARAMS: PrfParams = { fbDocs: 10, fbTerms: 20, alpha: 0.5 };
 
+/**
+ * The cell the SHIPPED profiles serve, owner-approved 2026-08-21 on the
+ * `qwen3-reranker-4b` gate: `vault-hu` nDCG@10 +0.0323 (p=0.0186), `vault`
+ * +0.0080 (p=0.4567, not significant — adopted deliberately).
+ *
+ * It is a DIFFERENT cell from {@link DEFAULT_PRF_PARAMS}: `fbTerms` is 40, and
+ * no recorded arm ever ran the 20 above. This constant is the OWNER of the
+ * number — `profiles/default.profile.json` and `profiles/hu-tax.profile.json`
+ * state it as data and `tests/prfProfileDefault.test.ts` locks the two to it,
+ * so the measured cell cannot drift into three independent literals.
+ */
+export const SERVED_PRF_PARAMS: PrfParams = { fbDocs: 10, fbTerms: 40, alpha: 0.5 };
+
 /** One feedback document: its ANALYSED terms, in order, and its relevance. */
 export interface PrfFeedbackDoc {
   /**

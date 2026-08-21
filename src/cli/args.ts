@@ -64,6 +64,9 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // pass. The three below tune it and are meaningless without it, so each one
   // REFUSES on its own — the rule `--rerank-model` already follows.
   '--prf': { kind: 'boolean' },
+  // The OFF switch for a profile-carried feedback default. Passing it beside
+  // `--prf` is a usage error: a contradiction is refused, never resolved.
+  '--no-prf': { kind: 'boolean' },
   '--prf-docs': { kind: 'value', placeholder: '<n>' },
   '--prf-terms': { kind: 'value', placeholder: '<n>' },
   '--prf-alpha': { kind: 'value', placeholder: '<a>' },

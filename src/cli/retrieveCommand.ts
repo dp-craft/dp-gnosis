@@ -350,13 +350,32 @@ export const PRF_TERMS_FLAG = '--prf-terms';
 
 export const PRF_ALPHA_FLAG = '--prf-alpha';
 
+/**
+ * The OFF switch for a profile-carried default. Without it a profile that turns
+ * feedback on makes the unexpanded arm unreachable from the CLI, and a losing
+ * leg that cannot be re-tested cheaply stops being evidence.
+ */
+export const NO_PRF_FLAG = '--no-prf';
+
 const PRF_TUNING_FLAGS: readonly string[] = [PRF_DOCS_FLAG, PRF_TERMS_FLAG, PRF_ALPHA_FLAG];
 
 /** The one adapter whose scorer carries the weighted rescore. */
 const PRF_ADAPTER: AdapterName = 'fts5';
 
 const orphanPrfFlagError = (flag: string): string =>
-  `${flag} requires ${PRF_FLAG} — without it nothing expands and the result would carry a feedback label it never earned`;
+  `${flag} requires a feedback pass — pass ${PRF_FLAG}, or drop ${NO_PRF_FLAG} on a profile that states one; without it nothing expands and the result would carry a feedback label it never earned`;
+
+const prfContradictionError = (): string =>
+  `${PRF_FLAG} and ${NO_PRF_FLAG} state opposite things and this run passed both — pass exactly one; a contradiction is refused, never resolved`;
+
+/**
+ * A PROFILE default cannot refuse the run: refusing would make every non-fts5
+ * adapter unusable under the shipped profiles. It retrieves unexpanded and SAYS
+ * so — an ignored expansion nobody is told about is the "produced nothing,
+ * recorded as data" class this project keeps hitting.
+ */
+const prfUnexpandedNote = (adapter: AdapterName): string =>
+  `${PRF_FLAG}: this profile serves a feedback default, which the ${PRF_ADAPTER} adapter alone carries, and this run selected "${adapter}" — the ranking is UNEXPANDED. Pass \`--adapter ${PRF_ADAPTER}\` to expand it, or ${NO_PRF_FLAG} to state the plain first pass deliberately`;
 
 const prfAdapterError = (adapter: AdapterName): string =>
   `${PRF_FLAG} is honoured by the ${PRF_ADAPTER} adapter alone and this run selected "${adapter}" — pass \`--adapter ${PRF_ADAPTER}\` or drop ${PRF_FLAG}; it is never silently ignored, because an unexpanded ranking under a ${PRF_FLAG} label is a wrong answer reported as a clean one`;
@@ -384,44 +403,128 @@ const isPrfAlpha = (value: number): boolean =>
   Number.isFinite(value) && value >= 0 && value <= 1;
 
 /** Out of range REFUSES rather than clamping, the rule `--rerank-weight` set. */
-const prfAlphaOf = (flags: FlagValues): PrfNumberResult => {
+const prfAlphaOf = (flags: FlagValues, shipped: number): PrfNumberResult => {
   const raw = stringFlag(flags, PRF_ALPHA_FLAG);
-  if (raw === undefined) return { ok: true, value: DEFAULT_PRF_PARAMS.alpha };
+  if (raw === undefined) return { ok: true, value: shipped };
   const value = Number(raw);
   return isPrfAlpha(value) ? { ok: true, value } : { ok: false, error: prfAlphaError(raw) };
 };
 
+/**
+ * WHICH switch turned the feedback pass on — the one thing a caller cannot
+ * recover from the reported cell, since a tuning flag shows up in the cell
+ * itself. `flag` = an explicit `--prf`; `profile` = the profile's `defaultPrf`.
+ */
+export type PrfSourceName = 'flag' | 'profile';
+
+/** The feedback pass as argv AND the profile resolved it, with what it must say. */
+interface PrfResolution {
+  /** `undefined` = no feedback pass; the first pass IS the ranking. */
+  readonly prf: PrfParams | undefined;
+  /** Set exactly when `prf` is, so the pair cannot report a source with no pass. */
+  readonly prfSource: PrfSourceName | undefined;
+  /** Present when a profile default could not be honoured on this adapter. */
+  readonly prfNote: string | undefined;
+}
+
 type PrfResult =
-  | { readonly ok: true; readonly prf: PrfParams | undefined }
+  | ({ readonly ok: true } & PrfResolution)
   | { readonly ok: false; readonly error: string };
 
-/** Absent tuning flags resolve to {@link DEFAULT_PRF_PARAMS}, so a bare `--prf`
- * is the cell the offline forecast measured. */
-const prfParamsOf = (flags: FlagValues): PrfResult => {
-  const docs = prfCountOf(flags, PRF_DOCS_FLAG, DEFAULT_PRF_PARAMS.fbDocs);
+/** Which switch turned the pass on, as the payload names it. */
+const prfSourceName = (source: PrfSource): PrfSourceName =>
+  source.explicit ? 'flag' : 'profile';
+
+/**
+ * Absent tuning flags resolve to `base` — the profile's cell when it states one,
+ * {@link DEFAULT_PRF_PARAMS} otherwise — so a flag overrides ONE member and
+ * leaves the served cell carrying the rest.
+ */
+const prfParamsOf = (flags: FlagValues, source: PrfSource): PrfResult => {
+  const { base } = source;
+  const docs = prfCountOf(flags, PRF_DOCS_FLAG, base.fbDocs);
   if (!docs.ok) return docs;
-  const terms = prfCountOf(flags, PRF_TERMS_FLAG, DEFAULT_PRF_PARAMS.fbTerms);
+  const terms = prfCountOf(flags, PRF_TERMS_FLAG, base.fbTerms);
   if (!terms.ok) return terms;
-  const alpha = prfAlphaOf(flags);
+  const alpha = prfAlphaOf(flags, base.alpha);
   return alpha.ok
-    ? { ok: true, prf: { fbDocs: docs.value, fbTerms: terms.value, alpha: alpha.value } }
+    ? {
+        ok: true,
+        prf: { fbDocs: docs.value, fbTerms: terms.value, alpha: alpha.value },
+        prfSource: prfSourceName(source),
+        prfNote: undefined,
+      }
     : alpha;
 };
 
-/** The first tuning flag passed without `--prf`, or `undefined` when none was. */
+/** The first tuning flag passed with no feedback pass to tune, or `undefined`. */
 const orphanPrfFlag = (flags: FlagValues, on: boolean): string | undefined =>
   on ? undefined : PRF_TUNING_FLAGS.find(flag => flags[flag] !== undefined);
 
-/** `undefined` = no feedback pass. Every other outcome is params or a refusal. */
-const resolvePrf = (flags: FlagValues, adapter: AdapterName): PrfResult => {
-  const on = flags[PRF_FLAG] === true;
-  const orphan = orphanPrfFlag(flags, on);
-  if (orphan !== undefined) return { ok: false, error: orphanPrfFlagError(orphan) };
-  if (!on) return { ok: true, prf: undefined };
-  return adapter === PRF_ADAPTER
-    ? prfParamsOf(flags)
-    : { ok: false, error: prfAdapterError(adapter) };
+/** Where the feedback pass came from, which is what the adapter rule turns on. */
+interface PrfSource {
+  /** A feedback pass was asked for at all: by argv, or by the profile. */
+  readonly on: boolean;
+  /** Asked for by ARGV — the case that refuses on a non-fts5 adapter. */
+  readonly explicit: boolean;
+  /** The cell the tuning flags override, member by member. */
+  readonly base: PrfParams;
+}
+
+/** `flag > profile > OFF`, stated once so no branch below re-derives it. */
+const prfSourceOf = (flags: FlagValues, profileDefault: PrfParams | undefined): PrfSource => {
+  const explicit = flags[PRF_FLAG] === true;
+  const disabled = flags[NO_PRF_FLAG] === true;
+  return {
+    explicit,
+    on: explicit || (!disabled && profileDefault !== undefined),
+    base: profileDefault ?? DEFAULT_PRF_PARAMS,
+  };
 };
+
+/** `fts5` expands; elsewhere an EXPLICIT flag refuses and a profile default notes. */
+const prfForAdapter = (
+  source: PrfSource,
+  flags: FlagValues,
+  adapter: AdapterName
+): PrfResult => {
+  if (adapter === PRF_ADAPTER) return prfParamsOf(flags, source);
+  return source.explicit
+    ? { ok: false, error: prfAdapterError(adapter) }
+    : {
+        ok: true,
+        prf: undefined,
+        prfSource: undefined,
+        prfNote: prfUnexpandedNote(adapter),
+      };
+};
+
+const prfForSource = (
+  source: PrfSource,
+  flags: FlagValues,
+  adapter: AdapterName
+): PrfResult => {
+  const orphan = orphanPrfFlag(flags, source.on);
+  if (orphan !== undefined) return { ok: false, error: orphanPrfFlagError(orphan) };
+  if (!source.on) {
+    return { ok: true, prf: undefined, prfSource: undefined, prfNote: undefined };
+  }
+  return prfForAdapter(source, flags, adapter);
+};
+
+/**
+ * The whole resolution order: an explicit flag beats the profile's default,
+ * which beats OFF, and `--no-prf` turns a profile default off. Passing both
+ * switches is a usage error rather than a silent winner.
+ */
+export const resolvePrf = (
+  flags: FlagValues,
+  adapter: AdapterName,
+  profileDefault: PrfParams | undefined
+): PrfResult =>
+  flags[PRF_FLAG] === true && flags[NO_PRF_FLAG] === true
+    ? { ok: false, error: prfContradictionError() }
+    : prfForSource(prfSourceOf(flags, profileDefault), flags, adapter);
 
 /** The rewrite cache sits beside the index it serves, like the embedding cache. */
 const REPHRASE_CACHE_SUFFIX = '.rephrase-cache';
@@ -980,12 +1083,26 @@ const confidenceLine = (request: RetrieveRequest, budgeted: BudgetedResult): str
 const budgetLine = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
   `retrieve: budget ${budgeted.maxTokens} counted as ${request.budgetMode}`;
 
+/**
+ * The expansion stated on the human rendering too, and ONLY when one ran: the
+ * text output is the same record in another shape, so a fact absent from it is
+ * a fact the reader does not have.
+ */
+export const prfLines = (request: RetrieveRequest): readonly string[] => {
+  const { prf, prfSource } = request;
+  if (prf === undefined || prfSource === undefined) return [];
+  return [
+    `retrieve: prf fbDocs ${prf.fbDocs}, fbTerms ${prf.fbTerms}, alpha ${prf.alpha} (${prfSource})`,
+  ];
+};
+
 const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): string => {
   const { result } = budgeted;
   return [
     `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
     confidenceLine(request, budgeted),
     budgetLine(request, budgeted),
+    ...prfLines(request),
     ...rephraseLines(request),
     ...rerankLines(request),
     ...unsearchedNotes(request, result),
@@ -1013,6 +1130,10 @@ type ArgsResult =
     readonly rephrase: boolean;
     /** `undefined` = no feedback pass; the first pass IS the ranking. */
     readonly prf: PrfParams | undefined;
+    /** Which switch turned that pass on; `undefined` when none ran. */
+    readonly prfSource: PrfSourceName | undefined;
+    /** What an unhonoured profile default must say; `undefined` when none. */
+    readonly prfNote: string | undefined;
   }
   | { readonly ok: false; readonly error: string };
 
@@ -1027,6 +1148,10 @@ interface ResolvedValues {
   readonly maxPerDoc: number | undefined;
   /** `undefined` = no feedback pass. See {@link resolvePrf}. */
   readonly prf: PrfParams | undefined;
+  /** See {@link PrfResolution}. */
+  readonly prfSource: PrfSourceName | undefined;
+  /** See {@link PrfResolution}. */
+  readonly prfNote: string | undefined;
 }
 
 /** The rerank leg as argv resolved it: how to score, and the floor to serve at. */
@@ -1138,7 +1263,7 @@ const resolvePresentation = (
 const resolvedValues = (
   counts: Extract<CountsResult, { readonly ok: true }>,
   presentation: Extract<PresentationResult, { readonly ok: true }>,
-  prf: PrfParams | undefined
+  prf: PrfResolution
 ): ResolvedValues => ({
   k: counts.k,
   maxTokens: counts.maxTokens,
@@ -1146,22 +1271,19 @@ const resolvedValues = (
   types: presentation.types,
   domains: presentation.domains,
   maxPerDoc: presentation.maxPerDoc,
-  prf,
+  ...prf,
 });
 
 /** Every value flag, resolved together so the command states one refusal path. */
-const resolveArgs = (
-  flags: FlagValues,
-  vocabulary: readonly AtomDomain[],
-  adapter: AdapterName
-): ArgsResult => {
+const resolveArgs = (context: CommandContext): ArgsResult => {
+  const { flags, profile } = context;
   const counts = resolveCounts(flags);
   if (!counts.ok) return { ok: false, error: counts.error };
-  const presentation = resolvePresentation(flags, vocabulary);
+  const presentation = resolvePresentation(flags, profile.domains);
   if (!presentation.ok) return { ok: false, error: presentation.error };
-  const prf = resolvePrf(flags, adapter);
+  const prf = resolvePrf(flags, context.adapter, profile.defaultPrf);
   return prf.ok
-    ? withRerankArgs(flags, resolvedValues(counts, presentation, prf.prf))
+    ? withRerankArgs(flags, resolvedValues(counts, presentation, prf))
     : { ok: false, error: prf.error };
 };
 
@@ -1196,6 +1318,18 @@ export interface RetrieveRequest {
    * for, which is what keeps the default ranking byte for byte what it was.
    */
   readonly prf: PrfParams | undefined;
+  /**
+   * Which switch turned that pass on — REPORTED, because the cell alone cannot
+   * say whether the caller asked or the profile did. `undefined` when no pass
+   * ran, so it is set exactly when {@link RetrieveRequest.prf} is.
+   */
+  readonly prfSource: PrfSourceName | undefined;
+  /**
+   * The line an unhonoured PROFILE feedback default must carry, so an
+   * unexpanded ranking is never delivered as an expanded one. `undefined` when
+   * the profile stated none, or when the adapter honoured it.
+   */
+  readonly prfNote: string | undefined;
   /** The rewrite `--rephrase` produced; `undefined` when it was off or refused. */
   readonly queryRewritten: string | undefined;
   /** The rewriter's refusal, carried into the note and the PARTIAL exit code. */
@@ -1218,12 +1352,21 @@ export const effectiveQuery = (request: RetrieveRequest): string =>
  * field instead of two. A skip and an absent corpus cannot co-occur: nothing was
  * retrieved to budget in the second case.
  */
+/**
+ * The unexpanded-ranking line, and nothing else: it is a STATEMENT about what
+ * ran, not a refusal, so it never moves the exit code — the run delivered
+ * everything it could, by the adapter rule the profile default states.
+ */
+const prfNotes = (request: RetrieveRequest): readonly string[] =>
+  request.prfNote === undefined ? [] : [request.prfNote];
+
 export const noteLines = (
   request: RetrieveRequest,
   budgeted: BudgetedResult
 ): readonly string[] => {
   const refusals = refusalsOf(request);
   const trailing = [
+    ...prfNotes(request),
     ...floorNotes(budgeted),
     ...emptyNotes(request, budgeted),
     ...capNotes(request, budgeted),
@@ -1239,6 +1382,31 @@ const noteField = (
 ): Readonly<Record<string, string>> => {
   const lines = noteLines(request, budgeted);
   return lines.length > 0 ? { note: lines.join('\n') } : {};
+};
+
+/**
+ * The RESOLVED feedback model the run expanded under, PRESENT only when a pass
+ * actually ran — its presence is what says one did, exactly as `rerankScore`
+ * says a reranker scored an atom. A default-valued field could not tell an
+ * expanded ranking from a plain one, and the expansion is unrecoverable from
+ * the atoms afterwards: a run that changed the answer MUST show it in the record.
+ */
+export interface PrfReport {
+  readonly fbDocs: number;
+  readonly fbTerms: number;
+  readonly alpha: number;
+  readonly source: PrfSourceName;
+}
+
+/** The resolved cell plus its source, or `undefined` when nothing expanded. */
+const prfReport = (request: RetrieveRequest): PrfReport | undefined =>
+  request.prf === undefined || request.prfSource === undefined
+    ? undefined
+    : { ...request.prf, source: request.prfSource };
+
+export const prfField = (request: RetrieveRequest): { readonly prf?: PrfReport } => {
+  const report = prfReport(request);
+  return report === undefined ? {} : { prf: report };
 };
 
 /** Omitted entirely when no rewrite happened, so an unrephrased payload is unchanged. */
@@ -1261,6 +1429,7 @@ const payload = (
   poolSize: budgeted.poolSize,
   budgetMode: request.budgetMode,
   confidence: confidenceOf(request, budgeted),
+  ...prfField(request),
   atoms: explainAtoms(effectiveQuery(request), budgeted.result.atoms),
   skipped: budgeted.skipped,
   ...noteField(request, budgeted),
@@ -1688,6 +1857,13 @@ const UNRESOLVED = {
   rerankRefusal: undefined,
 } as const;
 
+/** The feedback pass and the line it owes a reader, carried as one. */
+const prfFields = (args: ResolvedArgs): PrfResolution => ({
+  prf: args.prf,
+  prfSource: args.prfSource,
+  prfNote: args.prfNote,
+});
+
 /** The request as argv described it — every refusal field still unresolved. */
 const initialRequest = (
   context: CommandContext,
@@ -1706,7 +1882,7 @@ const initialRequest = (
   rerankOptions: args.rerankOptions,
   minRelevance: args.minRelevance,
   rephrase: args.rephrase,
-  prf: args.prf,
+  ...prfFields(args),
   ...UNRESOLVED,
 });
 
@@ -1750,7 +1926,7 @@ export const performRetrieval = async (
   overhead?: string
 ): Promise<RetrievalOutcome> => {
   const query = context.positionals.join(' ');
-  const args = resolveArgs(context.flags, context.profile.domains, context.adapter);
+  const args = resolveArgs(context);
   if (query.length === 0) return { ok: false, outcome: usageError(NO_QUERY) };
   if (!args.ok) return { ok: false, outcome: usageError(args.error) };
   return await searchWithBudget(initialRequest(context, query, args), charged, overhead);

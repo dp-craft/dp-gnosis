@@ -26,7 +26,8 @@ import {
   effectiveQuery,
   FLAT_FLAG,
   noteLines,
-  performRetrieval
+  performRetrieval,
+  prfField
 } from './retrieveCommand.js';
 
 /** This command's name, on its payload and on a refusal that renders no pack. */
@@ -210,6 +211,7 @@ const payload = (
   synthesis: Synthesis
 ): GnosisAnswer => ({
   ...runFields(run),
+  ...prfField(run.request),
   budgetMode: run.request.budgetMode,
   maxTokens: run.budgeted.maxTokens,
   packTokens: run.budgeted.usedTokens,

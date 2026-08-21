@@ -59,6 +59,9 @@ const retrieveArgv = (fixture: Fixture, adapter: string): readonly string[] => [
   '3',
   '--adapter',
   adapter,
+  // The PLAIN first pass on every adapter: the shipped profile serves a
+  // feedback default that only `fts5` carries, and this argv compares adapters.
+  '--no-prf',
   '--atoms-dir',
   fixture.atomsDir,
   '--index-path',

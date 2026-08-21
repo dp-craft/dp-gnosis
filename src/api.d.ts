@@ -82,6 +82,16 @@ export type GnosisAnswer = {
   readonly count: number;
   readonly documents: number;
   readonly poolSize: number;
+  /**
+   * The RM3 cell the run expanded under, and which switch turned it on.
+   * Present ONLY when a feedback pass ran — its presence is what says one did.
+   */
+  readonly prf?: {
+    readonly fbDocs: number;
+    readonly fbTerms: number;
+    readonly alpha: number;
+    readonly source: 'flag' | 'profile';
+  };
   readonly budgetMode: 'bytes' | 'tokens';
   readonly maxTokens: number;
   readonly packTokens: number;

@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import type { PrfParams } from './prf.js';
+
 /**
  * The ingest PROFILE: the closed label vocabularies and the mechanical
  * path→label tables, loaded from a data file instead of being spelled in code.
@@ -84,10 +86,26 @@ export interface IngestProfile {
    * ingested and still indexed, so a benchmark measures the full corpus.
    */
   readonly defaultExcludedTypes?: readonly string[] | undefined;
+  /**
+   * The RM3 feedback cell the CLI retrieve path expands with unless a caller
+   * says otherwise. Like `defaultExcludedTypes` it is a RETRIEVE-TIME default,
+   * never a corpus one: ingest, the port and every adapter ignore it, so the
+   * bench — which calls the port directly — measures exactly what it always
+   * measured. ABSENT means no feedback pass at all, so a profile that states
+   * none retrieves byte for byte as before.
+   */
+  readonly defaultPrf?: PrfParams | undefined;
 }
 
-/** The exclusion half: what a profile leaves out, of the corpus and of a result. */
-type ProfileExclusions = Pick<IngestProfile, 'excludePaths' | 'defaultExcludedTypes'>;
+/**
+ * The half a profile states as OPTIONAL keys: what it leaves out of the corpus
+ * and of a result, and the feedback cell a result expands with. Every member is
+ * absent-means-unchanged, which is what keeps an external profile working.
+ */
+type ProfileDefaults = Pick<
+  IngestProfile,
+  'excludePaths' | 'defaultExcludedTypes' | 'defaultPrf'
+>;
 
 /** The location half of a profile — what T-3 added to the vocabulary half. */
 type ProfileLocations = Pick<
@@ -113,6 +131,7 @@ const KNOWN_KEYS: readonly string[] = [
   'atomMaxChars',
   'excludePaths',
   'defaultExcludedTypes',
+  'defaultPrf',
 ];
 
 const fail = (source: string, detail: string): never => {
@@ -311,13 +330,75 @@ const defaultExcludedTypeList = (
     member(value, types, { source, where: `defaultExcludedTypes[${index}]` })
   );
 
-const exclusionsOf = (
+/** One numeric member of `defaultPrf`: what it is called and what it accepts. */
+interface PrfFieldSpec {
+  readonly key: string;
+  readonly accepts: (value: unknown) => value is number;
+  readonly expected: string;
+}
+
+/** The share is a proportion, so anything outside [0, 1] is refused, not clamped. */
+const isProportion = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+
+const prfField = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string,
+  spec: PrfFieldSpec
+): number => {
+  const value = raw[spec.key];
+  return spec.accepts(value)
+    ? value
+    : fail(source, `field "defaultPrf.${spec.key}" is "${String(value)}", ${spec.expected}`);
+};
+
+const FB_DOCS_SPEC: PrfFieldSpec = {
+  key: 'fbDocs',
+  accepts: isPositiveInteger,
+  expected: 'not a positive whole number of feedback documents',
+};
+
+const FB_TERMS_SPEC: PrfFieldSpec = {
+  key: 'fbTerms',
+  accepts: isPositiveInteger,
+  expected: 'not a positive whole number of expansion terms',
+};
+
+const ALPHA_SPEC: PrfFieldSpec = {
+  key: 'alpha',
+  accepts: isProportion,
+  expected: 'not a number from 0 (the query alone) to 1 (the expansion alone)',
+};
+
+/**
+ * The optional retrieve-time feedback default. A malformed member is REFUSED
+ * with the field named: a silently corrected knob would expand every served
+ * query by an amount nobody authored, and the only symptom is a ranking.
+ */
+const defaultPrfOf = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string
+): PrfParams | undefined => {
+  const value = raw['defaultPrf'];
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    return fail(source, 'field "defaultPrf" is present but is not an object stating fbDocs, fbTerms and alpha');
+  }
+  return {
+    fbDocs: prfField(value, source, FB_DOCS_SPEC),
+    fbTerms: prfField(value, source, FB_TERMS_SPEC),
+    alpha: prfField(value, source, ALPHA_SPEC),
+  };
+};
+
+const defaultsOf = (
   raw: Readonly<Record<string, unknown>>,
   source: string,
   types: readonly string[]
-): ProfileExclusions => ({
+): ProfileDefaults => ({
   excludePaths: excludePathList(raw, source),
   defaultExcludedTypes: defaultExcludedTypeList(raw, source, types),
+  defaultPrf: defaultPrfOf(raw, source),
 });
 
 const locationsOf = (
@@ -363,7 +444,7 @@ export const parseIngestProfile = (raw: unknown, source: string): IngestProfile 
     typeRules: ruleList(raw, 'typeRules', source).map((rule, i) => typeRule(rule, i, typeCtx)),
     segmentRules: ruleList(raw, 'segmentRules', source).map((rule, i) => segmentRule(rule, i, typeCtx)),
     atomMaxChars: optionalPositiveInteger(raw, 'atomMaxChars', source),
-    ...exclusionsOf(raw, source, types),
+    ...defaultsOf(raw, source, types),
     ...locationsOf(raw, source),
   };
 };
