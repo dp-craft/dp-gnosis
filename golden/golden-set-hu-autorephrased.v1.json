@@ -12,7 +12,7 @@
     {
       "id": "hu-001",
       "axis": "inflected-form",
-      "query": "vat analytics logging enable configuration",
+      "query": "napló engedélyezés áfa analitika kapcsoló beállítás",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -28,7 +28,7 @@
     {
       "id": "hu-002",
       "axis": "inflected-form",
-      "query": "tax obligation time allocation monthly distribution idotbeli elhatarolas",
+      "query": "Az adófizetési kötelezettségek megoszlanak-e a hónapok között, ha időbeli elhatárolást használunk?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -38,12 +38,12 @@
       ],
       "rationale": "Inflection pair: the body states 'Az adófizetési kötelezettség egyetlen adóponthoz kötődik', the query uses the plural 'kötelezettségek'. The three atoms are the deferred-revenue chapter: what deferral is in Odoo, why it does not touch VAT analytics, and the genuinely multi-month case (Afa tv. 58) that people confuse with it.",
       "rephrasedFrom": "Az adófizetési kötelezettségek megoszlanak-e a hónapok között, ha időbeli elhatárolást használunk?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-003",
       "axis": "inflected-form",
-      "query": "invoice tax point date of supply missing performance date",
+      "query": "bejövő számla adópont teljesítés dátum delivery_date invoice_date taxpoint",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -59,7 +59,7 @@
     {
       "id": "hu-004",
       "axis": "inflected-form",
-      "query": "migration manual steps post installation database",
+      "query": "migráció manuális lépések telepítés utáni migration manual steps post-install",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -75,7 +75,7 @@
     {
       "id": "hu-005",
       "axis": "inflected-form",
-      "query": "tag label prevent generate declaration invoice bill hibás",
+      "query": "címkék számla hibás bevallás generálás megakadályozás kizárás",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -91,7 +91,7 @@
     {
       "id": "hu-006",
       "axis": "inflected-form",
-      "query": "invoice register exceptions missing after save mark",
+      "query": "kivétel csak olvasható regiszter kivétel-lista megjelölt számla áfabevallási kivétel mentés",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -107,7 +107,7 @@
     {
       "id": "hu-007",
       "axis": "inflected-form",
-      "query": "anyk nyomtatvány adószám cég adatok kitöltés",
+      "query": "cég adószám anyk nyomtatvány megadás beállítás",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -123,7 +123,7 @@
     {
       "id": "hu-008",
       "axis": "inflected-form",
-      "query": "főkönyv ledger prefix tax amount zero configuration",
+      "query": "adóösszeg nulla főkönyvi prefix beállítás hiányos",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -140,7 +140,7 @@
     {
       "id": "hu-009",
       "axis": "inflected-form",
-      "query": "migration notes invoices accounting migration",
+      "query": "migrációs megjegyzés számla migration note invoice",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -156,7 +156,7 @@
     {
       "id": "hu-010",
       "axis": "inflected-form",
-      "query": "l10n_hu_plus dependency modules",
+      "query": "Mely modulokban maradt még l10n_hu_plus függőség?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -167,12 +167,12 @@
       ],
       "rationale": "Inflection pair: bodies write 'Modul' and 'l10n_hu_plus-függése', the query uses the inessive plural 'modulokban'. These enumerate which modules still depend on plus (ecosystem table, peer overview table, and the per-module dependency inventories); the decoupling-effort and oerp_hu_base proposal atoms are excluded because they answer 'what would it cost', not 'who still depends'.",
       "rephrasedFrom": "Mely modulokban maradt még l10n_hu_plus függőség?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-011",
       "axis": "exact-keyword",
-      "query": "pre_init_trade_position step trade position initialization",
+      "query": "Mit csinál a pre_init_trade_position lépés?",
       "domain": null,
       "type": "knowledge",
       "relevantAtomIds": [
@@ -181,12 +181,12 @@
       ],
       "rationale": "The literal step_key 'pre_init_trade_position' appears verbatim only in the 8-step registry table and in the per-step detail list (domestic/eu/other classification, WHERE IS NULL semantics, base.europe requirement). The pre-init hook atom is a near miss: it names the same work but spells it 'StepPreInitTradePosition', a different token.",
       "rephrasedFrom": "Mit csinál a pre_init_trade_position lépés?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-012",
       "axis": "exact-keyword",
-      "query": "huf_rate_fallback",
+      "query": "Mit jelent a HUF_RATE_FALLBACK megjegyzés?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -198,12 +198,12 @@
       ],
       "rationale": "The token 'HUF_RATE_FALLBACK' is written out in all five: the A7 master-data row, the token columns of the step registry, the step-1/step-8 detail, the multi-currency settings row, and the note-field summary. Step 8's own token list in the recommended-scenario atom is excluded because it enumerates NO_TAX_LINES / NO_PARTNER / TAXPOINT_INDERIVABLE only.",
       "rephrasedFrom": "Mit jelent a HUF_RATE_FALLBACK megjegyzés?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-013",
       "axis": "exact-keyword",
-      "query": "taxpoint inderivable invoice tax point derivation",
+      "query": "Mikor kap egy számla TAXPOINT_INDERIVABLE jelölést?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -213,12 +213,12 @@
       ],
       "rationale": "'TAXPOINT_INDERIVABLE' occurs verbatim as trap 5 of step 5, as a token column value in the registry table, and in the post-migration review list of invoices forced to 'excluded'. Atoms about missing delivery dates in general are excluded because they never name the token.",
       "rephrasedFrom": "Mikor kap egy számla TAXPOINT_INDERIVABLE jelölést?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-014",
       "axis": "exact-keyword",
-      "query": "md68 error code when to use",
+      "query": "md68 kód használata mikor",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -236,7 +236,7 @@
     {
       "id": "hu-015",
       "axis": "rare-technical-token",
-      "query": "pg_try_advisory_xact_lock migration advisory lock transaction",
+      "query": "Mire való a pg_try_advisory_xact_lock a migrációs lépéseknél?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -244,12 +244,12 @@
       ],
       "rationale": "The Postgres function name appears verbatim only in the concurrency/error-handling atom, together with its key expression hashtext('vat_migration_' || step_key). The emergency-shell atom is the near miss: it warns that shell calls bypass 'az advisory lockot' but never spells the function name.",
       "rephrasedFrom": "Mire való a pg_try_advisory_xact_lock a migrációs lépéseknél?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-016",
       "axis": "rare-technical-token",
-      "query": "_oerp_migration_huf_fellthrough table migration huf fellthrough",
+      "query": "Mi az a _oerp_migration_huf_fellthrough tábla?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -258,12 +258,12 @@
       ],
       "rationale": "The misspelled staging-table identifier occurs verbatim twice: where step 1 fills it and step 8 drains and drops it, and in the drift indicator post_backfill_notes_needed that tests for its existence. The 1.34.0 upgrade atom is excluded — it describes a different staging table (_oerp_migration_1340_staging).",
       "rephrasedFrom": "Mi az a _oerp_migration_huf_fellthrough tábla?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-017",
       "axis": "rare-technical-token",
-      "query": "nyomtatványverzió xml generálás mező",
+      "query": "Mi kerül a nyomtatvanyverzio elembe a generált XML-ben?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -272,12 +272,12 @@
       ],
       "rationale": "The unaccented XML element name appears verbatim in the ANYK XML skeleton and in finding M12, which reports that the field receives the reference file's filename instead of a version. Other ANYK atoms describe the wizard flow but never the element.",
       "rephrasedFrom": "Mi kerül a nyomtatvanyverzio elembe a generált XML-ben?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-018",
       "axis": "rare-technical-token",
-      "query": "l10n_hu_group_vat group vat tax number declaration",
+      "query": "Honnan jön a l10n_hu_group_vat csoportos adószám a bevallásba?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -290,12 +290,12 @@
       ],
       "rationale": "All six name the l10n_hu_edi-owned field and its route into partner_group_member_tax_number for domestic partners on the 2665M page — as a master-data row, as the only thing actually consumed from l10n_hu_edi, in the partner-classification order, in the settings summary, in the item snapshot mapping, and in the partner read list.",
       "rephrasedFrom": "Honnan jön a l10n_hu_group_vat csoportos adószám a bevallásba?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-019",
       "axis": "multi-word-phrase",
-      "query": "import nav catalog button functionality",
+      "query": "import nav catalog gomb nav katalógus import",
       "domain": "docs",
       "type": null,
       "relevantAtomIds": [
@@ -312,7 +312,7 @@
     {
       "id": "hu-020",
       "axis": "multi-word-phrase",
-      "query": "unmapped nav code filter unconnected taxes",
+      "query": "unmapped nav code szűrő bekötetlen adók keresés",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -327,7 +327,7 @@
     {
       "id": "hu-021",
       "axis": "multi-word-phrase",
-      "query": "fill missing reapply migration center button difference",
+      "query": "fill missing reapply gomb migrációs központ különbség",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -343,7 +343,7 @@
     {
       "id": "hu-022",
       "axis": "multi-word-phrase",
-      "query": "2665m partner summary sheet columns",
+      "query": "2665m partner összesítő lap oszlopok",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -359,7 +359,7 @@
     {
       "id": "hu-023",
       "axis": "synonym",
-      "query": "tax return exclude voucher documented audit trail",
+      "query": "bizonylat kihagyás adóbevallás dokumentáció nyomonkövetés",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -375,7 +375,7 @@
     {
       "id": "hu-024",
       "axis": "synonym",
-      "query": "tax item nav code missing required validation error",
+      "query": "adónem nav-kód hiányzó kezelés",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -391,7 +391,7 @@
     {
       "id": "hu-025",
       "axis": "synonym",
-      "query": "incoming invoice header completion date missing display",
+      "query": "bejövő számla fejléc teljesítés napja delivery_date invoice_date taxpoint",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -405,7 +405,7 @@
     {
       "id": "hu-026",
       "axis": "domain-filtered",
-      "query": "jogosultsági csoportok telepítés installation permission groups",
+      "query": "jogosultsági csoport telepítés modul permission group install",
       "domain": "docs",
       "type": "knowledge",
       "relevantAtomIds": [
@@ -421,7 +421,7 @@
     {
       "id": "hu-027",
       "axis": "domain-filtered",
-      "query": "outbound network calls closed network offline air gap proxy",
+      "query": "kimenő internetes hívás outbound network call zárt hálózat offline air-gapped proxy beállítás",
       "domain": "docs",
       "type": "knowledge",
       "relevantAtomIds": [
@@ -436,7 +436,7 @@
     {
       "id": "hu-028",
       "axis": "production-shaped-long-form",
-      "query": "áfa analitika modul telepítés meglévő adatbázis bevallás előző hónap generálás nulla tétel hibakeresés",
+      "query": "áfa analitika modul telepítés meglévő adatbázis bevallás előző hónap generálás nulla tétel hibakeresés ellenőrzési lista",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -453,7 +453,7 @@
     {
       "id": "hu-029",
       "axis": "production-shaped-long-form",
-      "query": "l10n_hu_plus l10n_hu_nav_evat migration order sequence legacy invoice declaration evat",
+      "query": "Egy régi rendszerről állunk át, ahol l10n_hu_plus és l10n_hu_nav_evat is telepítve volt. Milyen sorrendben futtassam a migrációs lépéseket, hogy egyetlen régi számla se maradjon ki a bevallásból?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -464,12 +464,12 @@
       ],
       "rationale": "The recommended scenario gives the 10-point order, the decision tree says which steps apply given which legacy module, the prerequisite table lists what must exist first, and M4 is the ordering trap that makes step 5 touch zero rows yet report 'ok' when the journal flags still come from step 7. The upgrade-path atom is excluded: it covers -u on an existing install, not a legacy data takeover.",
       "rephrasedFrom": "Egy régi rendszerről állunk át, ahol l10n_hu_plus és l10n_hu_nav_evat is telepítve volt. Milyen sorrendben futtassam a migrációs lépéseket, hogy egyetlen régi számla se maradjon ki a bevallásból?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-030",
       "axis": "production-shaped-long-form",
-      "query": "fordított adózás jóváíró számla könyvelés analitika pozitív összeg hiba bug",
+      "query": "A könyvelő fordított adózású jóváíró számlát rögzített, és az analitikában mindkét oldalon pozitív összeg jelenik meg. Ez hiba, és javítva lett-e már?",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -480,12 +480,12 @@
       ],
       "rationale": "These four are the bug statement (deductible and payable both TRUE blocked the -1 multiplier), the worked numbers, the code change in v1.29.1, and the pairing constraint that makes it critical. The 'not affected' and test-list atoms are near misses: they enumerate what did not change and which tests were added, not the symptom or its fix.",
       "rephrasedFrom": "A könyvelő fordított adózású jóváíró számlát rögzített, és az analitikában mindkét oldalon pozitív összeg jelenik meg. Ez hiba, és javítva lett-e már?",
-      "rephraseChanged": true
+      "rephraseChanged": false
     },
     {
       "id": "hu-031",
       "axis": "production-shaped-long-form",
-      "query": "euró exchange rate periodic invoice accounting tax declaration legal requirement system behavior",
+      "query": "euró könyvelés időszakos elszámolás számla árfolyam bevallás jogszabály rendszer logika",
       "domain": null,
       "type": null,
       "relevantAtomIds": [
@@ -501,7 +501,7 @@
   ],
   "variant": "keyword-autorephrased",
   "variantNote": "Auto arm of golden-set-hu.v1.json. Same topic ids and IDENTICAL relevantAtomIds; ONLY the query text differs, produced by the SHIPPED tools/dp-gnosis/src/rephrase.ts path via `npm run gnosis -- retrieve <q> --rephrase` on 2026-08-18. Its pair is golden-set-hu-rephrased.v1.json, the HUMAN rewrite of the same 31 topics: base -> auto measures what the tool buys, auto -> human measures how much of the human ceiling the tool reaches. No rephraseRule field: a model self-reporting which rule it applied is unverifiable, so it is not recorded.",
-  "rephrasedCount": 31,
-  "rephraseModel": "qwen38-27b-q4kxl-ctx130k-mtp-coding",
-  "rephrasePromptVersion": "v1"
+  "rephrasedCount": 20,
+  "rephraseModel": "qwen38-27b-q4kxl-ctx130k-kvq8-mtp-frog-coding",
+  "rephrasePromptVersion": "v2"
 }
