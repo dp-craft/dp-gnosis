@@ -289,6 +289,18 @@ describe('fuseForecastCli argument and leg selection', () => {
     expect(selectLegRow(history, 'vault', FUSE_LEG_SPECS[2] as never)?.runPath).toBe('runs/prf.trec');
   });
 
+  it('reads a pre-flag row with no prf key as the prf-OFF leg', () => {
+    const preFlag = legRow({ runPath: 'runs/preflag.trec' });
+    delete (preFlag as { prf?: boolean }).prf;
+    const history = [preFlag, legRow({ adapter: 'linear', runPath: 'runs/preflag-linear.trec' })];
+    delete (history[1] as { prf?: boolean }).prf;
+    expect(selectLegRow(history, 'vault', FUSE_LEG_SPECS[0] as never)?.runPath)
+      .toBe('runs/preflag.trec');
+    expect(selectLegRow(history, 'vault', FUSE_LEG_SPECS[1] as never)?.runPath)
+      .toBe('runs/preflag-linear.trec');
+    expect(selectLegRow(history, 'vault', FUSE_LEG_SPECS[2] as never)).toBeUndefined();
+  });
+
   it('names the missing leg when no recorded row qualifies', () => {
     expect(() => requireLegRow([], 'vault', FUSE_LEG_SPECS[1] as never)).toThrow(/linear/);
   });

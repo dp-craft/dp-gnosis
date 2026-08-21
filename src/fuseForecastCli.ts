@@ -98,8 +98,16 @@ export const parseFuseForecastArgs = (argv: readonly string[]): FuseForecastArgs
 export const isFusableRow = (row: HistoryRow, dataset: string): boolean =>
   row.dataset === dataset && row.depth === FUSE_DEPTH && !row.rerank && row.runPath !== undefined;
 
+/**
+ * An ABSENT `prf` reads as OFF, never as a moved treatment — `compare.ts`'s rule
+ * verbatim: no row recorded before the flag existed expanded its query. Reading
+ * absence as "not false" excluded the whole pre-flag population, which is where
+ * the plain BM25 legs live.
+ */
+const prfExpanded = (row: HistoryRow): boolean => row.prf ?? false;
+
 const matchesSpec = (row: HistoryRow, spec: LegSpec): boolean =>
-  row.adapter === spec.adapter && row.prf === spec.prf;
+  row.adapter === spec.adapter && prfExpanded(row) === spec.prf;
 
 /** The LATEST matching row by timestamp — a leg is never derived from a filename. */
 export const selectLegRow = (
