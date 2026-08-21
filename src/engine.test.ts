@@ -532,8 +532,9 @@ describe('retrieveDocs', () => {
  * `beirIndex.ts`. `runCli` is the SHIPPED entry point (`src/cli/main.ts` calls
  * exactly this), so the comparison covers argument resolution, context building,
  * `createPort` and `port.retrieve`. `--max-tokens` is raised only to defeat the
- * CLI's PRESENTATION budget, which is the one step `engine.ts` deliberately
- * omits; everything that decides ORDER is identical on both sides.
+ * CLI's PRESENTATION budget and `--no-prf` turns off the profile's retrieve-time
+ * feedback default — the two steps `engine.ts` deliberately omits, both CLI-only
+ * by design; everything that decides ORDER is identical on both sides.
  */
 describe('CLI equivalence', () => {
   const cliRanking = async (query: string): Promise<readonly string[]> => {
@@ -550,6 +551,7 @@ describe('CLI equivalence', () => {
       String(DEPTH),
       '--max-tokens',
       '10000000',
+      '--no-prf',
       '--json',
     ]);
     expect(result.exitCode).toBe(0);
