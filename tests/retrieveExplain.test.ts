@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { runCli } from '../src/cli/cli.js';
 import { explainAtoms, matchedTerms, snippetOf } from '../src/cli/explain.js';
 import { DEFAULT_MAX_PER_DOC, GROUPED_POOL_FLOOR } from '../src/cli/grouping.js';
+import { HELP_TEXT } from '../src/cli/help.js';
 import { DEFAULT_EXCLUDED_TYPES, RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
 import type { RetrievedAtom } from '../src/port.js';
 import { analyze } from '../src/query.js';
@@ -638,6 +639,20 @@ describe('--min-relevance refuses rather than filtering something it cannot cali
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('mxbai-rerank-large-v2');
     expect(result.stderr).toContain(RERANK_MODEL_ID);
+  });
+
+  /**
+   * `answer` reuses `performRetrieval` whole, so the floor is HONOURED there —
+   * proved by the refusal it gives: the flag reached the floor resolver instead
+   * of the misplaced-flag path. The help text is asserted to say the same, since
+   * a caller reads that line before it reads this pipeline.
+   */
+  it('honours the floor on `answer` too, and --help says so', async () => {
+    const result = await runCli(['answer', 'zestful retrieval', '--adapter', 'linear', '--min-relevance', '0.5']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('--min-relevance requires --rerank');
+    expect(HELP_TEXT).toContain('--min-relevance <p> on `retrieve` and `answer`');
   });
 });
 

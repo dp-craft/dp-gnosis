@@ -13,6 +13,7 @@ import { buildCorpusManifest, CORPUS_MANIFEST_FILE, serializeCorpusManifest } fr
 import type { IngestProfile } from './ingestProfile.js';
 import { domainForPath, typeForPath } from './ingestProfile.js';
 import { ATOMS_DIR, REPO_ROOT } from './paths.js';
+import { loadSummarySidecar } from './summarySidecar.js';
 import { readExistingIds, validateAtom } from './validate.js';
 
 /**
@@ -114,7 +115,8 @@ export interface IngestSummary {
   readonly duplicates: number;
 }
 
-interface LoadedSource {
+/** One in-scope source document, read once. Exported so the sidecar extractor walks the SAME scope. */
+export interface LoadedSource {
   readonly sourcePath: string;
   readonly text: string;
   /** A profile-declared domain; `undefined` when no declared root claims the source. */
@@ -190,7 +192,7 @@ const resolveRoot = async (repoRoot: string, root: string): Promise<readonly str
   const files = await listRoot(repoRoot, root);
   if (files.length > 0) return files;
   throw new Error(
-    `corpus root "${root}" matched no markdown files under ${repoRoot} — fix or remove it in CORPUS_ROOTS (src/config.ts) or ${CORPUS_ROOTS_ENV_VAR}`
+    `corpus root "${root}" matched no markdown files under ${repoRoot} — fix or remove it in CORPUS_ROOTS (src/config.ts), in the profile's corpusRoots, or in ${CORPUS_ROOTS_ENV_VAR}`
   );
 };
 
@@ -227,8 +229,12 @@ const loadSource = async (
   };
 };
 
-/** Every in-scope source of the run, read once, in sorted path order. */
-const loadCorpus = async (
+/**
+ * Every in-scope source of the run, read once, in sorted path order. Exported
+ * because the sidecar extractor MUST walk the corpus ingest walks — a second
+ * hand-rolled scope is how two commands end up reading different corpora.
+ */
+export const loadCorpus = async (
   repoRoot: string,
   corpusRoots: readonly string[],
   profile: IngestProfile
@@ -274,7 +280,7 @@ const WHITESPACE_RUN_RE = /\s+/g;
 /** Removing a comment leaves the blank lines that framed it; three or more collapse to one break. */
 const BLANK_RUN_RE = /\n{3,}/g;
 
-const documentSummary = (text: string): string | undefined => {
+export const documentSummary = (text: string): string | undefined => {
   const raw = SUMMARY_COMMENT_RE.exec(text)?.[1] ?? '';
   const collapsed = raw.replace(WHITESPACE_RUN_RE, ' ').trim();
   return collapsed.length > 0 ? collapsed : undefined;
@@ -307,24 +313,56 @@ const partSuffix = (
   return peers.length > 1 ? ` (${ordinal}/${peers.length})` : '';
 };
 
-const toCandidates = (source: LoadedSource, profile: IngestProfile): readonly Candidate[] => {
+/**
+ * SUMMARY RESOLUTION, and the direction is deliberate: an in-source
+ * `LLM-PRIMARY` comment WINS, the sidecar fills in for a document that declares
+ * none, and neither leaves `summary` absent. That makes the sidecar strictly
+ * ADDITIVE — a corpus whose documents still carry their comments ingests
+ * byte-identically, so every recorded baseline stands.
+ */
+const resolveSummary = (
+  source: LoadedSource,
+  summaries: ReadonlyMap<string, string>
+): string | undefined => documentSummary(source.text) ?? summaries.get(source.sourcePath);
+
+/** What one source document contributes to every candidate it yields, resolved once. */
+interface DocumentContext {
+  readonly domain: string;
+  readonly docTitle: string;
+  readonly summary: string | undefined;
+  readonly chunks: readonly MarkdownChunk[];
+}
+
+const toCandidate =
+  (source: LoadedSource, profile: IngestProfile, doc: DocumentContext) =>
+    (chunk: MarkdownChunk, index: number): Candidate => ({
+      sourcePath: source.sourcePath,
+      index,
+      originCount: doc.chunks.length,
+      chunk,
+      domain: doc.domain,
+      type: typeForPath(profile, source.sourcePath),
+      docTitle: doc.docTitle,
+      summary: doc.summary,
+      part: partSuffix(doc.chunks, chunk, index),
+      maxChars: profile.atomMaxChars,
+    });
+
+const toCandidates = (
+  source: LoadedSource,
+  profile: IngestProfile,
+  summaries: ReadonlyMap<string, string>
+): readonly Candidate[] => {
   const domain = source.domain;
   if (domain === undefined) return [];
   const chunks = chunkMarkdown(source.text, profile.atomMaxChars);
-  const docTitle = documentTitle(source, chunks);
-  const summary = documentSummary(source.text);
-  return chunks.map((chunk, index) => ({
-    sourcePath: source.sourcePath,
-    index,
-    originCount: chunks.length,
-    chunk,
+  const doc: DocumentContext = {
     domain,
-    type: typeForPath(profile, source.sourcePath),
-    docTitle,
-    summary,
-    part: partSuffix(chunks, chunk, index),
-    maxChars: profile.atomMaxChars,
-  }));
+    docTitle: documentTitle(source, chunks),
+    summary: resolveSummary(source, summaries),
+    chunks,
+  };
+  return chunks.map(toCandidate(source, profile, doc));
 };
 
 const byOrder = (left: Candidate, right: Candidate): number =>
@@ -867,13 +905,23 @@ const persist = async (phase: WritePhase): Promise<number> => {
   return pruned;
 };
 
+/** The sidecar the profile names, read ONCE per run and resolved against the effective repo root. */
+const profileSummaries = (
+  repoRoot: string,
+  profile: IngestProfile
+): ReadonlyMap<string, string> =>
+  profile.summarySidecar === undefined
+    ? new Map()
+    : loadSummarySidecar(join(repoRoot, profile.summarySidecar));
+
 export const ingest = async (options: IngestOptions): Promise<IngestSummary> => {
   const outputDir = options.outputDir ?? ATOMS_DIR;
   const repoRoot = options.repoRoot ?? REPO_ROOT;
   const profile = profileOf(options);
   const loaded = await loadCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots(), profile);
   const unmapped = unmappedSkips(loaded, profile);
-  const candidates = [...loaded.flatMap(source => toCandidates(source, profile))].sort(byOrder);
+  const summaries = profileSummaries(repoRoot, profile);
+  const candidates = [...loaded.flatMap(source => toCandidates(source, profile, summaries))].sort(byOrder);
   const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), {
     profile,
     gold: goldOf(options),

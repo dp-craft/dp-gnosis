@@ -59,7 +59,7 @@ export const HELP_TEXT: string = [
   '  it is refused by an unreachable server, one not serving that model, or one failing the two-document discrimination probe — never silently unreranked',
   `  --rerank-model <id> scores with another cross-encoder; --rerank-profile ${RERANK_PRESET_NAMES.join('|')} selects the fusion rule (default ${DEFAULT_RERANK_PRESET}); --rerank-weight <w> overrides the reranked order's RRF weight, 0 to 1, never clamped`,
   '  all three require --rerank and are a usage error (exit 2) without it — nothing would rerank, yet the result would carry the label',
-  'Relevance: --min-relevance <p> on `retrieve` only, OFF by default — drops every delivered atom whose CALIBRATED relevance probability is below p, reporting how many fell below which floor',
+  'Relevance: --min-relevance <p> on `retrieve` and `answer`, OFF by default — drops every delivered atom whose CALIBRATED relevance probability is below p, reporting how many fell below which floor',
   '  strictly subtractive: it never reorders, never promotes an atom from deeper in the pool and never moves poolSize; it requires --rerank and a reranker with a measured score scale, and refuses rather than clamping',
   `Rephrase: --rephrase on \`retrieve\` only, OFF by default — rewrites the question into a BM25 keyword query with ${REPHRASE_MODEL_ID} (override with ${REPHRASE_MODEL_ENV_VAR}) before the first pass, then searches the rewrite`,
   '  the rewrite is cached on disk beside the index, so a repeated query costs no network; the reported query stays the one you typed, with the rewrite beside it as queryRewritten',

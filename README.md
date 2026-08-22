@@ -404,6 +404,81 @@ The exit code is the contract and is mirrored, never flattened:
 
 A malformed line answers `-32700` (`id: null`), an unknown method `-32601`, an unknown tool name `-32602`. Acceptance over real stdio: `bash tools/dp-gnosis/scripts/mcp-smoke.sh [question]` — exit 0 when both handshake and call come back well formed.
 
+## Second consumer — point another client at this vault, without editing TypeScript
+
+`17` DoD #5. Everything here is a **client-side** snippet: nothing in this repository has to change, and the
+repository deliberately ships **no `.mcp.json`** — the file belongs to the consumer, whose absolute paths differ.
+
+**Two absolute paths are the whole configuration**, and both are stable properties of the checkout:
+
+| Placeholder | What to substitute | Why absolute |
+|---|---|---|
+| `<REPO>` | the absolute path of this checkout, e.g. `/home/dev/work/dippe/AiChatney` | an MCP client launches the server with an unspecified working directory |
+| `<NODE_BIN>` | the directory holding `node`, e.g. `/home/dev/.nvm/versions/node/v24.14.0/bin` | needed only when the client's `PATH` does not already carry a Node ≥ 22 — `tsx`'s shebang is `env node` |
+
+**The server does not read the working directory.** `REPO_ROOT` is derived from the module's own location
+(`src/paths.ts`), so the vault, the index and the profile resolve identically from any cwd. That is what makes an
+absolute-path launch sufficient.
+
+### opencode / Claude Desktop / Cursor / Zed — stdio MCP
+
+```json
+{
+  "mcpServers": {
+    "dp-gnosis": {
+      "command": "<REPO>/node_modules/.bin/tsx",
+      "args": ["<REPO>/tools/dp-gnosis/src/mcp/main.ts"]
+    }
+  }
+}
+```
+
+One tool, `gnosis_answer` — § MCP surface owns its argument contract. **Rewrite the question into keywords before
+calling it** (§ Query rephrasing); it is the largest measured quality lever in the system and the MCP surface applies
+no rephrasing of its own.
+
+**Measured latency, so a consumer does not read the first call as a hang.** Over stdio from a clean shell
+(`env -i`, cwd `/tmp`), on this machine: handshake **0.2 s**, the FIRST `tools/call` **34–52 s**, and the SECOND
+call in the same session **0.2 s**. The first call pays `tsx` transpilation of the source tree plus opening the
+14k-atom `fts5` index; the session then holds both. An MCP server is long-lived, so the cold cost is paid once per
+client launch, not per question. **This is the NO-rerank path** — adding `--rerank` costs ≈12 s per query on top
+(`GNOSIS-BASELINES.md` § Serving path), and the MCP tool does not enable it.
+
+### Obsidian
+
+A vault IS a folder of markdown, so it needs no MCP at all — it needs a **profile**. § Obsidian owns the usage
+contract (never write into the vault, exclude `.obsidian/`, rebuild after editing); the launch is:
+
+```
+<REPO>/node_modules/.bin/tsx <REPO>/tools/dp-gnosis/src/cli/main.ts \
+  --profile <REPO>/tools/dp-gnosis/profiles/<your>.profile.json \
+  answer "your keywords here"
+```
+
+The profile's `repoRoot` points at the vault directory, `corpusRoots` at the folders inside it to search, and
+`atomsDir` / `indexPath` at locations **outside** the vault. Every profile MUST own its own two — § Profiles states
+why sharing either one destroys the other instance's corpus.
+
+### The refresh step — half the deliverable
+
+**A stale index refuses; nothing rebuilds it.** `indexState` returns `stale` when the corpus moved under the index
+and the query REFUSES with exit 3 rather than answering from it. That is the correct behaviour and it is also a dead
+end for a consumer who does not know the two commands that clear it:
+
+```
+<REPO>/node_modules/.bin/tsx <REPO>/tools/dp-gnosis/src/cli/main.ts [--profile <p>] ingest
+<REPO>/node_modules/.bin/tsx <REPO>/tools/dp-gnosis/src/cli/main.ts [--profile <p>] index
+```
+
+**Both, in that order, every time the documents change.** `ingest` rewrites the atoms; `index` rebuilds the search
+index WHOLESALE from them — there is no incremental update, so an edited note is invisible until `index` has run.
+
+| Rule | Why |
+|---|---|
+| `ingest` PRUNES | the atoms tree is made to hold exactly the current run's write set. Point it at a throwaway `--atoms-dir` for any read-only experiment, never at a live one |
+| Restart the MCP server after a refresh | the session holds an open index handle; a rebuilt index reaches an already-running server only on relaunch |
+| An `ingest` that matches no files THROWS | a typo'd corpus root would otherwise index zero documents in silence — see § Exit codes for the code it leaves |
+
 ## Obsidian — usage contract
 
 Point a profile's `repoRoot` at the vault directory and its `corpusRoots` at the folders inside it to search. Everything else follows the profile rules above.

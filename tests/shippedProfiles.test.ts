@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { runCli } from '../src/cli/cli.js';
-import { ATOM_TYPES } from '../src/config.js';
+import { ATOM_TYPES, CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { INGEST_PROFILE_PATH } from '../src/paths.js';
@@ -82,7 +82,12 @@ describe('shipped profiles', () => {
     });
   });
 
-  it('rejects (does not resolve) ingest when a corpus root matches no markdown, naming that root', async () => {
+  // AC delta (D4): the previous assertion was `rejects.toThrow(...)` — an
+  // uncaught throw reaching the process as exit 1, outside the documented
+  // 0/2/3 exit vocabulary a caller MUST branch on. A misconfigured corpus root
+  // is a USAGE error, so the contract is now exit 2 with the message on stderr,
+  // and the message must name all THREE places the scope can be set.
+  it('refuses ingest with exit 2 when a corpus root matches no markdown, naming that root and every remedy', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gnosis-unmounted-'));
     const profilePath = join(dir, 'unmounted.profile.json');
     await writeFile(
@@ -102,9 +107,14 @@ describe('shipped profiles', () => {
       }),
       'utf8'
     );
-    await expect(runCli(['ingest', '--profile', profilePath])).rejects.toThrow(
-      /corpus root "analizis" matched no markdown files/
-    );
+    const result = await runCli(['ingest', '--profile', profilePath]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/corpus root "analizis" matched no markdown files/);
+    expect(result.stderr).toContain('CORPUS_ROOTS (src/config.ts)');
+    expect(result.stderr).toContain('the profile\'s corpusRoots');
+    expect(result.stderr).toContain(CORPUS_ROOTS_ENV_VAR);
+    expect(result.stdout).toBe('');
   });
 
   it('lets web-research declare a domain the default profile does not know', () => {

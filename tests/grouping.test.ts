@@ -273,7 +273,18 @@ describe('the grouping flags refuse a contradiction rather than picking one', ()
   });
 
   it.each(['--flat', '--max-per-doc'])('refuses %s outside retrieve', async flag => {
-    const result = await runCli(['ingest', flag, '2']);
+    // Pinned to a temp fixture: an unpinned `ingest` would resolve its output to
+    // the production ATOMS_DIR, so the refusal under test is not load-bearing.
+    const place = await fixture();
+    const result = await runCli([
+      'ingest',
+      '--atoms-dir',
+      place.atomsDir,
+      '--repo-root',
+      place.repoRoot,
+      flag,
+      '2',
+    ]);
 
     expect(result.exitCode).toBe(EXIT_USAGE);
     expect(result.stderr).toContain(flag);

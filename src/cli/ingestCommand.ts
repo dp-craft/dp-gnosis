@@ -55,7 +55,22 @@ const ingestCorpus = async (context: CommandContext): Promise<CommandOutcome> =>
     })
   );
 
+/**
+ * A corpus scope that resolves to nothing is a USAGE error, not a crash: the
+ * roots are caller-configured, and the refusal names the correction. Letting it
+ * escape as an uncaught throw exits 1 — outside the 0/2/3 vocabulary the README
+ * tells callers to branch on — so it is routed through the same usage path
+ * every other bad input takes.
+ */
+const attemptIngest = async (context: CommandContext): Promise<CommandOutcome> => {
+  try {
+    return await ingestCorpus(context);
+  } catch (error) {
+    return usageError(error instanceof Error ? error.message : String(error));
+  }
+};
+
 export const runIngestCommand = async (context: CommandContext): Promise<CommandOutcome> =>
   context.positionals.length > 0
     ? usageError(unexpectedSource(context.corpusRoots))
-    : await ingestCorpus(context);
+    : await attemptIngest(context);

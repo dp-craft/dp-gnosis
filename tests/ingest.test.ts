@@ -6,10 +6,13 @@ import {
   ATOM_FENCE_MAX_CHARS,
   ATOM_MAX_CHARS,
   CORPUS_ROOTS,
-  CORPUS_ROOTS_ENV_VAR
+  CORPUS_ROOTS_ENV_VAR,
+  DEFAULT_INGEST_PROFILE
 } from '../src/config.js';
 import { CORPUS_MANIFEST_FILE } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
+import type { IngestProfile } from '../src/ingestProfile.js';
+import { serializeSummarySidecar } from '../src/summarySidecar.js';
 
 interface Fixture {
   readonly root: string;
@@ -724,5 +727,77 @@ describe('ingest — corpus manifest', () => {
     const manifest = JSON.parse(await manifestOf(fixture)) as Record<string, unknown>;
     expect(manifest['skipped']).toBe(1);
     expect(manifest['atomCount']).toBe(1);
+  });
+});
+
+describe('ingest — summary sidecar resolution', () => {
+  const SIDECAR_FILE = 'summaries.json';
+
+  const writeSidecar = async (
+    root: string,
+    summaries: Readonly<Record<string, string>>
+  ): Promise<void> => {
+    await writeFile(
+      join(root, SIDECAR_FILE),
+      serializeSummarySidecar(new Map(Object.entries(summaries))),
+      'utf8'
+    );
+  };
+
+  const profileWithSidecar = (): IngestProfile => ({
+    ...DEFAULT_INGEST_PROFILE,
+    summarySidecar: SIDECAR_FILE,
+  });
+
+  const run = async (fixture: Fixture): Promise<readonly string[]> => {
+    const result = await ingest({
+      corpusRoots: [STANDARDS_ROOT],
+      outputDir: fixture.out,
+      repoRoot: fixture.root,
+      profile: profileWithSidecar(),
+    });
+    expect(result.skipped).toEqual([]);
+    return [...(await readAll(fixture.out)).values()];
+  };
+
+  it('lets an in-source LLM-PRIMARY comment override the sidecar entry', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'TS-TESTING.md', `${SUMMARY_COMMENT}\n\n${DOC}`);
+    await writeSidecar(fixture.root, {
+      'claude-artifacts/standards/TS-TESTING.md': 'the sidecar line that must lose',
+    });
+
+    const texts = await run(fixture);
+
+    expect(texts.every(text => text.includes(`summary: ${SUMMARY_TEXT}\n`))).toBe(true);
+    expect(texts.some(text => text.includes('must lose'))).toBe(false);
+  });
+
+  it('DoD #6 — a document carrying NO comment still gets its summary, from the sidecar', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'TS-TESTING.md', DOC);
+    await writeSidecar(fixture.root, {
+      'claude-artifacts/standards/TS-TESTING.md': 'what this document is, carried by the sidecar',
+    });
+
+    const texts = await run(fixture);
+
+    expect(texts.length).toBeGreaterThan(1);
+    expect(
+      texts.every(text =>
+        text.includes('summary: what this document is, carried by the sidecar\n')
+      )
+    ).toBe(true);
+    expect(texts.every(text => !bodyOf(text).includes('carried by the sidecar'))).toBe(true);
+  });
+
+  it('leaves the summary absent when neither the document nor the sidecar states one', async () => {
+    const fixture = await makeFixture();
+    await writeDoc(fixture.standards, 'TS-TESTING.md', DOC);
+    await writeSidecar(fixture.root, { 'claude-artifacts/standards/OTHER.md': 'unrelated' });
+
+    const texts = await run(fixture);
+
+    expect(texts.some(text => text.includes('summary:'))).toBe(false);
   });
 });

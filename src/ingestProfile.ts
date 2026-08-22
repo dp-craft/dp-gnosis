@@ -95,6 +95,13 @@ export interface IngestProfile {
    * none retrieves byte for byte as before.
    */
   readonly defaultPrf?: PrfParams | undefined;
+  /**
+   * Repo-relative path of this instance's SUMMARY SIDECAR — the `source path →
+   * summary` table ingest fills a document's summary from when the document
+   * itself declares no `LLM-PRIMARY` comment. Absent means no sidecar, so a
+   * profile that states none ingests byte for byte as before.
+   */
+  readonly summarySidecar?: string | undefined;
 }
 
 /**
@@ -104,7 +111,7 @@ export interface IngestProfile {
  */
 type ProfileDefaults = Pick<
   IngestProfile,
-  'excludePaths' | 'defaultExcludedTypes' | 'defaultPrf'
+  'excludePaths' | 'defaultExcludedTypes' | 'defaultPrf' | 'summarySidecar'
 >;
 
 /** The location half of a profile — what T-3 added to the vocabulary half. */
@@ -132,6 +139,7 @@ const KNOWN_KEYS: readonly string[] = [
   'excludePaths',
   'defaultExcludedTypes',
   'defaultPrf',
+  'summarySidecar',
 ];
 
 const fail = (source: string, detail: string): never => {
@@ -391,6 +399,31 @@ const defaultPrfOf = (
   };
 };
 
+/**
+ * The sidecar location, repo-relative by the same contract every path prefix
+ * obeys: an absolute path or one walking out through `..` is REFUSED rather
+ * than normalised, because a rebased location reads as "no sidecar" and the
+ * only symptom is a corpus that lost its summaries.
+ */
+const repoRelative = (value: string, source: string): string =>
+  unsafePrefix(value)
+    ? fail(
+        source,
+        `field "summarySidecar" names "${value}" — the path MUST be repo-relative, neither absolute nor containing ".."`
+      )
+    : value;
+
+const summarySidecarOf = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string
+): string | undefined => {
+  const value = raw['summarySidecar'];
+  if (value === undefined) return undefined;
+  return isString(value) && value.length > 0
+    ? repoRelative(value, source)
+    : fail(source, 'field "summarySidecar" is present but is not a non-empty string');
+};
+
 const defaultsOf = (
   raw: Readonly<Record<string, unknown>>,
   source: string,
@@ -399,6 +432,7 @@ const defaultsOf = (
   excludePaths: excludePathList(raw, source),
   defaultExcludedTypes: defaultExcludedTypeList(raw, source, types),
   defaultPrf: defaultPrfOf(raw, source),
+  summarySidecar: summarySidecarOf(raw, source),
 });
 
 const locationsOf = (

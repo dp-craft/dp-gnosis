@@ -93,12 +93,19 @@ export const GOLDEN_DIR: string = resolve(SRC_DIR, '..', 'golden');
 export const GOLDEN_SET_PATH: string = resolve(GOLDEN_DIR, 'golden-set.v1.json');
 
 /**
+ * The directory the named profile instances are authored in. A profile is
+ * selected by NAME as well as by path, so the directory is a constant here
+ * rather than a literal spelled at each caller.
+ */
+export const PROFILES_DIR: string = resolve(SRC_DIR, '..', 'profiles');
+
+/**
  * The SHIPPED ingest profile: the vocabularies and the path→label tables ingest
  * labels a corpus with. Tracked next to the code because it is authored policy,
  * not derived state — a missing or malformed file is a hard error, never a
  * silent fallback to values built into the code.
  */
-export const INGEST_PROFILE_PATH: string = resolve(SRC_DIR, '..', 'profiles', 'default.profile.json');
+export const INGEST_PROFILE_PATH: string = resolve(PROFILES_DIR, 'default.profile.json');
 
 /** Where reproducible, comparable reports are persisted (repo convention). */
 export const DOCS_TEST_DIR: string = resolve(REPO_ROOT, 'docs', 'test');

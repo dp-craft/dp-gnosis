@@ -204,7 +204,11 @@ describe('runCli', () => {
     });
 
     it('exits 2 naming the correction when a source path is passed', async () => {
-      const result = await runCli(['ingest', 'doc/some-file.md']);
+      // Pinned to a temp fixture: an unpinned `ingest` resolves its output to the
+      // production ATOMS_DIR and prunes the real vault, so the refusal above must
+      // not be the only thing standing between this suite and the corpus.
+      const fixture = await makeFixture();
+      const result = await runCli([...ingestArgv(fixture), 'doc/some-file.md']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('takes no source path');
@@ -501,6 +505,16 @@ describe('runCli', () => {
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('--domain');
+    });
+
+    it('refuses --budget-mode outside a retrieval command the way an unknown flag is refused', async () => {
+      // Pinned to a temp fixture for the same reason as the source-path refusal
+      // above: the guard under test MUST NOT be what keeps the real vault alive.
+      const fixture = await makeFixture();
+      const result = await runCli([...ingestArgv(fixture), '--budget-mode', 'tokens']);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--budget-mode');
     });
 
     it('rejects an unknown flag with exit 2 and names the valid flags', async () => {

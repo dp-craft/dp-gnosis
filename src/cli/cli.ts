@@ -32,6 +32,7 @@ import { resolveLocations } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import {
+  BUDGET_MODE_FLAG,
   DOMAIN_FLAG,
   EXCLUDE_TYPE_FLAG,
   FLAT_FLAG,
@@ -130,7 +131,7 @@ const wantsHelp = (args: ParsedArgs): boolean =>
   args.command === undefined || args.flags['--help'] === true || args.flags['-h'] === true;
 
 /**
- * `--format`, `--type` with `--exclude-type` / `--include-history`, `--max-tokens`, `--rerank` with its three tuning flags,
+ * `--format`, `--type` with `--exclude-type` / `--include-history`, `--max-tokens` with `--budget-mode`, `--rerank` with its three tuning flags,
  * `--rephrase`, and the two grouping flags belong to the RETRIEVAL commands —
  * `retrieve` and `answer`, which run the same pipeline. On any other command
  * they are refused through the SAME message an unknown flag gets: a flag no
@@ -154,6 +155,7 @@ const RETRIEVAL_FLAGS: readonly string[] = [
   EXCLUDE_TYPE_FLAG,
   INCLUDE_HISTORY_FLAG,
   MAX_TOKENS_FLAG,
+  BUDGET_MODE_FLAG,
   MIN_RELEVANCE_FLAG,
   RERANK_FLAG,
   RERANK_MODEL_FLAG,
