@@ -887,7 +887,14 @@ export const retrieveDocs = async (
   adjacency = false,
   prf?: PrfParams
 ): Promise<readonly RetrievedAtom[]> => {
-  const result = await port.retrieve(rawQueryText, { k: depth, adjacency, prf });
+  // The key is OMITTED when no expansion was asked for: `RetrieveOptions.prf`
+  // is optional and present-but-undefined is a different state under
+  // `exactOptionalPropertyTypes`.
+  const result = await port.retrieve(rawQueryText, {
+    k: depth,
+    adjacency,
+    ...(prf === undefined ? {} : { prf }),
+  });
   return result.poolAtoms ?? result.atoms;
 };
 

@@ -576,9 +576,12 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   analyzer: provenance.analyzer,
   queryAdjacency: provenance.queryAdjacency,
   prf: provenance.prf,
-  prfDocs: provenance.prfDocs,
-  prfTerms: provenance.prfTerms,
-  prfAlpha: provenance.prfAlpha,
+  // A run that did not expand writes no knob at all — the same JSON
+  // `JSON.stringify` produced from an explicit `undefined`, but a state
+  // `HistoryRow` can express: its knobs are optional, never `| undefined`.
+  ...(provenance.prfDocs === undefined ? {} : { prfDocs: provenance.prfDocs }),
+  ...(provenance.prfTerms === undefined ? {} : { prfTerms: provenance.prfTerms }),
+  ...(provenance.prfAlpha === undefined ? {} : { prfAlpha: provenance.prfAlpha }),
   typeFilter: provenance.typeFilter,
   ...descriptorFields(result),
   ...costFields(result),

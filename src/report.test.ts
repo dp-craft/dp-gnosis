@@ -247,6 +247,24 @@ describe('writeRunReport', () => {
     expect(row?.prfAlpha).toBe(0.5);
   });
 
+  it('writes no PRF knob KEY at all for a run that did not expand, and the value verbatim for one that did', () => {
+    const dir = tempResultsDir();
+    writeRunReport({ resultsDir: dir, provenance, results: [result] });
+    writeRunReport({
+      resultsDir: dir,
+      provenance: { ...provenance, prf: true, prfDocs: 10, prfTerms: 20, prfAlpha: 0.5 },
+      results: [result],
+    });
+    const lines = readFileSync(resolve(dir, HISTORY_FILE), 'utf8').trim().split('\n');
+
+    expect(lines[0]).not.toContain('prfDocs');
+    expect(lines[0]).not.toContain('prfTerms');
+    expect(lines[0]).not.toContain('prfAlpha');
+    expect(lines[1]).toContain('"prfDocs":10');
+    expect(lines[1]).toContain('"prfTerms":20');
+    expect(lines[1]).toContain('"prfAlpha":0.5');
+  });
+
   it('records the analysis chain on the row, so --compare can see an analyzer change', () => {
     const dir = tempResultsDir();
     writeRunReport({ resultsDir: dir, provenance, results: [result] });
