@@ -102,10 +102,52 @@ describe('the two flags outside retrieve', () => {
 });
 
 describe('--help', () => {
-  it('states the two flags, the excluded types and that the exclusion is CLI-only', () => {
+  it('states the two flags, the excluded types and where the exclusion applies', () => {
     expect(HELP_TEXT).toContain(EXCLUDE_TYPE_FLAG);
     expect(HELP_TEXT).toContain(INCLUDE_HISTORY_FLAG);
     expect(HELP_TEXT).toContain('feature-log | benchmark | review | brainstorm');
-    expect(HELP_TEXT).toContain('CLI path only');
+    expect(HELP_TEXT).toContain('a RETRIEVE-TIME default');
+    expect(HELP_TEXT).toContain('derives the vault datasets');
+    expect(HELP_TEXT).toContain('never on ingest');
+    expect(HELP_TEXT).toContain('the types stay ingested and indexed');
+  });
+
+  it('does not claim the exclusion never reaches the bench', () => {
+    expect(HELP_TEXT).not.toContain('never the bench');
+    expect(HELP_TEXT).not.toContain('CLI path only');
+  });
+});
+
+/**
+ * Flag scope: `RETRIEVAL_FLAGS` in `cli.ts` accepts these six on BOTH retrieval
+ * commands, and `answer` honours each of them through `performRetrieval` — so
+ * help MUST NOT scope any of them to `retrieve` alone. `--synthesize` is the
+ * only genuinely single-command flag (`ANSWER_ONLY_FLAGS`).
+ */
+describe('--help flag scoping', () => {
+  const RETRIEVAL_SCOPED_FLAGS: readonly string[] = [
+    '--format',
+    TYPE_FLAG,
+    '--max-tokens',
+    '--rerank',
+    '--rephrase',
+    '--max-per-doc'
+  ];
+
+  it('scopes no flag to `retrieve` only', () => {
+    expect(HELP_TEXT).not.toContain('on `retrieve` only');
+  });
+
+  it('states both retrieval commands for every flag both accept', () => {
+    const lines = HELP_TEXT.split('\n').filter(entry => !entry.startsWith('Flags:'));
+    RETRIEVAL_SCOPED_FLAGS.forEach(flag => {
+      const line = lines.find(entry => entry.includes(flag));
+      expect(line, `no help line introduces ${flag}`).toBeDefined();
+      expect(line).toContain('`retrieve` and `answer`');
+    });
+  });
+
+  it('keeps --synthesize scoped to answer alone', () => {
+    expect(HELP_TEXT).toContain('--synthesize on `answer` only');
   });
 });
