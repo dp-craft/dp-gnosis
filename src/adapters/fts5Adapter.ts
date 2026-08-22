@@ -71,9 +71,14 @@ import {
   ATOM_TYPES,
   type AtomDomain,
   type AtomType,
-  DEFAULT_ATOM_TYPE
+  DEFAULT_ATOM_TYPE,
+  DEFAULT_FIELD_WEIGHTS,
+  type FieldWeights,
+  FTS_COLUMNS,
+  type FtsColumn
 } from '../config.js';
 import { CORPUS_MANIFEST_FILE, readManifestDigest } from '../corpusManifest.js';
+import { type EnrichmentRecord, loadEnrichmentSidecar } from '../enrichment.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -126,23 +131,63 @@ const CORPUS_DIGEST_KEY = 'corpus_digest';
  * the keys mean something this code has not been told, and guessing there is how
  * a stale index gets answered from.
  */
-export const INDEX_SCHEMA_VERSION = '1';
-const CREATE_FTS_SQL =
-  'CREATE VIRTUAL TABLE atom_fts USING fts5(body, content=\'\', detail=full)';
+export const INDEX_SCHEMA_VERSION = '2';
+/**
+ * The stamped key naming HOW MANY sidecar records this build merged. `'0'` means
+ * the enrichment columns are empty — the only state in which this index ranks
+ * identically to a one-column one — and stamping it is what lets a later reader
+ * tell "no sidecar was passed" from "a sidecar was passed and matched nothing",
+ * which are the same empty index and very different facts.
+ */
+const ENRICHMENT_RECORDS_KEY = 'enrichment_records';
+/**
+ * Columns come from {@link FTS_COLUMNS} rather than a literal: the declaration
+ * order, the insert order and the `bm25()` weight order are then the SAME list,
+ * and a column cannot be indexed in one position while being weighted in another.
+ */
+const CREATE_FTS_SQL = `CREATE VIRTUAL TABLE atom_fts USING fts5(${FTS_COLUMNS.join(', ')}, content='', detail=full)`;
 const INSERT_META_SQL = 'INSERT INTO atom_meta(rowid, id, path) VALUES (?, ?, ?)';
-const INSERT_FTS_SQL = 'INSERT INTO atom_fts(rowid, body) VALUES (?, ?)';
+const FTS_PLACEHOLDERS = ['rowid', ...FTS_COLUMNS].map(() => '?').join(', ');
+const INSERT_FTS_SQL =
+  `INSERT INTO atom_fts(rowid, ${FTS_COLUMNS.join(', ')}) VALUES (${FTS_PLACEHOLDERS})`;
 const COUNT_META_SQL = 'SELECT COUNT(*) AS n FROM atom_meta';
+/**
+ * A weight is INLINED as a numeric literal rather than bound as a parameter:
+ * SQLite will not accept a bound value in an auxiliary function's argument list,
+ * so the statement is built once PER ADAPTER INSTANCE from that instance's
+ * weights and prepared there. A non-finite weight REFUSES instead of being
+ * formatted into `NaN` — which SQLite would parse as a column name and fail on
+ * at a point far from the caller that supplied it.
+ */
+const weightLiteral = (column: FtsColumn, weight: number): string => {
+  if (!Number.isFinite(weight)) {
+    throw new Error(`fts5 index: field weight for "${column}" is ${String(weight)}, not a finite number.`);
+  }
+  return String(weight);
+};
+
+const bm25Call = (weights: FieldWeights): string =>
+  `bm25(atom_fts, ${FTS_COLUMNS.map(column => weightLiteral(column, weights[column])).join(', ')})`;
+
 /**
  * `bm25()` returns MORE NEGATIVE for a better match, so plain ascending order is
  * best-first. Bare `bm25()` ordering is NOT deterministic — two rows can hold
- * identical scores — hence the `rowid` tiebreak here, and the port's own
+ * identical scores — hence the `rowid` tiebreak, and the port's own
  * `(score DESC, atomId ASC)` tiebreak afterwards so this adapter orders
  * identically to every other adapter.
+ *
+ * Both the projected score and the ORDER BY carry the SAME weight vector — a
+ * bare `bm25(atom_fts)` in either position would score by one function and rank
+ * by another.
  */
-const SEARCH_SQL =
-  'SELECT m.id AS id, m.path AS path, bm25(atom_fts) AS rank FROM atom_fts ' +
-  'JOIN atom_meta m ON m.rowid = atom_fts.rowid WHERE atom_fts MATCH ? ' +
-  'ORDER BY bm25(atom_fts), m.rowid';
+const searchSql = (weights: FieldWeights): string => {
+  const scorer = bm25Call(weights);
+  return (
+    `SELECT m.id AS id, m.path AS path, ${scorer} AS rank FROM atom_fts ` +
+    'JOIN atom_meta m ON m.rowid = atom_fts.rowid WHERE atom_fts MATCH ? ' +
+    `ORDER BY ${scorer}, m.rowid`
+  );
+};
 
 const WHITESPACE_RE = /\s+/;
 
@@ -161,6 +206,14 @@ export interface BuildFts5IndexOptions extends Fts5IndexLocation {
    * Absent means `DEFAULT_ANALYZER`; a pre-stamp index reads as `porter-fold`.
    */
   readonly analyzer?: AnalyzerId;
+  /**
+   * The enrichment sidecar to JOIN into the enrichment columns, by atom id.
+   * ABSENT — or present but pointing at a file that does not exist — leaves every
+   * enrichment column EMPTY, which is today's index byte for byte: an empty
+   * column contributes no tokens, so it moves neither `bm25()`'s length
+   * normalisation nor any score.
+   */
+  readonly enrichmentPath?: string | undefined;
 }
 
 /**
@@ -171,12 +224,22 @@ export interface BuildFts5IndexOptions extends Fts5IndexLocation {
 export interface Fts5AdapterOptions extends Fts5IndexLocation {
   /** Injected clock for `isRetrievable`; never read from inside. */
   readonly now: Date;
+  /**
+   * The `bm25()` weight per column, for THIS instance. Absent means
+   * {@link DEFAULT_FIELD_WEIGHTS} — body only, which is the ranking every
+   * recorded fts5 number was measured on. Unlike `analyzer` this IS a caller's
+   * choice: a weight changes how the same index is read, never what it holds,
+   * so it cannot desynchronise the query side from the index side.
+   */
+  readonly fieldWeights?: FieldWeights | undefined;
 }
 
 interface IndexEntry {
   readonly id: string;
   readonly path: string;
   readonly body: string;
+  /** The sidecar record joined to this atom, or `undefined` when none matched. */
+  readonly enrichment: EnrichmentRecord | undefined;
 }
 
 interface IndexRow {
@@ -205,19 +268,56 @@ const markdownPaths = (atomsDir: string): readonly string[] =>
         .sort(compareStrings)
     : [];
 
+/** The sidecar, keyed by atom id; an EMPTY map when no path was named. */
+const loadEnrichment = (path: string | undefined): ReadonlyMap<string, EnrichmentRecord> =>
+  path === undefined ? new Map() : loadEnrichmentSidecar(path);
+
 /** A file outside the closed frontmatter subset is SKIPPED. */
-const toEntry = (atomsDir: string, rel: string): IndexEntry | undefined => {
+const toEntry = (
+  atomsDir: string,
+  rel: string,
+  enrichment: ReadonlyMap<string, EnrichmentRecord>
+): IndexEntry | undefined => {
   const parsed = parseAtom(readFileSync(resolve(atomsDir, rel), 'utf8'));
-  return parsed.ok
-    ? { id: parsed.atom.frontmatter.id, path: rel, body: parsed.atom.body }
-    : undefined;
+  if (!parsed.ok) return undefined;
+  const id = parsed.atom.frontmatter.id;
+  return { id, path: rel, body: parsed.atom.body, enrichment: enrichment.get(id) };
 };
 
 /** Sorted by relative path, so rowids — and therefore ranking — are reproducible. */
-const collectEntries = (atomsDir: string): readonly IndexEntry[] =>
+const collectEntries = (
+  atomsDir: string,
+  enrichment: ReadonlyMap<string, EnrichmentRecord>
+): readonly IndexEntry[] =>
   markdownPaths(atomsDir)
-    .map(rel => toEntry(atomsDir, rel))
+    .map(rel => toEntry(atomsDir, rel, enrichment))
     .filter(isDefined);
+
+/**
+ * Column → the text a record contributes. `body` is absent on purpose: it comes
+ * from the atom, not the sidecar, and listing it here would let a record
+ * overwrite the corpus.
+ *
+ * A list field is joined with a single space. It is TEXT to an inverted index —
+ * there is no list type to preserve — and joining is what makes each item its own
+ * token instead of one unsearchable run.
+ */
+const ENRICHMENT_TEXT: Readonly<
+  Record<Exclude<FtsColumn, 'body'>, (record: EnrichmentRecord) => string>
+> = {
+  short: record => record.short,
+  long: record => record.long,
+  doc_desc: record => record.doc_description,
+  keywords: record => record.keywords.join(' '),
+  entities: record => record.entities.join(' '),
+  questions: record => record.questions.join(' '),
+};
+
+/** An unenriched atom yields `''` for every enrichment column — no tokens, no effect. */
+const columnText = (column: FtsColumn, entry: IndexEntry): string => {
+  if (column === 'body') return entry.body;
+  return entry.enrichment === undefined ? '' : ENRICHMENT_TEXT[column](entry.enrichment);
+};
 
 /** One `index_meta` row, as the build states it. */
 interface StampRow {
@@ -234,11 +334,14 @@ interface StampSpec {
    * read, and the query side could not tell it from a real digest.
    */
   readonly corpusDigest: string | undefined;
+  /** How many atoms were joined to a sidecar record; `0` when none were. */
+  readonly enrichmentRecords: number;
 }
 
 const stampRows = (spec: StampSpec): readonly StampRow[] => [
   { key: ANALYZER_KEY, value: spec.analyzer },
   { key: SCHEMA_VERSION_KEY, value: INDEX_SCHEMA_VERSION },
+  { key: ENRICHMENT_RECORDS_KEY, value: String(spec.enrichmentRecords) },
   ...(spec.corpusDigest === undefined
     ? []
     : [{ key: CORPUS_DIGEST_KEY, value: spec.corpusDigest }]),
@@ -263,8 +366,13 @@ const writeEntries = (
       meta.run(index + 1, entry.id, entry.path);
       // INDEX SIDE of the shared analyzer: `unicode61` then tokenizes text that
       // is already analyzed, so the inverted index holds the same terms the
-      // linear scan computes in memory.
-      fts.run(index + 1, analyzeToText(entry.body, spec.analyzer));
+      // linear scan computes in memory. EVERY column goes through it, not just
+      // `body` — a query is analyzed once, so a column that skipped the chain
+      // would hold terms the query can never spell.
+      fts.run(
+        index + 1,
+        ...FTS_COLUMNS.map(column => analyzeToText(columnText(column, entry), spec.analyzer))
+      );
     });
   })();
 };
@@ -281,7 +389,7 @@ const writeEntries = (
  * returned rather than discarded, and the caller gates on it.
  */
 export const buildFts5Index = (options: BuildFts5IndexOptions): number => {
-  const entries = collectEntries(options.atomsDir);
+  const entries = collectEntries(options.atomsDir, loadEnrichment(options.enrichmentPath));
   rmSync(options.indexPath, { force: true });
   mkdirSync(dirname(options.indexPath), { recursive: true });
   const db = new Database(options.indexPath);
@@ -291,6 +399,7 @@ export const buildFts5Index = (options: BuildFts5IndexOptions): number => {
   writeEntries(db, entries, {
     analyzer: options.analyzer ?? DEFAULT_ANALYZER,
     corpusDigest: readManifestDigest(options.atomsDir),
+    enrichmentRecords: entries.filter(entry => entry.enrichment !== undefined).length,
   });
   db.close();
   return entries.length;
@@ -681,13 +790,19 @@ const identityOf = (indexPath: string): string => {
   return `${info.ino}:${info.mtimeMs}:${info.size}`;
 };
 
-const openIndex = (indexPath: string): OpenIndex => {
+/**
+ * The weighted search statement is prepared HERE, once per open file, from the
+ * instance's weights — never rebuilt per call. Preparing it per retrieve would
+ * make the benchmark's warm regime a second measurement of the cold one, which
+ * is the comparison the harness exists to make.
+ */
+const openIndex = (indexPath: string, weights: FieldWeights): OpenIndex => {
   const db = new Database(indexPath, { readonly: true });
   return {
     identity: identityOf(indexPath),
     db,
     count: db.prepare(COUNT_META_SQL),
-    search: db.prepare(SEARCH_SQL),
+    search: db.prepare(searchSql(weights)),
     analyzer: stampedAnalyzer(db),
     stamp: readStamp(db),
   };
@@ -726,18 +841,18 @@ const release = (cell: HandleCell): void => {
   cell.open = undefined;
 };
 
-const reopen = (cell: HandleCell, indexPath: string): OpenIndex => {
+const reopen = (cell: HandleCell, indexPath: string, weights: FieldWeights): OpenIndex => {
   release(cell);
-  const opened = openIndex(indexPath);
+  const opened = openIndex(indexPath, weights);
   cell.open = opened;
   return opened;
 };
 
-const acquire = (cell: HandleCell, indexPath: string): OpenIndex => {
+const acquire = (cell: HandleCell, indexPath: string, weights: FieldWeights): OpenIndex => {
   const current = cell.open;
   return current !== undefined && current.identity === identityOf(indexPath)
     ? current
-    : reopen(cell, indexPath);
+    : reopen(cell, indexPath, weights);
 };
 
 /**
@@ -876,13 +991,13 @@ const snapshotOf = (
   };
 };
 
-const createIndexHandle = (): IndexHandle => {
+const createIndexHandle = (weights: FieldWeights): IndexHandle => {
   const cell: HandleCell = { open: undefined };
   return {
     close: (): void => release(cell),
-    stamp: (indexPath: string): IndexStamp => acquire(cell, indexPath).stamp,
+    stamp: (indexPath: string): IndexStamp => acquire(cell, indexPath, weights).stamp,
     snapshot: (indexPath: string, query: string, request: SnapshotRequest): IndexSnapshot =>
-      snapshotOf(acquire(cell, indexPath), query, request),
+      snapshotOf(acquire(cell, indexPath, weights), query, request),
   };
 };
 
@@ -964,7 +1079,7 @@ const retrieveFrom = (
 export const createFts5Adapter = (options: Fts5AdapterOptions): KnowledgePort => {
   const self: Fts5Instance = {
     options,
-    handle: createIndexHandle(),
+    handle: createIndexHandle(options.fieldWeights ?? DEFAULT_FIELD_WEIGHTS),
     corpus: { newestMs: undefined },
   };
   return {

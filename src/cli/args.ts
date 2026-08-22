@@ -9,7 +9,7 @@
  * driven by an LLM can have. Every rejection names the valid alternatives.
  */
 
-import { BUDGET_MODES, RERANK_PRESET_NAMES } from '../config.js';
+import { BUDGET_MODES, FTS_COLUMNS, RERANK_PRESET_NAMES } from '../config.js';
 import { ADAPTER_NAMES } from './adapter.js';
 
 type FlagSpec =
@@ -75,6 +75,17 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // `retrieve` only: render the ranking ungrouped and uncapped, as it was before
   // grouping existed. It contradicts a per-document cap, so the two together refuse.
   '--flat': { kind: 'boolean' },
+  // `retrieve` and `answer`: BM25F column weights, stated as OVERRIDES over the
+  // shipped defaults, so an unnamed column keeps the weight every recorded
+  // number was measured at. An unknown column name is a usage error.
+  '--field-weights': { kind: 'value', placeholder: `<${FTS_COLUMNS[0]}=w[,${FTS_COLUMNS[1]}=w]>` },
+  // `enrich` and `index`: the JSONL enrichment sidecar `enrich` WRITES and
+  // `index` READS. One flag for one artefact, so the two cannot drift apart.
+  '--enrichment': { kind: 'value', placeholder: '<file>' },
+  // `enrich` only: the E2 pilot bound — enrich at most n not-yet-fresh atoms.
+  '--limit': { kind: 'value', placeholder: '<n>' },
+  // `enrich` only: the generator id, for this run alone.
+  '--enrich-model': { kind: 'value', placeholder: '<id>' },
   // `answer` ONLY, OPT-IN: synthesise an answer over the pack. `retrieve` refuses
   // it through the same unknown-flag path — it has no pack to synthesise over.
   '--synthesize': { kind: 'boolean' },

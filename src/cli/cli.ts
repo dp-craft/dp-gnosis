@@ -23,6 +23,12 @@ import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
 import type { CommandContext, CommandHandler } from './context.js';
+import {
+  ENRICH_MODEL_FLAG,
+  ENRICHMENT_FLAG,
+  LIMIT_FLAG,
+  runEnrichCommand
+} from './enrichCommand.js';
 import type { OutputFormat } from './format.js';
 import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { HELP_TEXT } from './help.js';
@@ -35,6 +41,7 @@ import {
   BUDGET_MODE_FLAG,
   DOMAIN_FLAG,
   EXCLUDE_TYPE_FLAG,
+  FIELD_WEIGHTS_FLAG,
   FLAT_FLAG,
   INCLUDE_HISTORY_FLAG,
   MAX_PER_DOC_FLAG,
@@ -62,6 +69,7 @@ export interface CliResult {
 
 const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   ingest: runIngestCommand,
+  enrich: runEnrichCommand,
   index: runIndexCommand,
   retrieve: runRetrieveCommand,
   answer: runAnswerCommand,
@@ -168,6 +176,7 @@ const RETRIEVAL_FLAGS: readonly string[] = [
   PRF_ALPHA_FLAG,
   MAX_PER_DOC_FLAG,
   FLAT_FLAG,
+  FIELD_WEIGHTS_FLAG,
 ];
 
 /**
@@ -177,6 +186,22 @@ const RETRIEVAL_FLAGS: readonly string[] = [
  * correction reads identically wherever the flag lands.
  */
 const ANSWER_ONLY_FLAGS: readonly string[] = [SYNTHESIZE_FLAG];
+
+/**
+ * The generation verb, and the two flags only it can honour. `--enrichment` is
+ * NOT among them: it names one artefact that `enrich` writes and `index` reads,
+ * so it is scoped to BOTH — a sidecar path accepted on one side and refused on
+ * the other is how the two commands end up pointed at different files.
+ */
+const ENRICH_COMMAND = 'enrich';
+
+const INDEX_COMMAND = 'index';
+
+const ENRICH_ONLY_FLAGS: readonly string[] = [LIMIT_FLAG, ENRICH_MODEL_FLAG];
+
+const SIDECAR_COMMANDS: readonly string[] = [ENRICH_COMMAND, INDEX_COMMAND];
+
+const SIDECAR_FLAGS: readonly string[] = [ENRICHMENT_FLAG];
 
 const misplacedRetrievalFlag = (args: ParsedArgs): string | undefined =>
   RETRIEVAL_COMMANDS.includes(args.command ?? '')
@@ -188,8 +213,29 @@ const misplacedAnswerFlag = (args: ParsedArgs): string | undefined =>
     ? undefined
     : ANSWER_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
+const misplacedEnrichFlag = (args: ParsedArgs): string | undefined =>
+  args.command === ENRICH_COMMAND
+    ? undefined
+    : ENRICH_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
+
+const misplacedSidecarFlag = (args: ParsedArgs): string | undefined =>
+  SIDECAR_COMMANDS.includes(args.command ?? '')
+    ? undefined
+    : SIDECAR_FLAGS.find(flag => args.flags[flag] !== undefined);
+
+/**
+ * Every scope check, in one list. A `??` chain would grow one branch per scope;
+ * the fold keeps the complexity flat as the vocabulary grows.
+ */
+const SCOPE_CHECKS: readonly ((args: ParsedArgs) => string | undefined)[] = [
+  misplacedRetrievalFlag,
+  misplacedAnswerFlag,
+  misplacedEnrichFlag,
+  misplacedSidecarFlag,
+];
+
 const misplacedFlag = (args: ParsedArgs): string | undefined =>
-  misplacedRetrievalFlag(args) ?? misplacedAnswerFlag(args);
+  SCOPE_CHECKS.reduce<string | undefined>((found, check) => found ?? check(args), undefined);
 
 const handlerFor = (command: string | undefined): CommandHandler | undefined =>
   command === undefined ? undefined : COMMANDS[command];

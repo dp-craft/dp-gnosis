@@ -29,7 +29,9 @@ import {
 import { buildMiniSearchIndex, miniSearchAvailability } from '../adapters/miniSearchAdapter.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
+import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
+import { ENRICHMENT_FLAG } from './enrichCommand.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL } from './outcome.js';
 
@@ -59,9 +61,20 @@ interface Availability {
 const skipReason = (adapter: AdapterName, probe: Availability): string =>
   `index: ${adapter} was not built — ${probe.reason ?? UNKNOWN_REASON}; run \`npm install\` in tools/dp-gnosis to enable it`;
 
+/**
+ * `--enrichment` is OPT-IN at index time, with no default path: an absent flag
+ * builds the single-column index this adapter has always built, byte for byte.
+ * Defaulting to a conventional location would let a sidecar that happens to
+ * exist change the ranking of a build nobody asked to enrich — the silent
+ * failure class this project treats as a defect.
+ */
 const buildFts5 = async (context: CommandContext): Promise<string | number> =>
   await Promise.resolve(
-    buildFts5Index({ atomsDir: context.atomsDir, indexPath: context.indexPath })
+    buildFts5Index({
+      atomsDir: context.atomsDir,
+      indexPath: context.indexPath,
+      enrichmentPath: stringFlag(context.flags, ENRICHMENT_FLAG),
+    })
   );
 
 const buildMiniSearch = async (context: CommandContext): Promise<string | number> => {

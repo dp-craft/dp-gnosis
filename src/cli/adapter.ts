@@ -15,6 +15,7 @@ import {
 } from '../adapters/lanceDbDenseAdapter.js';
 import { createLinearScanAdapter } from '../adapters/linearScanAdapter.js';
 import { createMiniSearchAdapter } from '../adapters/miniSearchAdapter.js';
+import type { FieldWeights } from '../config.js';
 import {
   FTS5_INDEX_PATH,
   LANCEDB_HYBRID_INDEX_DIR,
@@ -117,6 +118,13 @@ export const defaultIndexPath = (adapter: AdapterName): string => DEFAULT_INDEX_
 interface PortLocation {
   readonly atomsDir: string;
   readonly indexPath: string;
+  /**
+   * The `bm25()` column weights, honoured by the ONE adapter whose index has
+   * columns (`fts5`). Every other factory ignores it rather than failing: a
+   * weight names a scoring detail of one route, not a capability every route
+   * must have, and refusing here would make `--field-weights` an adapter switch.
+   */
+  readonly fieldWeights?: FieldWeights | undefined;
 }
 
 /**
@@ -136,8 +144,19 @@ const denseFactory =
 
 const PORT_FACTORIES: Readonly<Record<AdapterName, (location: PortLocation) => KnowledgePort>> = {
   linear: location => createLinearScanAdapter(location.atomsDir),
-  fts5: location => createFts5Adapter({ ...location, now: new Date() }),
-  minisearch: location => createMiniSearchAdapter({ ...location, now: new Date() }),
+  fts5: location =>
+    createFts5Adapter({
+      atomsDir: location.atomsDir,
+      indexPath: location.indexPath,
+      fieldWeights: location.fieldWeights,
+      now: new Date(),
+    }),
+  minisearch: location =>
+    createMiniSearchAdapter({
+      atomsDir: location.atomsDir,
+      indexPath: location.indexPath,
+      now: new Date(),
+    }),
   lancedb: location =>
     createLanceDbAdapter({
       atomsDir: location.atomsDir,
@@ -149,8 +168,15 @@ const PORT_FACTORIES: Readonly<Record<AdapterName, (location: PortLocation) => K
   'lancedb-hybrid-full': denseFactory(DENSE_ROUTES['lancedb-hybrid-full']),
 };
 
+/** Per-route tuning a caller MAY attach; absent leaves every route at its default. */
+export interface PortOptions {
+  readonly fieldWeights?: FieldWeights | undefined;
+}
+
 export const createPort = (
   adapter: AdapterName,
   atomsDir: string,
-  indexPath: string
-): KnowledgePort => PORT_FACTORIES[adapter]({ atomsDir, indexPath });
+  indexPath: string,
+  options?: PortOptions
+): KnowledgePort =>
+  PORT_FACTORIES[adapter]({ atomsDir, indexPath, fieldWeights: options?.fieldWeights });

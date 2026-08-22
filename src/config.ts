@@ -710,3 +710,72 @@ export const typeForSource = (repoRelativePath: string): AtomType =>
 export const DEFAULT_EXCLUDED_TYPES: readonly AtomType[] = (
   DEFAULT_INGEST_PROFILE.defaultExcludedTypes ?? []
 ).map(value => expectMember(value, ATOM_TYPES, 'defaultExcludedTypes[]'));
+
+/**
+ * The COLUMNS of the fts5 index, in the order they are declared, inserted and
+ * weighted. ONE owner: `fts5Adapter.ts` derives its `CREATE VIRTUAL TABLE`, its
+ * `INSERT` and its `bm25()` weight vector from this list and never re-spells it.
+ * A second spelling is how a column ends up indexed in one position and weighted
+ * in another — a silent mis-scoring with no error anywhere.
+ *
+ * `body` is FIRST and stays first: it is the only column an unenriched vault
+ * fills, and its position is what makes the default weight vector readable.
+ */
+export const FTS_COLUMNS = [
+  'body',
+  'short',
+  'long',
+  'doc_desc',
+  'keywords',
+  'entities',
+  'questions',
+] as const;
+
+/** A member of the closed column vocabulary. */
+export type FtsColumn = (typeof FTS_COLUMNS)[number];
+
+/** A weight per column, TOTAL over the vocabulary — an unnamed column cannot exist. */
+export type FieldWeights = Readonly<Record<FtsColumn, number>>;
+
+/**
+ * BODY-ONLY, deliberately. Every enrichment column ships at weight 0 so the
+ * default ranking is what it has always been and every recorded fts5 number
+ * stays reproducible.
+ *
+ * The weight is NOT the whole story, and the difference matters: fts5's `bm25()`
+ * normalises by the row's TOTAL token count across ALL columns, so a POPULATED
+ * enrichment column changes the score of a row even at weight 0, by lengthening
+ * it. What weight 0 guarantees is the case that matters here — an ABSENT sidecar
+ * leaves every enrichment column EMPTY, an empty column contributes no tokens,
+ * and the index therefore scores byte for byte as the one-column index did.
+ */
+export const DEFAULT_FIELD_WEIGHTS: FieldWeights = {
+  body: 1,
+  short: 0,
+  long: 0,
+  doc_desc: 0,
+  keywords: 0,
+  entities: 0,
+  questions: 0,
+};
+
+/**
+ * The model the enrichment pass calls, served on the same llama-swap instance as
+ * the reranker and the rewriter. Probed byte-identical across two runs at
+ * {@link ENRICH_TEMPERATURE} / {@link ENRICH_SEED}, which is what makes a
+ * sidecar reproducible from its corpus.
+ */
+export const ENRICH_MODEL_ID = 'qwen35b-a3b-q5km-ctx130k-mtp-frog-coding';
+
+/** Environment override for {@link ENRICH_MODEL_ID}. */
+export const ENRICH_MODEL_ENV_VAR = 'DP_GNOSIS_ENRICH_MODEL';
+
+/** The sampling the reproducibility probe was run at; changing either invalidates it. */
+export const ENRICH_TEMPERATURE = 0.8;
+export const ENRICH_SEED = 11;
+
+/** Enough for six fields including 12–15 questions, and no more. */
+export const ENRICH_MAX_TOKENS = 1200;
+
+/** As generous as the other local-model hops: a COLD model load dominates. */
+export const ENRICH_TIMEOUT_MS = 180_000;

@@ -11,13 +11,15 @@ import { relative } from 'node:path';
 
 import type { AtomMeasure, SkippedAtom } from '../budget.js';
 import { fitToTokenBudget } from '../budget.js';
-import type { AtomDomain, AtomType, BudgetMode } from '../config.js';
+import type { AtomDomain, AtomType, BudgetMode, FieldWeights, FtsColumn } from '../config.js';
 import {
   ABSTAIN_FLOOR,
   ATOM_TYPES,
   BUDGET_MODES,
   DEFAULT_BUDGET_MODE,
   DEFAULT_EXCLUDED_TYPES,
+  DEFAULT_FIELD_WEIGHTS,
+  FTS_COLUMNS,
   RERANK_CALIBRATION,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
@@ -129,6 +131,79 @@ export const REPHRASE_FLAG = '--rephrase';
 export const MAX_PER_DOC_FLAG = '--max-per-doc';
 
 export const FLAT_FLAG = '--flat';
+
+/**
+ * The BM25F column weights, `retrieve` and `answer`; `cli.ts` refuses it
+ * elsewhere. It is stated as OVERRIDES over {@link DEFAULT_FIELD_WEIGHTS}, not
+ * as a whole vector: an unnamed column keeps its default, so
+ * `--field-weights questions=2` leaves `body` at 1 rather than silently zeroing
+ * the column every recorded number was measured on.
+ *
+ * An unknown column name is a usage error naming {@link FTS_COLUMNS}. Ignoring
+ * it would run the SHIPPED weights while the caller reads a run labelled with
+ * the weights they asked for.
+ */
+export const FIELD_WEIGHTS_FLAG = '--field-weights';
+
+const PAIR_SEPARATOR = ',';
+const PAIR_ASSIGN = '=';
+
+const fieldWeightsError = (offender: string, why: string): string =>
+  `${FIELD_WEIGHTS_FLAG} entry "${offender}" ${why} — pass \`${FIELD_WEIGHTS_FLAG} <col${PAIR_ASSIGN}w[${PAIR_SEPARATOR}col${PAIR_ASSIGN}w]>\` naming one of: ${FTS_COLUMNS.join(', ')}`;
+
+const asColumn = (name: string): FtsColumn | undefined =>
+  FTS_COLUMNS.find(column => column === name);
+
+type WeightPairResult =
+  | { readonly ok: true; readonly column: FtsColumn; readonly weight: number }
+  | { readonly ok: false; readonly error: string };
+
+const columnOf = (entry: string): FtsColumn | undefined =>
+  asColumn((entry.split(PAIR_ASSIGN)[0] ?? '').trim());
+
+/** `undefined` for an empty or non-finite weight — never a silent `NaN`. */
+const weightOf = (entry: string): number | undefined => {
+  const raw = (entry.split(PAIR_ASSIGN)[1] ?? '').trim();
+  const value = Number(raw);
+  return raw.length > 0 && Number.isFinite(value) ? value : undefined;
+};
+
+const parseWeightPair = (entry: string): WeightPairResult => {
+  const column = columnOf(entry);
+  const weight = weightOf(entry);
+  if (column === undefined)
+    return { ok: false, error: fieldWeightsError(entry, 'names no fts5 column') };
+  return weight === undefined
+    ? { ok: false, error: fieldWeightsError(entry, 'carries no finite weight') }
+    : { ok: true, column, weight };
+};
+
+type FieldWeightsResult =
+  | { readonly ok: true; readonly fieldWeights: FieldWeights }
+  | { readonly ok: false; readonly error: string };
+
+const mergePair = (weights: FieldWeights, entry: string): FieldWeightsResult => {
+  const pair = parseWeightPair(entry);
+  return pair.ok
+    ? { ok: true, fieldWeights: { ...weights, [pair.column]: pair.weight } }
+    : { ok: false, error: pair.error };
+};
+
+const mergePairs = (entries: readonly string[]): FieldWeightsResult =>
+  entries.reduce<FieldWeightsResult>(
+    (carried, entry) => (carried.ok ? mergePair(carried.fieldWeights, entry) : carried),
+    { ok: true, fieldWeights: DEFAULT_FIELD_WEIGHTS }
+  );
+
+/** `col=w[,col=w]` over the shipped defaults. Absent = the shipped defaults. */
+export const resolveFieldWeights = (flags: FlagValues): FieldWeightsResult => {
+  const raw = stringFlag(flags, FIELD_WEIGHTS_FLAG);
+  if (raw === undefined) return { ok: true, fieldWeights: DEFAULT_FIELD_WEIGHTS };
+  const entries = raw.split(PAIR_SEPARATOR).map(entry => entry.trim()).filter(entry => entry.length > 0);
+  return entries.length === 0
+    ? { ok: false, error: fieldWeightsError(raw, 'names no column at all') }
+    : mergePairs(entries);
+};
 
 const maxPerDocError = (raw: string): string =>
   `${MAX_PER_DOC_FLAG} must be a non-negative integer — got "${raw}"; pass e.g. \`${MAX_PER_DOC_FLAG} ${DEFAULT_MAX_PER_DOC}\`, or \`${MAX_PER_DOC_FLAG} ${NO_CAP}\` to cap nothing`;
@@ -1124,6 +1199,8 @@ type ArgsResult =
     readonly domains: readonly AtomDomain[] | undefined;
     /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
     readonly maxPerDoc: number | undefined;
+    /** The BM25F column weights. See {@link resolveFieldWeights}. */
+    readonly fieldWeights: FieldWeights;
     readonly rerank: boolean;
     readonly rerankOptions: RerankOptions;
     readonly minRelevance: number | undefined;
@@ -1146,6 +1223,8 @@ interface ResolvedValues {
   readonly domains: readonly AtomDomain[] | undefined;
   /** `undefined` = `--flat`. See {@link resolveMaxPerDoc}. */
   readonly maxPerDoc: number | undefined;
+  /** See {@link resolveFieldWeights}. */
+  readonly fieldWeights: FieldWeights;
   /** `undefined` = no feedback pass. See {@link resolvePrf}. */
   readonly prf: PrfParams | undefined;
   /** See {@link PrfResolution}. */
@@ -1225,6 +1304,7 @@ type PresentationResult =
     readonly types: readonly AtomType[] | undefined;
     readonly domains: readonly AtomDomain[] | undefined;
     readonly maxPerDoc: number | undefined;
+    readonly fieldWeights: FieldWeights;
   }
   | { readonly ok: false; readonly error: string };
 
@@ -1235,11 +1315,24 @@ interface SearchFilters {
   readonly domains: readonly AtomDomain[] | undefined;
 }
 
+/** The arrangement plus the filters, once both have parsed. */
+interface Arranged extends SearchFilters {
+  readonly maxPerDoc: number | undefined;
+}
+
+/** The last presentation step: how the columns are weighed. */
+const withFieldWeights = (flags: FlagValues, arranged: Arranged): PresentationResult => {
+  const weights = resolveFieldWeights(flags);
+  return weights.ok
+    ? { ok: true, ...arranged, fieldWeights: weights.fieldWeights }
+    : { ok: false, error: weights.error };
+};
+
 /** The arrangement, added to filters that already parsed. */
 const withMaxPerDoc = (flags: FlagValues, filters: SearchFilters): PresentationResult => {
   const maxPerDoc = resolveMaxPerDoc(flags);
   return maxPerDoc.ok
-    ? { ok: true, ...filters, maxPerDoc: maxPerDoc.maxPerDoc }
+    ? withFieldWeights(flags, { ...filters, maxPerDoc: maxPerDoc.maxPerDoc })
     : { ok: false, error: maxPerDoc.error };
 };
 
@@ -1271,6 +1364,7 @@ const resolvedValues = (
   types: presentation.types,
   domains: presentation.domains,
   maxPerDoc: presentation.maxPerDoc,
+  fieldWeights: presentation.fieldWeights,
   ...prf,
 });
 
@@ -1307,6 +1401,12 @@ export interface RetrieveRequest {
    * document. `undefined` = `--flat`: no cap, no grouping, no position marker.
    */
   readonly maxPerDoc: number | undefined;
+  /**
+   * The BM25F column weights the first pass scores under — the shipped defaults
+   * unless `--field-weights` overrode a column. Body-only by default, so an
+   * absent sidecar reproduces today's ranking byte for byte.
+   */
+  readonly fieldWeights: FieldWeights;
   readonly rerank: boolean;
   /** The reranker's model and fusion rule as the tuning flags resolved them. */
   readonly rerankOptions: RerankOptions;
@@ -1831,7 +1931,9 @@ const search = async (
   overhead: number
 ): Promise<RetrievalOutcome> => {
   const { context } = request;
-  const port = createPort(context.adapter, context.atomsDir, context.indexPath);
+  const port = createPort(context.adapter, context.atomsDir, context.indexPath, {
+    fieldWeights: request.fieldWeights,
+  });
   const result = await port.retrieve(effectiveQuery(request), retrieveOptions(request));
   port.close?.();
   const ranked = await rankedResult(request, result);
@@ -1856,6 +1958,12 @@ const UNRESOLVED = {
   rephraseRefusal: undefined,
   rerankRefusal: undefined,
 } as const;
+
+/** How the run SCORES: the column weights, and the feedback pass over them. */
+const scoringFields = (args: ResolvedArgs): PrfResolution & { readonly fieldWeights: FieldWeights } => ({
+  fieldWeights: args.fieldWeights,
+  ...prfFields(args),
+});
 
 /** The feedback pass and the line it owes a reader, carried as one. */
 const prfFields = (args: ResolvedArgs): PrfResolution => ({
@@ -1882,7 +1990,7 @@ const initialRequest = (
   rerankOptions: args.rerankOptions,
   minRelevance: args.minRelevance,
   rephrase: args.rephrase,
-  ...prfFields(args),
+  ...scoringFields(args),
   ...UNRESOLVED,
 });
 
