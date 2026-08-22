@@ -261,6 +261,10 @@ export const toDocumentRanking = (
  */
 export interface DocumentScore {
   readonly docId: string;
+  // Deliberately NOT reusing `ScoredAtom`'s fields: this is a recorded FILE
+  // FORMAT, and sharing them would let a new field on the atom silently add a
+  // column to every future scores TSV.
+
   readonly score: number;
   readonly firstPassScore?: number;
   readonly rerankScore?: number;

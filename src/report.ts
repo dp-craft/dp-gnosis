@@ -463,8 +463,8 @@ export const runFileRelPath = (provenance: RunProvenance, dataset: string): stri
 
 /**
  * `scores/<instant>-<adapter>-<dataset>.tsv`, relative to the results dir — the
- * same stamp-and-adapter name the other two per-dataset artefacts carry, so one
- * run's four files sort together and no two arms of a minute can collide.
+ * same stamp-and-adapter name the other two per-dataset artefacts carry, so a
+ * dataset's three files share one stem and no two arms of a minute can collide.
  */
 export const scoresRelPath = (provenance: RunProvenance, dataset: string): string =>
   `${SCORES_DIR}/${runStamp(provenance.ts)}-${provenance.adapter}-${dataset}.tsv`;
@@ -893,8 +893,8 @@ const writeTrecRun = (
   return path;
 };
 
-/** The scores TSV's key column, and the rank the row's array position carried. */
-export const SCORES_QUERY_COLUMN = 'query_id';
+/** The scores TSV's columns. Private: no reader parses this file by name yet. */
+const SCORES_QUERY_COLUMN = 'query_id';
 const SCORES_RANK_COLUMN = 'rank';
 const SCORES_DOC_COLUMN = 'doc_id';
 const SCORES_SCORE_COLUMN = 'score';
@@ -973,11 +973,12 @@ const writeScores = (
 
 /**
  * Record ONE dataset, the moment it finishes: its per-topic TSV, its TREC run
- * file, its scores TSV when it measured any, and its history row. Called per dataset rather than once per run because
- * a run that dies mid-suite (measured 2026-08-15: an OOM 67.5 minutes and six
- * completed datasets in) previously wrote NOTHING — every completed dataset's
- * numbers were lost, and "a partial run must never look complete" held only for
- * a dataset failure, never for a process death.
+ * file, its scores TSV when it measured any, and its history row. Called per
+ * dataset rather than once per run because a run that dies mid-suite (measured
+ * 2026-08-15: an OOM 67.5 minutes and six completed datasets in) previously
+ * wrote NOTHING — every completed dataset's numbers were lost, and "a partial
+ * run must never look complete" held only for a dataset failure, never for a
+ * process death.
  *
  * The artefacts are written BEFORE the history row is appended: a row names its
  * `perTopicPath`/`runPath` and resolution reads only those fields, so a crash
@@ -1002,8 +1003,10 @@ export const recordDataset = (options: DatasetRecordOptions): RecordedDataset =>
 
 /**
  * The per-topic BULK: two orders of magnitude bigger than the metrics, and each
- * already has its own artefact. Listed so a third one cannot be added to
- * `DatasetResult` and silently land in the summary.
+ * already has its own artefact. A named list rather than one key, so adding the
+ * second did not turn an equality check into a forgotten one — but it is a LIST,
+ * not a guard: a third bulk field on `DatasetResult` lands in the summary until
+ * it is added here.
  */
 const BULK_KEYS: readonly string[] = ['rankings', 'documentScores'];
 
