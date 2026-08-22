@@ -16,13 +16,13 @@ import {
   RERANK_RRF_K,
   RERANK_RRF_WEIGHT
 } from '../../dp-gnosis/src/config.js';
-import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
 import type {
   IndexState,
   KnowledgePort,
   RetrievedAtom,
   RetrieveOptions
 } from '../../dp-gnosis/src/port.js';
+import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY } from '../../dp-gnosis/src/rerank.js';
 import { SCALE_FIELDS, TREATMENT_FIELDS } from './compare.js';
@@ -372,7 +372,7 @@ describe('parseArgs', () => {
       '--prf-terms',
       '8',
       '--prf-alpha',
-      '0.3'
+      '0.3',
     ]);
     expect(options.prfDocs).toBe(5);
     expect(options.prfTerms).toBe(8);
