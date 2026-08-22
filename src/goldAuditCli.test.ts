@@ -6,14 +6,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { BeirDoc } from './beir.js';
-import type { BeirDataset, DatasetEntry } from './manifest.js';
-import type { Qrel } from './metrics.js';
 import {
   auditIngestOptions,
   emptyRankingLines,
   emptyRankingTopics,
-  scoreRun,
+  scoreRun
 } from './goldAuditCli.js';
+import type { BeirDataset, DatasetEntry } from './manifest.js';
+import type { Qrel } from './metrics.js';
 
 const DOCS: readonly BeirDoc[] = [{ id: 'd1', title: 'One', text: 'Body one.' }];
 

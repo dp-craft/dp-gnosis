@@ -393,6 +393,7 @@ describe('probePortSoundness', () => {
       indexPath,
       adapter: 'lancedb',
       atomCount: 0,
+      enrichmentRecords: 0,
       docCount: 0,
       ingestMs: 0,
       probeMs: 0,

@@ -16,7 +16,12 @@ import {
   SCALE_FIELDS,
   TREATMENT_FIELDS
 } from './compare.js';
-import { type HistoryRow, NO_TYPE_FILTER } from './report.js';
+import {
+  DEFAULT_FIELD_WEIGHTS_TEXT,
+  type HistoryRow,
+  NO_ENRICHMENT,
+  NO_TYPE_FILTER
+} from './report.js';
 
 /** What an absent rerank doc window on a row means — the values that always held. */
 const LEGACY_RERANK_DOC_CHARS = 2000;
@@ -378,6 +383,67 @@ describe('compareLastTwo', () => {
   it('reads an ABSENT typeFilter as `none`, equal to an --include-history row', () => {
     const result = compareLastTwo(
       [row({}), row({ gitSha: 'bbb2222', typeFilter: NO_TYPE_FILTER, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
+  it('guards the FIELD WEIGHTS as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('fieldWeights');
+    expect(SCALE_FIELDS).not.toContain('fieldWeights');
+  });
+
+  it('guards the ENRICHMENT count as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('enrichment');
+    expect(SCALE_FIELDS).not.toContain('enrichment');
+  });
+
+  it('COMPARES a field-weight change as an arm comparison, never subtracting it', () => {
+    const result = compareLastTwo(
+      [
+        row({ fieldWeights: DEFAULT_FIELD_WEIGHTS_TEXT }),
+        row({
+          gitSha: 'bbb2222',
+          fieldWeights: 'body=1,short=0,long=0,doc_desc=0,keywords=2,entities=0,questions=0',
+          ndcg10: 0.65,
+        }),
+      ],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['fieldWeights']);
+    expect(formatComparison(result)).toContain('fieldWeights');
+  });
+
+  it('COMPARES an enrichment-count change as an arm comparison, never subtracting it', () => {
+    const result = compareLastTwo(
+      [row({ enrichment: NO_ENRICHMENT }), row({ gitSha: 'bbb2222', enrichment: 455, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['enrichment']);
+  });
+
+  /**
+   * THE BACKFILL, and it is a pair. Every row recorded before the enrichment
+   * columns existed read a BODY-ONLY index and merged no sidecar — that is the
+   * only index the engine could build — so an old row and a new unenriched run
+   * measured the SAME treatment and must compare EQUAL. Reading either absence
+   * as unset would relabel the whole recorded history as an arm nobody ran.
+   */
+  it('reads an ABSENT fieldWeights/enrichment as the body-only, unenriched arm', () => {
+    const result = compareLastTwo(
+      [
+        row({}),
+        row({
+          gitSha: 'bbb2222',
+          fieldWeights: DEFAULT_FIELD_WEIGHTS_TEXT,
+          enrichment: NO_ENRICHMENT,
+          ndcg10: 0.65,
+        }),
+      ],
       'scifact'
     );
     expect(result.kind).toBe('delta');

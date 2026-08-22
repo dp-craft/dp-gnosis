@@ -43,8 +43,12 @@ import {
 import {
   ATOM_MAX_CHARS,
   DEFAULT_EXCLUDED_TYPES,
+  DEFAULT_FIELD_WEIGHTS,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
+  type FieldWeights,
+  FTS_COLUMNS,
+  type FtsColumn,
   RERANK_DOC_MAX_CHARS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
@@ -92,6 +96,7 @@ import {
   resolveLayer
 } from './manifest.js';
 import {
+  canonicalFieldWeights,
   corpusChecksum,
   currentGitSha,
   type DatasetResult,
@@ -225,6 +230,19 @@ export interface CliOptions {
    */
   readonly queryAdjacency: boolean;
   /**
+   * The `bm25()` weight per column the run READS its index with, already merged
+   * over `DEFAULT_FIELD_WEIGHTS`. Never `undefined`: every run weights the
+   * columns somehow, and the default IS the weighting every recorded row was
+   * measured on.
+   */
+  readonly fieldWeights: FieldWeights;
+  /**
+   * The enrichment sidecar JOINED into the index at build time. `undefined`
+   * means none, which builds every enrichment column empty — today's index, byte
+   * for byte.
+   */
+  readonly enrichmentPath: string | undefined;
+  /**
    * RM3 pseudo-relevance feedback: the first pass builds a term model and the
    * ranking is REPLACED by the weighted rescore. Recorded on every row like
    * `queryAdjacency`, because every run either expanded or did not.
@@ -335,6 +353,90 @@ const resolveAnalyzer = (adapter: AdapterName, value: string | undefined): Analy
     `dp-gnosis-bench: adapter "${adapter}" does not honour --analyzer "${analyzer}" — ` +
       `only "${ANALYZER_AWARE_ADAPTER}" builds its index with the named chain; ` +
       `"${adapter}" always analyses with "${HARDCODED_ADAPTER_ANALYZER}"`
+  );
+};
+
+const FIELD_WEIGHTS_FLAG = '--field-weights';
+const ENRICHMENT_FLAG = '--enrichment';
+
+/** The ONE adapter whose `bm25()` call carries a per-column weight (`fts5Adapter.ts`). */
+const FIELD_WEIGHTS_AWARE_ADAPTER: AdapterName = 'fts5';
+
+/** The ONE adapter whose index build has enrichment columns to merge a sidecar into. */
+const ENRICHMENT_AWARE_ADAPTER: AdapterName = 'fts5';
+
+const FTS_COLUMN_NAMES: readonly string[] = [...FTS_COLUMNS];
+
+const isFtsColumn = (value: string): value is FtsColumn => FTS_COLUMN_NAMES.includes(value);
+
+/**
+ * One `col=w` term. BOTH halves refuse rather than resolve to something: an
+ * unknown column silently dropped would leave the run reading the index at the
+ * DEFAULT weights while the row records the ones that were asked for, and a
+ * non-finite weight reaches `bm25()` as `NaN`, which orders nothing and would be
+ * recorded as a result.
+ */
+const parseWeightPair = (term: string): readonly [FtsColumn, number] => {
+  const [name = '', raw = ''] = term.split('=');
+  if (!isFtsColumn(name)) {
+    throw new Error(
+      `dp-gnosis-bench: unknown ${FIELD_WEIGHTS_FLAG} column "${name}" in "${term}" — ` +
+        `use ${FTS_COLUMN_NAMES.join(', ')}`
+    );
+  }
+  const weight = Number(raw);
+  if (raw.trim().length > 0 && Number.isFinite(weight)) return [name, weight];
+  throw new Error(
+    `dp-gnosis-bench: ${FIELD_WEIGHTS_FLAG} expects a finite weight in "${term}", got "${raw}"`
+  );
+};
+
+/**
+ * The named weights MERGED OVER {@link DEFAULT_FIELD_WEIGHTS} — an unnamed column
+ * keeps its default. That is what makes an ABSENT flag re-run a recorded row bit
+ * for bit: the default is body-only, which is the ranking every recorded fts5
+ * number was measured on, so `--field-weights questions=2` moves one column and
+ * leaves `body` at 1 rather than zeroing the corpus.
+ */
+const mergeFieldWeights = (value: string): FieldWeights =>
+  csv(value)
+    .map(parseWeightPair)
+    .reduce<FieldWeights>(
+      (weights, [column, weight]) => ({ ...weights, [column]: weight }),
+      DEFAULT_FIELD_WEIGHTS
+    );
+
+/**
+ * `--field-weights` on any adapter but `fts5` REFUSES, exactly as `--analyzer`
+ * does: no other adapter takes a per-column weight — none of them even has the
+ * columns — so the row would record `fieldWeights`, a TREATMENT field
+ * `compare.ts` labels an arm by, under a weighting nothing ever scored with.
+ */
+const resolveFieldWeights = (adapter: AdapterName, value: string | undefined): FieldWeights => {
+  if (value === undefined) return DEFAULT_FIELD_WEIGHTS;
+  if (adapter === FIELD_WEIGHTS_AWARE_ADAPTER) return mergeFieldWeights(value);
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour ${FIELD_WEIGHTS_FLAG} "${value}" — ` +
+      `only "${FIELD_WEIGHTS_AWARE_ADAPTER}" weights its columns, and the row would name a ` +
+      'weighting it never applied'
+  );
+};
+
+/**
+ * `--enrichment` on any adapter but `fts5` REFUSES, for the reason
+ * `--field-weights` does: only the fts5 build has enrichment columns to join a
+ * sidecar into, so any other arm would record an enrichment treatment whose text
+ * never reached an index.
+ */
+const resolveEnrichmentPath = (
+  adapter: AdapterName,
+  value: string | undefined
+): string | undefined => {
+  if (value === undefined || adapter === ENRICHMENT_AWARE_ADAPTER) return value;
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour ${ENRICHMENT_FLAG} "${value}" — ` +
+      `only "${ENRICHMENT_AWARE_ADAPTER}" builds enrichment columns, and the row would name a ` +
+      'sidecar nothing indexed'
   );
 };
 
@@ -694,6 +796,8 @@ export const RUN_FLAGS: FlagSpec = {
     PRF_DOCS_FLAG,
     PRF_TERMS_FLAG,
     PRF_ALPHA_FLAG,
+    FIELD_WEIGHTS_FLAG,
+    ENRICHMENT_FLAG,
     ...GATE_VALUE_FLAGS,
   ],
   boolean: [
@@ -739,6 +843,8 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     ),
     analyzer: resolveAnalyzer(adapter, flagValue(argv, '--analyzer')),
     queryAdjacency: checkAdjacencyAdapter(adapter, argv.includes(QUERY_ADJACENCY_FLAG)),
+    fieldWeights: resolveFieldWeights(adapter, flagValue(argv, FIELD_WEIGHTS_FLAG)),
+    enrichmentPath: resolveEnrichmentPath(adapter, flagValue(argv, ENRICHMENT_FLAG)),
     prf,
     prfDocs: parsePrfCount(PRF_DOCS_FLAG, flagValue(argv, PRF_DOCS_FLAG), prf),
     prfTerms: parsePrfCount(PRF_TERMS_FLAG, flagValue(argv, PRF_TERMS_FLAG), prf),
@@ -1156,6 +1262,11 @@ export interface PrepareArm {
   readonly adapter: AdapterName;
   /** Absent means the engine default — the chain `sweep.ts` and every legacy run used. */
   readonly analyzer?: AnalyzerId | undefined;
+  /**
+   * The enrichment sidecar the index build joins in. Absent means none, which is
+   * what `sweep.ts` and every recorded run built.
+   */
+  readonly enrichmentPath?: string | undefined;
 }
 
 /**
@@ -1215,6 +1326,7 @@ export const prepareOf = (request: PrepareRequest): Promise<PreparedDataset> =>
     atomMaxChars: request.entry.atomMaxChars,
     adapter: request.arm.adapter,
     analyzer: request.arm.analyzer,
+    enrichmentPath: request.arm.enrichmentPath,
     ...(request.goldIds === undefined ? {} : { goldIds: request.goldIds }),
   });
 
@@ -1261,7 +1373,11 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
   const prepared = await prepareOf({
     entry,
     dir,
-    arm: { adapter: options.adapter, analyzer: options.analyzer },
+    arm: {
+      adapter: options.adapter,
+      analyzer: options.analyzer,
+      enrichmentPath: options.enrichmentPath,
+    },
     goldIds: goldIdsOf(entry, qrels),
   });
   // Before the dataset's FIRST rerank call, and before the port exists — a
@@ -1270,6 +1386,7 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
   const port = openPort(prepared, {
     adapter: options.adapter,
     hybridWeight: options.hybridWeight,
+    fieldWeights: options.fieldWeights,
   });
   const context = { port, options, excluded: readExcluded(dir) };
   const queried = await probeThenQuery(context, entry.id, topics);
@@ -1278,6 +1395,7 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
     topics: topics.length,
     docCount: prepared.docCount,
     atomCount: prepared.atomCount,
+    enrichment: prepared.enrichmentRecords,
     ingestMs: prepared.ingestMs,
     ...measurementsOf(
       queried,
@@ -1480,6 +1598,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   embedModel: denseRouteOf(options.adapter) === undefined ? undefined : EMBED_MODEL_ID,
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
+  fieldWeights: canonicalFieldWeights(options.fieldWeights),
   queryAdjacency: options.queryAdjacency,
   ...prfProvenance(options),
   typeFilter: typeFilterOf(options.includeHistory),

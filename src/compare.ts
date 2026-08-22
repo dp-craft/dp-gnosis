@@ -24,6 +24,8 @@
  * | treatment | `tokenBudget` / `servedK` | a different SET PRESENTED to the consumer — the token cap, and the window it was charged over |
  * | treatment | `embedModel` | a different ENCODER behind the dense leg |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
+ * | treatment | `fieldWeights` | a different `bm25()` WEIGHT per column, so a different ranking over one index |
+ * | treatment | `enrichment` | a different number of atoms carrying ENRICHMENT text — the ingest-enrichment arm |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
  * | treatment | `prf` | the query was RM3-EXPANDED from its own first pass, or not |
  * | treatment | `prfDocs` / `prfTerms` / `prfAlpha` | a different RM3 term model over the same first pass — guarded ONLY between two rows that both expanded |
@@ -47,7 +49,12 @@ import {
 } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
-import { type HistoryRow, NO_TYPE_FILTER } from './report.js';
+import {
+  DEFAULT_FIELD_WEIGHTS_TEXT,
+  type HistoryRow,
+  NO_ENRICHMENT,
+  NO_TYPE_FILTER
+} from './report.js';
 
 const DELTA_DIGITS = 4;
 
@@ -83,6 +90,8 @@ export const TREATMENT_FIELDS = [
   'servedK',
   'embedModel',
   'analyzer',
+  'fieldWeights',
+  'enrichment',
   'queryAdjacency',
   'prf',
   'prfDocs',
@@ -226,12 +235,25 @@ const LEGACY_RERANK_RRF_WEIGHT = 0.5;
  * ran, which `appliesTo` answers, and an absent one on a row that DID expand
  * means the engine's `DEFAULT_PRF_PARAMS`, the only model a stamped row ever ran.
  *
+ * `fieldWeights` and `enrichment` are the ingest-enrichment BACKFILL, and they
+ * are a pair. Every row recorded before the enrichment columns existed read a
+ * BODY-ONLY index — that is the only index the engine could build — and merged
+ * no sidecar, because none existed. So an absent `fieldWeights` reads as
+ * `DEFAULT_FIELD_WEIGHTS_TEXT` and an absent `enrichment` as `NO_ENRICHMENT`,
+ * which is EXACTLY the treatment every one of those runs was measured at. An old
+ * row and a new unenriched row therefore compare EQUAL on both, and only a run
+ * that actually named a weight or merged a sidecar flips the ARM COMPARISON
+ * label. Reading either as unset instead would relabel the whole recorded
+ * history as an arm nobody ever ran.
+ *
  * `tokenBudget` / `servedK` have NO default and MUST NOT be given one: absence
  * means no cap was applied, which is a real arm rather than an older value, so a
  * budgeted row against an unbudgeted one is the experiment.
  */
 const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>> = {
   analyzer: DEFAULT_ANALYZER,
+  fieldWeights: DEFAULT_FIELD_WEIGHTS_TEXT,
+  enrichment: NO_ENRICHMENT,
   rerankModel: RERANK_MODEL_ID,
   hybridWeight: HYBRID_FUSION.rerankWeight,
   embedModel: EMBED_MODEL_ID,

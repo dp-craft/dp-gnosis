@@ -38,6 +38,11 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import {
+  DEFAULT_FIELD_WEIGHTS,
+  type FieldWeights,
+  FTS_COLUMNS
+} from '../../dp-gnosis/src/config.js';
 import type { TopicFacets } from './beir.js';
 import { countNonEmptyLines } from './lines.js';
 import type { Metrics } from './metrics.js';
@@ -125,6 +130,13 @@ export interface RunProvenance {
    */
   readonly analyzer: string;
   /**
+   * The `bm25()` weight per column this run READ the index with, canonical
+   * (`canonicalFieldWeights`). Required for the reason `analyzer` is: every run
+   * weighted the columns somehow, and the weights are unrecoverable from the
+   * metrics afterwards.
+   */
+  readonly fieldWeights: string;
+  /**
    * Whether the QUERY-SIDE adjacency treatment was applied. Required for the
    * reason `analyzer` is: every run either applied it or did not, and a row
    * omitting it could not be told apart from one measured under the other arm.
@@ -160,6 +172,33 @@ export interface RunProvenance {
  */
 export const NO_TYPE_FILTER = 'none';
 
+/**
+ * The `bm25()` weight per column as ONE stable string, in {@link FTS_COLUMNS}
+ * order — `body=1,short=0,…`. A run records this rather than the object because
+ * `history.jsonl` is compared FIELD BY FIELD: two runs of one arm must produce
+ * the same value, and an object would compare by key order and by JSON shape
+ * rather than by the weights themselves.
+ */
+export const canonicalFieldWeights = (weights: FieldWeights): string =>
+  FTS_COLUMNS.map(column => `${column}=${weights[column]}`).join(',');
+
+/**
+ * What a run that weighted NOTHING but `body` stamps — which is what EVERY row
+ * recorded before the enrichment columns existed was measured at, since
+ * `body` was the only column an index held. An old row and a new unweighted row
+ * therefore compare EQUAL, and only a real field-weight arm flips the label.
+ */
+export const DEFAULT_FIELD_WEIGHTS_TEXT = canonicalFieldWeights(DEFAULT_FIELD_WEIGHTS);
+
+/**
+ * What a run that merged NO enrichment sidecar stamps — which is what every row
+ * recorded before the sidecar existed merged, since there was no sidecar to
+ * merge. Recorded as a COUNT rather than the sidecar path: the path is
+ * machine-specific and says nothing about what reached the index, while the
+ * count is exactly the treatment — how many atoms carried enrichment text.
+ */
+export const NO_ENRICHMENT = 0;
+
 /** One dataset's outcome plus the provenance that is specific to that dataset. */
 export interface DatasetResult {
   readonly dataset: string;
@@ -182,6 +221,14 @@ export interface DatasetResult {
   readonly topics: number;
   readonly docCount: number;
   readonly atomCount: number;
+  /**
+   * How many of this dataset's atoms the index build JOINED to an enrichment
+   * sidecar record — read back off the index's own stamp, never counted here, so
+   * the number describes what was BUILT rather than what was asked for. `0` when
+   * no sidecar was named or none of its records matched. ABSENT on an
+   * externally-scored run, which is handed a foreign `.trec` and builds no index.
+   */
+  readonly enrichment?: number | undefined;
   readonly ingestMs: number;
   /** Wall time of the whole query phase — kept next to the distribution. */
   readonly queryMs: number;
@@ -350,6 +397,23 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * how `compare.ts` reads an absent one.
    */
   readonly analyzer?: string;
+  /**
+   * The `bm25()` column weights this row was measured under — TREATMENT
+   * provenance (`compare.ts`), so a weight change is labelled an arm comparison
+   * instead of being subtracted. Absent on every row recorded before the
+   * enrichment columns existed; those all read a body-only index, which is
+   * {@link DEFAULT_FIELD_WEIGHTS_TEXT}, and that is how `compare.ts` reads an
+   * absent one.
+   */
+  readonly fieldWeights?: string;
+  /**
+   * How many atoms this row's index carried enrichment text for — TREATMENT
+   * provenance (`compare.ts`). Absent on every row recorded before the sidecar
+   * existed; those merged nothing, which is {@link NO_ENRICHMENT}, and that is
+   * how `compare.ts` reads an absent one. So an old row and a new unenriched row
+   * compare EQUAL, and only a real enrichment arm flips the label.
+   */
+  readonly enrichment?: number;
   /**
    * Whether this row's queries carried the adjacency phrase — TREATMENT
    * provenance (`compare.ts`), so switching it on is labelled an arm comparison
@@ -574,6 +638,10 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   servedK: provenance.servedK,
   embedModel: provenance.embedModel,
   analyzer: provenance.analyzer,
+  fieldWeights: provenance.fieldWeights,
+  // A run that built no index writes no key at all — never a `0` claiming a
+  // sidecar was consulted and found empty.
+  ...(result.enrichment === undefined ? {} : { enrichment: result.enrichment }),
   queryAdjacency: provenance.queryAdjacency,
   prf: provenance.prf,
   // A run that did not expand writes no knob at all — the same JSON

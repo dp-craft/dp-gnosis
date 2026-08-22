@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ATOM_MAX_CHARS,
   DEFAULT_EXCLUDED_TYPES,
+  DEFAULT_FIELD_WEIGHTS,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
   RERANK_DOC_MAX_CHARS,
@@ -30,7 +31,9 @@ import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import type { Qrel } from './metrics.js';
 import {
+  canonicalFieldWeights,
   type DatasetResult,
+  DEFAULT_FIELD_WEIGHTS_TEXT,
   HISTORY_FILE,
   NO_TYPE_FILTER,
   readHistory,
@@ -79,6 +82,8 @@ describe('parseArgs', () => {
       rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
       analyzer: DEFAULT_ANALYZER,
       queryAdjacency: false,
+      fieldWeights: DEFAULT_FIELD_WEIGHTS,
+      enrichmentPath: undefined,
       prf: false,
       includeHistory: false,
     });
@@ -97,6 +102,8 @@ describe('parseArgs', () => {
         rerankFusion: RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
         analyzer: DEFAULT_ANALYZER,
         queryAdjacency: false,
+        fieldWeights: DEFAULT_FIELD_WEIGHTS,
+        enrichmentPath: undefined,
         prf: false,
         includeHistory: false,
       });
@@ -481,6 +488,79 @@ describe('parseArgs', () => {
     expect(options.hybridWeight).toBe(0.8);
     expect(options.rerankWeight).toBe(0.2);
     expect(options.rerankFusion).toEqual({ kind: 'rrf', rrfK: RERANK_RRF_K, rerankWeight: 0.2 });
+  });
+
+  it('MERGES --field-weights over the default, leaving an unnamed column alone', () => {
+    const options = parseArgs(['--field-weights', 'questions=2,keywords=0.5']);
+    expect(options.fieldWeights).toEqual({
+      ...DEFAULT_FIELD_WEIGHTS,
+      questions: 2,
+      keywords: 0.5,
+    });
+    expect(options.fieldWeights.body).toBe(DEFAULT_FIELD_WEIGHTS.body);
+  });
+
+  it('FAILS LOUDLY on an unknown --field-weights column, naming the real ones', () => {
+    const argv = ['--field-weights', 'title=2'];
+    expect(() => parseArgs(argv)).toThrow(/title/);
+    expect(() => parseArgs(argv)).toThrow(/questions/);
+  });
+
+  it('FAILS LOUDLY on a non-finite weight rather than scoring the index with NaN', () => {
+    expect(() => parseArgs(['--field-weights', 'body=nope'])).toThrow(/finite/);
+    expect(() => parseArgs(['--field-weights', 'body='])).toThrow(/finite/);
+  });
+
+  it('REFUSES --field-weights on an adapter that weights no columns', () => {
+    const argv = ['--adapter', 'linear', '--field-weights', 'questions=2'];
+    expect(() => parseArgs(argv)).toThrow(/--field-weights/);
+    expect(() => parseArgs(argv)).toThrow(/linear/);
+    expect(() => parseArgs(argv)).toThrow(/fts5/);
+  });
+
+  it('reads --enrichment as the sidecar the index build joins in', () => {
+    expect(parseArgs(['--enrichment', '/tmp/enrichment.jsonl']).enrichmentPath).toBe(
+      '/tmp/enrichment.jsonl'
+    );
+  });
+
+  it('REFUSES --enrichment on an adapter with no enrichment columns to merge into', () => {
+    const argv = ['--adapter', 'minisearch', '--enrichment', '/tmp/enrichment.jsonl'];
+    expect(() => parseArgs(argv)).toThrow(/--enrichment/);
+    expect(() => parseArgs(argv)).toThrow(/minisearch/);
+    expect(() => parseArgs(argv)).toThrow(/fts5/);
+  });
+});
+
+describe('the field-weight and enrichment provenance', () => {
+  /**
+   * The value is compared FIELD BY FIELD in `history.jsonl`, so what a run stamps
+   * has to be a stable STRING in `FTS_COLUMNS` order — an object would compare by
+   * key order and JSON shape rather than by the weights themselves.
+   */
+  it('stamps the weights canonically, in FTS_COLUMNS order', () => {
+    expect(canonicalFieldWeights(DEFAULT_FIELD_WEIGHTS)).toBe(
+      'body=1,short=0,long=0,doc_desc=0,keywords=0,entities=0,questions=0'
+    );
+  });
+
+  it('stamps a merged arm as the SAME string for two runs of that arm', () => {
+    const first = parseArgs(['--field-weights', 'questions=2']);
+    const second = parseArgs(['--field-weights', 'questions=2']);
+    expect(canonicalFieldWeights(first.fieldWeights)).toBe(
+      canonicalFieldWeights(second.fieldWeights)
+    );
+  });
+
+  /**
+   * The backfill's other half: a run that names NEITHER flag must stamp exactly
+   * what every recorded row is read as, so an unflagged run today and a row
+   * recorded before the columns existed compare EQUAL rather than as two arms.
+   */
+  it('stamps an UNFLAGGED run as the body-only, unenriched arm', () => {
+    const provenance = provenanceOf(parseArgs([]), 'abc1234');
+    expect(provenance.fieldWeights).toBe(DEFAULT_FIELD_WEIGHTS_TEXT);
+    expect(parseArgs([]).enrichmentPath).toBeUndefined();
   });
 });
 
@@ -1027,6 +1107,7 @@ const testProvenance: RunProvenance = {
   ts: '2026-08-15T10:00:00.000Z',
   gitSha: 'sha1234',
   adapter: 'fts5',
+  fieldWeights: DEFAULT_FIELD_WEIGHTS_TEXT,
   depth: 100,
   rerank: false,
   analyzer: DEFAULT_ANALYZER,

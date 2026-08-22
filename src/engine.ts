@@ -61,7 +61,7 @@ import {
   denseRouteOf,
   hasPersistentIndex
 } from '../../dp-gnosis/src/cli/adapter.js';
-import type { RerankFusion } from '../../dp-gnosis/src/config.js';
+import type { FieldWeights, RerankFusion } from '../../dp-gnosis/src/config.js';
 import { ingest, type IngestSkip, type IngestSummary } from '../../dp-gnosis/src/ingest.js';
 import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
 import type {
@@ -76,6 +76,7 @@ import { probeRerankDiscrimination, rerankAtoms } from '../../dp-gnosis/src/rera
 import type { BeirDoc } from './beir.js';
 import { buildProfile, materializeCorpus, type MaterializedCorpus } from './corpus.js';
 import { assertIndexedGoldReachable } from './fetch/vault.js';
+import { NO_ENRICHMENT } from './report.js';
 import { type RankedAtom, toDocumentRanking } from './score.js';
 
 const MARKDOWN_EXT = '.md';
@@ -88,6 +89,15 @@ export const CORPUS_DIR_NAME = 'docs';
 
 /** The index's own atom table (`fts5Adapter.ts:79`), read to count what was INDEXED. */
 const INDEXED_PATHS_SQL = 'SELECT path FROM atom_meta';
+
+/**
+ * The build's OWN count of atoms it joined to a sidecar record, read back off
+ * the stamp `buildFts5Index` writes inside the same transaction as the rows it
+ * describes. Read rather than recomputed: counting the sidecar here would report
+ * what was OFFERED, and the treatment under measurement is what was MERGED.
+ */
+const ENRICHMENT_STAMP_SQL =
+  'SELECT value FROM index_meta WHERE key = \'enrichment_records\'';
 
 /** Below this share of input documents represented in the index, the dataset fails. */
 export const MIN_DOCUMENT_COVERAGE = 0.9;
@@ -142,6 +152,13 @@ export interface PrepareDatasetOptions {
    */
   readonly analyzer?: AnalyzerId | undefined;
   /**
+   * The enrichment sidecar JOINED into the index's enrichment columns, by atom
+   * id. Absent — or a path with no file — leaves every enrichment column empty,
+   * which is today's index byte for byte: an empty column holds no terms, so it
+   * moves neither length normalisation nor any score.
+   */
+  readonly enrichmentPath?: string | undefined;
+  /**
    * Document ids the dataset's golden set judges, handed to the engine's
    * exact-body dedupe so a mirrored document keeps the copy the judgments can
    * credit. The ids are the qrels' `corpus-id` column, which `materializeCorpus`
@@ -162,6 +179,12 @@ export interface PreparedDataset {
   readonly adapter: AdapterName;
   /** Atoms actually present in the index — not atoms written to disk. */
   readonly atomCount: number;
+  /**
+   * Atoms the fts5 build joined to an enrichment sidecar record, read off the
+   * index's own stamp. `0` when no sidecar was named — the state every recorded
+   * run was prepared in.
+   */
+  readonly enrichmentRecords: number;
   readonly docCount: number;
   /**
    * Ingest plus the MEASURED adapter's own index build — the cost of the arm the
@@ -273,6 +296,22 @@ export const assertCorpusMaterialized = (facts: CorpusMaterialization): void => 
 interface IndexedPathRow {
   readonly path: string;
 }
+
+interface StampValueRow {
+  readonly value: string;
+}
+
+/**
+ * How many atoms the probe index carries enrichment text for. An index built
+ * before the stamp existed has no row and reads as {@link NO_ENRICHMENT} — it
+ * merged nothing, because there was no sidecar to merge.
+ */
+const indexedEnrichmentRecords = (indexPath: string): number => {
+  const db = new Database(indexPath, { readonly: true });
+  const row = db.prepare(ENRICHMENT_STAMP_SQL).get() as StampValueRow | undefined;
+  db.close();
+  return row === undefined ? NO_ENRICHMENT : Number(row.value);
+};
 
 /** Atom paths the index actually holds — the post-narrowing set, from the index itself. */
 const indexedAtomPaths = (indexPath: string): readonly string[] => {
@@ -392,6 +431,7 @@ const ingestAndProbe = async (
     atomsDir: paths.atomsDir,
     indexPath: paths.indexPath,
     ...(options.analyzer === undefined ? {} : { analyzer: options.analyzer }),
+    ...(options.enrichmentPath === undefined ? {} : { enrichmentPath: options.enrichmentPath }),
   });
   return { ingestMs: ingestedAt - startedAt, probeMs: Date.now() - ingestedAt };
 };
@@ -558,6 +598,7 @@ export const prepareDataset = async (
     indexPath: built.indexPath,
     adapter,
     atomCount: indexed.length,
+    enrichmentRecords: indexedEnrichmentRecords(paths.indexPath),
     docCount: corpus.docCount,
     ingestMs: attributedIngestMs({ adapter, ...probed, adapterBuildMs: built.ms }),
     probeMs: probed.probeMs,
@@ -683,6 +724,13 @@ export interface PortOptions {
    * weight nothing fused with.
    */
   readonly hybridWeight?: number | undefined;
+  /**
+   * The `bm25()` weight per column the port READS the index with. Absent means
+   * the engine's `DEFAULT_FIELD_WEIGHTS` — body only, the ranking every recorded
+   * row was measured on. Only `fts5` reads it; the flag that carries it refuses
+   * on any other adapter, so a row can never name a weight nothing scored with.
+   */
+  readonly fieldWeights?: FieldWeights | undefined;
 }
 
 /** The default: the adapter under measurement in `run.ts`. */
@@ -765,7 +813,9 @@ export const openPort = (
   assertPreparedFor(prepared, options.adapter);
   return (
     openTunedPort(prepared, options) ??
-    createPort(options.adapter, prepared.atomsDir, prepared.indexPath)
+    createPort(options.adapter, prepared.atomsDir, prepared.indexPath, {
+      ...(options.fieldWeights === undefined ? {} : { fieldWeights: options.fieldWeights }),
+    })
   );
 };
 

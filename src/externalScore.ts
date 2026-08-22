@@ -67,6 +67,15 @@ const EXTERNAL_DOMAIN = 'external';
 const EXTERNAL_DOC_SHAPE = 'document';
 const EXTERNAL_ANALYZER = 'external';
 
+/**
+ * A foreign system weighted no columns of ours — it built no index at all — so
+ * the row stamps `external` rather than a weighting it never applied. It differs
+ * from `DEFAULT_FIELD_WEIGHTS_TEXT` (`report.ts`) on purpose: an external row must never
+ * compare EQUAL on a treatment it does not have, the same rule
+ * `EXTERNAL_ANALYZER` states one field over.
+ */
+const EXTERNAL_FIELD_WEIGHTS = 'external';
+
 /** One `qid Q0 docid rank score tag` line, reduced to the three fields that rank it. */
 interface RunLine {
   readonly queryId: string;
@@ -329,6 +338,7 @@ const provenanceOf = (args: ExternalArgs, suiteRoot: string): RunProvenance => (
   rerankModel: args.rerankModel,
   rerankPool: args.rerankPool,
   analyzer: EXTERNAL_ANALYZER,
+  fieldWeights: EXTERNAL_FIELD_WEIGHTS,
   queryAdjacency: false,
   prf: false,
   typeFilter: NO_TYPE_FILTER,

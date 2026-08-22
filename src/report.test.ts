@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
   type DatasetResult,
+  DEFAULT_FIELD_WEIGHTS_TEXT,
   HISTORY_FILE,
   type HistoryRow,
   NO_TYPE_FILTER,
@@ -56,6 +57,7 @@ const provenance: RunProvenance = {
   ts: '2026-08-14T09:30:00.000Z',
   gitSha: 'abc1234',
   adapter: 'fts5',
+  fieldWeights: DEFAULT_FIELD_WEIGHTS_TEXT,
   depth: 100,
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
@@ -195,6 +197,7 @@ describe('writeRunReport', () => {
         'rPrecisionTopics',
         'rbpResidual',
         'queryAdjacency',
+        'fieldWeights',
         'prf',
         'typeFilter',
         'rerank',
