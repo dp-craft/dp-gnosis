@@ -106,6 +106,8 @@ import {
   type AtomSpread,
   atomSpread,
   type DatasetScore,
+  type DocumentScore,
+  documentScores,
   perAxisStrata,
   scoreDataset,
   toDocumentRanking,
@@ -984,12 +986,13 @@ const servedAtoms = (
 };
 
 /**
- * The document ranking AND the atom-level spread the rollup dedupes away, both
- * read off the SAME served list and the same exclusions — measured once, so the
- * two can never describe different atoms.
+ * The document ranking, the SCORES that produced it, and the atom-level spread
+ * the rollup dedupes away — all three read off the SAME served list and the same
+ * exclusions, so none can describe different atoms than the others.
  */
 interface TopicRanking {
   readonly ranking: readonly string[];
+  readonly documentScores: readonly DocumentScore[];
   readonly spread: AtomSpread;
 }
 
@@ -1011,21 +1014,23 @@ const rankTopic = async (context: RankContext, topic: Topic): Promise<TopicRanki
   });
   const served = servedAtoms(options, ordered);
   const excluded = context.excluded.get(topic.id) ?? [];
-  return { ranking: toDocumentRanking(served, excluded), spread: atomSpread(served, excluded) };
+  return {
+    ranking: toDocumentRanking(served, excluded),
+    documentScores: documentScores(served, excluded),
+    spread: atomSpread(served, excluded),
+  };
 };
 
 /** One topic's ranking and the wall time the retrieve+rerank+rollup path took. */
-interface TimedTopic {
+interface TimedTopic extends TopicRanking {
   readonly id: string;
-  readonly ranking: readonly string[];
-  readonly spread: AtomSpread;
   readonly ms: number;
 }
 
 const timeTopic = async (context: RankContext, topic: Topic): Promise<TimedTopic> => {
   const startedAt = Date.now();
-  const { ranking, spread } = await rankTopic(context, topic);
-  return { id: topic.id, ranking, spread, ms: Date.now() - startedAt };
+  const ranked = await rankTopic(context, topic);
+  return { id: topic.id, ...ranked, ms: Date.now() - startedAt };
 };
 
 /** Sequential by design: one port, one index, one CPU-bound query at a time. */
@@ -1055,6 +1060,13 @@ const P95 = 0.95;
 /** The query phase: rankings by topic, total wall time, and its distribution. */
 export interface QueryOutcome {
   readonly rankings: ReadonlyMap<string, readonly string[]>;
+  /**
+   * What each ranked document SCORED, per topic — the rankings' second
+   * projection, recorded so a score-distribution question costs no re-run. It
+   * enters no metric: every measure here is rank-based, and the rankings above
+   * are what they are computed from.
+   */
+  readonly documentScores: ReadonlyMap<string, readonly DocumentScore[]>;
   /** Per-topic presentation diversity — scored alongside, never into, the metrics. */
   readonly spread: ReadonlyMap<string, AtomSpread>;
   readonly queryMs: number;
@@ -1075,6 +1087,7 @@ export const queryDataset = async (
   const perQueryMs = timed.map(entry => entry.ms);
   return {
     rankings: new Map(timed.map(entry => [entry.id, entry.ranking])),
+    documentScores: new Map(timed.map(entry => [entry.id, entry.documentScores])),
     spread: new Map(timed.map(entry => [entry.id, entry.spread])),
     queryMs: Date.now() - startedAt,
     queryP50Ms: percentileMs(perQueryMs, P50),
@@ -1099,9 +1112,10 @@ const descriptorOf = (
 });
 
 /**
- * What the run measured. `rankings` is carried through to the TREC run file and
- * NOWHERE else — `report.ts` keeps it out of the JSON summary, which stays the
- * one-row-per-dataset record it has always been.
+ * What the run measured. `rankings` and `documentScores` are carried through to
+ * the TREC run file and the scores TSV and NOWHERE else — `report.ts` keeps both
+ * out of the JSON summary, which stays the one-row-per-dataset record it has
+ * always been.
  */
 const measurementsOf = (
   queried: QueryOutcome,
@@ -1118,6 +1132,7 @@ const measurementsOf = (
   | 'perTopic'
   | 'perAxisDescriptive'
   | 'rankings'
+  | 'documentScores'
 > => {
   const perTopic = withTopicFacets(scored.perTopic, facets);
   const strata = perAxisStrata(perTopic);
@@ -1132,6 +1147,7 @@ const measurementsOf = (
     // A dataset with no authored axis records no key at all — never an empty list.
     ...(strata.length === 0 ? {} : { perAxisDescriptive: strata }),
     rankings: queried.rankings,
+    documentScores: queried.documentScores,
   };
 };
 

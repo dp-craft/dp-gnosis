@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { Metrics, Qrel } from './metrics.js';
 import {
   atomSpread,
+  documentScores,
   perAxisStrata,
   scoreDataset,
+  type ScoredAtom,
   toDocumentRanking,
   type TopicScore,
   withTopicFacets
@@ -34,6 +36,54 @@ describe('toDocumentRanking', () => {
 
   it('skips an atom with no originPaths rather than crashing', () => {
     expect(toDocumentRanking([atom(), atom('docs/a.md'), atom()])).toEqual(['a']);
+  });
+});
+
+const scoredAtom = (path: string, score: number, rerank?: Partial<ScoredAtom>): ScoredAtom => ({
+  originPaths: [path],
+  score,
+  ...rerank,
+});
+
+describe('documentScores', () => {
+  it('keeps the score of the atom that OCCUPIED the rank, never a later duplicate', () => {
+    const atoms = [scoredAtom('docs/a.md', -2), scoredAtom('docs/a.md', -9)];
+    expect(documentScores(atoms)).toEqual([{ docId: 'a', score: -2 }]);
+  });
+
+  it('drops excluded and originless atoms exactly as the ranking does', () => {
+    const atoms = [
+      { originPaths: [], score: -1 },
+      scoredAtom('docs/a.md', -2),
+      scoredAtom('docs/b.md', -3),
+    ];
+    expect(documentScores(atoms, ['b'])).toEqual([{ docId: 'a', score: -2 }]);
+  });
+
+  it('carries the rerank pair ONLY when the atom has it — absent is not zero', () => {
+    const atoms = [
+      scoredAtom('docs/a.md', 0.9, { firstPassScore: -4.5, rerankScore: 0.91 }),
+      scoredAtom('docs/b.md', 0.1, { firstPassScore: -6.5 }),
+    ];
+    expect(documentScores(atoms)).toEqual([
+      { docId: 'a', score: 0.9, firstPassScore: -4.5, rerankScore: 0.91 },
+      { docId: 'b', score: 0.1, firstPassScore: -6.5 },
+    ]);
+    expect(Object.keys(documentScores(atoms)[1] ?? {})).not.toContain('rerankScore');
+  });
+
+  it('is aligned with toDocumentRanking rank for rank — one rollup, two projections', () => {
+    const atoms = [
+      scoredAtom('docs/a.md', -2),
+      { originPaths: [], score: -3 },
+      scoredAtom('docs/b.md', -4),
+      scoredAtom('docs/a.md', -5),
+      scoredAtom('docs/c.md', -6),
+    ];
+    const excluded = ['c'];
+    expect(documentScores(atoms, excluded).map(entry => entry.docId)).toEqual(
+      toDocumentRanking(atoms, excluded)
+    );
   });
 });
 

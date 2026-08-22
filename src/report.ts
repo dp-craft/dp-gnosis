@@ -7,10 +7,19 @@
  * | `<stem>-<sha>.json` | the same numbers, machine-readable, for a later diff |
  * | `per-topic/<instant>-<adapter>-<dataset>.tsv` | per-topic scores, so a paired test can be run LATER without re-running the benchmark |
  * | `runs/<instant>-<adapter>-<dataset>.trec` | the per-topic RANKINGS, in the format an external evaluator already reads |
+ * | `scores/<instant>-<adapter>-<dataset>.tsv` | the SCORES behind that order, which the `.trec` cannot carry |
  * | `history.jsonl` | one line per (run, dataset) — the progress table `--compare` reads |
  *
- * The first three are written PER DATASET, as it completes (`recordDataset`);
+ * The first four are written PER DATASET, as it completes (`recordDataset`);
  * only the `.md`/`.json` summary is a whole-run artefact (`writeRunSummary`).
+ *
+ * The scores file exists because the `.trec` score column is RANK-DERIVED on
+ * purpose (`trecLines`) and so carries no measurement, while every metric here
+ * is rank-based and never needed one. A run therefore recorded its order and
+ * lost what produced it, and any score-distribution question cost a re-run. It
+ * is written ONLY by a run that measured atom scores: an externally-scored run
+ * (`externalScore.ts`) starts from a foreign `.trec` and has none, and records
+ * no file and no path rather than a column of zeros.
  *
  * The history row carries PROVENANCE next to the metrics, and that is the whole
  * point of the file. Commit `0ee258ea` changed the measuring scale and the
@@ -32,7 +41,7 @@ import { dirname, resolve } from 'node:path';
 import type { TopicFacets } from './beir.js';
 import { countNonEmptyLines } from './lines.js';
 import type { Metrics } from './metrics.js';
-import type { AtomSpread, AxisStratum, TopicScore } from './score.js';
+import type { AtomSpread, AxisStratum, DocumentScore, TopicScore } from './score.js';
 
 const DATE_CHARS = 10;
 const TIME_CHARS = 5;
@@ -46,6 +55,9 @@ export const PER_TOPIC_DIR = 'per-topic';
 
 /** TREC run files live in their own subdirectory — they are the bulky artefact. */
 export const RUN_FILE_DIR = 'runs';
+
+/** The score files sit beside the run files, one row per ranked document. */
+export const SCORES_DIR = 'scores';
 
 /** Facts true of the whole run — identical on every dataset's history row. */
 export interface RunProvenance {
@@ -194,6 +206,15 @@ export interface DatasetResult {
    * external evaluator already reads.
    */
   readonly rankings: ReadonlyMap<string, readonly string[]>;
+  /**
+   * What each ranked document SCORED, per topic, in the same rank order as
+   * `rankings` — the two are projections of one rollup (`score.ts`), so they
+   * cannot describe different atoms. ABSENT on a run that measured no scores,
+   * which is every externally-scored run: it is handed a foreign `.trec` and
+   * has nothing but the order. Kept OUT of the JSON summary for the same reason
+   * the rankings are.
+   */
+  readonly documentScores?: ReadonlyMap<string, readonly DocumentScore[]> | undefined;
 }
 
 /**
@@ -250,6 +271,13 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    * deriving a name — the same rule `perTopicPath` states above.
    */
   readonly runPath?: string;
+  /**
+   * The run's OWN scores TSV, relative to the results directory. Absent on every
+   * row whose run measured no scores — an externally-scored row always, and every
+   * row recorded before the file existed — and resolution REFUSES such a row
+   * rather than deriving a name, the same rule `perTopicPath` states above.
+   */
+  readonly scoresPath?: string;
   /** `null` only in rows written before the effective value was recorded. */
   readonly atomMaxChars: number | null;
   readonly depth: number;
@@ -361,11 +389,13 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
   readonly queryMs: number;
 }
 
-/** The three artefacts recording ONE dataset produced, so the caller can name them. */
+/** The artefacts recording ONE dataset produced, so the caller can name them. */
 export interface RecordedDataset {
   readonly historyPath: string;
   readonly perTopicPath: string;
   readonly runPath: string;
+  /** Absent when the run measured no scores — nothing was written. */
+  readonly scoresPath?: string;
 }
 
 /** Everything `recordDataset` needs: one run's provenance, one dataset's outcome. */
@@ -430,6 +460,22 @@ export const perTopicRelPath = (provenance: RunProvenance, dataset: string): str
  */
 export const runFileRelPath = (provenance: RunProvenance, dataset: string): string =>
   `${RUN_FILE_DIR}/${runStamp(provenance.ts)}-${provenance.adapter}-${dataset}.trec`;
+
+/**
+ * `scores/<instant>-<adapter>-<dataset>.tsv`, relative to the results dir — the
+ * same stamp-and-adapter name the other two per-dataset artefacts carry, so one
+ * run's four files sort together and no two arms of a minute can collide.
+ */
+export const scoresRelPath = (provenance: RunProvenance, dataset: string): string =>
+  `${SCORES_DIR}/${runStamp(provenance.ts)}-${provenance.adapter}-${dataset}.tsv`;
+
+/**
+ * Where the run's scores TSV lives — READ off the row, never derived.
+ * `undefined` for a row that recorded none, which is a fact about that run and
+ * not a missing file to go looking for.
+ */
+export const scoresFilePath = (resultsDir: string, run: HistoryRow): string | undefined =>
+  run.scoresPath === undefined ? undefined : resolve(resultsDir, run.scoresPath);
 
 /**
  * Where the run's TREC run file lives — READ off the row the writer recorded it
@@ -510,6 +556,10 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   adapter: provenance.adapter,
   perTopicPath: perTopicRelPath(provenance, result.dataset),
   runPath: runFileRelPath(provenance, result.dataset),
+  // A run that measured no scores writes no key at all — never an empty path.
+  ...(result.documentScores === undefined
+    ? {}
+    : { scoresPath: scoresRelPath(provenance, result.dataset) }),
   atomMaxChars: result.atomMaxChars,
   depth: provenance.depth,
   rerank: provenance.rerank,
@@ -843,9 +893,87 @@ const writeTrecRun = (
   return path;
 };
 
+/** The scores TSV's key column, and the rank the row's array position carried. */
+export const SCORES_QUERY_COLUMN = 'query_id';
+const SCORES_RANK_COLUMN = 'rank';
+const SCORES_DOC_COLUMN = 'doc_id';
+const SCORES_SCORE_COLUMN = 'score';
+
+/**
+ * The rerank pair, appended AFTER the score and emitted ONLY when a run carries
+ * one — a BM25 run's file MUST stay the four-column header above, exactly as the
+ * per-topic TSV holds its shape for a run that measured no spread.
+ */
+const SCORES_RERANK_COLUMNS = ['first_pass_score', 'rerank_score'] as const;
+
+/**
+ * FULL precision, never `toFixed`: this file exists so a later analysis need not
+ * pay for the benchmark again, and a rounded score cannot be un-rounded. The
+ * 4-decimal form belongs to the metric family, which lives in the other TSV.
+ * An absent rerank score is an EMPTY field — 0 would read as "the reranker
+ * scored it zero", where the fact is that it never returned the atom.
+ */
+const scoreCell = (value: number | undefined): string =>
+  value === undefined ? '' : String(value);
+
+const hasRerank = (entry: DocumentScore): boolean =>
+  entry.firstPassScore !== undefined || entry.rerankScore !== undefined;
+
+const scoresHeader = (rerank: boolean): string =>
+  [
+    SCORES_QUERY_COLUMN,
+    SCORES_RANK_COLUMN,
+    SCORES_DOC_COLUMN,
+    SCORES_SCORE_COLUMN,
+    ...(rerank ? SCORES_RERANK_COLUMNS : []),
+  ].join('\t');
+
+const scoresRow = (
+  queryId: string,
+  entry: DocumentScore,
+  index: number,
+  rerank: boolean
+): string =>
+  [
+    queryId,
+    index + 1,
+    entry.docId,
+    scoreCell(entry.score),
+    ...(rerank ? [scoreCell(entry.firstPassScore), scoreCell(entry.rerankScore)] : []),
+  ].join('\t');
+
+/**
+ * The scores TSV body — `query_id rank doc_id score`, rank 1-based and read off
+ * the array position, so it is the recorded order by construction and cannot
+ * drift from the `.trec` written beside it. Pure: a topic that ranked nothing
+ * contributes no row, and no topics at all yield the header alone.
+ */
+export const renderScoresTsv = (
+  documentScores: ReadonlyMap<string, readonly DocumentScore[]>
+): string => {
+  const rerank = [...documentScores.values()].some(entries => entries.some(hasRerank));
+  const rows = [...documentScores].flatMap(([queryId, entries]) =>
+    entries.map((entry, index) => scoresRow(queryId, entry, index, rerank))
+  );
+  return [scoresHeader(rerank), ...rows, ''].join('\n');
+};
+
+/** Nothing measured, nothing written — the caller then records no path either. */
+const writeScores = (
+  resultsDir: string,
+  provenance: RunProvenance,
+  result: DatasetResult
+): string | undefined => {
+  if (result.documentScores === undefined) return undefined;
+  mkdirSync(resolve(resultsDir, SCORES_DIR), { recursive: true });
+  const path = resolve(resultsDir, scoresRelPath(provenance, result.dataset));
+  writeFileSync(path, renderScoresTsv(result.documentScores), 'utf8');
+  return path;
+};
+
 /**
  * Record ONE dataset, the moment it finishes: its per-topic TSV, its TREC run
- * file, and its history row. Called per dataset rather than once per run because
+ * file, its scores TSV when it measured any, and its history row. Called per dataset rather than once per run because
  * a run that dies mid-suite (measured 2026-08-15: an OOM 67.5 minutes and six
  * completed datasets in) previously wrote NOTHING — every completed dataset's
  * numbers were lost, and "a partial run must never look complete" held only for
@@ -866,16 +994,22 @@ export const recordDataset = (options: DatasetRecordOptions): RecordedDataset =>
   mkdirSync(resolve(resultsDir, RUN_FILE_DIR), { recursive: true });
   const perTopicPath = writePerTopic(resultsDir, provenance, result);
   const runPath = writeTrecRun(resultsDir, provenance, result);
+  const scoresPath = writeScores(resultsDir, provenance, result);
   const historyPath = resolve(resultsDir, HISTORY_FILE);
   appendHistory(historyPath, [toHistoryRow(provenance, result)]);
-  return { historyPath, perTopicPath, runPath };
+  return { historyPath, perTopicPath, runPath, ...(scoresPath === undefined ? {} : { scoresPath }) };
 };
 
-const RANKINGS_KEY = 'rankings';
+/**
+ * The per-topic BULK: two orders of magnitude bigger than the metrics, and each
+ * already has its own artefact. Listed so a third one cannot be added to
+ * `DatasetResult` and silently land in the summary.
+ */
+const BULK_KEYS: readonly string[] = ['rankings', 'documentScores'];
 
-/** The JSON sidecar is a SUMMARY: the rankings live in the run file, once. */
+/** The JSON sidecar is a SUMMARY: the bulk lives in its own file, once. */
 const summaryOf = (result: DatasetResult): Readonly<Record<string, unknown>> =>
-  Object.fromEntries(Object.entries(result).filter(([key]) => key !== RANKINGS_KEY));
+  Object.fromEntries(Object.entries(result).filter(([key]) => !BULK_KEYS.includes(key)));
 
 const jsonRecord = (options: RunReportOptions): unknown => ({
   provenance: options.provenance,

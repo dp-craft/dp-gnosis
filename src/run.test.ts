@@ -52,6 +52,7 @@ import {
   percentileMs,
   provenanceOf,
   queryDataset,
+  type QueryOutcome,
   REFUSAL_EXIT_CODE,
   RERANK_POOL_BELOW_DEPTH_WARNING,
   rerankPoolOf,
@@ -825,6 +826,80 @@ describe('queryDataset — the treatment reaches the port', () => {
   it('passes the OVERRIDDEN RM3 params the flags named', async () => {
     const argv = ['--prf', '--prf-docs', '3', '--prf-terms', '7', '--prf-alpha', '0.9'];
     expect((await seenOptionsFor(argv))[0]?.prf).toEqual({ fbDocs: 3, fbTerms: 7, alpha: 0.9 });
+  });
+});
+
+/**
+ * The scores are the ranking's SECOND projection, and the only failure mode that
+ * matters is a silent misalignment: nothing downstream reads a score, so a
+ * ranking and a score vector that describe different atoms would be invisible in
+ * every metric. Each case below asserts the two agree through the REAL query
+ * path — rollup, dedupe, exclusions and the presentation cap included.
+ */
+describe('queryDataset — the scores travel with the order they produced', () => {
+  const scoredAtomFor = (index: number, docId: string, score: number): RetrievedAtom => ({
+    id: `a${index}`,
+    title: `atom ${index}`,
+    domain: 'docs',
+    type: 'knowledge',
+    body: '0123456789',
+    score,
+    sourcePath: `atoms/a${index}.md`,
+    originPaths: [`docs/${docId}.md`],
+  });
+
+  const portOf = (atoms: readonly RetrievedAtom[]): KnowledgePort => ({
+    name: 'fts5',
+    retrieve: async () =>
+      await Promise.resolve({ atoms, mode: 'fts5', indexState: 'ready' as IndexState }),
+  });
+
+  const outcomeFor = async (
+    atoms: readonly RetrievedAtom[],
+    argv: readonly string[] = [],
+    excluded: ReadonlyMap<string, readonly string[]> = new Map()
+  ): Promise<QueryOutcome> =>
+    await queryDataset({ port: portOf(atoms), options: parseArgs(argv), excluded }, [
+      { id: 'q1', text: 'lint:test-shape' },
+    ]);
+
+  const ATOMS = [
+    scoredAtomFor(1, 'd1', -2.5),
+    scoredAtomFor(2, 'd2', -4.25),
+    scoredAtomFor(3, 'd3', -6.125),
+  ];
+
+  it('records one score per ranked document, in the ranking order', async () => {
+    const outcome = await outcomeFor(ATOMS);
+    expect(outcome.documentScores.get('q1')).toEqual([
+      { docId: 'd1', score: -2.5 },
+      { docId: 'd2', score: -4.25 },
+      { docId: 'd3', score: -6.125 },
+    ]);
+    expect(outcome.documentScores.get('q1')?.map(entry => entry.docId)).toEqual(
+      outcome.rankings.get('q1')
+    );
+  });
+
+  it('keeps the score of the atom that WON the rank when two atoms share a document', async () => {
+    const shared = [scoredAtomFor(1, 'd1', -2.5), scoredAtomFor(2, 'd1', -9.5)];
+    const outcome = await outcomeFor(shared);
+    expect(outcome.documentScores.get('q1')).toEqual([{ docId: 'd1', score: -2.5 }]);
+    expect(outcome.rankings.get('q1')).toEqual(['d1']);
+  });
+
+  it('drops an excluded document from the scores exactly as from the ranking', async () => {
+    const outcome = await outcomeFor(ATOMS, [], new Map([['q1', ['d2']]]));
+    expect(outcome.documentScores.get('q1')?.map(entry => entry.docId)).toEqual(['d1', 'd3']);
+    expect(outcome.rankings.get('q1')).toEqual(['d1', 'd3']);
+  });
+
+  it('is truncated by the presentation budget exactly as the ranking is', async () => {
+    const outcome = await outcomeFor(ATOMS, ['--budget', '20']);
+    expect(outcome.documentScores.get('q1')?.map(entry => entry.docId)).toEqual(
+      outcome.rankings.get('q1')
+    );
+    expect(outcome.documentScores.get('q1')).toHaveLength(2);
   });
 });
 

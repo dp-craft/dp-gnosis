@@ -13,6 +13,7 @@ import {
   readHistory,
   recordDataset,
   renderPerTopicTsv,
+  renderScoresTsv,
   renderTrecRun,
   reportStem,
   runFilePath,
@@ -20,6 +21,9 @@ import {
   type RunProvenance,
   type RunReportOptions,
   runTag,
+  SCORES_DIR,
+  scoresFilePath,
+  scoresRelPath,
   writeRunSummary
 } from './report.js';
 import type { TopicScore } from './score.js';
@@ -717,5 +721,103 @@ describe('the topic-facet columns and the per-axis strata', () => {
     const rows = readHistory(resolve(dir, HISTORY_FILE));
 
     expect(Object.keys(rows[0] ?? {})).not.toContain('perAxisDescriptive');
+  });
+});
+
+describe('the scores artefact', () => {
+  const scored: DatasetResult = {
+    ...result,
+    documentScores: new Map([
+      [
+        'q1',
+        [
+          { docId: 'doc-a', score: -8.5 },
+          { docId: 'doc-b', score: -12.062500390625 },
+        ],
+      ],
+    ]),
+  };
+
+  it('renders rank, doc and score — the rank the ARRAY position, 1-based', () => {
+    expect(renderScoresTsv(scored.documentScores ?? new Map())).toBe(
+      ['query_id\trank\tdoc_id\tscore', 'q1\t1\tdoc-a\t-8.5', 'q1\t2\tdoc-b\t-12.062500390625', ''].join(
+        '\n'
+      )
+    );
+  });
+
+  it('keeps FULL precision — a rounded score cannot be un-rounded later', () => {
+    const body = renderScoresTsv(scored.documentScores ?? new Map());
+    expect(body).toContain('-12.062500390625');
+  });
+
+  it('emits the rerank columns ONLY when a run has them', () => {
+    const reranked = new Map([
+      ['q1', [{ docId: 'doc-a', score: 0.91, firstPassScore: -8.5, rerankScore: 0.91 }]],
+    ]);
+    expect(renderScoresTsv(reranked)).toBe(
+      [
+        'query_id\trank\tdoc_id\tscore\tfirst_pass_score\trerank_score',
+        'q1\t1\tdoc-a\t0.91\t-8.5\t0.91',
+        '',
+      ].join('\n')
+    );
+  });
+
+  it('writes EMPTY fields for an atom the reranker never returned — the row keeps its width', () => {
+    const partial = new Map([
+      ['q1', [{ docId: 'doc-a', score: 0.9, rerankScore: 0.9 }, { docId: 'doc-b', score: 0.1 }]],
+    ]);
+    expect(renderScoresTsv(partial).split('\n')[2]).toBe('q1\t2\tdoc-b\t0.1\t\t');
+  });
+
+  it('yields the header ALONE when no topic ranked anything', () => {
+    expect(renderScoresTsv(new Map())).toBe('query_id\trank\tdoc_id\tscore\n');
+  });
+
+  it('contributes no row for a topic that ranked nothing, exactly as the run file does', () => {
+    const empty = new Map([
+      ['q1', [{ docId: 'doc-a', score: -1 }]],
+      ['q2', []],
+    ]);
+    expect(renderScoresTsv(empty).split('\n').filter(line => line.startsWith('q2'))).toEqual([]);
+  });
+
+  it('records the file and names it on the history row', () => {
+    const resultsDir = tempResultsDir();
+    const recorded = recordDataset({ resultsDir, provenance, result: scored });
+    const rows = readHistory(resolve(resultsDir, HISTORY_FILE));
+    expect(rows[0]?.scoresPath).toBe(scoresRelPath(provenance, scored.dataset));
+    expect(recorded.scoresPath).toBe(resolve(resultsDir, scoresRelPath(provenance, scored.dataset)));
+    expect(readFileSync(recorded.scoresPath ?? '', 'utf8')).toContain('doc-a');
+    expect(scoresRelPath(provenance, scored.dataset).startsWith(`${SCORES_DIR}/`)).toBe(true);
+  });
+
+  it('records NOTHING for a run that measured no scores — an external run has none', () => {
+    const resultsDir = tempResultsDir();
+    const recorded = recordDataset({ resultsDir, provenance, result });
+    const rows = readHistory(resolve(resultsDir, HISTORY_FILE));
+    expect(recorded.scoresPath).toBeUndefined();
+    expect(rows[0]?.scoresPath).toBeUndefined();
+    expect(scoresFilePath(resultsDir, rows[0] as HistoryRow)).toBeUndefined();
+  });
+
+  it('resolves the path off the ROW, never derived from the stamp', () => {
+    const resultsDir = tempResultsDir();
+    recordDataset({ resultsDir, provenance, result: scored });
+    const rows = readHistory(resolve(resultsDir, HISTORY_FILE));
+    expect(scoresFilePath(resultsDir, rows[0] as HistoryRow)).toBe(
+      resolve(resultsDir, scoresRelPath(provenance, scored.dataset))
+    );
+  });
+
+  it('stays OUT of the JSON summary, exactly as the rankings do', () => {
+    const resultsDir = tempResultsDir();
+    const written = writeRunReport({ resultsDir, provenance, results: [scored] });
+    const summary = JSON.parse(readFileSync(written.jsonPath, 'utf8')) as {
+      readonly results: readonly Record<string, unknown>[];
+    };
+    expect(summary.results[0]).not.toHaveProperty('documentScores');
+    expect(summary.results[0]).not.toHaveProperty('rankings');
   });
 });

@@ -21,6 +21,13 @@
  * `excludedIds` exists because BRIGHT ships per-query exclusions. Scoring a
  * document the dataset told us to drop makes the number wrong in both
  * directions — it can occupy a rank and it can never be credited.
+ *
+ * The rollup is stated ONCE (`rankedDocuments`) and read through two
+ * projections: the ids that get scored (`toDocumentRanking`) and the scores the
+ * representing atoms carried (`documentScores`). A second implementation of the
+ * dedupe would let an id and a score describe different atoms the moment a
+ * rerank reorders — which is unobservable in the metrics, since every metric
+ * here is rank-based.
  */
 import { basename } from 'node:path';
 
@@ -45,6 +52,21 @@ const EMPTY_QREL: Qrel = new Map<string, number>();
  */
 export interface RankedAtom {
   readonly originPaths: readonly string[];
+}
+
+/**
+ * The score fields of `RetrievedAtom`, on top of the origin the rollup needs.
+ * Structural for the same reason `RankedAtom` is.
+ *
+ * `score` is the number that PRODUCED the order it sits in — the first-pass
+ * score on a BM25 run, the FUSED score on a reranked one. The other two are set
+ * only on a reranked run (`port.ts`), and an atom the reranker never returned
+ * carries no `rerankScore` at all: that is a fact about the atom, not a zero.
+ */
+export interface ScoredAtom extends RankedAtom {
+  readonly score: number;
+  readonly firstPassScore?: number;
+  readonly rerankScore?: number;
 }
 
 /**
@@ -171,32 +193,94 @@ const originDocId = (atom: RankedAtom): string | undefined => {
   return origin === undefined ? undefined : basename(origin, MARKDOWN_EXT);
 };
 
-const isPresent = (value: string | undefined): value is string => value !== undefined;
+/**
+ * One document and the ATOM that put it there — the atom occupying that rank.
+ * The pair travels together so a projection can never read an id from one list
+ * and a score from another.
+ */
+interface RolledDocument<A extends RankedAtom> {
+  readonly docId: string;
+  readonly atom: A;
+}
+
+const rolledOf = <A extends RankedAtom>(atom: A): RolledDocument<A> | undefined => {
+  const docId = originDocId(atom);
+  return docId === undefined ? undefined : { docId, atom };
+};
+
+const isRolled = <A extends RankedAtom>(
+  entry: RolledDocument<A> | undefined
+): entry is RolledDocument<A> => entry !== undefined;
 
 /**
- * Atom order → document ids, WITHOUT the dedupe: map, drop originless, drop
+ * Atom order → documents, WITHOUT the dedupe: map, drop originless, drop
  * excluded. Shared with `atomSpread` so the two can never disagree about which
  * atoms are in the ranking.
  */
-const mappedDocIds = (
-  atoms: readonly RankedAtom[],
+const mappedDocuments = <A extends RankedAtom>(
+  atoms: readonly A[],
   excludedIds: readonly string[]
-): readonly string[] => {
+): readonly RolledDocument<A>[] => {
   const excluded = new Set(excludedIds);
   return atoms
-    .map(originDocId)
-    .filter(isPresent)
-    .filter(docId => !excluded.has(docId));
+    .map(rolledOf)
+    .filter(isRolled)
+    .filter(entry => !excluded.has(entry.docId));
 };
 
-/** Atom order → document order: map, drop excluded, dedupe keeping the first. */
+/** THE rollup: map, drop excluded, dedupe keeping the first. Projected, never copied. */
+const rankedDocuments = <A extends RankedAtom>(
+  atoms: readonly A[],
+  excludedIds: readonly string[]
+): readonly RolledDocument<A>[] => {
+  const mapped = mappedDocuments(atoms, excludedIds);
+  const docIds = mapped.map(entry => entry.docId);
+  return mapped.filter((entry, index) => docIds.indexOf(entry.docId) === index);
+};
+
+/** Atom order → document order: the rollup, projected to the ids that get scored. */
 export const toDocumentRanking = (
   atoms: readonly RankedAtom[],
   excludedIds: readonly string[] = []
-): readonly string[] => {
-  const docIds = mappedDocIds(atoms, excludedIds);
-  return docIds.filter((docId, index) => docIds.indexOf(docId) === index);
-};
+): readonly string[] => rankedDocuments(atoms, excludedIds).map(entry => entry.docId);
+
+/**
+ * One document's place in the ranking and what it scored there — the rollup's
+ * SECOND projection, entry for entry with `toDocumentRanking`.
+ *
+ * It exists because the rollup is where the numbers were lost. Every metric here
+ * is rank-based, so nothing downstream ever needed a score, and the recorded
+ * `.trec` writes a deliberately RANK-DERIVED score column (`report.ts`) so an
+ * evaluator's re-sort cannot alter the measured order. Between them no recorded
+ * artefact carried what the retrieval actually scored, and any score-distribution
+ * question — query-performance prediction, score decay, calibration — cost a
+ * full re-run of the benchmark to ask.
+ *
+ * Rank is the ARRAY POSITION: it is the rollup's own order, and a stored copy
+ * beside the entry is one more thing that can disagree with it.
+ */
+export interface DocumentScore {
+  readonly docId: string;
+  readonly score: number;
+  readonly firstPassScore?: number;
+  readonly rerankScore?: number;
+}
+
+/** An absent rerank field stays ABSENT, never present-undefined. */
+const documentScoreOf = (entry: RolledDocument<ScoredAtom>): DocumentScore => ({
+  docId: entry.docId,
+  score: entry.atom.score,
+  ...(entry.atom.firstPassScore === undefined
+    ? {}
+    : { firstPassScore: entry.atom.firstPassScore }),
+  ...(entry.atom.rerankScore === undefined ? {} : { rerankScore: entry.atom.rerankScore }),
+});
+
+/** The ranking's scores — same atoms, same exclusions, same rollup, other projection. */
+export const documentScores = (
+  atoms: readonly ScoredAtom[],
+  excludedIds: readonly string[] = []
+): readonly DocumentScore[] => rankedDocuments(atoms, excludedIds).map(documentScoreOf);
 
 const SPREAD_5 = 5;
 const SPREAD_10 = 10;
@@ -216,7 +300,7 @@ export const atomSpread = (
   atoms: readonly RankedAtom[],
   excludedIds: readonly string[] = []
 ): AtomSpread => {
-  const docIds = mappedDocIds(atoms, excludedIds);
+  const docIds = mappedDocuments(atoms, excludedIds).map(entry => entry.docId);
   return {
     distinctDocs5: distinctDocsAt(docIds, SPREAD_5),
     distinctDocs10: distinctDocsAt(docIds, SPREAD_10),
