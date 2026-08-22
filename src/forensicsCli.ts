@@ -113,6 +113,9 @@ export const FORENSICS_HELP = [
   `              (default ${DEFAULT_SERVED_K})`,
   `  --budget    the presentation token budget (default ${RETRIEVE_TOKEN_BUDGET})`,
   '',
+  'allGoldInBudget is 1 when the WHOLE gold set is served and survives the budget, else 0;',
+  'noiseAtServedK is 1 - P@servedK over what was delivered, budget-free so every dataset has it.',
+  '',
   `goldSurvivesBudget is defined for ${BUDGET_DATASETS.join(' / ')} only — they project`,
   'one atom per document; elsewhere the column is EMPTY and the summary says why.',
   '',
@@ -180,6 +183,8 @@ export interface ForensicsRow {
   readonly firstGoldRank: number | undefined;
   readonly recallLimited: boolean;
   readonly goldSurvivesBudget: number | undefined;
+  readonly allGoldInBudget: number | undefined;
+  readonly noiseAtServedK: number | undefined;
 }
 
 /**
@@ -208,6 +213,8 @@ export const FORENSICS_COLUMNS: readonly string[] = [
   'firstGoldRank',
   'recallLimited',
   'goldSurvivesBudget',
+  'allGoldInBudget',
+  'noiseAtServedK',
 ];
 
 /** An unmeasurable cell is EMPTY — `report.ts:tsvCell`'s rule, not a second one. */
@@ -228,6 +235,8 @@ export const forensicsTsvRow = (row: ForensicsRow): string =>
     rankCell(row.firstGoldRank),
     String(row.recallLimited),
     forensicsCell(row.goldSurvivesBudget),
+    forensicsCell(row.allGoldInBudget),
+    forensicsCell(row.noiseAtServedK),
   ].join('\t');
 
 export const forensicsTsv = (rows: readonly ForensicsRow[]): string =>
@@ -285,6 +294,56 @@ export const goldSurvivingBudget = (
   return gold.filter(docId => kept.has(docId)).length / gold.length;
 };
 
+/**
+ * Whether the topic's ENTIRE gold set is delivered: 1 when every judged-positive
+ * document is BOTH inside the served window AND kept by the presentation cap,
+ * 0 otherwise. `goldSurvivesBudget` reports a SHARE of what the window already
+ * held; this reports whether the consumer sees the whole answer.
+ *
+ * `undefined` when the topic has no gold at all, or when a served body is
+ * missing — the missing-body guard runs FIRST so the column is never a confident
+ * 0 produced from a simulation that charged a real document 0 tokens.
+ */
+export const allGoldInBudget = (
+  ranking: readonly string[],
+  qrel: Qrel,
+  bodies: ReadonlyMap<string, string>,
+  servedK: number,
+  maxTokens: number
+): number | undefined => {
+  const served = ranking.slice(0, servedK);
+  if (!served.every(docId => bodies.has(docId))) return undefined;
+  const gold = [...qrel.keys()].filter(docId => isGold(qrel, docId));
+  if (gold.length === 0) return undefined;
+  const kept = keptIds(served, bodies, maxTokens);
+  return gold.every(docId => kept.has(docId)) ? 1 : 0;
+};
+
+/**
+ * The share of the served window that is NOT gold — `1 − P@servedK`.
+ *
+ * The denominator is the window's OWN length, i.e. what was actually delivered,
+ * not `servedK`: a topic served three documents is not 40 % noisier for the two
+ * it never had to show.
+ *
+ * It deliberately does NOT apply the token budget. `goldSurvivesBudget` and
+ * `allGoldInBudget` already carry the budget's cost, so this column stays
+ * defined on EVERY dataset rather than only on the `BUDGET_DATASETS` that have a
+ * 1:1 atom projection.
+ *
+ * `undefined` when the window is empty — nothing delivered, so no noise share
+ * exists to report.
+ */
+export const noiseAtServedK = (
+  ranking: readonly string[],
+  qrel: Qrel,
+  servedK: number
+): number | undefined => {
+  const window = ranking.slice(0, servedK);
+  if (window.length === 0) return undefined;
+  return 1 - window.filter(docId => isGold(qrel, docId)).length / window.length;
+};
+
 export interface TopicInput {
   readonly queryId: string;
   readonly ranking: readonly string[];
@@ -317,6 +376,11 @@ export const forensicsRow = (topic: TopicInput, context: RowContext): ForensicsR
       bodies === undefined
         ? undefined
         : goldSurvivingBudget(topic.ranking, topic.qrel, bodies, context.servedK, context.budget),
+    allGoldInBudget:
+      bodies === undefined
+        ? undefined
+        : allGoldInBudget(topic.ranking, topic.qrel, bodies, context.servedK, context.budget),
+    noiseAtServedK: noiseAtServedK(topic.ranking, topic.qrel, context.servedK),
   };
 };
 
@@ -426,6 +490,17 @@ const budgetSummary = (rows: readonly ForensicsRow[], note: string): string => {
     : `goldSurvivesBudget ${mean(values).toFixed(DIGITS)} over ${values.length} topics`;
 };
 
+/**
+ * A run-level mean beside the count of topics it was measured over — a mean of a
+ * SUBSET quoted without its denominator reads as a whole-run number.
+ */
+const meanSummary = (label: string, values: readonly (number | undefined)[]): string => {
+  const present = measured(values);
+  return present.length === 0
+    ? `${label} n/a`
+    : `${label} ${mean(present).toFixed(DIGITS)} over ${present.length} topics`;
+};
+
 const cell = (value: number | undefined): string =>
   value === undefined ? 'n/a' : value.toFixed(DIGITS);
 
@@ -460,6 +535,8 @@ export const summaryLine = (
   `orderingLoss ${mean(rows.map(item => item.orderingLoss)).toFixed(DIGITS)}  ` +
   `recallLoss ${mean(rows.map(item => item.recallLoss)).toFixed(DIGITS)}  ` +
   `${budgetSummary(rows, context.budgetNote)}  ` +
+  `${meanSummary('allGoldInBudget', rows.map(item => item.allGoldInBudget))}  ` +
+  `${meanSummary('noiseAtK', rows.map(item => item.noiseAtServedK))}  ` +
   `${agreementSummary(rows, recorded)}  ` +
   `→ ${context.tsvPath}`;
 

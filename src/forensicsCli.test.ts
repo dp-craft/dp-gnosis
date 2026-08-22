@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { readRunFile } from './forensics.js';
 import {
+  allGoldInBudget,
   CAUSE_QREL_DRIFT,
   FORENSICS_COLUMNS,
   forensicsCell,
@@ -13,6 +14,7 @@ import {
   forensicsTsvRow,
   goldSurvivingBudget,
   metricDisagreements,
+  noiseAtServedK,
   parseForensicsArgs,
   recordedMetrics
 } from './forensicsCli.js';
@@ -173,6 +175,8 @@ const emptyRow: ForensicsRow = {
   firstGoldRank: undefined,
   recallLimited: true,
   goldSurvivesBudget: undefined,
+  allGoldInBudget: undefined,
+  noiseAtServedK: undefined,
 };
 
 /** A `q-001` row carrying only the metrics a drift case needs to state. */
@@ -197,6 +201,21 @@ describe('unmeasurable cells', () => {
   it('should still write a measured zero as 0.0000', () => {
     expect(forensicsCell(0)).toBe('0.0000');
   });
+
+  it('should leave the two derived columns empty in the row', () => {
+    const cells = forensicsTsvRow(emptyRow).split('\t');
+    const all = FORENSICS_COLUMNS.indexOf('allGoldInBudget');
+    const noise = FORENSICS_COLUMNS.indexOf('noiseAtServedK');
+    expect([cells[all], cells[noise]]).toEqual(['', '']);
+  });
+
+  it('should APPEND the derived columns after goldSurvivesBudget, moving none', () => {
+    expect(FORENSICS_COLUMNS.slice(-3)).toEqual([
+      'goldSurvivesBudget',
+      'allGoldInBudget',
+      'noiseAtServedK',
+    ]);
+  });
 });
 
 const qrel: Qrel = new Map([['a', 1], ['b', 1]]);
@@ -220,6 +239,47 @@ describe('goldSurvivingBudget', () => {
   it('should be UNMEASURABLE when a served body is missing', () => {
     const bodies = new Map([['a', 'xx']]);
     expect(goldSurvivingBudget(['a', 'b'], qrel, bodies, 2, 100)).toBeUndefined();
+  });
+});
+
+describe('allGoldInBudget', () => {
+  it('should be 1 when every gold document is served AND survives the budget', () => {
+    const bodies = new Map([['a', 'xx'], ['b', 'yy'], ['c', 'zz']]);
+    expect(allGoldInBudget(['a', 'c', 'b'], qrel, bodies, 3, 100)).toBe(1);
+  });
+
+  it('should be 0 when a gold document never reaches the served window', () => {
+    const bodies = new Map([['a', 'xx'], ['c', 'zz']]);
+    expect(allGoldInBudget(['a', 'c'], qrel, bodies, 2, 100)).toBe(0);
+  });
+
+  it('should be 0 when gold is served but the budget drops it', () => {
+    const bodies = new Map([['a', 'xxxx'], ['b', 'yy']]);
+    expect(allGoldInBudget(['a', 'b'], qrel, bodies, 2, 5)).toBe(0);
+  });
+
+  it('should be UNMEASURABLE when the topic has no gold at all', () => {
+    const bodies = new Map([['a', 'xx']]);
+    expect(allGoldInBudget(['a'], new Map(), bodies, 5, 100)).toBeUndefined();
+  });
+
+  it('should be UNMEASURABLE when a served body is missing, before any 0', () => {
+    const bodies = new Map([['a', 'xx']]);
+    expect(allGoldInBudget(['a', 'b'], qrel, bodies, 2, 100)).toBeUndefined();
+  });
+});
+
+describe('noiseAtServedK', () => {
+  it('should be 1 minus precision over the served window', () => {
+    expect(noiseAtServedK(['a', 'c', 'b'], qrel, 3)).toBeCloseTo(1 / 3, 10);
+  });
+
+  it('should divide by what was DELIVERED, not by servedK', () => {
+    expect(noiseAtServedK(['a'], qrel, 5)).toBe(0);
+  });
+
+  it('should be UNMEASURABLE when nothing was delivered', () => {
+    expect(noiseAtServedK([], qrel, 5)).toBeUndefined();
   });
 });
 
