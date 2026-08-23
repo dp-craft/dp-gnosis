@@ -152,7 +152,15 @@ describe('the shipped datasets.json', () => {
   // vault (2) are untouched. The external list is asserted in MANIFEST ORDER —
   // `webis-touche2020` is the archive id (touche2020.zip is a 404) and `ensureBeirDataset`
   // resolves `<dataDir>/<id>/corpus.jsonl`, so a renamed id would break the fetch, not this test.
-  it('carries seven external BEIR, nine BRIGHT, two vault and four vault-arm entries', () => {
+  //
+  // AC delta: `arguana-sub` adds one external BEIR entry (`beir-local`, `source:
+  // data/arguana-sub`) — a 250-topic / 1542-doc subsample of `arguana`, the measurement
+  // scaffold for the ingest-enrichment ablation, where a full enrichment pass costs ~2h
+  // instead of ~11h. It moves external BEIR 7 → 8 and the total 22 → 23; BRIGHT (9), vault
+  // (2) and the vault arms (4) are untouched. It ships `enabled: false` with `layers: []`
+  // — the same precedent as the four rephrased arms — so the default suite and every
+  // layered run are unchanged.
+  it('carries eight external BEIR, nine BRIGHT, two vault and four vault-arm entries', () => {
     const ids = entries.map(e => e.id);
     const isVault = (id: string): boolean => id === 'vault' || id.startsWith('vault-');
     const isArm = (id: string): boolean => /-(auto)?rephrased$/.test(id);
@@ -163,6 +171,7 @@ describe('the shipped datasets.json', () => {
       'nfcorpus',
       'scifact',
       'arguana',
+      'arguana-sub',
       'trec-covid',
       'scidocs',
       'fiqa',
@@ -175,17 +184,18 @@ describe('the shipped datasets.json', () => {
       'vault-hu-rephrased',
       'vault-hu-autorephrased',
     ]);
-    expect(entries).toHaveLength(7 + 9 + 2 + 4);
+    expect(entries).toHaveLength(8 + 9 + 2 + 4);
   });
 
   // AC delta: the T-04 projection fix gives a title-only record a non-empty chunk body,
   // so `trec-covid` clears the 90% document-coverage gate and joins the default suite —
   // 17 → 18 enabled. The only entries still disabled are the four rephrased arms, which
   // are run by `--only` and MUST stay out of a bare `npm run gnosis:bench`.
-  it('enables eighteen of the twenty-two entries, each having a fetcher', () => {
+  it('enables eighteen of the twenty-three entries, each having a fetcher', () => {
     const disabled = entries.filter(e => !e.enabled).map(e => e.id);
 
     expect(disabled).toEqual([
+      'arguana-sub',
       'vault-rephrased',
       'vault-autorephrased',
       'vault-hu-rephrased',
