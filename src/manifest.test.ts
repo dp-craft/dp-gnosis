@@ -159,8 +159,12 @@ describe('the shipped datasets.json', () => {
   // instead of ~11h. It moves external BEIR 7 → 8 and the total 22 → 23; BRIGHT (9), vault
   // (2) and the vault arms (4) are untouched. It ships `enabled: false` with `layers: []`
   // — the same precedent as the four rephrased arms — so the default suite and every
-  // layered run are unchanged.
-  it('carries eight external BEIR, nine BRIGHT, two vault and four vault-arm entries', () => {
+  // layered run are unchanged. Its two summary arms, `arguana-sub-short` and
+  // `arguana-sub-longkw`, are the same 250 topics with each document's text replaced by its
+  // generated summary (`short`, and `long`+`keywords`) — retrieval measured on the summary
+  // INSTEAD of the body — and ship disabled with empty layers on that same precedent,
+  // taking external BEIR 8 → 10 and the total 23 → 25.
+  it('carries ten external BEIR, nine BRIGHT, two vault and four vault-arm entries', () => {
     const ids = entries.map(e => e.id);
     const isVault = (id: string): boolean => id === 'vault' || id.startsWith('vault-');
     const isArm = (id: string): boolean => /-(auto)?rephrased$/.test(id);
@@ -172,6 +176,8 @@ describe('the shipped datasets.json', () => {
       'scifact',
       'arguana',
       'arguana-sub',
+      'arguana-sub-short',
+      'arguana-sub-longkw',
       'trec-covid',
       'scidocs',
       'fiqa',
@@ -184,18 +190,20 @@ describe('the shipped datasets.json', () => {
       'vault-hu-rephrased',
       'vault-hu-autorephrased',
     ]);
-    expect(entries).toHaveLength(8 + 9 + 2 + 4);
+    expect(entries).toHaveLength(10 + 9 + 2 + 4);
   });
 
   // AC delta: the T-04 projection fix gives a title-only record a non-empty chunk body,
   // so `trec-covid` clears the 90% document-coverage gate and joins the default suite —
   // 17 → 18 enabled. The only entries still disabled are the four rephrased arms, which
   // are run by `--only` and MUST stay out of a bare `npm run gnosis:bench`.
-  it('enables eighteen of the twenty-three entries, each having a fetcher', () => {
+  it('enables eighteen of the twenty-five entries, each having a fetcher', () => {
     const disabled = entries.filter(e => !e.enabled).map(e => e.id);
 
     expect(disabled).toEqual([
       'arguana-sub',
+      'arguana-sub-short',
+      'arguana-sub-longkw',
       'vault-rephrased',
       'vault-autorephrased',
       'vault-hu-rephrased',

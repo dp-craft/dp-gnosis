@@ -55,6 +55,28 @@
       "layers": []
     },
     {
+      "id": "arguana-sub-short",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/arguana-sub-short",
+      "domain": "argumentation",
+      "docShape": "argument",
+      "queryShape": "long-form",
+      "enabled": false,
+      "layers": []
+    },
+    {
+      "id": "arguana-sub-longkw",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/arguana-sub-longkw",
+      "domain": "argumentation",
+      "docShape": "argument",
+      "queryShape": "long-form",
+      "enabled": false,
+      "layers": []
+    },
+    {
       "comment": "42,139 of its 171,332 records carry a non-empty title and an EMPTY text \u2014 the CORD-19 metadata-only population, where the source never had an abstract, so nothing is lost in atom production. Before the T-04 projection fix those title-only atoms were all discarded as empty-bodied and the dataset FAILED the assertIngestSound 90% document-coverage gate; dropping them cost 3,135 relevant judgments (12.71%) across 50 of 50 topics, a hard recall ceiling of ~0.873. toMarkdown now gives a title-only record a non-empty chunk body, so the gate keeps them and this entry is enabled. IS in the `par` layer, against plan risk R4: R4 assumed a ~10 min ingest, but it MEASURES 270 s (4.5 min) and is cached in the work dir afterwards, making it cheaper than arguana (~11.6 min), which is uncontroversially Tier-1. Archive confirmed HTTP 200 at 73,876,720 bytes.",
       "id": "trec-covid",
       "format": "beir-zip",
