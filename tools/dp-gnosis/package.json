@@ -17,9 +17,13 @@
     "./api": {
       "types": "./dist/api.d.ts"
     },
+    "./mcp": {
+      "types": "./dist/mcp/protocol.d.ts",
+      "import": "./dist/mcp/protocol.js"
+    },
     "./package.json": "./package.json"
   },
-  "comment:files": "What a fresh install must carry to RUN, not to be developed. `profiles/` ships because a profile is resolved at RUNTIME by path (paths.ts:profilesDir), and `golden/` ships with it because every shipped profile names `goldIdsPath: \"../golden\"` — the gold source ingest breaks exact-body dedupe ties against. Absent, `ingest` REFUSES (goldenIds.ts:sourceError) rather than deduping gold-blind, so a fresh install could not build its first index. `tests/`, `scripts/` and `src/` stay out; `dist/` carries the build.",
+  "comment:files": "What a fresh install must carry to RUN, not to be developed. `profiles/` ships because a profile is resolved at RUNTIME by path (paths.ts:profilesDir), and `golden/` ships with it because every shipped profile names `goldIdsPath: \"../golden\"` \u2014 the gold source ingest breaks exact-body dedupe ties against. Absent, `ingest` REFUSES (goldenIds.ts:sourceError) rather than deduping gold-blind, so a fresh install could not build its first index. `tests/`, `scripts/` and `src/` stay out; `dist/` carries the build.",
   "files": [
     "dist",
     "profiles",
@@ -33,7 +37,7 @@
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "comment:build": "`src/api.d.ts` is a DECLARATION file: tsc reads it and emits nothing for it, so the consumer contract would be missing from `dist` after a plain build. It is COPIED rather than pointed at from `src`, so `files` stays `dist`-only and `dist/index.d.ts`'s own `from './api.js'` resolves inside the published tree.",
-  "comment:dependencies": "better-sqlite3 backs the FTS5 adapter; it already resolves from the repo root, so nothing new is installed — declared here so this package stays a liftable unit (decision N-1). `stemmer` is NOT optional: it is applied uniformly via processTerm to every adapter, so a missing one would silently change ranking rather than skip a leg. MIT, zero transitive deps (§IX round approved 2026-08-08).",
+  "comment:dependencies": "better-sqlite3 backs the FTS5 adapter; it already resolves from the repo root, so nothing new is installed \u2014 declared here so this package stays a liftable unit (decision N-1). `stemmer` is NOT optional: it is applied uniformly via processTerm to every adapter, so a missing one would silently change ranking rather than skip a leg. MIT, zero transitive deps (\u00a7IX round approved 2026-08-08).",
   "dependencies": {
     "better-sqlite3": "^12.11.1",
     "stemmer": "^2.0.1"
@@ -41,7 +45,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13"
   },
-  "comment:optionalDependencies": "Adapter-gated packages, approved in the COMMON.md §IX round of 2026-08-08 (plan T-18 / T-20). Loaded by LAZY DYNAMIC IMPORT so an absent one skips its adapter instead of breaking the suite. The loader MUST catch ALL import errors, not just MODULE_NOT_FOUND: @lancedb/lancedb can fail at import time with a native BINDING error on a platform whose prebuilt binary lags the root version, and a narrow catch would hard-fail the suite instead of skipping the adapter. apache-arrow is @lancedb/lancedb's required peer.",
+  "comment:optionalDependencies": "Adapter-gated packages, approved in the COMMON.md \u00a7IX round of 2026-08-08 (plan T-18 / T-20). Loaded by LAZY DYNAMIC IMPORT so an absent one skips its adapter instead of breaking the suite. The loader MUST catch ALL import errors, not just MODULE_NOT_FOUND: @lancedb/lancedb can fail at import time with a native BINDING error on a platform whose prebuilt binary lags the root version, and a narrow catch would hard-fail the suite instead of skipping the adapter. apache-arrow is @lancedb/lancedb's required peer.",
   "optionalDependencies": {
     "@lancedb/lancedb": "^0.33.0",
     "apache-arrow": "^18.1.0",
