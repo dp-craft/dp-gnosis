@@ -573,14 +573,34 @@ const DECLARED_TYPES = [
   'lessons-learned',
 ] as const;
 
-const expectVocabulary = <T extends readonly string[]>(
+/**
+ * Narrow a profile's declared vocabulary against the mirrored tuple: any
+ * SUBSET, in any order, is accepted — a profile declaring three types is a
+ * NARROWER corpus, and the twelve it omits simply return no results. A member
+ * the tuple never declares is still REFUSED, because the TypeScript union
+ * would then lie about what a valid label is.
+ *
+ * It returns `declared` — the FULL tuple — and NOT the subset it was handed.
+ * That is load-bearing, not an oversight: `ATOM_TYPES` is consumed as "every
+ * valid label" by `port.ts`, `cli/retrieveCommand.ts` (`asType` and the
+ * exclude-type vocabulary), `cli/help.ts` and all three adapters' `asType`
+ * fallbacks. Returning the subset while typed as the full tuple would make
+ * `AtomType` lie. MUST NOT "fix" this to return `actual`.
+ */
+export const expectVocabulary = <T extends readonly string[]>(
   actual: readonly string[],
   declared: T,
   field: string
 ): T => {
-  if (actual.length !== declared.length || declared.some((value, index) => actual[index] !== value)) {
+  if (actual.length === 0) {
     throw new Error(
-      `ingest profile "${INGEST_PROFILE_PATH}" declares ${field} ${actual.join(' | ')}, while src/config.ts mirrors ${declared.join(' | ')} — a vocabulary value MUST be present in both, or the TypeScript union lies about what a valid label is`
+      `ingest profile "${INGEST_PROFILE_PATH}" declares no ${field} at all — declare at least one of ${declared.join(' | ')}`
+    );
+  }
+  const foreign = actual.find(value => !declared.includes(value));
+  if (foreign !== undefined) {
+    throw new Error(
+      `ingest profile "${INGEST_PROFILE_PATH}" declares ${field} "${foreign}", which src/config.ts does not mirror — a ${field} value MUST be one of ${declared.join(' | ')}, or the TypeScript union lies about what a valid label is`
     );
   }
   return declared;
