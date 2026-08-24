@@ -26,8 +26,20 @@ const srcDir = (): string => dirname(fileURLToPath(import.meta.url));
 /** Absolute path of the repository root (`<repo>`). */
 export const repoRoot = (): string => resolve(srcDir(), '..', '..', '..');
 
-/** This package's own directory (`<root>/tools/dp-gnosis`), which carries the authored, tracked assets. */
-const packageDir = (root: string = repoRoot()): string => resolve(root, 'tools', 'dp-gnosis');
+/**
+ * This package's own directory, which carries the authored, tracked assets
+ * (`profiles/`, `golden/`). It is anchored on THIS FILE's location — one level
+ * above `src/` in the repository, one level above `dist/` in an install — and
+ * NOT on `repoRoot()`: `<root>/tools/dp-gnosis` is a fact about the development
+ * checkout, and an installed package sits at `<prefix>/@dp/gnosis` instead, so
+ * the derived form resolved a profile path that does not exist and the CLI died
+ * on `--help`. The value is identical to the old one in the checkout.
+ *
+ * It takes NO root, deliberately: an authored asset follows the CODE, while the
+ * vault and the cache follow the caller's root. That split is the whole reason
+ * both forms exist here.
+ */
+const packageDir = (): string => resolve(srcDir(), '..');
 
 /**
  * The single top-level directory dp-gnosis owns (`<root>/dp-gnosis`). Both the
@@ -108,20 +120,20 @@ export const benchWorkDir = (root: string = repoRoot()): string =>
  * not derived state, and regenerating it from a retriever's output would make
  * the measurement circular.
  */
-export const goldenDir = (root: string = repoRoot()): string =>
-  resolve(packageDir(root), 'golden');
+export const goldenDir = (): string =>
+  resolve(packageDir(), 'golden');
 
 /** The one golden set the shipped loader reads; every other version sits beside it. */
-export const goldenSetPath = (root: string = repoRoot()): string =>
-  resolve(goldenDir(root), 'golden-set.v1.json');
+export const goldenSetPath = (): string =>
+  resolve(goldenDir(), 'golden-set.v1.json');
 
 /**
  * The directory the named profile instances are authored in. A profile is
  * selected by NAME as well as by path, so the directory is resolved here rather
  * than spelled as a literal at each caller.
  */
-export const profilesDir = (root: string = repoRoot()): string =>
-  resolve(packageDir(root), 'profiles');
+export const profilesDir = (): string =>
+  resolve(packageDir(), 'profiles');
 
 /**
  * The SHIPPED ingest profile: the vocabularies and the path→label tables ingest
@@ -129,8 +141,8 @@ export const profilesDir = (root: string = repoRoot()): string =>
  * not derived state — a missing or malformed file is a hard error, never a
  * silent fallback to values built into the code.
  */
-export const ingestProfilePath = (root: string = repoRoot()): string =>
-  resolve(profilesDir(root), 'default.profile.json');
+export const ingestProfilePath = (): string =>
+  resolve(profilesDir(), 'default.profile.json');
 
 /** Where reproducible, comparable reports are persisted (repo convention). */
 export const docsTestDir = (root: string = repoRoot()): string =>

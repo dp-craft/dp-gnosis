@@ -1,13 +1,38 @@
 {
-  "name": "dp-gnosis",
+  "name": "@dp/gnosis",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Retrieval over a curated markdown atom vault. Liftable unit: code here, vault at dp-gnosis/vault/, cache at dp-gnosis/cache/.",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "gnosis": "dist/cli/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/api.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "comment:files": "What a fresh install must carry to RUN, not to be developed. `profiles/` ships because a profile is resolved at RUNTIME by path (paths.ts:profilesDir), and `golden/` ships with it because every shipped profile names `goldIdsPath: \"../golden\"` — the gold source ingest breaks exact-body dedupe ties against. Absent, `ingest` REFUSES (goldenIds.ts:sourceError) rather than deduping gold-blind, so a fresh install could not build its first index. `tests/`, `scripts/` and `src/` stay out; `dist/` carries the build.",
+  "files": [
+    "dist",
+    "profiles",
+    "golden",
+    "README.md"
+  ],
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/api.d.ts','dist/api.d.ts')\"",
+    "prepublishOnly": "npm run typecheck && npm run build"
   },
+  "comment:build": "`src/api.d.ts` is a DECLARATION file: tsc reads it and emits nothing for it, so the consumer contract would be missing from `dist` after a plain build. It is COPIED rather than pointed at from `src`, so `files` stays `dist`-only and `dist/index.d.ts`'s own `from './api.js'` resolves inside the published tree.",
   "comment:dependencies": "better-sqlite3 backs the FTS5 adapter; it already resolves from the repo root, so nothing new is installed — declared here so this package stays a liftable unit (decision N-1). `stemmer` is NOT optional: it is applied uniformly via processTerm to every adapter, so a missing one would silently change ranking rather than skip a leg. MIT, zero transitive deps (§IX round approved 2026-08-08).",
   "dependencies": {
     "better-sqlite3": "^12.11.1",

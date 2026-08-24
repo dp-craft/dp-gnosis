@@ -21,3 +21,4 @@ tools/dp-gnosis-bench/.venv/
 
 # External BEIR corpora fetched on demand.
 docs/benchmarks/*/data/
+*.tgz

@@ -1,0 +1,15 @@
+{
+  "comment": "EMIT-ONLY. `tsconfig.json` stays the typecheck project (noEmit, tests + scripts included) and its semantics MUST NOT move; this one narrows the program to `src/**` and turns emit on. `types` drops `vitest/globals`: the published build MUST NOT compile against a test global. `resolveJsonModule` is inherited and inert — nothing under `src/` imports a .json (the profiles and golden sets are read at RUNTIME by path, which is why they ship as `files`, not as emitted modules).",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests", "scripts"]
+}

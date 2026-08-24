@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Process binding for the CLI. Adapts the values `runCli` returns to the real
  * process: writes the streams, sets the exit code. No parsing, no formatting.
