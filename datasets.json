@@ -1,5 +1,5 @@
 {
-  "comment:purpose": "The manifest. Adding a domain is one entry here, no code. `domain` / `docShape` / `queryShape` are REPORT metadata only \u2014 they never reach the ingest profile, whose vocabulary is frozen in tools/dp-gnosis/src/config.ts.",
+  "comment:purpose": "The manifest. Adding a domain is one entry here, no code. `domain` / `docShape` / `queryShape` are REPORT metadata only — they never reach the ingest profile, whose vocabulary is frozen in tools/dp-gnosis/src/config.ts.",
   "datasets": [
     {
       "id": "nfcorpus",
@@ -77,7 +77,7 @@
       "layers": []
     },
     {
-      "comment": "42,139 of its 171,332 records carry a non-empty title and an EMPTY text \u2014 the CORD-19 metadata-only population, where the source never had an abstract, so nothing is lost in atom production. Before the T-04 projection fix those title-only atoms were all discarded as empty-bodied and the dataset FAILED the assertIngestSound 90% document-coverage gate; dropping them cost 3,135 relevant judgments (12.71%) across 50 of 50 topics, a hard recall ceiling of ~0.873. toMarkdown now gives a title-only record a non-empty chunk body, so the gate keeps them and this entry is enabled. IS in the `par` layer, against plan risk R4: R4 assumed a ~10 min ingest, but it MEASURES 270 s (4.5 min) and is cached in the work dir afterwards, making it cheaper than arguana (~11.6 min), which is uncontroversially Tier-1. Archive confirmed HTTP 200 at 73,876,720 bytes.",
+      "comment": "42,139 of its 171,332 records carry a non-empty title and an EMPTY text — the CORD-19 metadata-only population, where the source never had an abstract, so nothing is lost in atom production. Before the T-04 projection fix those title-only atoms were all discarded as empty-bodied and the dataset FAILED the assertIngestSound 90% document-coverage gate; dropping them cost 3,135 relevant judgments (12.71%) across 50 of 50 topics, a hard recall ceiling of ~0.873. toMarkdown now gives a title-only record a non-empty chunk body, so the gate keeps them and this entry is enabled. IS in the `par` layer, against plan risk R4: R4 assumed a ~10 min ingest, but it MEASURES 270 s (4.5 min) and is cached in the work dir afterwards, making it cheaper than arguana (~11.6 min), which is uncontroversially Tier-1. Archive confirmed HTTP 200 at 73,876,720 bytes.",
       "id": "trec-covid",
       "format": "beir-zip",
       "qrels": "test",
@@ -92,7 +92,7 @@
       ]
     },
     {
-      "comment": "BEIR citation-prediction set: the query is a paper TITLE and the judged documents are the papers it cites, so it measures title\u2192abstract matching rather than question\u2192passage. Archive confirmed HTTP 200 at 142,471,588 bytes.",
+      "comment": "BEIR citation-prediction set: the query is a paper TITLE and the judged documents are the papers it cites, so it measures title→abstract matching rather than question→passage. Archive confirmed HTTP 200 at 142,471,588 bytes.",
       "id": "scidocs",
       "format": "beir-zip",
       "qrels": "test",
@@ -107,7 +107,7 @@
       ]
     },
     {
-      "comment": "Financial-domain opinionated QA over StackExchange answers \u2014 the only Tier-1 entry whose documents are user-written forum prose rather than edited scientific text. Archive confirmed HTTP 200 at 17,948,027 bytes.",
+      "comment": "Financial-domain opinionated QA over StackExchange answers — the only Tier-1 entry whose documents are user-written forum prose rather than edited scientific text. Archive confirmed HTTP 200 at 17,948,027 bytes.",
       "id": "fiqa",
       "format": "beir-zip",
       "qrels": "test",
@@ -122,7 +122,7 @@
       ]
     },
     {
-      "comment": "The id is the ARCHIVE id \u2014 touche2020.zip is a 404, and ensureBeirDataset resolves <dataDir>/<entry.id>/corpus.jsonl against the archive's inner directory, so the entry id MUST equal it. Kept deliberately as the rerank-REGRESSION control: it is the only BEIR dataset where a cross-encoder DEGRADES the result (published BM25 0.367 -> BM25+CE 0.271), so an arm that improves everything is measuring something other than reranking. `full`-ONLY, and that is measured rather than preferred: its ingest is 2,413 s (40 min) \u2014 68% of the whole layer's cost \u2014 for 49 of the suite's 3,776 topics (1.3%), i.e. 1.2 topics/min against arguana's 121. Its value is the rerank regression above, which only `full`'s arms exercise, and it needs the 8 GB heap bench.sh now sets. Archive confirmed HTTP 200 at 227,132,363 bytes.",
+      "comment": "The id is the ARCHIVE id — touche2020.zip is a 404, and ensureBeirDataset resolves <dataDir>/<entry.id>/corpus.jsonl against the archive's inner directory, so the entry id MUST equal it. Kept deliberately as the rerank-REGRESSION control: it is the only BEIR dataset where a cross-encoder DEGRADES the result (published BM25 0.367 -> BM25+CE 0.271), so an arm that improves everything is measuring something other than reranking. `full`-ONLY, and that is measured rather than preferred: its ingest is 2,413 s (40 min) — 68% of the whole layer's cost — for 49 of the suite's 3,776 topics (1.3%), i.e. 1.2 topics/min against arguana's 121. Its value is the rerank regression above, which only `full`'s arms exercise, and it needs the 8 GB heap bench.sh now sets. Archive confirmed HTTP 200 at 227,132,363 bytes.",
       "id": "webis-touche2020",
       "format": "beir-zip",
       "qrels": "test",
@@ -147,7 +147,7 @@
       "layers": []
     },
     {
-      "comment": "The same 103 biology queries as bright-biology, scored against the GOLD PASSAGES instead of the whole pages. A passage is ~387 chars, so one passage is essentially one atom and document-level scoring here IS block-level scoring \u2014 this is the block-ranking measurement. Its score MUST NOT be read as the cost of chunking relative to bright-biology: the candidate set is 57359 passages against 524 pages, so the two numbers measure different-difficulty tasks. To isolate chunking, vary atomMaxChars on ONE entry and compare across runs.",
+      "comment": "The same 103 biology queries as bright-biology, scored against the GOLD PASSAGES instead of the whole pages. A passage is ~387 chars, so one passage is essentially one atom and document-level scoring here IS block-level scoring — this is the block-ranking measurement. Its score MUST NOT be read as the cost of chunking relative to bright-biology: the candidate set is 57359 passages against 524 pages, so the two numbers measure different-difficulty tasks. To isolate chunking, vary atomMaxChars on ONE entry and compare across runs.",
       "id": "bright-biology-passages",
       "format": "bright",
       "split": "biology",
@@ -236,7 +236,7 @@
       "layers": []
     },
     {
-      "comment": "The REAL vault, the material dp-gnosis actually serves \u2014 every other entry is an English proxy. `derive` projects the ingested atoms plus the hand-authored golden set into the BEIR layout at `source` on EVERY run: both inputs are local files this repo already carries, so there is nothing to fetch and a cache could only measure a vault that has since changed. The atom FILENAME is the document id, which is what `relevantAtomIds` names and what `score.ts` recovers from `originPaths`.",
+      "comment": "The REAL vault, the material dp-gnosis actually serves — every other entry is an English proxy. `derive` projects the ingested atoms plus the hand-authored golden set into the BEIR layout at `source` on EVERY run: both inputs are local files this repo already carries, so there is nothing to fetch and a cache could only measure a vault that has since changed. The atom FILENAME is the document id, which is what `relevantAtomIds` names and what `score.ts` recovers from `originPaths`.",
       "id": "vault",
       "format": "beir-local",
       "qrels": "test",
@@ -254,7 +254,7 @@
       ]
     },
     {
-      "comment": "The Hungarian half of the same material, against its own golden set. The recall ceiling is 1.0000 \u2014 all 117 judgments resolve (an older comment here claimed 22 were unreachable; that was a stale atom cache, re-measured 2026-08-15 as 0 unreachable). Its numbers are still NOT comparable with `vault` in absolute terms, for a different reason: 454 documents against vault's 11345 puts its random-ranking floor far higher (R@100 floor 0.2203 vs 0.0088), so compare only after normalising onto each corpus's own random-to-perfect scale.",
+      "comment": "The Hungarian half of the same material, against its own golden set. The recall ceiling is 1.0000 — all 117 judgments resolve (an older comment here claimed 22 were unreachable; that was a stale atom cache, re-measured 2026-08-15 as 0 unreachable). Its numbers are still NOT comparable with `vault` in absolute terms, for a different reason: 454 documents against vault's 11345 puts its random-ranking floor far higher (R@100 floor 0.2203 vs 0.0088), so compare only after normalising onto each corpus's own random-to-perfect scale.",
       "id": "vault-hu",
       "format": "beir-local",
       "qrels": "test",
@@ -272,7 +272,21 @@
       ]
     },
     {
-      "comment": "ROW X of the pre-rerank campaign \u2014 the query-phrasing ARM of `vault`. Identical corpus, identical topic ids, identical relevantAtomIds; ONLY the query text differs, rewritten to keyword form per tools/dp-gnosis/README.md \u00a7 Query rephrasing. The bench sends RAW query text, so phrasing \u2014 the largest measured quality lever in the system (P@10 0.20 -> 0.80) \u2014 is otherwise invisible to it; a committed rephrased golden file makes it a deterministic, perfectly paired experiment. `enabled` is FALSE on purpose: this is an arm, and enabling it would silently change what a bare `gnosis:bench` measures. Run it with `--only vault-rephrased`. 20 of the 60 topics are byte-identical to the base set by design (README rule 5 \u2014 MUST NOT dilute a query that already carries the exact rare term), so a whole-set delta is diluted by 33% guaranteed ties and the changed-topic subset MUST be reported alongside it.",
+      "comment": "Hungarian Wikipedia QA, converted from SzegedAI/MILQA (CC-BY-SA-4.0, SQuAD 2.0 layout). Exists for ONE reason: `vault-hu` carries 31 topics at an MDE of 0.05-0.07, which cannot decide any Hungarian analyzer or PRF question. This carries 16885 answerable questions over 2191 paragraphs, so its detectable effect is far smaller, and its random R@100 floor is 0.0456 against vault-hu's 0.2203. It is a LANGUAGE probe, not a product proxy: encyclopedic Wikipedia prose, not the served vault's technical notes, so a topical or domain conclusion MUST NOT be carried across. Unanswerable questions (28%) are dropped; the annotators deliberately paraphrased questions to avoid lexical matching, which is what makes it a real lexical-gap test rather than near-duplicate detection.",
+      "id": "milqa-hu",
+      "format": "milqa",
+      "qrels": "test",
+      "source": "https://huggingface.co/datasets/SzegedAI/MILQA/resolve/main",
+      "domain": "hungarian-wikipedia",
+      "docShape": "wiki-paragraph",
+      "queryShape": "hungarian-question",
+      "enabled": true,
+      "layers": [
+        "par"
+      ]
+    },
+    {
+      "comment": "ROW X of the pre-rerank campaign — the query-phrasing ARM of `vault`. Identical corpus, identical topic ids, identical relevantAtomIds; ONLY the query text differs, rewritten to keyword form per tools/dp-gnosis/README.md § Query rephrasing. The bench sends RAW query text, so phrasing — the largest measured quality lever in the system (P@10 0.20 -> 0.80) — is otherwise invisible to it; a committed rephrased golden file makes it a deterministic, perfectly paired experiment. `enabled` is FALSE on purpose: this is an arm, and enabling it would silently change what a bare `gnosis:bench` measures. Run it with `--only vault-rephrased`. 20 of the 60 topics are byte-identical to the base set by design (README rule 5 — MUST NOT dilute a query that already carries the exact rare term), so a whole-set delta is diluted by 33% guaranteed ties and the changed-topic subset MUST be reported alongside it.",
       "id": "vault-rephrased",
       "format": "beir-local",
       "qrels": "test",
@@ -288,7 +302,7 @@
       "layers": []
     },
     {
-      "comment": "AUTO arm of `vault` \u2014 the same 60 topics rewritten by the SHIPPED --rephrase path (tools/dp-gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. Pairs against `vault` (what --rephrase buys) and against `vault-rephrased` (how much of the human ceiling it reaches). The tool rewrote 58 of 60 topics where the human deliberately left 20 untouched under README rule 5, so a whole-set delta here is NOT diluted by design ties the way the human arm is. Rewrites are frozen in the golden file, so the arm re-runs bit-identical without a model. `enabled` FALSE like the other arms; run with --only vault-autorephrased.",
+      "comment": "AUTO arm of `vault` — the same 60 topics rewritten by the SHIPPED --rephrase path (tools/dp-gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. Pairs against `vault` (what --rephrase buys) and against `vault-rephrased` (how much of the human ceiling it reaches). The tool rewrote 58 of 60 topics where the human deliberately left 20 untouched under README rule 5, so a whole-set delta here is NOT diluted by design ties the way the human arm is. Rewrites are frozen in the golden file, so the arm re-runs bit-identical without a model. `enabled` FALSE like the other arms; run with --only vault-autorephrased.",
       "id": "vault-autorephrased",
       "format": "beir-local",
       "qrels": "test",
@@ -304,7 +318,7 @@
       "layers": []
     },
     {
-      "comment": "ROW X, Hungarian arm \u2014 the phrasing pair of `vault-hu`. All 31 topics are full inflected questions, so all 31 are rewritten; this is the cleaner half of the experiment. It also carries the README's non-English instruction (write the word STEM the document uses, not the inflected form the asker speaks), so it measures de-inflection and intent-stripping together, not separately. `enabled` FALSE for the same reason as `vault-rephrased`; run with `--only vault-hu-rephrased`.",
+      "comment": "ROW X, Hungarian arm — the phrasing pair of `vault-hu`. All 31 topics are full inflected questions, so all 31 are rewritten; this is the cleaner half of the experiment. It also carries the README's non-English instruction (write the word STEM the document uses, not the inflected form the asker speaks), so it measures de-inflection and intent-stripping together, not separately. `enabled` FALSE for the same reason as `vault-rephrased`; run with `--only vault-hu-rephrased`.",
       "id": "vault-hu-rephrased",
       "format": "beir-local",
       "qrels": "test",
@@ -320,7 +334,7 @@
       "layers": []
     },
     {
-      "comment": "AUTO arm of `vault-hu` \u2014 the same 31 topics rewritten by the SHIPPED --rephrase path (tools/dp-gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. It exists so the tool is measured against BOTH its baseline and its human ceiling: `vault-hu` -> this is what --rephrase buys, this -> `vault-hu-rephrased` is how much of the hand-written ceiling it reaches. Rewrites are frozen in the golden file rather than called per run, so the arm is deterministic and re-runs bit-identical without a model. `enabled` FALSE for the same reason as the other arms; run with --only vault-hu-autorephrased.",
+      "comment": "AUTO arm of `vault-hu` — the same 31 topics rewritten by the SHIPPED --rephrase path (tools/dp-gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. It exists so the tool is measured against BOTH its baseline and its human ceiling: `vault-hu` -> this is what --rephrase buys, this -> `vault-hu-rephrased` is how much of the hand-written ceiling it reaches. Rewrites are frozen in the golden file rather than called per run, so the arm is deterministic and re-runs bit-identical without a model. `enabled` FALSE for the same reason as the other arms; run with --only vault-hu-autorephrased.",
       "id": "vault-hu-autorephrased",
       "format": "beir-local",
       "qrels": "test",

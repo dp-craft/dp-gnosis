@@ -82,10 +82,24 @@ export interface BrightDataset extends DatasetBase {
   readonly granularity: BrightGranularity;
 }
 
-export type DatasetEntry = BeirDataset | BrightDataset;
+/**
+ * MILQA (SzegedAI, Hungarian Wikipedia QA) in its published SQuAD 2.0 layout,
+ * converted into BEIR by `fetch/milqa.ts`. It is its own format rather than a
+ * `beir-zip` because nothing about it is BEIR on the wire — two JSON split
+ * files, an overlap between them, and a paragraph granularity this suite
+ * chooses. `source` is the directory the two pinned split files hang under.
+ */
+export interface MilqaDataset extends DatasetBase {
+  readonly format: 'milqa';
+  readonly source: string;
+  /** The qrels split to score — the `qrels/<split>.tsv` basename. */
+  readonly qrels: string;
+}
+
+export type DatasetEntry = BeirDataset | BrightDataset | MilqaDataset;
 
 const BEIR_FORMATS: readonly string[] = ['beir-zip', 'beir-local'];
-const FORMATS_TEXT = '"beir-zip", "beir-local" or "bright"';
+const FORMATS_TEXT = '"beir-zip", "beir-local", "bright" or "milqa"';
 const GRANULARITIES: readonly string[] = ['long', 'passage'];
 const GRANULARITIES_TEXT = '"long" (whole pages) or "passage" (the gold passages inside them)';
 const DEFAULT_GRANULARITY: BrightGranularity = 'long';
@@ -213,6 +227,16 @@ const beirOf = (
   derive: deriveOf(record, where),
 });
 
+const milqaOf = (
+  record: Readonly<Record<string, unknown>>,
+  where: string
+): MilqaDataset => ({
+  ...baseOf(record, where),
+  format: 'milqa',
+  source: requireString(record, 'source', where),
+  qrels: requireString(record, 'qrels', where),
+});
+
 const isGranularity = (value: unknown): value is BrightGranularity =>
   typeof value === 'string' && GRANULARITIES.includes(value);
 
@@ -251,8 +275,9 @@ const toEntry = (raw: unknown, index: number): DatasetEntry => {
     : fail(`${where} is not an object`, 'make it a JSON object with id/format/domain fields');
   const format = requireString(record, 'format', where);
   if (isBeirFormat(format)) return beirOf(format, record, where);
-  return format === 'bright'
-    ? brightOf(record, where)
+  if (format === 'bright') return brightOf(record, where);
+  return format === 'milqa'
+    ? milqaOf(record, where)
     : fail(`${where} has unknown format "${format}"`, `use ${FORMATS_TEXT}`);
 };
 

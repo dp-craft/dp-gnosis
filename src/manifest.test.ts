@@ -102,7 +102,7 @@ describe('parseManifest', () => {
 
   it('names the fix when the format is unknown', () => {
     expect(() => parseManifest(wrap(entry({ format: 'csv' })))).toThrow(
-      /unknown format "csv".*"beir-zip", "beir-local" or "bright"/s
+      /unknown format "csv".*"beir-zip", "beir-local", "bright" or "milqa"/s
     );
   });
 
@@ -164,7 +164,12 @@ describe('the shipped datasets.json', () => {
   // generated summary (`short`, and `long`+`keywords`) — retrieval measured on the summary
   // INSTEAD of the body — and ship disabled with empty layers on that same precedent,
   // taking external BEIR 8 → 10 and the total 23 → 25.
-  it('carries ten external BEIR, nine BRIGHT, two vault and four vault-arm entries', () => {
+  // AC delta: `milqa-hu` adds the first `milqa`-format entry — SzegedAI/MILQA fetched
+  // from the Hub and projected into BEIR by `fetch/milqa.ts`. It is neither BRIGHT nor
+  // vault, so it counts as external: 10 -> 11 and the total 25 -> 26. It exists because
+  // `vault-hu`'s 31 topics cannot decide a Hungarian analyzer or PRF question at an MDE
+  // of 0.05-0.07; it is a LANGUAGE probe, never a product proxy.
+  it('carries eleven external, nine BRIGHT, two vault and four vault-arm entries', () => {
     const ids = entries.map(e => e.id);
     const isVault = (id: string): boolean => id === 'vault' || id.startsWith('vault-');
     const isArm = (id: string): boolean => /-(auto)?rephrased$/.test(id);
@@ -182,6 +187,7 @@ describe('the shipped datasets.json', () => {
       'scidocs',
       'fiqa',
       'webis-touche2020',
+      'milqa-hu',
     ]);
     expect(ids.filter(id => isVault(id) && !isArm(id))).toEqual(['vault', 'vault-hu']);
     expect(ids.filter(isArm)).toEqual([
@@ -190,14 +196,15 @@ describe('the shipped datasets.json', () => {
       'vault-hu-rephrased',
       'vault-hu-autorephrased',
     ]);
-    expect(entries).toHaveLength(10 + 9 + 2 + 4);
+    expect(entries).toHaveLength(11 + 9 + 2 + 4);
   });
 
   // AC delta: the T-04 projection fix gives a title-only record a non-empty chunk body,
   // so `trec-covid` clears the 90% document-coverage gate and joins the default suite —
   // 17 → 18 enabled. The only entries still disabled are the four rephrased arms, which
   // are run by `--only` and MUST stay out of a bare `npm run gnosis:bench`.
-  it('enables eighteen of the twenty-five entries, each having a fetcher', () => {
+  // AC delta: `milqa-hu` ships enabled, 18 -> 19. The disabled set is unchanged.
+  it('enables nineteen of the twenty-six entries, each having a fetcher', () => {
     const disabled = entries.filter(e => !e.enabled).map(e => e.id);
 
     expect(disabled).toEqual([
@@ -209,7 +216,7 @@ describe('the shipped datasets.json', () => {
       'vault-hu-rephrased',
       'vault-hu-autorephrased',
     ]);
-    expect(enabledDatasets(entries)).toHaveLength(18);
+    expect(enabledDatasets(entries)).toHaveLength(19);
   });
 
   // The six vault-family entries are the only ones that DERIVE their BEIR layout,
@@ -309,7 +316,9 @@ describe('the shipped datasets.json', () => {
     ]);
   });
 
-  it('ships par as the six Tier-1 BM25 datasets, trec-covid among them', () => {
+  // AC delta: `milqa-hu` joins `par` and NOT `full` — its 16885 topics are the
+  // Hungarian power the layer lacked, and the arm-bearing layer does not need them.
+  it('ships par as the six Tier-1 BM25 datasets plus milqa-hu', () => {
     expect(datasetsInLayer(entries, 'par').map(e => e.id)).toEqual([
       'nfcorpus',
       'scifact',
@@ -317,14 +326,18 @@ describe('the shipped datasets.json', () => {
       'trec-covid',
       'scidocs',
       'fiqa',
+      'milqa-hu',
     ]);
   });
 
   // `full` is `par` plus webis-touche2020 — the rerank-REGRESSION control, whose
   // 40-minute ingest only the arm-bearing layer earns back.
-  it('ships full as par plus webis-touche2020, and nothing else', () => {
+  it('ships full as the six Tier-1 BM25 datasets plus webis-touche2020, and nothing else', () => {
     const par = datasetsInLayer(entries, 'par').map(e => e.id);
-    expect(datasetsInLayer(entries, 'full').map(e => e.id)).toEqual([...par, 'webis-touche2020']);
+    expect(datasetsInLayer(entries, 'full').map(e => e.id)).toEqual([
+      ...par.filter(id => id !== 'milqa-hu'),
+      'webis-touche2020',
+    ]);
   });
 
   // The cost asymmetry is measured, not preferred: a later contributor moving

@@ -77,6 +77,7 @@ import {
 } from './engine.js';
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
+import { ensureMilqaDataset } from './fetch/milqa.js';
 import {
   assertGoldReachable,
   describeDerivation,
@@ -895,6 +896,7 @@ export const ensureDataset = async (
 ): Promise<string> => {
   if (entry.format === 'bright') await ensureBrightDataset(entry, DATA_DIR);
   if (entry.format === 'beir-zip') await ensureBeirDataset(entry, DATA_DIR);
+  if (entry.format === 'milqa') await ensureMilqaDataset(entry, DATA_DIR);
   if (entry.format === 'beir-local' && entry.derive !== undefined) {
     deriveVault(entry, includeHistory);
   }
@@ -1277,7 +1279,7 @@ export interface PrepareArm {
  * ingested exactly as it always was.
  */
 export const isDerivedDataset = (entry: DatasetEntry): boolean =>
-  entry.format !== 'bright' && entry.derive !== undefined;
+  entry.format !== 'bright' && entry.format !== 'milqa' && entry.derive !== undefined;
 
 /** A judged pair — grade 0 is a JUDGED non-relevant document and names no gold. */
 const isRelevant = (graded: readonly [string, number]): boolean => graded[1] > 0;
