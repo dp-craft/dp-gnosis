@@ -25,3 +25,5 @@ docs/benchmarks/*/data/
 .claude/
 claude-artifacts/
 docs/
+CLAUDE.md
+.idea/
