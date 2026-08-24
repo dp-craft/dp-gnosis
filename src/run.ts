@@ -102,6 +102,7 @@ import {
   type DatasetResult,
   HISTORY_FILE,
   NO_TYPE_FILTER,
+  PROVENANCE_MERGE,
   readHistory,
   recordDataset,
   type RunProvenance,
@@ -1600,6 +1601,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   analyzer: options.analyzer,
   fieldWeights: canonicalFieldWeights(options.fieldWeights),
   queryAdjacency: options.queryAdjacency,
+  provenanceMerge: PROVENANCE_MERGE,
   ...prfProvenance(options),
   typeFilter: typeFilterOf(options.includeHistory),
 });

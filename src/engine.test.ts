@@ -918,11 +918,17 @@ describe('auditDuplicates — which document the dedupe orphaned, and where its 
   });
 
   /**
-   * D2. The dedupe survivor rule is JUDGED FIRST, so an audit that ingests
-   * gold-blind reports orphans production never loses. Same fixture, same
-   * corpus: the goldIds are the whole difference.
+   * D2, restated by the PROVENANCE MERGE (R0). The survivor of a byte-identical
+   * group now names every refused member's source path, so `representedDocIds`
+   * covers the whole group and NEITHER audit can lose a judgment — a gold-blind
+   * ingest included. That is the R0 gate: 0 orphaned golds.
+   *
+   * The goldIds still decide WHICH copy is refused, which is why the `links`
+   * assertions above stay: the gold-awareness signal moved from "was the
+   * judgment lost" to "which document holds the surviving atom", and it MUST NOT
+   * disappear with the loss it used to cause.
    */
-  it('reports no judged orphan when the golden set decides the survivor', async () => {
+  it('loses no judgment either way once the survivor carries the orphan\u2019s provenance', async () => {
     const judged = new Map<string, Qrel>([['q1', new Map([['aud-zzz', 1]])]]);
     const corpusDocIds = [...MIRRORS, ...fillers].map(doc => doc.id);
     const aware = await auditDuplicates({
@@ -939,6 +945,7 @@ describe('auditDuplicates — which document the dedupe orphaned, and where its 
     const auditOf = (represented: readonly string[]): GoldAudit =>
       auditGold({ datasetId: 'fixture', corpusDocIds, representedDocIds: represented, qrels: judged });
     expect(auditOf(aware.representedDocIds).lostJudgments).toBe(0);
-    expect(auditOf(blind.representedDocIds).lostJudgments).toBe(1);
+    expect(auditOf(blind.representedDocIds).lostJudgments).toBe(0);
+    expect(aware.links).not.toEqual(blind.links);
   });
 });

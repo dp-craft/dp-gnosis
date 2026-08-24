@@ -62,6 +62,7 @@ const provenance: RunProvenance = {
   rerank: false,
   analyzer: DEFAULT_ANALYZER,
   queryAdjacency: false,
+  provenanceMerge: true,
   prf: false,
   typeFilter: NO_TYPE_FILTER,
 };
@@ -196,6 +197,7 @@ describe('writeRunReport', () => {
         'rPrecision',
         'rPrecisionTopics',
         'rbpResidual',
+        'provenanceMerge',
         'queryAdjacency',
         'fieldWeights',
         'prf',

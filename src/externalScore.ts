@@ -36,6 +36,7 @@ import {
   currentGitSha,
   type DatasetResult,
   NO_TYPE_FILTER,
+  PROVENANCE_MERGE,
   recordDataset,
   type RunProvenance
 } from './report.js';
@@ -340,6 +341,7 @@ const provenanceOf = (args: ExternalArgs, suiteRoot: string): RunProvenance => (
   analyzer: EXTERNAL_ANALYZER,
   fieldWeights: EXTERNAL_FIELD_WEIGHTS,
   queryAdjacency: false,
+  provenanceMerge: PROVENANCE_MERGE,
   prf: false,
   typeFilter: NO_TYPE_FILTER,
 });

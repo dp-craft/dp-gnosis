@@ -37,6 +37,28 @@ describe('toDocumentRanking', () => {
   it('skips an atom with no originPaths rather than crashing', () => {
     expect(toDocumentRanking([atom(), atom('docs/a.md'), atom()])).toEqual(['a']);
   });
+
+  /**
+   * Ingest MERGES the provenance of a byte-identical group into the surviving
+   * atom, so `originPaths` is a list of documents, not a single one. Crediting
+   * only the first would book every merged twin as an unretrieved miss.
+   */
+  it('credits EVERY origin document of one atom, at consecutive ranks', () => {
+    expect(toDocumentRanking([atom('docs/a.md', 'docs/b.md'), atom('docs/c.md')])).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+  });
+
+  it('keeps the FIRST occurrence when a later atom repeats a merged origin', () => {
+    const atoms = [atom('docs/a.md', 'docs/b.md'), atom('docs/b.md'), atom('docs/c.md')];
+    expect(toDocumentRanking(atoms)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('drops an excluded id without dropping the rest of its atom\u2019s origins', () => {
+    expect(toDocumentRanking([atom('docs/a.md', 'docs/b.md')], ['a'])).toEqual(['b']);
+  });
 });
 
 const scoredAtom = (path: string, score: number, rerank?: Partial<ScoredAtom>): ScoredAtom => ({

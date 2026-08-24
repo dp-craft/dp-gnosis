@@ -143,6 +143,15 @@ export interface RunProvenance {
    */
   readonly queryAdjacency: boolean;
   /**
+   * Whether this row was produced by the PROVENANCE-MERGE semantics: ingest
+   * gives the survivor of a byte-identical group every dropped mirror's source
+   * path, and the rollup credits every one of an atom's origin documents.
+   * Required for the reason `queryAdjacency` is — it moves every number on a
+   * corpus holding duplicate bodies, and no flag records it because it is a
+   * semantics version rather than a knob.
+   */
+  readonly provenanceMerge: boolean;
+  /**
    * Whether RM3 pseudo-relevance feedback expanded the query. Required for the
    * reason `queryAdjacency` is: every run either expanded or did not, and the
    * expansion is unrecoverable from the metrics afterwards.
@@ -171,6 +180,14 @@ export interface RunProvenance {
  * measures today. The two therefore compare EQUAL rather than as two arms.
  */
 export const NO_TYPE_FILTER = 'none';
+
+/**
+ * The provenance-merge semantics this build scores under. A CONSTANT, not a
+ * flag: there is no arm that turns it off, and the only rows carrying the other
+ * value are the ones already on disk. Stamped on every row a run writes so
+ * `compare.ts` can refuse to subtract one of those from one of these.
+ */
+export const PROVENANCE_MERGE = true;
 
 /**
  * The `bm25()` weight per column as ONE stable string, in {@link FTS_COLUMNS}
@@ -423,6 +440,14 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    */
   readonly queryAdjacency?: boolean;
   /**
+   * Whether this row was scored under the provenance-merge semantics —
+   * TREATMENT provenance (`compare.ts`), so a pre-fix row against a post-fix one
+   * is labelled an arm comparison instead of being subtracted. Absent on every
+   * row recorded before the merge landed; none of those credited a merged twin,
+   * which is how `compare.ts` reads an absent one.
+   */
+  readonly provenanceMerge?: boolean;
+  /**
    * Whether this row's queries were RM3-expanded — TREATMENT provenance
    * (`compare.ts`), so switching it on is labelled an arm comparison instead of
    * being subtracted. Absent on every row recorded before the flag existed; none
@@ -643,6 +668,7 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   // sidecar was consulted and found empty.
   ...(result.enrichment === undefined ? {} : { enrichment: result.enrichment }),
   queryAdjacency: provenance.queryAdjacency,
+  provenanceMerge: provenance.provenanceMerge,
   prf: provenance.prf,
   // A run that did not expand writes no knob at all — the same JSON
   // `JSON.stringify` produced from an explicit `undefined`, but a state

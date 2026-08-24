@@ -10,10 +10,13 @@
  *
  * Two rules, both load-bearing:
  *
- * 1. The document id comes from `originPaths[0]`'s basename — the file
- *    `materializeCorpus` wrote, named `<docid>.md`. `atom.id` MUST NOT be used:
- *    `baseIdOf` slugifies it (`MED-10` → `med-10`) and appends a SHA1 fragment
- *    on collision, so it cannot be mapped back to a qrels key.
+ * 1. The document ids come from EVERY entry of `originPaths`, each taken as its
+ *    basename — the file `materializeCorpus` wrote, named `<docid>.md`. An atom
+ *    speaks for more than one document whenever ingest merged the provenance of
+ *    a byte-identical duplicate group into it, and crediting only the first
+ *    would book every merged twin as a document no atom claims. `atom.id` MUST
+ *    NOT be used: `baseIdOf` slugifies it (`MED-10` → `med-10`) and appends a
+ *    SHA1 fragment on collision, so it cannot be mapped back to a qrels key.
  * 2. Dedupe keeps the FIRST occurrence. Rank position IS the measurement; a
  *    later atom from an already-seen document adds nothing but would push every
  *    following document down if it were kept.
@@ -187,11 +190,9 @@ export interface DatasetScore {
   readonly rPrecisionTopics: number;
 }
 
-/** An atom with no `sources` frontmatter has no document — it is skipped. */
-const originDocId = (atom: RankedAtom): string | undefined => {
-  const origin = atom.originPaths[0];
-  return origin === undefined ? undefined : basename(origin, MARKDOWN_EXT);
-};
+/** An atom with no `sources` frontmatter has no document — it contributes none. */
+const originDocIds = (atom: RankedAtom): readonly string[] =>
+  atom.originPaths.map(origin => basename(origin, MARKDOWN_EXT));
 
 /**
  * One document and the ATOM that put it there — the atom occupying that rank.
@@ -203,29 +204,25 @@ interface RolledDocument<A extends RankedAtom> {
   readonly atom: A;
 }
 
-const rolledOf = <A extends RankedAtom>(atom: A): RolledDocument<A> | undefined => {
-  const docId = originDocId(atom);
-  return docId === undefined ? undefined : { docId, atom };
-};
-
-const isRolled = <A extends RankedAtom>(
-  entry: RolledDocument<A> | undefined
-): entry is RolledDocument<A> => entry !== undefined;
+/**
+ * One atom → one entry per document it speaks for, in `originPaths` order. A
+ * merged atom therefore occupies consecutive positions, which is exactly what it
+ * earned: one retrieval reached all of them.
+ */
+const rolledOf = <A extends RankedAtom>(atom: A): readonly RolledDocument<A>[] =>
+  originDocIds(atom).map(docId => ({ docId, atom }));
 
 /**
- * Atom order → documents, WITHOUT the dedupe: map, drop originless, drop
- * excluded. Shared with `atomSpread` so the two can never disagree about which
- * atoms are in the ranking.
+ * Atom order → documents, WITHOUT the dedupe: expand, drop excluded. Shared with
+ * `atomSpread` so the two can never disagree about which atoms are in the
+ * ranking.
  */
 const mappedDocuments = <A extends RankedAtom>(
   atoms: readonly A[],
   excludedIds: readonly string[]
 ): readonly RolledDocument<A>[] => {
   const excluded = new Set(excludedIds);
-  return atoms
-    .map(rolledOf)
-    .filter(isRolled)
-    .filter(entry => !excluded.has(entry.docId));
+  return atoms.flatMap(rolledOf).filter(entry => !excluded.has(entry.docId));
 };
 
 /** THE rollup: map, drop excluded, dedupe keeping the first. Projected, never copied. */

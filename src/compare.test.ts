@@ -275,6 +275,36 @@ describe('compareLastTwo', () => {
     expect(result.kind).toBe('delta');
   });
 
+  it('guards the provenance merge as a TREATMENT, never as a measuring scale', () => {
+    expect(TREATMENT_FIELDS).toContain('provenanceMerge');
+    expect(SCALE_FIELDS).not.toContain('provenanceMerge');
+  });
+
+  /**
+   * The merge restates every number on a corpus holding duplicate bodies, so a
+   * pre-fix row against a post-fix one is a bookkeeping artefact and MUST NOT be
+   * subtracted.
+   */
+  it('COMPARES a provenance-merge change as an arm comparison, never subtracting it', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', provenanceMerge: true, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('arm-delta');
+    if (result.kind !== 'arm-delta') return;
+    expect(result.arms.map(change => change.field)).toEqual(['provenanceMerge']);
+    expect(formatComparison(result)).toContain('provenanceMerge');
+  });
+
+  /** Every row recorded before the merge landed booked the twin as a miss. */
+  it('reads an ABSENT provenance merge as OFF, not as a changed treatment', () => {
+    const result = compareLastTwo(
+      [row({}), row({ gitSha: 'bbb2222', provenanceMerge: false, ndcg10: 0.65 })],
+      'scifact'
+    );
+    expect(result.kind).toBe('delta');
+  });
+
   it('guards PRF and its three knobs as TREATMENTS, never as measuring scales', () => {
     expect(TREATMENT_FIELDS).toContain('prf');
     expect(TREATMENT_FIELDS).toContain('prfDocs');

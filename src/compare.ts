@@ -27,6 +27,7 @@
  * | treatment | `fieldWeights` | a different `bm25()` WEIGHT per column, so a different ranking over one index |
  * | treatment | `enrichment` | a different number of atoms carrying ENRICHMENT text — the ingest-enrichment arm |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
+ * | treatment | `provenanceMerge` | a different SCORING SEMANTICS — whether a deduped atom credits every source document whose body it represents |
  * | treatment | `prf` | the query was RM3-EXPANDED from its own first pass, or not |
  * | treatment | `prfDocs` / `prfTerms` / `prfAlpha` | a different RM3 term model over the same first pass — guarded ONLY between two rows that both expanded |
  * | treatment | `typeFilter` | a different CORPUS PROJECTION — the atom types the run could return at all |
@@ -93,6 +94,7 @@ export const TREATMENT_FIELDS = [
   'fieldWeights',
   'enrichment',
   'queryAdjacency',
+  'provenanceMerge',
   'prf',
   'prfDocs',
   'prfTerms',
@@ -211,6 +213,14 @@ const LEGACY_RERANK_RRF_WEIGHT = 0.5;
  * `queryAdjacency` likewise: no row recorded before the flag existed applied the
  * adjacency phrase, so absence reads as OFF rather than as a moved treatment.
  *
+ * `provenanceMerge` likewise, and it is the one field with no flag behind it: it
+ * is a SEMANTICS VERSION. Before it landed, ingest kept a single source path on
+ * the survivor of a byte-identical group and the rollup credited only the first
+ * origin, so every dropped twin was a document no atom claimed. Every number on
+ * a corpus holding duplicate bodies moved when that was fixed, so an absent
+ * stamp reads as OFF and a pre-fix row against a post-fix one is labelled an ARM
+ * COMPARISON rather than subtracted into a bookkeeping artefact.
+ *
  * `typeFilter` likewise: every row recorded before the bench was aligned with
  * serving projected the FULL corpus, which is what `NO_TYPE_FILTER` names — so
  * an old row and an `--include-history` row compare equal, as they must, since
@@ -258,6 +268,7 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   hybridWeight: HYBRID_FUSION.rerankWeight,
   embedModel: EMBED_MODEL_ID,
   queryAdjacency: false,
+  provenanceMerge: false,
   prf: false,
   prfDocs: DEFAULT_PRF_PARAMS.fbDocs,
   prfTerms: DEFAULT_PRF_PARAMS.fbTerms,
