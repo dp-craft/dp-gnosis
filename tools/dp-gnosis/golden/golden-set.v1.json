@@ -1,0 +1,628 @@
+{
+ "version": 1,
+ "frozenAt": "/home/dev/.claude/jobs/fe152fe7/tmp/atoms-fix1",
+ "corpusAtomCount": 11522,
+ "minimumMeaningfulDifference": {
+  "queries": 50,
+  "recallResolution": 0.02,
+  "statement": "Recall is averaged over 50 queries, so one query flipping moves mean recall by at most 1/50 = 0.02 (2 percentage points). A gap of 1 query (2 pts) between two adapters is indistinguishable from a single judgement call and MUST be read as noise; a gap of 2 queries (4 pts) is suggestive but not a result; only a gap of 3 or more queries (>=6 pts) is interpretable as a real difference. Any claim that adapter A beats adapter B MUST quote the query-count delta, not only the percentage.",
+  "notes": "relevantAtomIds are author judgements made by reading the atom bodies, never by running a retriever. They are believed sufficient, not provably exhaustive: an unlisted atom that also answers a query depresses measured precision equally for every adapter, so cross-adapter comparison stays valid while absolute precision is a lower bound."
+ },
+ "queries": [
+  {
+   "id": "q-001",
+   "axis": "exact-keyword",
+   "query": "backslides",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-4-oscillation-check-model-the",
+    "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
+    "runner-investigate-runner-investigate-root-cause-a-run-3-paste-able-investigation-prompt",
+    "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "The plural token 'backslides' appears verbatim in each: the oscillating_runs SELECT column, the cookbook row, the reading-the-signal bullet ('backslides>0'), and the oscillation check's 'check oscillating_runs.backslides before and after'."
+  },
+  {
+   "id": "q-002",
+   "axis": "exact-keyword",
+   "query": "gate-no-verdict",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-2-gate-tool-contract-no-tool",
+    "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-a3cab9f3",
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis"
+   ],
+   "rationale": "The hyphenated failure-class literal 'gate-no-verdict' is written out in the gate-tool contract, in the routing row 'Was this run a measurement at all?', and in the telemetry gate_no_verdict column description."
+  },
+  {
+   "id": "q-003",
+   "axis": "exact-keyword",
+   "query": "dirty-tree",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-operate-runner-operate-launch-a-run-canonical-invocation",
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "'dirty-tree' appears as failureClass in the canonical invocation note, as a failure_class value in the columns table, and as the 'Dirty target tree' bullet."
+  },
+  {
+   "id": "q-004",
+   "axis": "exact-keyword",
+   "query": "forEachLocale",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright",
+    "ts-e2e-testing-e2e-testing-with-playwright-flow-style-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-i18n-driven-text-rule-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locale-parametrization-mandatory-for-any-spec",
+    "ts-e2e-testing-e2e-testing-with-playwright-test-independence"
+   ],
+   "rationale": "The camelCase fixture name forEachLocale occurs verbatim in the locale-parametrization rule, the flow-style code block, the i18n text rule ('t() provided by forEachLocale'), the independence rule, and the E2E overview's fixture-source list."
+  },
+  {
+   "id": "q-005",
+   "axis": "exact-keyword",
+   "query": "ariaTree",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-snapshot-format-policy-adr-018"
+   ],
+   "rationale": "The L3 rule says assert `ariaTree(container)` against an inline snapshot; the snapshot-format policy has an `ariaTree()` output row and names src/test/serializers/aria-tree.ts."
+  },
+  {
+   "id": "q-006",
+   "axis": "exact-keyword",
+   "query": "guardRejections",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-8488f65d",
+    "runner-investigate-runner-investigate-root-cause-a-run-10-context-window-method-what-grew-1c98fae0",
+    "runner-investigate-runner-investigate-root-cause-a-run-9-drive-scope-vs-gate-scope-method",
+    "runner-investigate-runner-investigate-root-cause-a-run-triage-symptom-method"
+   ],
+   "rationale": "guardRejections is the policy-wall-vs-role-wall discriminator in method 9, and the '0 with many reads' signal repeated in the eviction atom, the triage table and the master routing table."
+  },
+  {
+   "id": "q-007",
+   "axis": "exact-keyword",
+   "query": "Xenova/distilgpt2",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-40ac4dd7",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-48d8eb61",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-b08d5b9b"
+   ],
+   "rationale": "The model id `Xenova/distilgpt2` is written verbatim in the ADR-024 risk bullet, the chosen-option bullet ('q4 quantized') and the Decision paragraph."
+  },
+  {
+   "id": "q-008",
+   "axis": "exact-keyword",
+   "query": "globIgnores",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-dependency-governance-dependency-governance-heavy-binary-wasm-asset-gate"
+   ],
+   "rationale": "`workbox.globIgnores` appears only in the heavy binary/WASM asset gate, as the named fix path for an oversized precached asset."
+  },
+  {
+   "id": "q-009",
+   "axis": "exact-keyword",
+   "query": "passWithNoTests",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-c3b7685b"
+   ],
+   "rationale": "The suite-routing false-green note is the only atom spelling `passWithNoTests: true` — the reason a bare path against the app config prints 'No test files found' and exits 0."
+  },
+  {
+   "id": "q-010",
+   "axis": "inflected-form",
+   "query": "backsliding runs",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
+    "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "The corpus writes 'backslide' and 'backslides'; 'backsliding' occurs nowhere. EXPECTED TO FAIL for every v1 adapter — no stemmer is approved, so the query token cannot match. That failure is the evidence for the pending stemming dependency round."
+  },
+  {
+   "id": "q-011",
+   "axis": "inflected-form",
+   "query": "evicting tool results the model still needs",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-8488f65d",
+    "runner-investigate-runner-investigate-root-cause-a-run-10-context-window-method-what-grew-1c98fae0",
+    "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
+   ],
+   "rationale": "The atoms say 'evicted' and 'Eviction'; 'evicting' does not occur. Partial rescue is possible from the other query words ('tool', 'results', 'model'), so this measures how much a lexical adapter loses on the discriminating token alone. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-012",
+   "axis": "inflected-form",
+   "query": "reindexing frs from behavior",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-034-project-source-of-truth-adr-034-project-source-of-truth-authoring",
+    "adr-034-project-source-of-truth-adr-034-project-source-of-truth-drift-gate",
+    "adr-034-project-source-of-truth-adr-034-project-source-of-truth-structure"
+   ],
+   "rationale": "The atoms write 'reindexed', 'auto-reindexes' and 'reindex'; 'reindexing' occurs nowhere. EXPECTED TO FAIL in v1 for the discriminating token."
+  },
+  {
+   "id": "q-013",
+   "axis": "inflected-form",
+   "query": "stubbing llm endpoints in e2e",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory-l4-contract-lane-gated",
+    "ts-e2e-testing-e2e-testing-with-playwright-reload-offline-patterns"
+   ],
+   "rationale": "The corpus uses 'stub', 'stubs' and 'installLlmStubs'; 'stubbing' does not occur. EXPECTED TO FAIL on that token in v1."
+  },
+  {
+   "id": "q-014",
+   "axis": "inflected-form",
+   "query": "memoizing a component to fix a rendering bug",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-debugging-rules-debugging-rules-anti-patterns",
+    "ts-debugging-rules-debugging-rules-red-flags-checklist",
+    "ts-debugging-rules-debugging-rules-rule-5-question-memoization-fixes-react-browser-only"
+   ],
+   "rationale": "The atoms write 'memoization', 'useMemo' and 'memoized'; 'memoizing' occurs nowhere. EXPECTED TO FAIL on the discriminating token in v1."
+  },
+  {
+   "id": "q-015",
+   "axis": "inflected-form",
+   "query": "governing new npm packages",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
+    "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives"
+   ],
+   "rationale": "The corpus writes 'governance' and 'governed'; 'governing' does not occur. EXPECTED TO FAIL on that token in v1."
+  },
+  {
+   "id": "q-016",
+   "axis": "multi-word-phrase",
+   "query": "atomic multi-field updates",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-08075418",
+    "ts-testing-common-testing-standards-multi-action-ordering-tests"
+   ],
+   "rationale": "ADR-031 titles the section 'Atomic multi-field updates' (read-modify-write is not concurrency-safe); the multi-action ordering test rule cites 'Atomic Multi-Field Updates' as its trigger."
+  },
+  {
+   "id": "q-017",
+   "axis": "multi-word-phrase",
+   "query": "dead-handler walk",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3"
+   ],
+   "rationale": "The L3 rule names step 5 'Dead-handler walk' (click every button, assert state or mock calls changed); the layer table names L3's bug class as 'dead handlers'."
+  },
+  {
+   "id": "q-018",
+   "axis": "multi-word-phrase",
+   "query": "80-line container ceiling",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-82c213b1",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748"
+   ],
+   "rationale": "The exact phrase '80-line container ceiling' appears in the ADR-030 enforcement table and the ADR-029 bespoke-checker list; ADR-031 states the same limit as 'A container over 80 lines fails lint:containers' and 'Max 80 lines'."
+  },
+  {
+   "id": "q-019",
+   "axis": "multi-word-phrase",
+   "query": "escalation ladder position",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-1-ownership-boundaries-task-35862746",
+    "runner-map-runner-map-what-is-where-key-files",
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis"
+   ],
+   "rationale": "final_rung is documented as 'escalation-ladder position'; the key-files map points at ladder.ts / the escalation-loop entry; the ownership table assigns the escalation ladder to the runner."
+  },
+  {
+   "id": "q-020",
+   "axis": "multi-word-phrase",
+   "query": "red green refactor cycle written before implementation",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-032-testing-strategy-adr-032-testing-strategy-decision",
+    "ts-testing-common-testing-standards-tdd-cycle-mandatory"
+   ],
+   "rationale": "The TDD atom is literally 'Red (failing test) -> Green (minimal code to pass) -> Refactor. Tests MUST be written BEFORE implementation'; ADR-032's Decision repeats 'a test is written first and must fail before implementation'."
+  },
+  {
+   "id": "q-021",
+   "axis": "multi-word-phrase",
+   "query": "cross-feature imports go through the barrel",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules",
+    "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-cross-feature",
+    "ts-module-dependency-rules-ts-module-dependency-rules-import-rules"
+   ],
+   "rationale": "ADR-030 rules state 'Cross-feature goes through the barrel (@/features/{name})'; its enforcement row bans deep @/features/*/{stores,...} imports; the module-dependency cross-feature and import-rules atoms carry the same constraint per directory."
+  },
+  {
+   "id": "q-022",
+   "axis": "multi-word-phrase",
+   "query": "three tier locator policy for playwright specs",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-constraints-summary",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-data-testid",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-testid-coverage"
+   ],
+   "rationale": "The 3-tier policy atom defines find / find-and-assert-a11y / assert-content; the data-testid naming, testid coverage contract and constraints summary restate its rules."
+  },
+  {
+   "id": "q-023",
+   "axis": "multi-word-phrase",
+   "query": "fix the mechanism not the symptom",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit",
+    "runner-change-runner-change-design-rules-read-before-any-edit-3-roi-gate-answer-these",
+    "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-23b0841f"
+   ],
+   "rationale": "'fix the mechanism, not the symptom' is the core rule of the How-to-think atom, is repeated verbatim in the RUNNER-CHANGE preamble, and is the ROI gate's 'Root cause or symptom?' row."
+  },
+  {
+   "id": "q-024",
+   "axis": "rare-technical-token",
+   "query": "tsc -b",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-649e649b"
+   ],
+   "rationale": "The working-commands table is the only read atom spelling `tsc -b`, in the MUST NOT column: it covers src/electron only, never tools/**. A tokenizer that drops the bare flag '-b' collapses this query to 'tsc'."
+  },
+  {
+   "id": "q-025",
+   "axis": "rare-technical-token",
+   "query": "@/features",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules"
+   ],
+   "rationale": "The alias path '@/features/{name}' and the restricted pattern '@/features/*/{stores,components,containers,hooks}/*' are written in these two atoms. The leading '@' and the '/' are the tokenizer hazard."
+  },
+  {
+   "id": "q-026",
+   "axis": "rare-technical-token",
+   "query": "useEffect",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-policy",
+    "react-composition-patterns-react-composition-patterns-useeffect-is-restricted-red-flag",
+    "ts-debugging-rules-debugging-rules-red-flags-checklist",
+    "ts-debugging-rules-debugging-rules-rule-4-dependency-array-audit-react-browser-only"
+   ],
+   "rationale": "The camelCase identifier useEffect names the ADR-031 four-tag policy, the composition-patterns restriction, the dependency-array audit rule, the red-flags checklist item, and the ADR-029 'useEffect policy' plugin row."
+  },
+  {
+   "id": "q-027",
+   "axis": "rare-technical-token",
+   "query": "lint:test-shape",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l2",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06-16"
+   ],
+   "rationale": "The colon-bearing npm script name lint:test-shape appears as the L2 shape gate, the L3 store-mock rejection, the S2/S3 stage gate, and an ADR-029 bespoke checker. A tokenizer that splits on ':' turns this into two common words."
+  },
+  {
+   "id": "q-028",
+   "axis": "rare-technical-token",
+   "query": ".agentic-runner/telemetry.sqlite",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
+    "runner-investigate-runner-investigate-root-cause-a-run-3-paste-able-investigation-prompt",
+    "runner-map-runner-map-what-is-where-artifacts-where-output-lands",
+    "runner-telemetry-runner-telemetry-investigation-optimization"
+   ],
+   "rationale": "The dotted, slashed sink path is written verbatim as the sqlite3 argument in both investigation atoms, as the Sink bullet in the telemetry overview, and as an artifacts-table row."
+  },
+  {
+   "id": "q-029",
+   "axis": "rare-technical-token",
+   "query": "data-testid",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-data-testid",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-testid-coverage",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l2"
+   ],
+   "rationale": "The hyphenated attribute data-testid names the naming-format atom, the tier-(a) default locator, the coverage contract, and the L2 forbidden-assertion row ('class-strip preserves data-*')."
+  },
+  {
+   "id": "q-030",
+   "axis": "rare-technical-token",
+   "query": "onnxruntime-web",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-64a1d58c",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-b08d5b9b",
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-d7e704c0"
+   ],
+   "rationale": "onnxruntime-web is named in the ADR-024 option list, the chosen-option bullet, and the research-tools note ('Hugging Face model card and onnxruntime-web documentation review')."
+  },
+  {
+   "id": "q-031",
+   "axis": "rare-technical-token",
+   "query": "RUNNER_EVAL_CAPTURE",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-map-runner-map-what-is-where-artifacts-where-output-lands",
+    "runner-operate-runner-operate-launch-a-run-0-run-with-debug-capture-on-mandatory",
+    "runner-operate-runner-operate-launch-a-run-canonical-invocation",
+    "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
+   ],
+   "rationale": "The SCREAMING_SNAKE env var is spelled out in the mandatory-knobs table, the env-var table, the artifacts row ('unless RUNNER_EVAL_CAPTURE=0'), and the /dp-test-llm note in the canonical invocation."
+  },
+  {
+   "id": "q-032",
+   "axis": "rare-technical-token",
+   "query": "@impacts",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-scoped-e2e-s2-phase-end",
+    "ts-testing-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06-16"
+   ],
+   "rationale": "The at-prefixed spec annotation @impacts appears only in the scoped-E2E rule and the S2 stage row. A tokenizer that strips '@' collapses it to the common word 'impacts'."
+  },
+  {
+   "id": "q-033",
+   "axis": "synonym",
+   "query": "loop thrashing back and forth between checks with no net progress",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-4-oscillation-check-model-the",
+    "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-cdfa3035",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "The corpus word is 'oscillation' / 'flip-flop' / 'backslide'; 'thrashing' is the user's synonym. EXPECTED TO FAIL in v1 — lexical BM25 cannot bridge vocabulary. This failure is the evidence for adding a dense/vector leg."
+  },
+  {
+   "id": "q-034",
+   "axis": "synonym",
+   "query": "snackbar notification library choice",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-current-ui"
+   ],
+   "rationale": "The corpus says 'toast notifications' and names sonner; 'snackbar' never occurs. EXPECTED TO FAIL in v1 (vocabulary gap)."
+  },
+  {
+   "id": "q-035",
+   "axis": "synonym",
+   "query": "combo box list renders blank inside a narrow side panel",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-82c213b1"
+   ],
+   "rationale": "The atom describes Radix SelectContent/PopoverContent/DropdownMenuContent rendering an 'empty portal' in containers narrower than 400px; 'combo box', 'blank' and 'side panel' are the user's synonyms for Select, empty and sidebar. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-036",
+   "axis": "synonym",
+   "query": "screen reader tree assertions for a container test",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-snapshot-format-policy-adr-018"
+   ],
+   "rationale": "The corpus says 'ARIA snapshot' / 'a11y-tree' / 'ariaTree'; 'screen reader tree' is the synonym. Only 'container' and 'test' overlap lexically. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-037",
+   "axis": "synonym",
+   "query": "rules for pulling in a third-party library",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
+    "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives"
+   ],
+   "rationale": "The corpus says 'dependency' / 'package' / 'install'; 'library' and 'pulling in' are the synonyms. EXPECTED TO FAIL in v1."
+  },
+  {
+   "id": "q-038",
+   "axis": "synonym",
+   "query": "word valence dictionary for scoring the tone of generated text",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-165",
+    "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-83bc419d",
+    "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-bc3cec48"
+   ],
+   "rationale": "The corpus says 'lexicon' and 'sentiment'; 'dictionary' and 'tone' are the synonyms. 'valence' and 'scoring' do overlap, so this measures partial bridging. EXPECTED TO FAIL on the discriminating terms in v1."
+  },
+  {
+   "id": "q-039",
+   "axis": "domain-filtered",
+   "query": "which telemetry column names the reason a run failed",
+   "domain": "runner",
+   "relevantAtomIds": [
+    "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis",
+    "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
+    "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-1360d84d"
+   ],
+   "rationale": "failure_class is documented as 'WHY it failed ... First column to check on a bad run', with the reading-the-signal bullets and the 'Why runs failed' cookbook query. All three carry x_domain: runner; a same-domain filter must not admit any standards or adr atom."
+  },
+  {
+   "id": "q-040",
+   "axis": "domain-filtered",
+   "query": "environment variable that turns off the functional style gate",
+   "domain": "runner",
+   "relevantAtomIds": [
+    "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant"
+   ],
+   "rationale": "RUNNER_FP_GATE ('0 disables', 'Functional-style gate (for/while/class in generated source)') is documented only in the env-var table, x_domain: runner."
+  },
+  {
+   "id": "q-041",
+   "axis": "domain-filtered",
+   "query": "where container smoke tests live and what they must assert",
+   "domain": "standards",
+   "relevantAtomIds": [
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six",
+    "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "ts-testing-common-testing-standards-test-organization"
+   ],
+   "rationale": "The L3 rule gives the five required steps, the test-organization table gives the path features/{name}/containers/__tests__/*.smoke.test.tsx, and the layer table gives the coverage floor. All three are x_domain: standards; ADR-032's layer model covers the same ground but is x_domain: adr and MUST NOT be admitted under this filter."
+  },
+  {
+   "id": "q-042",
+   "axis": "domain-filtered",
+   "query": "feature flag registration fields and default value",
+   "domain": "standards",
+   "relevantAtomIds": [
+    "feature-flag-governance-feature-flag-governance",
+    "feature-flag-governance-feature-flag-governance-flag-lifecycle",
+    "feature-flag-governance-feature-flag-governance-flag-registration"
+   ],
+   "rationale": "The registration table gives key/default/i18n fields, the governance atom states flags MUST default to false, and the lifecycle table gives creation-to-graduation. All x_domain: standards."
+  },
+  {
+   "id": "q-043",
+   "axis": "domain-filtered",
+   "query": "which decision record chose the state manager and the container pattern",
+   "domain": "adr",
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-decision",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-fd3f62e2"
+   ],
+   "rationale": "ADR-031's Decision names 'Zustand + immer as the single state manager' and three component roles; the state-management and roles atoms carry the selector rules and the role table. All x_domain: adr — the standards-domain react-composition and UI atoms cover related material and MUST NOT be admitted here."
+  },
+  {
+   "id": "q-044",
+   "axis": "domain-filtered",
+   "query": "lint and formatting toolchain decision, no prettier no biome",
+   "domain": "adr",
+   "relevantAtomIds": [
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-consequences",
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-decision"
+   ],
+   "rationale": "ADR-029's Decision states ESLint 9 flat config is the sole lint and format toolchain with 'no Prettier, no Biome'; the current-state table lists the plugin versions and the consequences discuss replacing the formatter. All x_domain: adr."
+  },
+  {
+   "id": "q-045",
+   "axis": "production-shaped-long-form",
+   "query": "I need to change the agentic code runner because a task keeps failing at the tsc stage. Before I touch anything I want to know where the change belongs: the task DAG builder, the speckit orchestrator, or the runner harness itself. The symptom is that the model does not seem to have enough information about the collaborator modules it must call, and separately the test gate reported a failure when the test tool itself crashed and produced no summary line at all. I want to understand the rule about which component owns which defect, the rule about not encoding tool-specific flags or output grammar into harness code, and what questions I am supposed to answer before editing at all - what this buys, by which measured metric, whether I am fixing the root cause or a symptom, whether the change is visible to the model, and whether something could be removed instead of added. I also want the statement of the overall goal the harness serves, so I can check that a change that improves a benchmark is not in fact violating the vision. Please give me the ownership boundaries, the gate-tool contract, the pre-edit checklist, the minimalism rule about new knobs and config fields, and the goal statement about quality, proven, minimal.",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-change-runner-change-design-rules-read-before-any-edit-1-ownership-boundaries-task-35862746",
+    "runner-change-runner-change-design-rules-read-before-any-edit-2-gate-tool-contract-no-tool",
+    "runner-change-runner-change-design-rules-read-before-any-edit-3-roi-gate-answer-these",
+    "runner-change-runner-change-design-rules-read-before-any-edit-5-minimalism",
+    "runner-guide-runner-guide-the-single-entry-point-goals-expectations-the-vision-to-preserve"
+   ],
+   "rationale": "Production shape: several hundred words assembled from a task target plus symptom detail. Each named sub-question maps to exactly one atom - ownership boundaries table, gate-tool contract (no tool burn-in, fail fast), ROI gate questions, minimalism (a new knob is a last resort), and the goals/vision statement."
+  },
+  {
+   "id": "q-046",
+   "axis": "production-shaped-long-form",
+   "query": "Task: refactor an oversized container in a React feature so it passes the project gates. The container currently sits at about 140 lines, keeps a boolean for whether a confirm dialog is open, keeps a submitting flag while an async save runs, holds a per-row editing flag for a list, and computes a filtered and sorted array inline inside the JSX return. It also has two useEffect calls: one that calls a store load action on mount and one that reacts to a prop change by calling setState. I need to know the hard line limit for a container and what to do when it is exceeded, which pieces of local useState are permitted and which must move into the store, how the store selectors must be written so a Zustand v5 subscription does not re-render forever, which useEffect cases survive and what tag comment each one requires on the line immediately above it, and the rule that forbids logic and anonymous functions inside the JSX template. Give me the role table for renderer, container and page as well, because part of the fix is pushing the JSX down into a renderer that receives everything through props.",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-policy",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-3caf1748",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-9a31465a",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-fd3f62e2",
+    "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-ui",
+    "react-composition-patterns-react-composition-patterns-1-component-architecture-1-3"
+   ],
+   "rationale": "Production shape: a task statement plus concrete code facts. Sub-questions map to the roles table (80-line ceiling, props-only renderers), the four-tag useEffect policy, the Zustand v5 selector-stability table, the local-UI-state allowlist (dialog flags, loading flags, editingId belong in the store), and the two logicless-template atoms."
+  },
+  {
+   "id": "q-047",
+   "axis": "production-shaped-long-form",
+   "query": "I am writing a new Playwright end-to-end spec for a settings flow that configures a provider, sends a message and verifies the reply persists across a page reload. I must not call a live model. I need the fixture that parametrizes the spec per locale and provides the translation function and the regex bag, the rule that forbids hardcoded user-facing text literals in assertions, the stub installer for the LLM endpoints and the requirement to re-install those route handlers after a reload, the locator policy that says which of testid, role-with-accessible-name and text assertion to use where, and the total spec budget for the repository, because if the suite is already at the ceiling I have to merge or remove a spec rather than add one. Also tell me the expected shape of a spec: how many steps, how the step names are written, and whether a spec may depend on another spec having run first.",
+   "domain": null,
+   "relevantAtomIds": [
+    "ts-e2e-testing-e2e-testing-with-playwright-budget-cap-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-flow-style-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-i18n-driven-text-rule-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-locale-parametrization-mandatory-for-any-spec",
+    "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
+    "ts-e2e-testing-e2e-testing-with-playwright-reload-offline-patterns",
+    "ts-e2e-testing-e2e-testing-with-playwright-test-independence"
+   ],
+   "rationale": "Production shape: a spec-authoring brief. Each clause maps to one E2E standards atom - forEachLocale, the t(key) rule, installLlmStubs, the reload re-install pattern, the 3-tier locator policy, the 40-spec cap, the 5-20 step flow style, and the independence rule."
+  },
+  {
+   "id": "q-048",
+   "axis": "production-shaped-long-form",
+   "query": "A phase needs a new npm package that ships a multi-megabyte WASM asset and bundled model weights. Before I install anything I have to follow the project protocol. I need the sequence: exhaust native and existing alternatives first, then the research step and who performs it, then the architecture decision record that must be written and where it goes, then the explicit user approval wording, then the install step and what else must be updated. On top of that, because this dependency ships heavy binary assets, there is an extra gate that must run at the end of the phase that installs it rather than being deferred to pre-merge: a build plus a precache size assertion, with a documented per-asset limit and a named fix in the vite config when an asset exceeds it. I also want the precedent for how such a dependency was admitted before, including the constraints that it must be loaded through a lazy dynamic import inside a flag-gated path only, that model weights go to cache storage on demand, and that a one-time download consent prompt is persisted.",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-40ac4dd7",
+    "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
+    "ts-dependency-governance-dependency-governance-heavy-binary-wasm-asset-gate",
+    "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives",
+    "ts-dependency-governance-dependency-governance-step-2-technical-research",
+    "ts-dependency-governance-dependency-governance-step-3-write-adr",
+    "ts-dependency-governance-dependency-governance-step-4-user-approval",
+    "ts-dependency-governance-dependency-governance-step-5-install-and-continue"
+   ],
+   "rationale": "Production shape: a governance brief. The five numbered steps map one-to-one to the five step atoms; the heavy-asset paragraph maps to the WASM gate atom; the precedent paragraph maps to the ADR-024 Decision (lazy import, cache storage, consent, flag gate) and the ADR-033 five-step Decision."
+  },
+  {
+   "id": "q-049",
+   "axis": "production-shaped-long-form",
+   "query": "A runner run reports status completed and the summary says the red-then-green transition was observed, but when I look at the final working tree the implementation is there and I cannot find any test that verifies it. The run also recorded a nonzero reset count. Separately, two earlier attempts in the same run failed at the same stage with byte-identical gate output while the model was clearly editing files, and there were no guard rejections at all. I want the diagnosis method for a reported success whose evidence no longer exists - the status fields that must be read together rather than status alone, how to count the feature identifiers across the per-attempt snapshots, and which pipeline shape makes greenObserved degrade into merely nothing failed. I also want the method that distinguishes a walled-off model from a weak one by intersecting the files the gate errored on with the files the drive actually wrote, and the method for work that regresses between attempts through the replan and reset layer. Finally give me the known false positives that have burned prior sessions on exactly these signals.",
+   "domain": null,
+   "relevantAtomIds": [
+    "runner-investigate-runner-investigate-root-cause-a-run-7-state-continuity-method-work-that",
+    "runner-investigate-runner-investigate-root-cause-a-run-8-status-provenance-method-a-success",
+    "runner-investigate-runner-investigate-root-cause-a-run-9-drive-scope-vs-gate-scope-method",
+    "runner-investigate-runner-investigate-root-cause-a-run-known-traps-false-positives-that-ea24b076",
+    "runner-investigate-runner-investigate-root-cause-a-run-triage-symptom-method"
+   ],
+   "rationale": "Production shape: a diagnosis brief with three interleaved symptoms. They map to method 8 (status provenance / false green), method 9 (drive-scope vs gate-scope), method 7 (state continuity / reset poisoning), the known-traps atom that covers greenObserved on gate-only pipelines and collapsed co-located test snapshots, and the triage symptom table that routes all three."
+  },
+  {
+   "id": "q-050",
+   "axis": "production-shaped-long-form",
+   "query": "I am planning where a new concept belongs in the codebase. It persists a new kind of record, it has its own page in the UI, and two existing features will both need its value-object type. I do not want to guess. I need the mechanical decision tree that is followed from the top - does it persist data, is it a new entity type, does it have its own significant surface, does it pass the removal test, does it wrap an external protocol, is it shared across two or more features, is it stateless types and constants, is it pure logic - together with the rule that the tree is run once per concern rather than once per feature, because this concept clearly decomposes into a persistence file, a feature module and a shared type. I also need the thresholds that say when a feature directory, a domain module, a service file, a service module and a utility file are each justified, the per-directory import table saying what each layer may and may not import, the statement that imports flow downward and that cross-feature access goes through the barrel, and the removal test itself.",
+   "domain": null,
+   "relevantAtomIds": [
+    "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules",
+    "responsibility-rules-responsibility-rules-rules-rule-2-the-removal-test",
+    "ts-layer-boundaries-ts-layer-boundaries-module-creation-thresholds-generic-all-targets",
+    "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-direction",
+    "ts-module-dependency-rules-ts-module-dependency-rules-import-rules",
+    "ts-placement-decision-tree-ts-placement-decision-tree-decomposition-rule",
+    "ts-placement-decision-tree-ts-placement-decision-tree-how-to-use",
+    "ts-placement-decision-tree-ts-placement-decision-tree-the-tree-1c9c1b9a"
+   ],
+   "rationale": "Production shape: a placement brief spanning three source documents. The Q1..Q9 tree, the decomposition rule and the how-to-use steps come from the placement tree; the create-when thresholds from layer boundaries; the per-directory table and the downward-direction diagram from module dependency rules; the barrel rule from ADR-030; and the removal test from the responsibility rules."
+  }
+ ]
+}

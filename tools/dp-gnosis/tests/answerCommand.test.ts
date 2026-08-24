@@ -1,0 +1,340 @@
+/**
+ * `answer` end to end, over a real temp corpus through `runCli`.
+ *
+ * What is proved here is what a CALLER depends on and the pure renderer cannot
+ * show: that the text rendering IS the pack, that every `[^id]` the block cites
+ * resolves to an entry of `atoms[]` — a citation pointing at nothing is worse
+ * than no citation — that the two flags a pack cannot honour exit 2 naming why,
+ * and that the reserved chrome makes `--max-tokens` bound the WHOLE block
+ * rather than only the atoms inside it.
+ */
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import type { CliResult } from '../src/cli/cli.js';
+import { runCli } from '../src/cli/cli.js';
+import { PACK_CLOSE, PACK_OPEN } from '../src/cli/pack.js';
+import { REPHRASE_MODEL_ID, SYNTHESIZE_MODEL_ID } from '../src/config.js';
+
+const SUMMARY = '<!-- LLM-PRIMARY: how the layered test model divides the suite -->';
+const INTRO =
+  'intro prose about the layered test model and its tiers, describing what each tier covers and why the introduction of a document carries enough prose of its own to stand as a separate atom of the whole corpus';
+const UNIT =
+  'the fast unit tier of the layered test model runs in under a millisecond per test, and this section carries enough prose of its own that it stands alone as an atom of the corpus rather than folding into the introduction';
+const E2E =
+  'the end to end tier of the layered test model drives a real browser per test, and this section too carries enough prose of its own to stand alone as an atom of the corpus rather than folding into its neighbours';
+const OTHER =
+  'a second document about the layered test model and its tiers, written so that it carries enough prose of its own to stand alone as one atom of the corpus and to be retrieved beside the first document';
+
+const DOC_A = `${SUMMARY}\n\n# Layered Test Model\n\n${INTRO}\n\n## Unit tier\n\n${UNIT}\n\n## E2E tier\n\n${E2E}\n`;
+const DOC_B = `# Tier Notes\n\n${OTHER}\n`;
+
+const fixture = async (): Promise<string> => {
+  const repoRoot = await mkdtemp(join(tmpdir(), 'gnosis-answer-'));
+  const corpus = join(repoRoot, 'doc');
+  await mkdir(corpus, { recursive: true });
+  await writeFile(join(corpus, 'TS-TESTING.md'), DOC_A, 'utf8');
+  await writeFile(join(corpus, 'TIER-NOTES.md'), DOC_B, 'utf8');
+  const atomsDir = join(repoRoot, 'atoms');
+  await runCli(['ingest', '--atoms-dir', atomsDir, '--repo-root', repoRoot]);
+  return atomsDir;
+};
+
+const answer = async (atomsDir: string, extra: readonly string[]): Promise<CliResult> =>
+  await runCli([
+    'answer',
+    'layered test model tier',
+    '-k',
+    '4',
+    '--adapter',
+    'linear',
+    '--atoms-dir',
+    atomsDir,
+    ...extra,
+  ]);
+
+const parsed = (result: CliResult): Record<string, unknown> =>
+  JSON.parse(result.stdout) as Record<string, unknown>;
+
+const citedIds = (pack: string): readonly string[] =>
+  [...pack.matchAll(/^\[\^([^\]]+)\]/gmu)].flatMap(match => (match[1] === undefined ? [] : [match[1]]));
+
+let atomsDir = '';
+
+beforeAll(async () => {
+  vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');
+  atomsDir = await fixture();
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
+
+describe('answer — the text rendering is the pack', () => {
+  it('emits one delimited block carrying the atom bodies and their citations', async () => {
+    const result = await answer(atomsDir, []);
+    const lines = result.stdout.trimEnd().split('\n');
+
+    expect(result.exitCode).toBe(0);
+    expect(lines[0]).toBe(PACK_OPEN);
+    expect(lines.at(-1)).toBe(PACK_CLOSE);
+    expect(result.stdout).toContain('Retrieved reference material for: layered test model tier');
+    expect(citedIds(result.stdout).length).toBeGreaterThan(1);
+    expect([INTRO, UNIT, E2E, OTHER].filter(body => result.stdout.includes(body)).length)
+      .toBeGreaterThan(1);
+  });
+
+  it('groups the atoms under their source document, in reading order', async () => {
+    const result = await answer(atomsDir, []);
+    const headers = result.stdout.split('\n').filter(line => line.startsWith('## '));
+
+    expect(headers.length).toBeGreaterThan(0);
+    expect(headers).toEqual([...new Set(headers)]);
+  });
+});
+
+/** Present on EVERY answer payload; `note` and `queryRewritten` state themselves. */
+const REQUIRED_KEYS: readonly string[] = [
+  'adapter',
+  'atoms',
+  'budgetMode',
+  'citations',
+  'command',
+  'confidence',
+  'count',
+  'documents',
+  'exitCode',
+  'indexState',
+  'k',
+  'maxTokens',
+  'mode',
+  'neutralised',
+  'pack',
+  'packTokens',
+  'poolSize',
+  'query',
+  'skipped',
+];
+
+const OPTIONAL_KEYS: readonly string[] = ['note', 'queryRewritten'];
+
+describe('answer --json', () => {
+  it('carries every documented key, and no key outside the documented set', async () => {
+    const payload = parsed(await answer(atomsDir, ['--json']));
+    const keys = Object.keys(payload);
+
+    expect(REQUIRED_KEYS.filter(key => !keys.includes(key))).toEqual([]);
+    expect(keys.filter(key => ![...REQUIRED_KEYS, ...OPTIONAL_KEYS].includes(key))).toEqual([]);
+    expect(payload['command']).toBe('answer');
+    expect(payload['query']).toBe('layered test model tier');
+  });
+
+  it('resolves every [^id] the pack cites to an atom it delivered', async () => {
+    const payload = parsed(await answer(atomsDir, ['--json']));
+    const atoms = payload['atoms'] as readonly { readonly id: string }[];
+    const cited = citedIds(String(payload['pack']));
+
+    expect(cited).toEqual(payload['citations']);
+    expect(cited.filter(id => !atoms.some(atom => atom.id === id))).toEqual([]);
+    expect(cited.length).toBe(atoms.length);
+  });
+
+  it('reports the pack cost against the FULL budget the caller passed', async () => {
+    const payload = parsed(await answer(atomsDir, ['--json', '--max-tokens', '16000']));
+
+    expect(payload['maxTokens']).toBe(16000);
+    expect(payload['packTokens']).toBeGreaterThan(0);
+    expect(payload['packTokens']).toBeLessThanOrEqual(16000);
+  });
+});
+
+/**
+ * The declared `GnosisAnswer` contract, variant by variant. The key SET is what
+ * a consumer binds to, and the two conditional groups are what make it three
+ * sets rather than one: `--rephrase` adds `queryRewritten`, `--synthesize` adds
+ * `synthesized` and `answer`. Asserted as the WHOLE sorted set, so a key gained
+ * or lost anywhere fails here.
+ *
+ * `note` is in all three: this fixture's four matches hit the default
+ * `--max-per-doc 2`, and every variant reports that cap.
+ */
+const sortedKeys = (result: CliResult): readonly string[] => Object.keys(parsed(result)).sort();
+
+const okResponse = (body: unknown): unknown => ({
+  ok: true,
+  status: 200,
+  text: async (): Promise<string> => JSON.stringify(body),
+});
+
+/** Answers both llama-swap endpoints in-process: no server, no network. */
+const stubServer = (model: string, content: string): void => {
+  vi.stubGlobal('fetch', async (url: string): Promise<unknown> =>
+    url.endsWith('/v1/models')
+      ? okResponse({ data: [{ id: model }] })
+      : okResponse({ choices: [{ message: { role: 'assistant', content } }] })
+  );
+};
+
+describe('answer --json — the key set of every variant', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('plain: the required keys and the note, with no synthesis or rewrite key', async () => {
+    expect(sortedKeys(await answer(atomsDir, ['--json']))).toEqual(
+      [...REQUIRED_KEYS, 'note'].sort()
+    );
+  });
+
+  it('--rephrase: adds queryRewritten', async () => {
+    stubServer(REPHRASE_MODEL_ID, 'layered test model tier');
+    // Pinned to a temp path: the rewrite cache is written beside the index.
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'gnosis-answer-rephrase-'));
+    const result = await answer(atomsDir, [
+      '--json',
+      '--rephrase',
+      '--index-path',
+      join(cacheRoot, 'index.sqlite'),
+    ]);
+
+    expect(sortedKeys(result)).toEqual([...REQUIRED_KEYS, 'note', 'queryRewritten'].sort());
+  });
+
+  it('--synthesize: adds synthesized and answer', async () => {
+    stubServer(SYNTHESIZE_MODEL_ID, 'INSUFFICIENT');
+
+    expect(sortedKeys(await answer(atomsDir, ['--json', '--synthesize']))).toEqual(
+      [...REQUIRED_KEYS, 'note', 'answer', 'synthesized'].sort()
+    );
+  });
+});
+
+describe('answer — the two flags a pack cannot honour', () => {
+  it('refuses --flat, naming the grouping the pack is built on', async () => {
+    const result = await answer(atomsDir, ['--flat']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('--flat');
+    expect(result.stderr).toContain('grouped by source document by construction');
+  });
+
+  it('refuses --format xml, naming the formats it does accept', async () => {
+    const result = await answer(atomsDir, ['--format', 'xml']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('--format text');
+    expect(result.stderr).toContain('--format json');
+  });
+
+  it('still accepts --format text and --format json, which are its two renderings', async () => {
+    const text = await answer(atomsDir, ['--format', 'text']);
+    const json = await answer(atomsDir, ['--format', 'json']);
+
+    expect(text.stdout.startsWith(PACK_OPEN)).toBe(true);
+    expect(parsed(json)['command']).toBe('answer');
+  });
+});
+
+/**
+ * The report — skip lines, the neutralised count, the notes — is what the pack
+ * emits BECAUSE the budget ran out, and it is deliberately outside the reserve
+ * (see `packChrome`). The bound is therefore asserted over everything else:
+ * delimiters, preamble, atoms and footer, which is exactly what the chrome
+ * reservation is there to keep inside the ceiling.
+ */
+const REPORT_LINE = /^(skipped: | {2}skipped {2}|neutralised: |note: )/u;
+
+const withoutReport = (pack: string): string =>
+  pack.split('\n').filter(line => !REPORT_LINE.test(line)).join('\n');
+
+describe('answer under a small --max-tokens', () => {
+  const budget = 900;
+
+  it('keeps the block inside the byte budget, and reports what it skipped', async () => {
+    const result = await answer(atomsDir, [
+      '--json',
+      '--budget-mode',
+      'bytes',
+      '--max-tokens',
+      String(budget),
+    ]);
+    const payload = parsed(result);
+    const skipped = payload['skipped'] as readonly unknown[];
+
+    expect(result.exitCode).toBe(3);
+    expect(skipped.length).toBeGreaterThan(0);
+    expect(payload['packTokens']).toBeLessThanOrEqual(budget);
+    expect(Buffer.byteLength(withoutReport(String(payload['pack'])), 'utf8')).toBeLessThanOrEqual(
+      budget
+    );
+  });
+
+  it('names every skipped atom inside the pack itself, not only in the payload', async () => {
+    const result = await answer(atomsDir, ['--budget-mode', 'bytes', '--max-tokens', String(budget)]);
+
+    expect(result.stdout).toContain('skipped: ');
+    expect(result.stdout.trimEnd().split('\n').at(-1)).toBe(PACK_CLOSE);
+  });
+});
+
+/**
+ * `answer` runs the SAME pipeline as `retrieve`, so a filter it silently
+ * ignored would hand a caller a pack wider than the one it asked for.
+ */
+describe('answer honours --domain the way retrieve does', () => {
+  it('packs the atoms when their own domain is named', async () => {
+    const result = await answer(atomsDir, ['--json', '--domain', 'docs']);
+
+    expect(parsed(result)['count']).toBeGreaterThan(0);
+  });
+
+  it('packs nothing when a domain the corpus does not carry is named', async () => {
+    const result = await answer(atomsDir, ['--json', '--domain', 'adr']);
+
+    expect(parsed(result)['count']).toBe(0);
+  });
+});
+
+/**
+ * A4 — grounding, not answer material. `GnosisAtom.snippet` (`api.d.ts`) states
+ * that every delivered atom carries a snippet or a body, never a bare handle.
+ *
+ * Asserted as the NEGATIVE — the ids delivered with no grounding text at all —
+ * because the positive is what the payload happens to do today and would read
+ * as satisfied by a field that exists but says nothing. The snippet is also
+ * checked to be a VERBATIM slice of that atom's own body: grounding a caller
+ * cannot trace back to the atom it is filed under is not grounding.
+ */
+interface DeliveredAtom {
+  readonly id: string;
+  readonly sourcePath: string;
+  readonly body?: string;
+  readonly snippet?: string;
+}
+
+const groundingOf = (atom: DeliveredAtom): string =>
+  [atom.snippet ?? '', atom.body ?? ''].find(text => text.length > 0) ?? '';
+
+/** The delivered atoms carrying an id and a path and nothing to read. */
+const bareHandles = (atoms: readonly DeliveredAtom[]): readonly string[] =>
+  atoms.filter(atom => groundingOf(atom) === '').map(atom => atom.id);
+
+const snippetOutsideBody = (atom: DeliveredAtom): boolean =>
+  atom.snippet === undefined || atom.body === undefined || !atom.body.includes(atom.snippet);
+
+describe('answer --json — every delivered atom carries grounding, never a bare handle', () => {
+  it('delivers a non-empty snippet cut from that atom own body', async () => {
+    const payload = parsed(await answer(atomsDir, ['--json']));
+    const atoms = payload['atoms'] as readonly DeliveredAtom[];
+
+    expect(atoms.length).toBeGreaterThan(1);
+    expect(bareHandles(atoms)).toEqual([]);
+    expect(atoms.filter(snippetOutsideBody).map(atom => atom.id)).toEqual([]);
+    expect(atoms.filter(atom => (atom.snippet ?? '') === '').map(atom => atom.id)).toEqual([]);
+  });
+
+  it('flags an atom reduced to its id and its path', () => {
+    expect(bareHandles([{ id: 'handle', sourcePath: '/atoms/handle.md' }])).toEqual(['handle']);
+  });
+});

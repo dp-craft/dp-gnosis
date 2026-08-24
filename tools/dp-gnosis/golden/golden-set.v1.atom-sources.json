@@ -1,0 +1,620 @@
+[
+  {
+    "id": "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-09712e31",
+    "title": "ADR-024: `@huggingface/transformers` for In-Browser Perplexity Scoring > Consequences > Risks",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-024-huggingface-transformers-perplexity.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-28ed4a62",
+    "title": "ADR-024: `@huggingface/transformers` for In-Browser Perplexity Scoring > References > Research Tools Used",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-024-huggingface-transformers-perplexity.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-586623ad",
+    "title": "ADR-024: `@huggingface/transformers` for In-Browser Perplexity Scoring > Considered Options",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-024-huggingface-transformers-perplexity.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-6f667366",
+    "title": "`@huggingface/transformers` + onnxruntime-web",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-024-huggingface-transformers-perplexity.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-024-huggingface-transformers-perplexity-adr-024-huggingface-transformers-for-in-browser-a423437b",
+    "title": "ADR-024: `@huggingface/transformers` for In-Browser Perplexity Scoring > Decision",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-024-huggingface-transformers-perplexity.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-165",
+    "title": "afinn-165",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-025-afinn-165-sentiment.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-6c8359cf",
+    "title": "ADR-025: afinn-165 for Sentiment Scoring in Lab Run Analysis > Context",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-025-afinn-165-sentiment.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-025-afinn-165-sentiment-adr-025-afinn-165-for-sentiment-scoring-in-lab-run-analysis-ae39e32a",
+    "title": "ADR-025: afinn-165 for Sentiment Scoring in Lab Run Analysis > Decision",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-025-afinn-165-sentiment.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-consequences",
+    "title": "ADR-029: Lint, format and code-navigation toolchain > Consequences",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-029-toolchain.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-current-state",
+    "title": "Current state",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-029-toolchain.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-029-toolchain-adr-029-lint-format-and-code-navigation-toolchain-decision",
+    "title": "ADR-029: Lint, format and code-navigation toolchain > Decision",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-029-toolchain.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-enforcement",
+    "title": "ADR-030: Module boundaries and layering > Enforcement",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-030-module-boundary-enforcement.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-030-module-boundary-enforcement-adr-030-module-boundaries-and-layering-rules",
+    "title": "ADR-030: Module boundaries and layering > Rules",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-030-module-boundary-enforcement.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-3efe5676",
+    "title": "ADR-031: Component architecture and state management > Consequences",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-decision",
+    "title": "ADR-031: Component architecture and state management > Decision",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-policy",
+    "title": "`useEffect` policy",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-e8a50f44",
+    "title": "Logicless templates",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-roles-fd3f62e2",
+    "title": "Roles",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-08075418",
+    "title": "ADR-031: Component architecture and state management > State management",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-f1f5e174",
+    "title": "Atomic multi-field updates",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-031-component-architecture-adr-031-component-architecture-and-state-management-state-ui",
+    "title": "Local UI state",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-031-component-architecture.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-032-testing-strategy-adr-032-testing-strategy-decision",
+    "title": "ADR-032: Testing strategy > Decision",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-032-testing-strategy.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-current-ui",
+    "title": "UI",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-033-dependency-governance.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-033-dependency-governance-adr-033-dependency-governance-and-current-registry-decision",
+    "title": "ADR-033: Dependency governance and current registry > Decision",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-033-dependency-governance.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-034-project-source-of-truth-adr-034-project-source-of-truth-authoring",
+    "title": "Authoring",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-034-project-source-of-truth.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-034-project-source-of-truth-adr-034-project-source-of-truth-drift-gate",
+    "title": "Drift gate",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-034-project-source-of-truth.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "adr-034-project-source-of-truth-adr-034-project-source-of-truth-structure",
+    "title": "ADR-034: Project source of truth > Structure",
+    "sourcePath": "doc/40-code-standards/90-decisions/adr-034-project-source-of-truth.md",
+    "xDomain": "adr"
+  },
+  {
+    "id": "feature-flag-governance-feature-flag-governance",
+    "title": "Feature Flag Governance",
+    "sourcePath": "claude-artifacts/standards/FEATURE-FLAG-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "feature-flag-governance-feature-flag-governance-flag-lifecycle",
+    "title": "Feature Flag Governance > Flag Lifecycle",
+    "sourcePath": "claude-artifacts/standards/FEATURE-FLAG-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "feature-flag-governance-feature-flag-governance-flag-registration",
+    "title": "Feature Flag Governance > Flag Registration",
+    "sourcePath": "claude-artifacts/standards/FEATURE-FLAG-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "react-composition-patterns-react-composition-patterns-1-component-architecture-1-3",
+    "title": "React Composition Patterns > 1. Component Architecture > 1.3 Logicless Templates",
+    "sourcePath": "claude-artifacts/standards/REACT-COMPOSITION-PATTERNS.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "react-composition-patterns-react-composition-patterns-useeffect-is-restricted-red-flag",
+    "title": "React Composition Patterns > ⚠ `useEffect` is RESTRICTED (red flag)",
+    "sourcePath": "claude-artifacts/standards/REACT-COMPOSITION-PATTERNS.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "responsibility-rules-responsibility-rules-rules-rule-2-the-removal-test",
+    "title": "Responsibility Rules > Rules > Rule 2: The Removal Test",
+    "sourcePath": "claude-artifacts/standards/RESPONSIBILITY-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "runner-change-runner-change-design-rules-read-before-any-edit",
+    "title": "Runner Change — design rules (read BEFORE any edit)",
+    "sourcePath": "RUNNER-CHANGE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-change-runner-change-design-rules-read-before-any-edit-1-ownership-boundaries-task-35862746",
+    "title": "1. Ownership boundaries — task-dag · orchestrator · runner",
+    "sourcePath": "RUNNER-CHANGE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-change-runner-change-design-rules-read-before-any-edit-2-gate-tool-contract-no-tool",
+    "title": "2. Gate-tool contract — no tool burn-in, fail fast",
+    "sourcePath": "RUNNER-CHANGE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-change-runner-change-design-rules-read-before-any-edit-3-roi-gate-answer-these",
+    "title": "3. ROI gate — answer these BEFORE editing",
+    "sourcePath": "RUNNER-CHANGE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-change-runner-change-design-rules-read-before-any-edit-4-oscillation-check-model-the",
+    "title": "4. Oscillation check — model the loop before adding a demand",
+    "sourcePath": "RUNNER-CHANGE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-change-runner-change-design-rules-read-before-any-edit-5-minimalism",
+    "title": "5. Minimalism",
+    "sourcePath": "RUNNER-CHANGE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-guide-runner-guide-the-single-entry-point-goals-expectations-the-vision-to-preserve",
+    "title": "Goals & expectations (the vision to preserve)",
+    "sourcePath": "RUNNER-GUIDE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-8488f65d",
+    "title": "Master routing table — symptom → exact destination",
+    "sourcePath": "RUNNER-GUIDE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-guide-runner-guide-the-single-entry-point-master-routing-table-symptom-exact-a3cab9f3",
+    "title": "Master routing table — symptom → exact destination",
+    "sourcePath": "RUNNER-GUIDE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-1-find-bad-runs-telemetry",
+    "title": "1. Find bad runs (telemetry)",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-10-context-window-method-what-grew-1c98fae0",
+    "title": "Eviction — the model re-reads what it already read",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-3-paste-able-investigation-prompt",
+    "title": "3. Paste-able investigation prompt",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-7-state-continuity-method-work-that",
+    "title": "7. State-continuity method — work that regresses or vanishes BETWEEN attempts",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-8-status-provenance-method-a-success",
+    "title": "8. Status-provenance method — a reported success whose evidence no longer exists",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-9-drive-scope-vs-gate-scope-method",
+    "title": "9. Drive-scope vs gate-scope method — the gate reports what the drive cannot reach",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-23b0841f",
+    "title": "How to think (the thinking layer — read first for a new investigation)",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-how-to-think-the-thinking-layer-read-cdfa3035",
+    "title": "Metric set — what each reveals, and when to rethink",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-known-traps-false-positives-that-ea24b076",
+    "title": "Known traps — false-positives that have burned prior sessions",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-investigate-runner-investigate-root-cause-a-run-triage-symptom-method",
+    "title": "Triage — symptom → method",
+    "sourcePath": "RUNNER-INVESTIGATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-map-runner-map-what-is-where-artifacts-where-output-lands",
+    "title": "Artifacts — where output lands",
+    "sourcePath": "RUNNER-MAP.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-map-runner-map-what-is-where-key-files",
+    "title": "Key files",
+    "sourcePath": "RUNNER-MAP.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-649e649b",
+    "title": "Working commands — scope, run, navigate (MANDATORY)",
+    "sourcePath": "RUNNER-MAP.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-map-runner-map-what-is-where-working-commands-scope-run-navigate-mandatory-c3b7685b",
+    "title": "Working commands — scope, run, navigate (MANDATORY)",
+    "sourcePath": "RUNNER-MAP.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-operate-runner-operate-launch-a-run-0-run-with-debug-capture-on-mandatory",
+    "title": "0. Run with debug + capture ON (MANDATORY)",
+    "sourcePath": "RUNNER-OPERATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-operate-runner-operate-launch-a-run-canonical-invocation",
+    "title": "Canonical invocation",
+    "sourcePath": "RUNNER-OPERATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-operate-runner-operate-launch-a-run-environment-variables-debugging-relevant",
+    "title": "Environment variables (debugging-relevant)",
+    "sourcePath": "RUNNER-OPERATE.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-telemetry-runner-telemetry-investigation-optimization",
+    "title": "Runner Telemetry — Investigation & Optimization",
+    "sourcePath": "RUNNER-TELEMETRY.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-telemetry-runner-telemetry-investigation-optimization-columns-that-drive-diagnosis",
+    "title": "Columns that drive diagnosis",
+    "sourcePath": "RUNNER-TELEMETRY.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-telemetry-runner-telemetry-investigation-optimization-query-cookbook",
+    "title": "Query cookbook",
+    "sourcePath": "RUNNER-TELEMETRY.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "runner-telemetry-runner-telemetry-investigation-optimization-reading-the-signal-76e8cf31",
+    "title": "Reading the signal",
+    "sourcePath": "RUNNER-TELEMETRY.md",
+    "xDomain": "runner"
+  },
+  {
+    "id": "ts-debugging-rules-debugging-rules-anti-patterns",
+    "title": "Debugging Rules > Anti-Patterns",
+    "sourcePath": "claude-artifacts/standards/TS-DEBUGGING-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-debugging-rules-debugging-rules-red-flags-checklist",
+    "title": "Debugging Rules > Red Flags Checklist",
+    "sourcePath": "claude-artifacts/standards/TS-DEBUGGING-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-debugging-rules-debugging-rules-rule-4-dependency-array-audit-react-browser-only",
+    "title": "Debugging Rules > Rule 4: Dependency Array Audit (React/Browser only)",
+    "sourcePath": "claude-artifacts/standards/TS-DEBUGGING-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-debugging-rules-debugging-rules-rule-5-question-memoization-fixes-react-browser-only",
+    "title": "Debugging Rules > Rule 5: Question Memoization Fixes (React/Browser only)",
+    "sourcePath": "claude-artifacts/standards/TS-DEBUGGING-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-dependency-governance-dependency-governance",
+    "title": "Dependency Governance",
+    "sourcePath": "claude-artifacts/standards/TS-DEPENDENCY-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-dependency-governance-dependency-governance-heavy-binary-wasm-asset-gate",
+    "title": "Dependency Governance > Heavy Binary/WASM Asset Gate",
+    "sourcePath": "claude-artifacts/standards/TS-DEPENDENCY-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-dependency-governance-dependency-governance-step-1-exhaust-alternatives",
+    "title": "Dependency Governance > Step 1: Exhaust Alternatives",
+    "sourcePath": "claude-artifacts/standards/TS-DEPENDENCY-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-dependency-governance-dependency-governance-step-2-technical-research",
+    "title": "Dependency Governance > Step 2: Technical Research",
+    "sourcePath": "claude-artifacts/standards/TS-DEPENDENCY-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-dependency-governance-dependency-governance-step-3-write-adr",
+    "title": "Dependency Governance > Step 3: Write ADR",
+    "sourcePath": "claude-artifacts/standards/TS-DEPENDENCY-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-dependency-governance-dependency-governance-step-4-user-approval",
+    "title": "Dependency Governance > Step 4: User Approval",
+    "sourcePath": "claude-artifacts/standards/TS-DEPENDENCY-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-dependency-governance-dependency-governance-step-5-install-and-continue",
+    "title": "Dependency Governance > Step 5: Install and Continue",
+    "sourcePath": "claude-artifacts/standards/TS-DEPENDENCY-GOVERNANCE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright",
+    "title": "E2E Testing with Playwright",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-budget-cap-mandatory",
+    "title": "E2E Testing with Playwright > Budget Cap (MANDATORY)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-constraints-summary",
+    "title": "E2E Testing with Playwright > Constraints Summary",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-flow-style-mandatory",
+    "title": "E2E Testing with Playwright > Flow Style (MANDATORY)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-i18n-driven-text-rule-mandatory",
+    "title": "E2E Testing with Playwright > i18n-Driven Text Rule (MANDATORY)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory",
+    "title": "E2E Testing with Playwright > LLM Stub Policy (MANDATORY)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-llm-stub-policy-mandatory-l4-contract-lane-gated",
+    "title": "E2E Testing with Playwright > LLM Stub Policy (MANDATORY) > L4-contract lane (gated real-exec — NOT CI E2E)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-locale-parametrization-mandatory-for-any-spec",
+    "title": "E2E Testing with Playwright > Locale Parametrization (MANDATORY for any spec with text assertions)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory",
+    "title": "E2E Testing with Playwright > Locator Policy — 3-Tier (MANDATORY)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-data-testid",
+    "title": "E2E Testing with Playwright > Locator Policy — 3-Tier (MANDATORY) > `data-testid` naming",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-locator-policy-3-tier-mandatory-testid-coverage",
+    "title": "testid coverage contract (MANDATORY)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-reload-offline-patterns",
+    "title": "E2E Testing with Playwright > Reload + Offline Patterns",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-scoped-e2e-s2-phase-end",
+    "title": "E2E Testing with Playwright > Scoped E2E (S2 Phase-End)",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-e2e-testing-e2e-testing-with-playwright-test-independence",
+    "title": "E2E Testing with Playwright > Test Independence",
+    "sourcePath": "claude-artifacts/standards/TS-E2E-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-layer-boundaries-ts-layer-boundaries-module-creation-thresholds-generic-all-targets",
+    "title": "TS Layer Boundaries > Module Creation Thresholds > Generic (All Targets)",
+    "sourcePath": "claude-artifacts/standards/TS-LAYER-BOUNDARIES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-cross-feature",
+    "title": "TS Module Dependency Rules > Core Principles > Cross-Feature",
+    "sourcePath": "claude-artifacts/standards/TS-MODULE-DEPENDENCY-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-module-dependency-rules-ts-module-dependency-rules-core-principles-direction",
+    "title": "TS Module Dependency Rules > Core Principles > Direction",
+    "sourcePath": "claude-artifacts/standards/TS-MODULE-DEPENDENCY-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-module-dependency-rules-ts-module-dependency-rules-import-rules",
+    "title": "TS Module Dependency Rules > Import Rules",
+    "sourcePath": "claude-artifacts/standards/TS-MODULE-DEPENDENCY-RULES.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-placement-decision-tree-ts-placement-decision-tree-decomposition-rule",
+    "title": "TS Placement Decision Tree > Decomposition Rule",
+    "sourcePath": "claude-artifacts/standards/TS-PLACEMENT-DECISION-TREE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-placement-decision-tree-ts-placement-decision-tree-how-to-use",
+    "title": "TS Placement Decision Tree > How to Use",
+    "sourcePath": "claude-artifacts/standards/TS-PLACEMENT-DECISION-TREE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-placement-decision-tree-ts-placement-decision-tree-the-tree-bb9636ee",
+    "title": "TS Placement Decision Tree > The Tree",
+    "sourcePath": "claude-artifacts/standards/TS-PLACEMENT-DECISION-TREE.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six",
+    "title": "Common Testing Standards > Layered Test Model (ADR-018, supersedes ADR-005 six-category mandate)",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l2",
+    "title": "Common Testing Standards > Layered Test Model (ADR-018, supersedes ADR-005 six-category mandate) > L2 — Renderer test rules",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-layered-test-model-adr-018-supersedes-adr-005-six-l3",
+    "title": "Common Testing Standards > Layered Test Model (ADR-018, supersedes ADR-005 six-category mandate) > L3 — Container smoke + ARIA snapshot",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-multi-action-ordering-tests",
+    "title": "Common Testing Standards > Multi-Action Ordering Tests",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-snapshot-format-policy-adr-018",
+    "title": "Common Testing Standards > Snapshot Format Policy (ADR-018)",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-tdd-cycle-mandatory",
+    "title": "Common Testing Standards > TDD Cycle (MANDATORY)",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-test-organization",
+    "title": "Common Testing Standards > Test Organization",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  },
+  {
+    "id": "ts-testing-common-testing-standards-tiered-test-execution-adr-018-amendment-2026-06-16",
+    "title": "Common Testing Standards > Tiered Test Execution (ADR-018 amendment, 2026-06-16)",
+    "sourcePath": "claude-artifacts/standards/TS-TESTING.md",
+    "xDomain": "standards"
+  }
+]

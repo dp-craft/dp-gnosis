@@ -1,0 +1,76 @@
+/**
+ * `ingest` — run the ingest pipeline over the configured corpus roots.
+ *
+ * The exit code carries the skip/write split: a run that wrote atoms AND
+ * refused some exits 3, not 0. Reporting a partial corpus as a clean success is
+ * how a caller ends up querying a vault that is quietly missing documents.
+ */
+import { CORPUS_ROOTS_ENV_VAR } from '../config.js';
+import { loadJudgedAtomIds } from '../goldenIds.js';
+import type { IngestSkip, IngestSummary } from '../ingest.js';
+import { ingest } from '../ingest.js';
+import type { CommandContext } from './context.js';
+import type { CommandOutcome } from './outcome.js';
+import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
+
+/** Built per call so the message names the scope THIS invocation would use. */
+const unexpectedSource = (corpusRoots: readonly string[]): string =>
+  `ingest takes no source path — it walks the configured corpus roots (${corpusRoots.join(
+    ', '
+  )}); change the scope with ${CORPUS_ROOTS_ENV_VAR}=<comma-separated repo-relative roots>`;
+
+const skipLine = (skip: IngestSkip): string =>
+  `  skipped ${skip.source} (${skip.title}): ${skip.reasons.join('; ')}`;
+
+const ingestText = (summary: IngestSummary): string =>
+  [
+    `ingest: written ${summary.written}, skipped ${summary.skipped.length} (${summary.duplicates} duplicate-body)`,
+    ...summary.skipped.map(skipLine),
+  ].join('\n');
+
+const summarize = (summary: IngestSummary): CommandOutcome => ({
+  exitCode: summary.skipped.length === 0 ? EXIT_OK : EXIT_PARTIAL,
+  data: {
+    command: 'ingest',
+    written: summary.written,
+    skipped: summary.skipped,
+    duplicates: summary.duplicates,
+  },
+  text: ingestText(summary),
+});
+
+/**
+ * `goldIds` comes from the engine's OWN golden directory, as the benchmark
+ * already did: without it the exact-body dedupe is gold-BLIND and drops the
+ * judged copy of a mirrored pair whenever its twin sorts first.
+ */
+const ingestCorpus = async (context: CommandContext): Promise<CommandOutcome> =>
+  summarize(
+    await ingest({
+      corpusRoots: context.corpusRoots,
+      outputDir: context.atomsDir,
+      repoRoot: context.repoRoot,
+      profile: context.profile,
+      goldIds: loadJudgedAtomIds(),
+    })
+  );
+
+/**
+ * A corpus scope that resolves to nothing is a USAGE error, not a crash: the
+ * roots are caller-configured, and the refusal names the correction. Letting it
+ * escape as an uncaught throw exits 1 — outside the 0/2/3 vocabulary the README
+ * tells callers to branch on — so it is routed through the same usage path
+ * every other bad input takes.
+ */
+const attemptIngest = async (context: CommandContext): Promise<CommandOutcome> => {
+  try {
+    return await ingestCorpus(context);
+  } catch (error) {
+    return usageError(error instanceof Error ? error.message : String(error));
+  }
+};
+
+export const runIngestCommand = async (context: CommandContext): Promise<CommandOutcome> =>
+  context.positionals.length > 0
+    ? usageError(unexpectedSource(context.corpusRoots))
+    : await attemptIngest(context);
