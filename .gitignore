@@ -1,0 +1,23 @@
+node_modules/
+*.tsbuildinfo
+dist/
+
+# Runtime state — regenerable, never committed.
+dp-gnosis/cache/
+dp-gnosis/vault/atoms/
+dp-gnosis/vault-ext/atoms/
+dp-gnosis/vault-mdn/atoms/
+
+# The Hungarian corpus is the owner's private material.
+dp-gnosis/corpus-hu/
+
+# Benchmark working state. `results/` holds the RECORDED EVIDENCE the
+# byte-identity gates compare against — it is untracked but MUST NOT be
+# deleted; see GNOSIS-BENCH.md § Provenance.
+tools/dp-gnosis-bench/data/
+tools/dp-gnosis-bench/results/
+tools/dp-gnosis-bench/work/
+tools/dp-gnosis-bench/.venv/
+
+# External BEIR corpora fetched on demand.
+docs/benchmarks/*/data/

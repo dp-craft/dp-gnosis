@@ -1,0 +1,30 @@
+{
+  "profile": "default",
+  "atomCount": 14706,
+  "digest": "sha256:3e71ee8ed72ca6a7296ba516300236f97113f08aa371e507c68f68366db22053",
+  "byType": {
+    "adr": 433,
+    "benchmark": 911,
+    "brainstorm": 780,
+    "feature-log": 3877,
+    "knowledge": 2049,
+    "lessons-learned": 293,
+    "meta": 105,
+    "paper": 1940,
+    "plan": 527,
+    "research": 340,
+    "review": 2351,
+    "runner-rule": 99,
+    "standard": 648,
+    "teaching": 232,
+    "vendor-doc": 121
+  },
+  "byDomain": {
+    "adr": 401,
+    "docs": 13908,
+    "runner": 74,
+    "standards": 323
+  },
+  "skipped": 525,
+  "duplicates": 347
+}

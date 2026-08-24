@@ -1,0 +1,33 @@
+{
+  "name": "dp-gnosis-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Development workspace for @dp/gnosis — the engine and its benchmark, extracted from AiChatney so the quality gate lives in the same repository as the change it gates.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "gnosis": "tsx tools/dp-gnosis/src/cli/main.ts",
+    "gnosis:mcp": "tsx tools/dp-gnosis/src/mcp/main.ts",
+    "gnosis:test": "vitest run --config tools/dp-gnosis/vitest.config.ts",
+    "gnosis:bench": "./tools/dp-gnosis-bench/bench.sh",
+    "gnosis:sweep": "tsx tools/dp-gnosis-bench/src/sweep.ts",
+    "gnosis:pair": "tsx tools/dp-gnosis-bench/src/pair.ts",
+    "gnosis:charts": "tsx tools/dp-gnosis-bench/src/charts.ts",
+    "gnosis:forensics": "tsx tools/dp-gnosis-bench/src/forensicsCli.ts",
+    "gnosis:fuseforecast": "tsx tools/dp-gnosis-bench/src/fuseForecastCli.ts",
+    "gnosis:goldaudit": "tsx tools/dp-gnosis-bench/src/goldAuditCli.ts",
+    "bench:test": "vitest run --config vitest.tools.config.ts",
+    "test": "npm run gnosis:test && npm run bench:test",
+    "typecheck": "tsc -p tools/dp-gnosis/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1"
+  }
+}
