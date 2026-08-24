@@ -33,7 +33,7 @@ import type { OutputFormat } from './format.js';
 import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { helpText } from './help.js';
 import { runIndexCommand } from './indexCommand.js';
-import { runIngestCommand } from './ingestCommand.js';
+import { GOLD_IDS_FLAG, runIngestCommand } from './ingestCommand.js';
 import { resolveLocations } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
@@ -202,6 +202,15 @@ const SIDECAR_COMMANDS: readonly string[] = [ENRICH_COMMAND, INDEX_COMMAND];
 
 const SIDECAR_FLAGS: readonly string[] = [ENRICHMENT_FLAG];
 
+/**
+ * `--gold-ids` names the dedupe tie-break source, which only `ingest` reads.
+ * Accepting it on `retrieve` would let a caller believe a gold source shaped a
+ * ranking it never touched, so it is refused through the same wording.
+ */
+const INGEST_COMMAND = 'ingest';
+
+const INGEST_ONLY_FLAGS: readonly string[] = [GOLD_IDS_FLAG];
+
 const misplacedRetrievalFlag = (args: ParsedArgs): string | undefined =>
   RETRIEVAL_COMMANDS.includes(args.command ?? '')
     ? undefined
@@ -217,6 +226,11 @@ const misplacedEnrichFlag = (args: ParsedArgs): string | undefined =>
     ? undefined
     : ENRICH_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
+const misplacedIngestFlag = (args: ParsedArgs): string | undefined =>
+  args.command === INGEST_COMMAND
+    ? undefined
+    : INGEST_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
+
 const misplacedSidecarFlag = (args: ParsedArgs): string | undefined =>
   SIDECAR_COMMANDS.includes(args.command ?? '')
     ? undefined
@@ -230,6 +244,7 @@ const SCOPE_CHECKS: readonly ((args: ParsedArgs) => string | undefined)[] = [
   misplacedRetrievalFlag,
   misplacedAnswerFlag,
   misplacedEnrichFlag,
+  misplacedIngestFlag,
   misplacedSidecarFlag,
 ];
 

@@ -72,5 +72,7 @@
   "comment:summarySidecar": "Repo-relative path of the SUMMARY SIDECAR — the `source path → summary` table ingest fills a document's `summary:` from. Resolution direction: an in-source `<!-- LLM-PRIMARY: … -->` comment WINS, the sidecar fills in only for a document that declares none, and neither leaves the field absent. That order is what makes the sidecar strictly ADDITIVE: a corpus whose documents still carry their comments ingests byte-identically, so every recorded baseline stands. Its purpose is the corpora this repo does NOT author and may not modify — without the sidecar such a document cannot carry a summary at all. Written by tools/dp-gnosis/scripts/extract-summaries.ts, which walks this profile's own corpus scope; an ABSENT file is the pre-migration state and is read as an empty table, never as an error.",
   "summarySidecar": "tools/dp-gnosis/summaries/default.json",
   "comment:segmentRules": "Brainstorms are a SEGMENT rule, not a prefix rule: the directory appears under three unrelated parents, and enumerating those parents would silently mislabel the fourth one somebody adds. Matched on whole path segments, so a directory merely ENDING in the name cannot claim it. A segment rule OVERRIDES every prefix rule.",
-  "segmentRules": [{ "segment": "95-brainstorms", "type": "brainstorm" }]
+  "segmentRules": [{ "segment": "95-brainstorms", "type": "brainstorm" }],
+  "comment:goldIdsPath": "The gold source ingest breaks EXACT-BODY dedupe ties against, named HERE rather than defaulted invisibly: which copy of a byte-identical pair survives decides which SOURCE FILE counts as gold. This is the value the shipped path has always resolved.",
+  "goldIdsPath": "../golden"
 }

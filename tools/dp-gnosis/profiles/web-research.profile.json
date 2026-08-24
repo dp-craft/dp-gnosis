@@ -13,5 +13,7 @@
   "repoRoot": "../../..",
   "corpusRoots": ["docs/research"],
   "atomsDir": "../../../dp-gnosis/cache/atoms-web-research",
-  "indexPath": "../../../dp-gnosis/cache/index/atoms-web-research-fts5.db"
+  "indexPath": "../../../dp-gnosis/cache/index/atoms-web-research-fts5.db",
+  "comment:goldIdsPath": "The gold source ingest breaks EXACT-BODY dedupe ties against, stated rather than defaulted invisibly.",
+  "goldIdsPath": "../golden"
 }

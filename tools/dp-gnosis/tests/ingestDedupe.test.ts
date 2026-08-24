@@ -7,6 +7,7 @@ import type { CommandContext } from '../src/cli/context.js';
 import { runIngestCommand } from '../src/cli/ingestCommand.js';
 import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
+import { goldenDir } from '../src/paths.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /**
@@ -161,7 +162,7 @@ const contextFor = (fixture: Fixture): CommandContext => ({
 
 describe('CLI ingest dedupe', () => {
   it('keeps the judged copy of a byte-identical group', async () => {
-    expect(loadJudgedAtomIds()).toContain(GOLD_ID);
+    expect(loadJudgedAtomIds(goldenDir())).toContain(GOLD_ID);
     const fixture = await stageJudgedSecond();
 
     await runIngestCommand(contextFor(fixture));

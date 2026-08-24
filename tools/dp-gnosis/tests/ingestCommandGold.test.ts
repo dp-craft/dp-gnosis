@@ -6,6 +6,7 @@ import { runIngestCommand } from '../src/cli/ingestCommand.js';
 import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import type { IngestOptions, IngestSummary } from '../src/ingest.js';
 import { ingest } from '../src/ingest.js';
+import { goldenDir } from '../src/paths.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /**
@@ -41,6 +42,6 @@ describe('CLI ingest gold wiring', () => {
     const goldIds = (await passedOptions()).goldIds ?? [];
 
     expect(goldIds.length).toBeGreaterThan(0);
-    expect([...goldIds]).toEqual([...loadJudgedAtomIds()]);
+    expect([...goldIds]).toEqual([...loadJudgedAtomIds(goldenDir())]);
   });
 });

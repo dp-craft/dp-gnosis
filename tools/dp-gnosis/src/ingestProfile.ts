@@ -65,6 +65,15 @@ export interface IngestProfile {
   /** Where this instance's index is built; a DIRECTORY for lancedb. */
   readonly indexPath?: string | undefined;
   /**
+   * The golden-set directory (or single file) this instance breaks EXACT-BODY
+   * DEDUPE TIES against, stated here so the shipped path names its own gold
+   * source instead of inheriting an invisible default. Absent means no gold
+   * tie-break at all — the first copy by sorted source path wins — which is the
+   * only case allowed to be silent, because it is the case the profile ASKED
+   * for. A declared path that cannot be read REFUSES the ingest.
+   */
+  readonly goldIdsPath?: string | undefined;
+  /**
    * Hard cap on one atom's body, in characters. Absent means the shipped
    * `ATOM_MAX_CHARS`, so an existing profile chunks exactly as before.
    *
@@ -117,7 +126,7 @@ type ProfileDefaults = Pick<
 /** The location half of a profile — what T-3 added to the vocabulary half. */
 type ProfileLocations = Pick<
   IngestProfile,
-  'repoRoot' | 'corpusRoots' | 'atomsDir' | 'indexPath'
+  'repoRoot' | 'corpusRoots' | 'atomsDir' | 'indexPath' | 'goldIdsPath'
 >;
 
 /** Keys carrying authored rationale rather than data; every other key is unknown. */
@@ -135,6 +144,7 @@ const KNOWN_KEYS: readonly string[] = [
   'corpusRoots',
   'atomsDir',
   'indexPath',
+  'goldIdsPath',
   'atomMaxChars',
   'excludePaths',
   'defaultExcludedTypes',
@@ -443,6 +453,7 @@ const locationsOf = (
   corpusRoots: optionalStringList(raw, 'corpusRoots', source),
   atomsDir: optionalPath(raw, 'atomsDir', source),
   indexPath: optionalPath(raw, 'indexPath', source),
+  goldIdsPath: optionalPath(raw, 'goldIdsPath', source),
 });
 
 const unknownKeys = (raw: Readonly<Record<string, unknown>>): readonly string[] =>

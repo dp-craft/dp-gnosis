@@ -51,6 +51,7 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--repo-root': unowned('the repo root is discovered from the CLI location, not a documented value'),
   '--profile': unowned('no default profile exists — the cell states the built-in defaults apply'),
   '--golden-set': owned('GOLDEN_SET_PATH (src/paths.ts)', repoRelative(GOLDEN_SET_PATH)),
+  '--gold-ids': unowned('no constant owns it — the source is DECLARED by the loaded profile ("goldIdsPath"), and a profile that declares none ingests with no gold tie-break'),
   '-k': unowned('DEFAULT_K is a module-private literal in src/cli/retrieveCommand.ts'),
   '--format': unowned('the default output mode is a literal in the formatter, not a config constant'),
   '--type': unowned('unset by default — the vocabulary is profile-derived and printed by --help'),

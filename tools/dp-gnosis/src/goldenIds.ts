@@ -1,19 +1,28 @@
 /**
- * The union of every atom id ANY golden set judges — the tie-break input the
+ * The union of every atom id a golden set judges — the tie-break input the
  * ingest dedupe needs so a byte-identical group keeps the copy the measuring
  * instrument names.
  *
- * Deliberately LENIENT where `goldenSet.ts` is strict: that loader validates
- * the one artefact a benchmark scores against and MUST refuse a defect, while
- * this reader only breaks ties BETWEEN byte-identical copies. An id from an
- * unrelated golden set therefore cannot change which CONTENT is ingested, so a
- * superset is safe by construction and an unreadable or unrecognised file is
- * skipped rather than thrown — ingest with no gold behaves exactly as before.
+ * THIS FEEDS PRODUCTION INGEST DEDUPE, so it is not an analysis helper. When a
+ * duplicate group is byte-identical, the ids read here decide WHICH COPY
+ * SURVIVES, and scoring is document-level — so a missing or unreadable gold
+ * source does not lose a few ids, it re-points which SOURCE FILE counts as
+ * gold, silently, on a run that otherwise exits 0.
+ *
+ * That is why this refuses instead of returning empty: an empty result is
+ * indistinguishable from "no document is judged", and the only symptom of the
+ * confusion is a corpus that quietly stopped holding the documents the golden
+ * set measures. The caller that asked for NOTHING is the only one allowed
+ * silence, and it expresses that by not calling here at all.
+ *
+ * ONE tolerance survives, deliberately: a golden-set document whose SHAPE this
+ * reader does not recognise (no `queries` array — `golden-set.v1.atom-sources.json`
+ * is a bare array of atom records) judges nothing. It is a superset reader, so
+ * an unrecognised sibling cannot change which CONTENT is ingested, only how a
+ * tie is broken; refusing it would refuse the shipped golden directory itself.
  */
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-
-import { GOLDEN_DIR } from './paths.js';
 
 /** Every golden set is `golden-set*.json`; new versions land regularly, so none is named. */
 const GOLDEN_SET_PREFIX = 'golden-set';
@@ -34,26 +43,48 @@ const idsOfDocument = (text: string): readonly string[] => {
   return Array.isArray(queries) ? queries.flatMap(idsOfQuery) : [];
 };
 
-/** A missing, unreadable or malformed file MUST NOT fail an ingest. */
-const idsOfFile = (goldenDir: string, name: string): readonly string[] => {
+/** The refusal names the FILE and the defect, so the correction needs no guessing. */
+const fileError = (path: string, error: unknown): Error =>
+  new Error(`gold source file "${path}" cannot be read as a golden set (${String(error)})`);
+
+const idsOfFile = (path: string): readonly string[] => {
   try {
-    return idsOfDocument(readFileSync(join(goldenDir, name), 'utf8'));
-  } catch {
-    return [];
+    return idsOfDocument(readFileSync(path, 'utf8'));
+  } catch (error) {
+    throw fileError(path, error);
   }
 };
+
+const isGoldenSetName = (name: string): boolean =>
+  name.startsWith(GOLDEN_SET_PREFIX) && name.endsWith(JSON_SUFFIX);
 
 /** Sorted, so the enumeration order cannot vary with the filesystem. */
-const goldenSetFiles = (goldenDir: string): readonly string[] => {
+const goldenSetFiles = (goldenDir: string): readonly string[] =>
+  readdirSync(goldenDir)
+    .filter(isGoldenSetName)
+    .sort()
+    .map(name => join(goldenDir, name));
+
+/** A directory contributes its golden sets; a file contributes itself. */
+const sourceFiles = (goldSource: string): readonly string[] =>
+  statSync(goldSource).isDirectory() ? goldenSetFiles(goldSource) : [goldSource];
+
+const sourceError = (goldSource: string, error: unknown): Error =>
+  new Error(
+    `ingest: the gold source "${goldSource}" cannot be read (${String(error)}) — restore it, ` +
+      'name another with --gold-ids <dir|file>, or remove "goldIdsPath" from the profile to ' +
+      'ingest with no gold tie-break; ingest MUST NOT dedupe against a gold set it could not read'
+  );
+
+/**
+ * Every judged atom id under `goldSource`, deduplicated and sorted. The source
+ * is REQUIRED and stated by the caller: there is no default, because a default
+ * is precisely how this input became invisible.
+ */
+export const loadJudgedAtomIds = (goldSource: string): readonly string[] => {
   try {
-    return readdirSync(goldenDir)
-      .filter(name => name.startsWith(GOLDEN_SET_PREFIX) && name.endsWith(JSON_SUFFIX))
-      .sort();
-  } catch {
-    return [];
+    return [...new Set(sourceFiles(goldSource).flatMap(idsOfFile))].sort();
+  } catch (error) {
+    throw sourceError(goldSource, error);
   }
 };
-
-/** Every judged atom id across every golden set in the directory, deduplicated and sorted. */
-export const loadJudgedAtomIds = (goldenDir: string = GOLDEN_DIR): readonly string[] =>
-  [...new Set(goldenSetFiles(goldenDir).flatMap(name => idsOfFile(goldenDir, name)))].sort();

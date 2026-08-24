@@ -61,6 +61,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `--repo-root` | dir | repo root |
 | `--profile` | file — one named instance: its vocabulary, its labelling tables AND its own `repoRoot` / `corpusRoots` / `atomsDir` / `indexPath`. Each profile MUST own its `atomsDir` AND its `indexPath` — an atoms directory is stamped with its owner and refuses a second profile | none, the built-in defaults. Precedence is **flag > profile > default**, so `--atoms-dir` / `--index-path` / `--repo-root` still outrank whatever the profile states |
 | `--golden-set` | file | `tools/dp-gnosis/golden/golden-set.v1.json` |
+| `--gold-ids` | dir or file — **`ingest` only**, the golden set(s) the EXACT-BODY dedupe breaks ties against: when two source documents produce a byte-identical body, the judged copy survives. A path that cannot be read exits **3** naming it — ingest MUST NOT dedupe against a gold set it could not read | the loaded profile's `goldIdsPath`, which the shipped profiles declare as `tools/dp-gnosis/golden`; a profile that declares none ingests with NO gold tie-break |
 | `-k` | positive integer | `5` |
 | `--format` | `text\|json\|xml` — **`retrieve` and `answer`**; `xml` is **`retrieve` only**, since the answer pack is already a delimited block | `text` |
 | `--json` | boolean — alias for `--format json`, on `retrieve` and `answer` | off |

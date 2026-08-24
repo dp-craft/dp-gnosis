@@ -24,5 +24,7 @@
   "atomsDir": "../../../dp-gnosis/cache/hu-tax/atoms",
   "indexPath": "../../../dp-gnosis/cache/hu-tax/index/atoms-hu-tax-fts5.db",
   "comment:defaultPrf": "Owner-approved 2026-08-21: RM3 pseudo-relevance feedback is a SERVED default on this profile, at the MEASURED frozen cell fbDocs 10 / fbTerms 40 / alpha 0.5 — the cell `SERVED_PRF_PARAMS` (src/prf.ts) OWNS, and the one the gate was run on (qwen3-reranker-4b: vault-hu nDCG@10 +0.0323 p=0.0186; vault +0.0080 p=0.4567, not significant and adopted deliberately). It is NOT `DEFAULT_PRF_PARAMS`, whose fbTerms is 20 and which no recorded arm used. Like `defaultExcludedTypes` it is a RETRIEVE-TIME default on the CLI path alone: nothing in ingest, the port or an adapter reads it, so the bench still measures the unexpanded first pass and every recorded number stands. `--no-prf` turns it off, and the `--prf-*` flags override one member each.",
-  "defaultPrf": { "fbDocs": 10, "fbTerms": 40, "alpha": 0.5 }
+  "defaultPrf": { "fbDocs": 10, "fbTerms": 40, "alpha": 0.5 },
+  "comment:goldIdsPath": "The gold source ingest breaks EXACT-BODY dedupe ties against — the same directory the shipped default names, which carries this corpus’ golden-set-hu*.json. Stated rather than defaulted invisibly.",
+  "goldIdsPath": "../golden"
 }

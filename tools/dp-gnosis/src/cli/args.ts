@@ -27,6 +27,10 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // location flag above still outranks what the profile states.
   '--profile': { kind: 'value', placeholder: '<file>' },
   '--golden-set': { kind: 'value', placeholder: '<file>' },
+  // `ingest` only: the gold source EXACT-BODY dedupe breaks ties against. Named
+  // here so the shipped-path input is visible; a path that cannot be read
+  // REFUSES the ingest rather than deduping gold-blind.
+  '--gold-ids': { kind: 'value', placeholder: '<dir|file>' },
   '-k': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only — every other command refuses it through the same
   // unknown-flag path, because a format it cannot honour MUST NOT look accepted.

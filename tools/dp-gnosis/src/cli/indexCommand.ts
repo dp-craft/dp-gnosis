@@ -17,9 +17,13 @@
  * That path has no error of its own anywhere — every query simply answers
  * nothing — so it is caught here, at the only point that knows both numbers,
  * and reported as PARTIAL under a stable machine token.
+ *
+ * The same failure PER DOMAIN is reported beside it, and deliberately does NOT
+ * move the exit code: a build where one domain contributed zero rows while the
+ * rest indexed normally produces a plausible total, so the census (`domains`)
+ * and its warning exist to make that zero legible rather than to invent a
+ * second failure mode.
  */
-import { existsSync, readdirSync } from 'node:fs';
-
 import { buildFts5Index } from '../adapters/fts5Adapter.js';
 import { buildLanceDbIndex, lanceDbAvailability } from '../adapters/lanceDbAdapter.js';
 import {
@@ -31,6 +35,8 @@ import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
+import type { AtomsCensus } from './domainCensus.js';
+import { atomsCensus, droppedDomains } from './domainCensus.js';
 import { ENRICHMENT_FLAG } from './enrichCommand.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL } from './outcome.js';
@@ -39,8 +45,6 @@ const NO_INDEX_NOTE =
   'adapter has no persistent index — nothing to build (no-op); retrieve scans the vault directly';
 
 const UNKNOWN_REASON = 'its optional dependency could not be loaded';
-
-const MARKDOWN_EXT = '.md';
 
 /**
  * The machine token for "an index was built and it holds no atoms". The CLI is
@@ -148,19 +152,6 @@ const okOutcome = (context: CommandContext): CommandOutcome => ({
 });
 
 /**
- * How many `.md` files the atoms directory holds — the number the built count is
- * weighed against. It counts FILES, never parseable atoms: the gap between the
- * two IS the finding, so re-using an adapter's entry collector here would hide
- * exactly what the note has to report. One consumer, so it stays local.
- */
-const markdownFileCount = (atomsDir: string): number =>
-  existsSync(atomsDir)
-    ? readdirSync(atomsDir, { recursive: true, encoding: 'utf8' }).filter(rel =>
-      rel.endsWith(MARKDOWN_EXT)
-    ).length
-    : 0;
-
-/**
  * Names the two REAL causes and never guesses between them: an atom the
  * frontmatter parser refuses, and an atoms dir that belongs to another profile.
  * Both produce this identical pair of numbers, so a note claiming one would be
@@ -171,21 +162,66 @@ const emptyNote = (context: CommandContext, files: number): string =>
   'Either the frontmatter parser refuses those atoms, or the atoms dir and the profile do not ' +
   'match; re-run `ingest` for this profile and compare its written count against this one.';
 
+/** One row of the per-domain split, in the wording both renderings share. */
+const domainLine = (row: AtomsCensus['domains'][number]): string =>
+  `${row.domain}: ${row.files} file(s) in, ${row.indexed} atom(s) out`;
+
+const censusText = (census: AtomsCensus): string =>
+  `  by domain — ${census.domains.map(domainLine).join('; ')}` +
+  (census.unattributed === 0 ? '' : `; ${census.unattributed} file(s) declaring no domain`);
+
+/**
+ * A PARTIAL drop, stated as a warning and nothing more. It MUST NOT become a
+ * new failure mode: the exit code stays exactly what the whole-index rule made
+ * it, and this only makes the zero visible to whoever reads the run.
+ */
+const dropWarning = (dropped: readonly string[]): string =>
+  `index: domain(s) ${dropped.join(', ')} contributed .md file(s) and 0 atoms — the rest of the ` +
+  'corpus indexed normally, so no total reports this; re-run `ingest` for this profile and ' +
+  'compare that domain\'s written count against this one.';
+
+/** Absent unless a domain really dropped, so its PRESENCE is the signal. */
+const warningFields = (census: AtomsCensus): Readonly<Record<string, unknown>> => {
+  const dropped = droppedDomains(census);
+  return dropped.length === 0 ? {} : { warning: dropWarning(dropped) };
+};
+
+/** The census fields both outcomes carry, so a caller reads one shape either way. */
+const censusFields = (census: AtomsCensus): Readonly<Record<string, unknown>> => ({
+  domains: census.domains,
+  unattributed: census.unattributed,
+  ...warningFields(census),
+});
+
 /**
  * `built` stays TRUE: an index WAS written — it holds nothing. Reporting it as
  * unbuilt would send a caller looking for a missing file that is right there.
  */
-const emptyOutcome = (context: CommandContext, files: number): CommandOutcome => ({
+const emptyOutcome = (context: CommandContext, census: AtomsCensus): CommandOutcome => ({
   exitCode: EXIT_PARTIAL,
   data: {
     command: 'index',
     adapter: context.adapter,
     built: true,
     indexPath: context.indexPath,
-    note: emptyNote(context, files),
+    note: emptyNote(context, census.files),
     reason: INDEX_EMPTY_REASON,
+    ...censusFields(census),
   },
-  text: emptyNote(context, files),
+  text: [emptyNote(context, census.files), ...censusLines(census)].join('\n'),
+});
+
+/** The census lines a rendering carries: the split, and the warning if one fired. */
+const censusLines = (census: AtomsCensus): readonly string[] => {
+  const dropped = droppedDomains(census);
+  return [censusText(census), ...(dropped.length === 0 ? [] : [dropWarning(dropped)])];
+};
+
+/** Same census on the success path, exit code untouched. */
+const withCensus = (outcome: CommandOutcome, census: AtomsCensus): CommandOutcome => ({
+  ...outcome,
+  data: { ...outcome.data, ...censusFields(census) },
+  text: [outcome.text, ...censusLines(census)].join('\n'),
 });
 
 /**
@@ -194,8 +230,10 @@ const emptyOutcome = (context: CommandContext, files: number): CommandOutcome =>
  * files are present and none of them reached the index.
  */
 const builtOutcome = (context: CommandContext, indexed: number): CommandOutcome => {
-  const files = indexed === 0 ? markdownFileCount(context.atomsDir) : 0;
-  return files > 0 ? emptyOutcome(context, files) : okOutcome(context);
+  const census = atomsCensus(context.atomsDir, context.profile.domains);
+  return indexed === 0 && census.files > 0
+    ? emptyOutcome(context, census)
+    : withCensus(okOutcome(context), census);
 };
 
 const skippedOutcome = (context: CommandContext, reason: string): CommandOutcome => ({
