@@ -68,10 +68,6 @@ import Database from 'better-sqlite3';
 
 import { type Atom, parseAtom } from '../atom.js';
 import {
-  ATOM_TYPES,
-  type AtomDomain,
-  type AtomType,
-  DEFAULT_ATOM_TYPE,
   DEFAULT_FIELD_WEIGHTS,
   type FieldWeights,
   FTS_COLUMNS,
@@ -98,6 +94,12 @@ import {
   identifierTermOf
 } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
+import {
+  type AtomDomain,
+  type AtomType,
+  atomTypes,
+  defaultAtomType
+} from '../vocabulary.js';
 
 /** `mode`/`name` reported by this adapter. */
 const FTS5_MODE = 'fts5';
@@ -256,7 +258,7 @@ const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1
  * typo must not make an otherwise valid atom unreachable.
  */
 const asType = (value: string): AtomType =>
-  ATOM_TYPES.find(type => type === value) ?? DEFAULT_ATOM_TYPE;
+  atomTypes().find(type => type === value) ?? defaultAtomType();
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 

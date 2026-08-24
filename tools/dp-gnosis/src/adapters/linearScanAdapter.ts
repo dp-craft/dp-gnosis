@@ -22,8 +22,7 @@ import { join } from 'node:path';
 
 import type { Atom } from '../atom.js';
 import { parseAtom } from '../atom.js';
-import type { AtomDomain, AtomType } from '../config.js';
-import { ATOM_DOMAINS, ATOM_TYPES, BM25_IDF_SMOOTHING, DEFAULT_ATOM_TYPE } from '../config.js';
+import { BM25_IDF_SMOOTHING } from '../config.js';
 import { ATOMS_DIR } from '../paths.js';
 import type {
   AtomOrigin,
@@ -37,6 +36,13 @@ import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import type { TermProcessor } from '../query.js';
 import { stemTerm, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
+import {
+  type AtomDomain,
+  type AtomType,
+  atomDomains,
+  atomTypes,
+  defaultAtomType
+} from '../vocabulary.js';
 
 const ADAPTER_NAME = 'linear-scan';
 /** Names the legs that ran: one lexical leg, no vector leg, no index. */
@@ -164,7 +170,7 @@ const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 
 /** Membership test rather than a cast: an unknown domain is not an `AtomDomain`. */
 const asDomain = (value: string): AtomDomain | undefined =>
-  ATOM_DOMAINS.find(domain => domain === value);
+  atomDomains().find(domain => domain === value);
 
 /**
  * An unknown or absent `type` falls back to the default rather than dropping the
@@ -172,7 +178,7 @@ const asDomain = (value: string): AtomDomain | undefined =>
  * typo must not make an otherwise valid atom unreachable.
  */
 const asType = (value: string): AtomType =>
-  ATOM_TYPES.find(type => type === value) ?? DEFAULT_ATOM_TYPE;
+  atomTypes().find(type => type === value) ?? defaultAtomType();
 
 const isAtomFile = (entry: Dirent): boolean =>
   entry.isFile() && entry.name.endsWith(MARKDOWN_EXT);

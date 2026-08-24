@@ -17,7 +17,7 @@ import { loadVerifiedGoldenSet, type GoldenSet } from './goldenSet.js';
 import { ATOMS_DIR, BENCH_WORK_DIR, REPO_ROOT } from './paths.js';
 import type { KnowledgePort } from './port.js';
 import { type CorpusLocation } from './bench/candidates.js';
-import { ATOM_DOMAINS, type AtomDomain } from './config.js';
+import { type AtomDomain, atomDomains } from './vocabulary.js';
 
 const K_VALUES = [5, 100, 200, 400] as const;
 type KValue = (typeof K_VALUES)[number];
@@ -39,7 +39,7 @@ interface AdapterResult {
 }
 
 const asDomain = (value: string | null): AtomDomain | undefined =>
-  value === null ? undefined : ATOM_DOMAINS.find(domain => domain === value);
+  value === null ? undefined : atomDomains().find(domain => domain === value);
 
 const percentile = (sorted: number[], p: number) => sorted[Math.floor(sorted.length * p)] ?? 0;
 

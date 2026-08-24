@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { Atom } from '../src/atom.js';
-import { ATOM_FENCE_MAX_CHARS, ATOM_MAX_CHARS, ATOM_TYPES } from '../src/config.js';
+import { ATOM_FENCE_MAX_CHARS, ATOM_MAX_CHARS } from '../src/config.js';
 import { readExistingIds, validateAtom } from '../src/validate.js';
+import { atomTypes } from '../src/vocabulary.js';
 
 const atomWith = (overrides: Partial<Atom['frontmatter']>, body: string): Atom => ({
   frontmatter: {
@@ -87,7 +88,7 @@ describe('validateAtom', () => {
   });
 
   it('accepts every member of the closed type vocabulary', () => {
-    const refused = ATOM_TYPES.filter(type => validateAtom(atomWith({ type }, 'b'), none).length > 0);
+    const refused = atomTypes().filter(type => validateAtom(atomWith({ type }, 'b'), none).length > 0);
     expect(refused).toEqual([]);
   });
 

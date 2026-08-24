@@ -42,7 +42,6 @@ import {
 } from '../../dp-gnosis/src/cli/adapter.js';
 import {
   ATOM_MAX_CHARS,
-  DEFAULT_EXCLUDED_TYPES,
   DEFAULT_FIELD_WEIGHTS,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
@@ -57,6 +56,7 @@ import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
 import { DEFAULT_PRF_PARAMS, type PrfParams } from '../../dp-gnosis/src/prf.js';
 import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
+import { defaultExcludedTypes } from '../../dp-gnosis/src/vocabulary.js';
 import {
   type Qrel,
   readCorpus,
@@ -447,11 +447,11 @@ const INCLUDE_HISTORY_FLAG = '--include-history';
 /**
  * The TREATMENT string a run stamps: the types its corpus EXCLUDED, sorted so
  * two runs of one arm stamp the same value, and derived from the engine's own
- * `DEFAULT_EXCLUDED_TYPES` so no list is restated here. A run that excluded
+ * `defaultExcludedTypes()` so no list is restated here. A run that excluded
  * nothing stamps `NO_TYPE_FILTER`, which is what every legacy row means.
  */
 export const typeFilterOf = (includeHistory: boolean): string => {
-  const excluded = includeHistory ? [] : [...DEFAULT_EXCLUDED_TYPES].sort();
+  const excluded = includeHistory ? [] : [...defaultExcludedTypes()].sort();
   return excluded.length === 0 ? NO_TYPE_FILTER : excluded.join(',');
 };
 

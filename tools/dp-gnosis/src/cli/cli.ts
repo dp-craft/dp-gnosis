@@ -13,9 +13,9 @@
  * file — the parser, the context, the renderer and the exit-code contract are
  * already command-agnostic.
  */
-import { DEFAULT_INGEST_PROFILE } from '../config.js';
 import type { IngestProfile } from '../ingestProfile.js';
 import { loadIngestProfile } from '../ingestProfile.js';
+import { activeProfile } from '../vocabulary.js';
 import type { AdapterName } from './adapter.js';
 import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
 import { runAnswerCommand, SYNTHESIZE_FLAG } from './answerCommand.js';
@@ -31,7 +31,7 @@ import {
 } from './enrichCommand.js';
 import type { OutputFormat } from './format.js';
 import { FORMAT_FLAG, resolveFormat } from './format.js';
-import { HELP_TEXT } from './help.js';
+import { helpText } from './help.js';
 import { runIndexCommand } from './indexCommand.js';
 import { runIngestCommand } from './ingestCommand.js';
 import { resolveLocations } from './locations.js';
@@ -110,7 +110,7 @@ type ProfileResult =
  */
 const loadProfile = (args: ParsedArgs): ProfileResult => {
   const path = stringFlag(args.flags, PROFILE_FLAG);
-  if (path === undefined) return { ok: true, profile: DEFAULT_INGEST_PROFILE };
+  if (path === undefined) return { ok: true, profile: activeProfile() };
   try {
     return { ok: true, profile: loadIngestProfile(path) };
   } catch (error) {
@@ -128,11 +128,10 @@ const buildContext = (args: ParsedArgs): ContextResult => {
     : { ok: true, context: contextFor(args, adapter, profile.profile) };
 };
 
-const helpOutcome = (): CommandOutcome => ({
-  exitCode: EXIT_OK,
-  data: { command: 'help', help: HELP_TEXT },
-  text: HELP_TEXT,
-});
+const helpOutcome = (): CommandOutcome => {
+  const help = helpText();
+  return { exitCode: EXIT_OK, data: { command: 'help', help }, text: help };
+};
 
 /** A bare invocation is a help request, not a failure. */
 const wantsHelp = (args: ParsedArgs): boolean =>

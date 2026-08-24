@@ -20,12 +20,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_INGEST_PROFILE, resolveCorpusRoots } from '../src/config.js';
+import { resolveCorpusRoots } from '../src/config.js';
 import { documentSummary, loadCorpus } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { PROFILES_DIR, REPO_ROOT } from '../src/paths.js';
 import { serializeSummarySidecar } from '../src/summarySidecar.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 const EXIT_USAGE = 2;
 const PROFILE_SUFFIX = '.profile.json';
@@ -159,7 +160,7 @@ const profilePath = (value: string): string =>
 
 const profileOf = (state: ArgState): IngestProfile => {
   const value = state.values.get('profile');
-  return value === undefined ? DEFAULT_INGEST_PROFILE : loadIngestProfile(profilePath(value));
+  return value === undefined ? activeProfile() : loadIngestProfile(profilePath(value));
 };
 
 /** The sidecar the profile names, resolved against the effective repo root. */

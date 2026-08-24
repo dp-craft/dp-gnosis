@@ -4,19 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  ATOM_MAX_CHARS,
-  DEFAULT_EXCLUDED_TYPES,
-  DEFAULT_FIELD_WEIGHTS,
-  DEFAULT_RERANK_PRESET,
-  EMBED_MODEL_ID,
-  RERANK_DOC_MAX_CHARS,
-  RERANK_FUSION_PRESETS,
-  RERANK_K_INIT,
-  RERANK_MODEL_ID,
-  RERANK_RRF_K,
-  RERANK_RRF_WEIGHT
-} from '../../dp-gnosis/src/config.js';
+import { ATOM_MAX_CHARS, DEFAULT_FIELD_WEIGHTS, DEFAULT_RERANK_PRESET, EMBED_MODEL_ID, RERANK_DOC_MAX_CHARS, RERANK_FUSION_PRESETS, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_K, RERANK_RRF_WEIGHT } from '../../dp-gnosis/src/config.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -65,6 +53,7 @@ import {
   warnCollapsingTopics,
   warnRerankPoolBelowDepth
 } from './run.js';
+import { defaultExcludedTypes } from '../../dp-gnosis/src/vocabulary.js';
 
 /** A second reranker id — any id the shipped constant is not. */
 const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';
@@ -854,7 +843,7 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
    */
   it('records the effective EXCLUDED types as the typeFilter treatment, on both arms', () => {
     expect(provenanceOf(parseArgs([]), 'sha').typeFilter).toBe(
-      [...DEFAULT_EXCLUDED_TYPES].sort().join(',')
+      [...defaultExcludedTypes()].sort().join(',')
     );
     expect(provenanceOf(parseArgs(['--include-history']), 'sha').typeFilter).toBe(NO_TYPE_FILTER);
   });

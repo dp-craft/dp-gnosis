@@ -4,9 +4,6 @@
  * survives without parsing output.
  */
 import {
-  ATOM_DOMAINS,
-  ATOM_TYPES,
-  DEFAULT_EXCLUDED_TYPES,
   DEFAULT_RERANK_PRESET,
   ENRICH_MODEL_ENV_VAR,
   ENRICH_MODEL_ID,
@@ -23,12 +20,18 @@ import {
   SYNTHESIZE_MODEL_ID
 } from '../config.js';
 import { DEFAULT_PRF_PARAMS, SERVED_PRF_PARAMS } from '../prf.js';
+import { atomDomains, atomTypes, defaultExcludedTypes } from '../vocabulary.js';
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
 import { OUTPUT_FORMATS } from './format.js';
 import { DEFAULT_MAX_PER_DOC } from './grouping.js';
 
-export const HELP_TEXT: string = [
+/**
+ * A FUNCTION, not a constant: three of the lines below print the ACTIVE
+ * profile's vocabulary, and a module-level constant would resolve that profile
+ * the moment anything imported this file. The rendered text is unchanged.
+ */
+export const helpText = (): string => [
   'dp-gnosis — retrieval over a curated markdown atom vault',
   '',
   'Usage: dp-gnosis <command> [args] [flags]',
@@ -46,12 +49,12 @@ export const HELP_TEXT: string = [
   '  xml emits a <retrieved_context> block carrying each atom body — paste-ready for an LLM',
   '  passing --json together with --format xml is a usage error; another command with --format is too',
   `Types: --type <type[,type]> on \`retrieve\` and \`answer\` — an atom passes when its type is in the list; omit it to search every type`,
-  `  vocabulary: ${ATOM_TYPES.join(' | ')}`,
-  `  it is a RETRIEVE-TIME default — applied on the CLI path, and by the bench when it derives the vault datasets, never on ingest — leaving ${DEFAULT_EXCLUDED_TYPES.join(' | ')} out of an unfiltered retrieve, so a question is answered from knowledge rather than from the project's own history; the types stay ingested and indexed`,
+  `  vocabulary: ${atomTypes().join(' | ')}`,
+  `  it is a RETRIEVE-TIME default — applied on the CLI path, and by the bench when it derives the vault datasets, never on ingest — leaving ${defaultExcludedTypes().join(' | ')} out of an unfiltered retrieve, so a question is answered from knowledge rather than from the project's own history; the types stay ingested and indexed`,
   `  --exclude-type <type[,type]> REPLACES that default exclusion with the types you name; --include-history restores everything and searches the whole vocabulary`,
   `  --type, --exclude-type and --include-history each state the filter in a different way, so pass at most one — two together is a usage error (exit 2)`,
   `Domains: --domain <domain[,domain]> on \`retrieve\` and \`answer\` — an atom passes when its domain is in the list; omit it to search every domain`,
-  `  vocabulary: ${ATOM_DOMAINS.join(' | ')}`,
+  `  vocabulary: ${atomDomains().join(' | ')}`,
   `  it is the LOADED profile's vocabulary, so --profile <file> selects a different one and a value outside it is a usage error (exit 2)`,
   `Budget: --max-tokens <n> on \`retrieve\` and \`answer\` (default ${RETRIEVE_TOKEN_BUDGET}) — a CONSERVATIVE UPPER BOUND on tokens, estimated as UTF-8 byte length, never an exact token count`,
   `  it over-reserves: measured 2026-08-18, real atoms run 3.93 bytes/token, so the ${RETRIEVE_TOKEN_BUDGET} default admits roughly 16000 real tokens — size the flag ~4x the window you mean to fill`,

@@ -2,17 +2,12 @@ import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import {
-  ATOM_FENCE_MAX_CHARS,
-  ATOM_MAX_CHARS,
-  CORPUS_ROOTS,
-  CORPUS_ROOTS_ENV_VAR,
-  DEFAULT_INGEST_PROFILE
-} from '../src/config.js';
+import { ATOM_FENCE_MAX_CHARS, ATOM_MAX_CHARS, CORPUS_ROOTS, CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import { CORPUS_MANIFEST_FILE } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { serializeSummarySidecar } from '../src/summarySidecar.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 interface Fixture {
   readonly root: string;
@@ -745,7 +740,7 @@ describe('ingest — summary sidecar resolution', () => {
   };
 
   const profileWithSidecar = (): IngestProfile => ({
-    ...DEFAULT_INGEST_PROFILE,
+    ...activeProfile(),
     summarySidecar: SIDECAR_FILE,
   });
 

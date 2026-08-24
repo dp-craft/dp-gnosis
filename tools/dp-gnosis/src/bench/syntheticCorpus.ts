@@ -16,7 +16,7 @@ import { join } from 'node:path';
 
 import type { AtomFrontmatter } from '../atom.js';
 import { serializeAtom } from '../atom.js';
-import { ATOM_DOMAINS } from '../config.js';
+import { atomDomains } from '../vocabulary.js';
 import { sequential } from './sequential.js';
 
 const VOCAB: readonly string[] = [
@@ -58,11 +58,17 @@ const wordAt = (at: AtomSeed, slot: number): string =>
 const words = (at: AtomSeed, count: number, offset: number): string =>
   Array.from({ length: count }, (_unused, slot) => wordAt(at, slot + offset)).join(' ');
 
+/** The domain this seed lands on, read from the ACTIVE profile at call time. */
+const domainAt = (index: number): string => {
+  const domains = atomDomains();
+  return domains[index % domains.length] ?? FALLBACK_DOMAIN;
+};
+
 const frontmatterFor = (at: AtomSeed, id: string): AtomFrontmatter => ({
   type: 'knowledge',
   id,
   title: words(at, TITLE_WORDS, 0),
-  x_domain: ATOM_DOMAINS[at.index % ATOM_DOMAINS.length] ?? FALLBACK_DOMAIN,
+  x_domain: domainAt(at.index),
   status: 'stable',
   sources: [`synthetic://${at.seed}/${at.index}`],
 });

@@ -53,12 +53,6 @@ import { dirname, resolve } from 'node:path';
 import type * as Lance from '@lancedb/lancedb';
 
 import { type Atom, parseAtom } from '../atom.js';
-import {
-  ATOM_TYPES,
-  type AtomDomain,
-  type AtomType,
-  DEFAULT_ATOM_TYPE
-} from '../config.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -69,6 +63,12 @@ import type {
 import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import { stemText } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
+import {
+  type AtomDomain,
+  type AtomType,
+  atomTypes,
+  defaultAtomType
+} from '../vocabulary.js';
 
 /** `mode`/`name` reported by this adapter. Names the LEG, not just the engine. */
 const LANCEDB_MODE = 'lancedb-fts';
@@ -214,7 +214,7 @@ const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1
  * typo must not make an otherwise valid atom unreachable.
  */
 const asType = (value: string): AtomType =>
-  ATOM_TYPES.find(type => type === value) ?? DEFAULT_ATOM_TYPE;
+  atomTypes().find(type => type === value) ?? defaultAtomType();
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 

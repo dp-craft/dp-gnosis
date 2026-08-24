@@ -1,15 +1,6 @@
 import { isAbsolute } from 'node:path';
 
-import {
-  ATOM_CHUNK_TARGET_CHARS,
-  ATOM_DOMAINS,
-  ATOM_MAX_CHARS,
-  CORPUS_ROOTS,
-  CORPUS_ROOTS_ENV_VAR,
-  domainForSource,
-  resolveCorpusRoots,
-  SOURCE_ROOT_DOMAINS
-} from '../src/config.js';
+import { ATOM_CHUNK_TARGET_CHARS, ATOM_MAX_CHARS, CORPUS_ROOTS, CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from '../src/config.js';
 import {
   ATOMS_DIR,
   DOCS_TEST_DIR,
@@ -19,6 +10,7 @@ import {
   RUNTIME_ROOT,
   VAULT_ROOT
 } from '../src/paths.js';
+import { atomDomains, domainForSource, sourceRootDomains } from '../src/vocabulary.js';
 
 describe('paths', () => {
   it('exposes only absolute paths', () => {
@@ -68,8 +60,8 @@ describe('resolveCorpusRoots', () => {
 
 describe('domainForSource', () => {
   it('maps every declared source root to its domain', () => {
-    const mapped = SOURCE_ROOT_DOMAINS.map(rule => domainForSource(`${rule.prefix}x.md`));
-    expect(mapped).toEqual(SOURCE_ROOT_DOMAINS.map(rule => rule.domain));
+    const mapped = sourceRootDomains().map(rule => domainForSource(`${rule.prefix}x.md`));
+    expect(mapped).toEqual(sourceRootDomains().map(rule => rule.domain));
   });
 
   it('maps every known prefix explicitly', () => {
@@ -102,8 +94,8 @@ describe('domainForSource', () => {
    * added.
    */
   it('resolves every nested root to its own domain, not the broader one', () => {
-    const nested = SOURCE_ROOT_DOMAINS.filter(rule =>
-      SOURCE_ROOT_DOMAINS.some(
+    const nested = sourceRootDomains().filter(rule =>
+      sourceRootDomains().some(
         other => other.prefix.length < rule.prefix.length && rule.prefix.startsWith(other.prefix)
       )
     );
@@ -122,8 +114,8 @@ describe('domainForSource', () => {
   });
 
   it('only ever yields a member of the closed domain vocabulary', () => {
-    const domains = SOURCE_ROOT_DOMAINS.map(rule => rule.domain);
-    expect(domains.every(d => ATOM_DOMAINS.includes(d))).toBe(true);
+    const domains = sourceRootDomains().map(rule => rule.domain);
+    expect(domains.every(d => atomDomains().includes(d))).toBe(true);
   });
 });
 

@@ -3,10 +3,10 @@ import { vi } from 'vitest';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import type { CommandContext } from '../src/cli/context.js';
 import { runIngestCommand } from '../src/cli/ingestCommand.js';
-import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
 import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import type { IngestOptions, IngestSummary } from '../src/ingest.js';
 import { ingest } from '../src/ingest.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 /**
  * The WIRING, asserted where it was missing: `ingest` honoured `goldIds` from
@@ -27,7 +27,7 @@ const context: CommandContext = {
   indexPath: '/tmp/gnosis-gold-wiring/index',
   repoRoot: '/tmp/gnosis-gold-wiring',
   corpusRoots: ['docs'],
-  profile: DEFAULT_INGEST_PROFILE,
+  profile: activeProfile(),
 };
 
 const passedOptions = async (): Promise<IngestOptions> => {

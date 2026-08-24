@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import type { CommandContext } from '../src/cli/context.js';
 import { runIngestCommand } from '../src/cli/ingestCommand.js';
 import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 /**
  * Exact-body dedupe, measured from the outside: which copy of a MIRRORED
@@ -156,7 +156,7 @@ const contextFor = (fixture: Fixture): CommandContext => ({
   indexPath: join(fixture.root, 'index'),
   repoRoot: fixture.root,
   corpusRoots: [...ROOTS],
-  profile: DEFAULT_INGEST_PROFILE,
+  profile: activeProfile(),
 });
 
 describe('CLI ingest dedupe', () => {

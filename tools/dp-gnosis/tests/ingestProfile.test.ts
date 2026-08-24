@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
 import { ingest } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { domainForPath, loadIngestProfile, parseIngestProfile, typeForPath } from '../src/ingestProfile.js';
 import { INGEST_PROFILE_PATH } from '../src/paths.js';
 import { validateAtom } from '../src/validate.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
@@ -207,7 +207,7 @@ describe('shipped default profile', () => {
   it('is the source of the shipped vocabularies and rules', () => {
     const shipped = loadIngestProfile(INGEST_PROFILE_PATH);
 
-    expect(shipped).toEqual(DEFAULT_INGEST_PROFILE);
+    expect(shipped).toEqual(activeProfile());
     expect(shipped.domains).toEqual(['runner', 'standards', 'adr', 'docs', 'claude']);
     expect(shipped.types).toHaveLength(15);
     expect(shipped.defaultType).toBe('knowledge');
@@ -263,17 +263,17 @@ describe('shipped default profile', () => {
 
   it('claims research, plan and lessons-learned from the docs/ directories that carry them', () => {
     const claimed = [
-      ...DEFAULT_INGEST_PROFILE.typeRules.map(rule => rule.type),
-      ...DEFAULT_INGEST_PROFILE.segmentRules.map(rule => rule.type),
-      DEFAULT_INGEST_PROFILE.defaultType,
+      ...activeProfile().typeRules.map(rule => rule.type),
+      ...activeProfile().segmentRules.map(rule => rule.type),
+      activeProfile().defaultType,
     ];
 
     expect(claimed).toContain('research');
     expect(claimed).toContain('plan');
     expect(claimed).toContain('lessons-learned');
-    expect(typeForPath(DEFAULT_INGEST_PROFILE, 'docs/research/x.md')).toBe('research');
-    expect(typeForPath(DEFAULT_INGEST_PROFILE, 'docs/plans/x.md')).toBe('plan');
-    expect(typeForPath(DEFAULT_INGEST_PROFILE, 'docs/implementation-lessons-learned/x.md')).toBe(
+    expect(typeForPath(activeProfile(), 'docs/research/x.md')).toBe('research');
+    expect(typeForPath(activeProfile(), 'docs/plans/x.md')).toBe('plan');
+    expect(typeForPath(activeProfile(), 'docs/implementation-lessons-learned/x.md')).toBe(
       'lessons-learned'
     );
   });

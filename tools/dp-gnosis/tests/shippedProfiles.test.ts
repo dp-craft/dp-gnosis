@@ -6,10 +6,11 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { runCli } from '../src/cli/cli.js';
-import { ATOM_TYPES, CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
+import { CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { INGEST_PROFILE_PATH } from '../src/paths.js';
+import { atomTypes } from '../src/vocabulary.js';
 
 /** The shipped profiles directory — enumerated, so a future profile is covered too. */
 const PROFILES_DIR = dirname(INGEST_PROFILE_PATH);
@@ -31,7 +32,7 @@ const profileByName = (name: string): IngestProfile => {
 };
 
 /** The shipped type vocabulary, widened to string for a membership test. */
-const SHIPPED_TYPES: readonly string[] = ATOM_TYPES;
+const SHIPPED_TYPES: readonly string[] = atomTypes();
 
 const duplicatesOf = (values: readonly string[]): readonly string[] =>
   values.filter((value, index) => values.indexOf(value) !== index);
@@ -75,7 +76,7 @@ describe('shipped profiles', () => {
     expect(duplicatesOf(paths)).toEqual([]);
   });
 
-  it('names only shipped ATOM_TYPES, so no type is silently relabelled at read time', () => {
+  it('names only shipped atomTypes(), so no type is silently relabelled at read time', () => {
     loaded.forEach(([file, profile]) => {
       const unknown = profile.types.filter(type => !SHIPPED_TYPES.includes(type));
       expect({ file, unknown }).toEqual({ file, unknown: [] });

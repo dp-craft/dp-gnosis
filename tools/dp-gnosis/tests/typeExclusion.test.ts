@@ -10,14 +10,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { runCli } from '../src/cli/cli.js';
-import { HELP_TEXT } from '../src/cli/help.js';
+import { helpText } from '../src/cli/help.js';
 import {
   EXCLUDE_TYPE_FLAG,
   INCLUDE_HISTORY_FLAG,
   resolveTypeFilter,
   TYPE_FLAG
 } from '../src/cli/retrieveCommand.js';
-import { ATOM_TYPES, DEFAULT_EXCLUDED_TYPES } from '../src/config.js';
+import { atomTypes, defaultExcludedTypes } from '../src/vocabulary.js';
 
 const filterOf = (flags: Record<string, string | true>): readonly string[] | undefined => {
   const resolved = resolveTypeFilter(flags);
@@ -31,10 +31,10 @@ const errorOf = (flags: Record<string, string | true>): string => {
   return resolved.error;
 };
 
-describe('DEFAULT_EXCLUDED_TYPES', () => {
+describe('defaultExcludedTypes()', () => {
   it('mirrors the shipped profile as members of the closed type vocabulary', () => {
-    expect(DEFAULT_EXCLUDED_TYPES).toEqual(['feature-log', 'benchmark', 'review', 'brainstorm']);
-    expect(DEFAULT_EXCLUDED_TYPES.every(type => ATOM_TYPES.includes(type))).toBe(true);
+    expect(defaultExcludedTypes()).toEqual(['feature-log', 'benchmark', 'review', 'brainstorm']);
+    expect(defaultExcludedTypes().every(type => atomTypes().includes(type))).toBe(true);
   });
 });
 
@@ -42,7 +42,7 @@ describe('resolveTypeFilter', () => {
   it('excludes the profile default when no filter flag is passed', () => {
     const types = filterOf({});
 
-    expect(types).toEqual(ATOM_TYPES.filter(type => !DEFAULT_EXCLUDED_TYPES.includes(type)));
+    expect(types).toEqual(atomTypes().filter(type => !defaultExcludedTypes().includes(type)));
     expect(types).not.toContain('feature-log');
     expect(types).toContain('knowledge');
   });
@@ -74,11 +74,11 @@ describe('resolveTypeFilter', () => {
     const error = errorOf({ [EXCLUDE_TYPE_FLAG]: 'adr,nonsense' });
 
     expect(error).toContain('nonsense');
-    expect(error).toContain(ATOM_TYPES[0]);
+    expect(error).toContain(atomTypes()[0]);
   });
 
   it('refuses an exclusion that would empty the vocabulary instead of searching nothing', () => {
-    const error = errorOf({ [EXCLUDE_TYPE_FLAG]: ATOM_TYPES.join(',') });
+    const error = errorOf({ [EXCLUDE_TYPE_FLAG]: atomTypes().join(',') });
 
     expect(error).toContain(EXCLUDE_TYPE_FLAG);
     expect(error).toContain(INCLUDE_HISTORY_FLAG);
@@ -103,18 +103,18 @@ describe('the two flags outside retrieve', () => {
 
 describe('--help', () => {
   it('states the two flags, the excluded types and where the exclusion applies', () => {
-    expect(HELP_TEXT).toContain(EXCLUDE_TYPE_FLAG);
-    expect(HELP_TEXT).toContain(INCLUDE_HISTORY_FLAG);
-    expect(HELP_TEXT).toContain('feature-log | benchmark | review | brainstorm');
-    expect(HELP_TEXT).toContain('a RETRIEVE-TIME default');
-    expect(HELP_TEXT).toContain('derives the vault datasets');
-    expect(HELP_TEXT).toContain('never on ingest');
-    expect(HELP_TEXT).toContain('the types stay ingested and indexed');
+    expect(helpText()).toContain(EXCLUDE_TYPE_FLAG);
+    expect(helpText()).toContain(INCLUDE_HISTORY_FLAG);
+    expect(helpText()).toContain('feature-log | benchmark | review | brainstorm');
+    expect(helpText()).toContain('a RETRIEVE-TIME default');
+    expect(helpText()).toContain('derives the vault datasets');
+    expect(helpText()).toContain('never on ingest');
+    expect(helpText()).toContain('the types stay ingested and indexed');
   });
 
   it('does not claim the exclusion never reaches the bench', () => {
-    expect(HELP_TEXT).not.toContain('never the bench');
-    expect(HELP_TEXT).not.toContain('CLI path only');
+    expect(helpText()).not.toContain('never the bench');
+    expect(helpText()).not.toContain('CLI path only');
   });
 });
 
@@ -135,11 +135,11 @@ describe('--help flag scoping', () => {
   ];
 
   it('scopes no flag to `retrieve` only', () => {
-    expect(HELP_TEXT).not.toContain('on `retrieve` only');
+    expect(helpText()).not.toContain('on `retrieve` only');
   });
 
   it('states both retrieval commands for every flag both accept', () => {
-    const lines = HELP_TEXT.split('\n').filter(entry => !entry.startsWith('Flags:'));
+    const lines = helpText().split('\n').filter(entry => !entry.startsWith('Flags:'));
     RETRIEVAL_SCOPED_FLAGS.forEach(flag => {
       const line = lines.find(entry => entry.includes(flag));
       expect(line, `no help line introduces ${flag}`).toBeDefined();
@@ -148,6 +148,6 @@ describe('--help flag scoping', () => {
   });
 
   it('keeps --synthesize scoped to answer alone', () => {
-    expect(HELP_TEXT).toContain('--synthesize on `answer` only');
+    expect(helpText()).toContain('--synthesize on `answer` only');
   });
 });

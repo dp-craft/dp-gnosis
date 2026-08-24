@@ -24,7 +24,7 @@ import { loadVerifiedGoldenSet, type GoldenSet, type GoldenQuery } from './golde
 import { ATOMS_DIR, BENCH_WORK_DIR, REPO_ROOT } from './paths.js';
 import type { KnowledgePort, RetrievalResult } from './port.js';
 import { type CorpusLocation } from './bench/candidates.js';
-import { ATOM_DOMAINS, type AtomDomain } from './config.js';
+import { type AtomDomain, atomDomains } from './vocabulary.js';
 
 const K_VALUES = [5, 20, 50, 200, 400] as const;
 type KValue = (typeof K_VALUES)[number];
@@ -71,7 +71,7 @@ interface P70Report {
 }
 
 const asDomain = (value: string | null): AtomDomain | undefined =>
-  value === null ? undefined : ATOM_DOMAINS.find(domain => domain === value);
+  value === null ? undefined : atomDomains().find(domain => domain === value);
 
 /** Score one query at all k-values from a single retrieval. */
 const scoreMultiK = (

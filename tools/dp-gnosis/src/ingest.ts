@@ -7,7 +7,7 @@ import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
 import { chunkMarkdown, frontMatterTitle, headingLine, headingPath } from './chunker.js';
-import { bodyMaxChars, CORPUS_ROOTS_ENV_VAR, DEFAULT_INGEST_PROFILE, resolveCorpusRoots } from './config.js';
+import { bodyMaxChars, CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from './config.js';
 import type { CorpusManifestInput, ManifestAtom } from './corpusManifest.js';
 import { buildCorpusManifest, CORPUS_MANIFEST_FILE, serializeCorpusManifest } from './corpusManifest.js';
 import type { IngestProfile } from './ingestProfile.js';
@@ -15,6 +15,7 @@ import { domainForPath, typeForPath } from './ingestProfile.js';
 import { ATOMS_DIR, REPO_ROOT } from './paths.js';
 import { loadSummarySidecar } from './summarySidecar.js';
 import { readExistingIds, validateAtom } from './validate.js';
+import { activeProfile } from './vocabulary.js';
 
 /**
  * WAVE-1 INGEST — a knowingly TEMPORARY write path.
@@ -870,7 +871,7 @@ const checkAtoms = (
  * Ingest local markdown into atom files. Refusals are reported, never thrown
  * and never silently defaulted; the write set is always fully valid.
  */
-const profileOf = (options: IngestOptions): IngestProfile => options.profile ?? DEFAULT_INGEST_PROFILE;
+const profileOf = (options: IngestOptions): IngestProfile => options.profile ?? activeProfile();
 
 /** Absent gold is an EMPTY set, which leaves the dedupe exactly as it was before the field. */
 const goldOf = (options: IngestOptions): ReadonlySet<string> => new Set(options.goldIds ?? []);

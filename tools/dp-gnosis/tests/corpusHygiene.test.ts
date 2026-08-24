@@ -13,11 +13,12 @@ import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { CORPUS_ROOTS, DEFAULT_INGEST_PROFILE, domainForSource } from '../src/config.js';
+import { CORPUS_ROOTS } from '../src/config.js';
 import type { CorpusManifest } from '../src/corpusManifest.js';
 import { CORPUS_MANIFEST_FILE } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 import { typeForPath } from '../src/ingestProfile.js';
+import { activeProfile, domainForSource } from '../src/vocabulary.js';
 
 interface Fixture {
   readonly root: string;
@@ -59,7 +60,7 @@ describe('docs/ as a corpus root', () => {
 
   it('labels every authored docs/ subtree from the existing 15-type vocabulary', () => {
     expect(domainForSource('docs/research/2026-01-01-x.md')).toBe('docs');
-    const typeOf = (path: string): string => typeForPath(DEFAULT_INGEST_PROFILE, path);
+    const typeOf = (path: string): string => typeForPath(activeProfile(), path);
     expect(typeOf('docs/research/x.md')).toBe('research');
     expect(typeOf('docs/plans/x.md')).toBe('plan');
     expect(typeOf('docs/implementation-lessons-learned/x.md')).toBe('lessons-learned');

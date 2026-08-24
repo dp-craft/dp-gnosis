@@ -7,11 +7,12 @@ import type { FlagValues } from '../src/cli/args.js';
 import { parseArgs } from '../src/cli/args.js';
 import { runCli } from '../src/cli/cli.js';
 import { resolveLocations } from '../src/cli/locations.js';
-import { CORPUS_ROOTS, CORPUS_ROOTS_ENV_VAR, DEFAULT_INGEST_PROFILE } from '../src/config.js';
+import { CORPUS_ROOTS, CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { ATOMS_DIR, REPO_ROOT } from '../src/paths.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 /** Long enough to clear the minimum body length, so the section becomes an atom. */
 const alphaDoc = (term: string): string =>
@@ -40,7 +41,7 @@ const writeProfile = async (
   locations: Readonly<Record<string, unknown>>
 ): Promise<string> => {
   const path = join(corpus.profilesDir, `${name}.profile.json`);
-  await writeFile(path, JSON.stringify({ ...DEFAULT_INGEST_PROFILE, name, ...locations }), 'utf8');
+  await writeFile(path, JSON.stringify({ ...activeProfile(), name, ...locations }), 'utf8');
   return path;
 };
 
@@ -64,7 +65,7 @@ const jsonOf = (stdout: string): Record<string, unknown> =>
 const sourcePaths = (payload: Record<string, unknown>): readonly string[] =>
   (payload['atoms'] as readonly { readonly sourcePath: string }[]).map(atom => atom.sourcePath);
 
-const namedProfile = (name: string): IngestProfile => ({ ...DEFAULT_INGEST_PROFILE, name });
+const namedProfile = (name: string): IngestProfile => ({ ...activeProfile(), name });
 
 /** `vi.stubEnv` persists across tests otherwise, and the scope override is process-wide. */
 afterEach(() => {
@@ -73,7 +74,7 @@ afterEach(() => {
 
 describe('location precedence — flag > profile > default', () => {
   it('falls back to the built-in locations when neither a flag nor a profile states one', () => {
-    const locations = resolveLocations({}, 'fts5', DEFAULT_INGEST_PROFILE);
+    const locations = resolveLocations({}, 'fts5', activeProfile());
 
     expect(locations).toEqual({
       atomsDir: ATOMS_DIR,

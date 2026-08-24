@@ -19,10 +19,10 @@ import {
   INDEX_SCHEMA_VERSION
 } from '../src/adapters/fts5Adapter.js';
 import { runRetrieveCommand } from '../src/cli/retrieveCommand.js';
-import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import type { KnowledgePort, RetrievalResult } from '../src/port.js';
 import { DEFAULT_ANALYZER } from '../src/query.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 const NOW = new Date('2026-08-20T00:00:00.000Z');
 
@@ -103,7 +103,7 @@ const retrieveCommand = async (query: string): ReturnType<typeof runRetrieveComm
     flags: {},
     positionals: [query],
     corpusRoots: ['docs'],
-    profile: DEFAULT_INGEST_PROFILE,
+    profile: activeProfile(),
   });
 
 const ATOMS = [

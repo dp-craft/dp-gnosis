@@ -1,9 +1,10 @@
 import { readdir } from 'node:fs/promises';
 
 import { type Atom, parseAtom, serializeAtom } from './atom.js';
-import { ATOM_FENCE_MAX_CHARS, bodyMaxChars, DEFAULT_INGEST_PROFILE } from './config.js';
+import { ATOM_FENCE_MAX_CHARS, bodyMaxChars } from './config.js';
 import type { IngestProfile } from './ingestProfile.js';
 import { ATOMS_DIR } from './paths.js';
+import { activeProfile } from './vocabulary.js';
 
 /**
  * WRITE-TIME refusal. This module decides what may be WRITTEN into the atom
@@ -109,7 +110,7 @@ const roundTripError = (atom: Atom): string | undefined => {
 export const validateAtom = (
   atom: Atom,
   existingIds: ReadonlySet<string>,
-  profile: IngestProfile = DEFAULT_INGEST_PROFILE
+  profile: IngestProfile = activeProfile()
 ): readonly string[] =>
   [
     idFormatError(atom.frontmatter.id),

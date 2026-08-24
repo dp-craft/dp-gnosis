@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  DEFAULT_EXCLUDED_TYPES,
-  EMBED_MODEL_ID,
-  HYBRID_FUSION,
-  RERANK_MODEL_ID
-} from '../../dp-gnosis/src/config.js';
+import { EMBED_MODEL_ID, HYBRID_FUSION, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
 import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
 import {
@@ -22,6 +17,7 @@ import {
   NO_ENRICHMENT,
   NO_TYPE_FILTER
 } from './report.js';
+import { defaultExcludedTypes } from '../../dp-gnosis/src/vocabulary.js';
 
 /** What an absent rerank doc window on a row means — the values that always held. */
 const LEGACY_RERANK_DOC_CHARS = 2000;
@@ -393,7 +389,7 @@ describe('compareLastTwo', () => {
         row({ typeFilter: NO_TYPE_FILTER }),
         row({
           gitSha: 'bbb2222',
-          typeFilter: [...DEFAULT_EXCLUDED_TYPES].sort().join(','),
+          typeFilter: [...defaultExcludedTypes()].sort().join(','),
           ndcg10: 0.65,
         }),
       ],

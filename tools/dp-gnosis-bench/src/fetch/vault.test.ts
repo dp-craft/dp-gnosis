@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_EXCLUDED_TYPES } from '../../../dp-gnosis/src/config.js';
 import type { BeirDataset } from '../manifest.js';
 import {
   assertGoldReachable,
@@ -16,6 +15,7 @@ import {
   UNREACHABLE_GOLD_CAUSE,
   UNREACHABLE_GOLD_FLOOR
 } from './vault.js';
+import { defaultExcludedTypes } from '../../../dp-gnosis/src/vocabulary.js';
 
 const typedAtom = (id: string, title: string, body: string, type: string): string =>
   `---\ntype: ${type}\nid: ${id}\ntitle: ${title}\nx_domain: docs\nstatus: stable\nsources:\n  - src/${id}.md\n---\n${body}`;
@@ -24,7 +24,7 @@ const atom = (id: string, title: string, body: string): string =>
   typedAtom(id, title, body, 'knowledge');
 
 /** An excluded type, read off the engine constant so no list is restated here. */
-const EXCLUDED_TYPE: string = DEFAULT_EXCLUDED_TYPES[0] ?? '';
+const EXCLUDED_TYPE: string = defaultExcludedTypes()[0] ?? '';
 
 const stage = (): string => {
   const root = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-vault-'));
@@ -171,7 +171,7 @@ describe('ensureVaultDataset — the type filter', () => {
 
   /** An empty excluded set would make every case below pass vacuously. */
   it('has a non-empty excluded set to test against', () => {
-    expect(DEFAULT_EXCLUDED_TYPES.length).toBeGreaterThan(0);
+    expect(defaultExcludedTypes().length).toBeGreaterThan(0);
     expect(EXCLUDED_TYPE.length).toBeGreaterThan(0);
   });
 

@@ -23,7 +23,6 @@ import { fileURLToPath } from 'node:url';
 
 import type { CliResult } from '../src/cli/cli.js';
 import { runCli } from '../src/cli/cli.js';
-import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
 import type { AnswerInput, AnswerRunner } from '../src/mcp/protocol.js';
 import {
   answerArgv,
@@ -33,6 +32,7 @@ import {
   TOOL_NAME
 } from '../src/mcp/protocol.js';
 import { serveStdio } from '../src/mcp/server.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 type Json = Record<string, unknown>;
 
@@ -230,7 +230,7 @@ const tinyCorpus = async (): Promise<string> => {
   await writeFile(
     profilePath,
     JSON.stringify({
-      ...DEFAULT_INGEST_PROFILE,
+      ...activeProfile(),
       name: 'mcp',
       repoRoot,
       corpusRoots: ['doc'],

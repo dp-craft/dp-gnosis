@@ -11,13 +11,11 @@ import { relative } from 'node:path';
 
 import type { AtomMeasure, SkippedAtom } from '../budget.js';
 import { fitToTokenBudget } from '../budget.js';
-import type { AtomDomain, AtomType, BudgetMode, FieldWeights, FtsColumn } from '../config.js';
+import type { BudgetMode, FieldWeights, FtsColumn } from '../config.js';
 import {
   ABSTAIN_FLOOR,
-  ATOM_TYPES,
   BUDGET_MODES,
   DEFAULT_BUDGET_MODE,
-  DEFAULT_EXCLUDED_TYPES,
   DEFAULT_FIELD_WEIGHTS,
   FTS_COLUMNS,
   RERANK_CALIBRATION,
@@ -33,6 +31,8 @@ import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
 import { calibrate, rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
 import type { TokenCountResult } from '../tokenize.js';
 import { createTokenCounter } from '../tokenize.js';
+import type { AtomDomain, AtomType } from '../vocabulary.js';
+import { atomTypes, defaultExcludedTypes } from '../vocabulary.js';
 import type { AdapterName } from './adapter.js';
 import { createPort, hasPersistentIndex } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -83,7 +83,7 @@ export const TYPE_FLAG = '--type';
 /**
  * The domain filter, `retrieve` and `answer` alone; `cli.ts` refuses it
  * elsewhere. Its vocabulary is the LOADED profile's `domains`, never the
- * module-level {@link ATOM_DOMAINS}: a `--profile` instance carries its own
+ * module-level {@link atomDomains}: a `--profile` instance carries its own
  * knowledge domains, and validating against the shipped tuple would refuse the
  * only domains that instance has.
  */
@@ -91,7 +91,7 @@ export const DOMAIN_FLAG = '--domain';
 
 /**
  * The exclusion override, `retrieve` only; `cli.ts` refuses it elsewhere. It
- * REPLACES {@link DEFAULT_EXCLUDED_TYPES} instead of extending it, so what a
+ * REPLACES {@link defaultExcludedTypes} instead of extending it, so what a
  * run excluded is what the caller typed — an exclusion silently unioned with an
  * invisible default is not readable off the command line.
  */
@@ -645,11 +645,11 @@ const rawFlag = (flags: FlagValues, name: string): string => stringFlag(flags, n
  * vocabulary, so the correction needs no second call.
  */
 const typeError = (offender: string, flag: string = TYPE_FLAG): string =>
-  `${flag} value "${offender}" is outside the closed vocabulary — replace it with one of ${ATOM_TYPES.join(' | ')}; pass several as \`${flag} adr,review\``;
+  `${flag} value "${offender}" is outside the closed vocabulary — replace it with one of ${atomTypes().join(' | ')}; pass several as \`${flag} adr,review\``;
 
 const splitTypes = (raw: string): readonly string[] => raw.split(',').map(part => part.trim());
 
-const asType = (value: string): AtomType | undefined => ATOM_TYPES.find(type => type === value);
+const asType = (value: string): AtomType | undefined => atomTypes().find(type => type === value);
 
 /**
  * `types: undefined` = no filter reaches the port at all. It is deliberately
@@ -728,7 +728,7 @@ const filterConflict = (flags: FlagValues): string | undefined => {
  * and this message names the flags that produced the emptiness.
  */
 const emptyExclusionError = (): string =>
-  `${EXCLUDE_TYPE_FLAG} excludes every type in the vocabulary, so nothing could be searched — drop a value, or pass ${INCLUDE_HISTORY_FLAG} to search all of ${ATOM_TYPES.join(' | ')}`;
+  `${EXCLUDE_TYPE_FLAG} excludes every type in the vocabulary, so nothing could be searched — drop a value, or pass ${INCLUDE_HISTORY_FLAG} to search all of ${atomTypes().join(' | ')}`;
 
 type ExcludedResult =
   | { readonly ok: true; readonly excluded: readonly AtomType[] }
@@ -739,7 +739,7 @@ type ExcludedResult =
 const resolveExcluded = (flags: FlagValues): ExcludedResult => {
   if (flags[INCLUDE_HISTORY_FLAG] === true) return { ok: true, excluded: [] };
   const raw = stringFlag(flags, EXCLUDE_TYPE_FLAG);
-  if (raw === undefined) return { ok: true, excluded: DEFAULT_EXCLUDED_TYPES };
+  if (raw === undefined) return { ok: true, excluded: defaultExcludedTypes() };
   const requested = splitTypes(raw);
   const offender = requested.find(value => asType(value) === undefined);
   return offender === undefined
@@ -750,7 +750,7 @@ const resolveExcluded = (flags: FlagValues): ExcludedResult => {
 /** Excluding nothing passes NO filter, keeping the today-path byte-identical. */
 const keptTypes = (excluded: readonly AtomType[]): TypesResult => {
   if (excluded.length === 0) return { ok: true, types: undefined };
-  const kept = ATOM_TYPES.filter(type => !excluded.includes(type));
+  const kept = atomTypes().filter(type => !excluded.includes(type));
   return kept.length === 0 ? { ok: false, error: emptyExclusionError() } : { ok: true, types: kept };
 };
 
@@ -1024,7 +1024,7 @@ const filteredNote = (flags: FlagValues): string => {
     );
   }
   return filteredEmptyNote(
-    `the profile default excludes ${DEFAULT_EXCLUDED_TYPES.join(', ')}`,
+    `the profile default excludes ${defaultExcludedTypes().join(', ')}`,
     WIDEN_ALL
   );
 };

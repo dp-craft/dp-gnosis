@@ -60,10 +60,6 @@ import type * as Lance from '@lancedb/lancedb';
 
 import { type Atom, parseAtom } from '../atom.js';
 import {
-  ATOM_TYPES,
-  type AtomDomain,
-  type AtomType,
-  DEFAULT_ATOM_TYPE,
   EMBED_BATCH_SIZE,
   EMBED_MODEL_ID,
   HYBRID_FUSION,
@@ -82,6 +78,12 @@ import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import { stemText } from '../query.js';
 import { fuseLegs } from '../rerank.js';
 import { isRetrievable } from '../retrievability.js';
+import {
+  type AtomDomain,
+  type AtomType,
+  atomTypes,
+  defaultAtomType
+} from '../vocabulary.js';
 
 /**
  * Which legs a route reads, and what it does with their union. It names the
@@ -218,7 +220,7 @@ const loadLance = (): Promise<LoadResult> =>
 const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 const asType = (value: string): AtomType =>
-  ATOM_TYPES.find(type => type === value) ?? DEFAULT_ATOM_TYPE;
+  atomTypes().find(type => type === value) ?? defaultAtomType();
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 

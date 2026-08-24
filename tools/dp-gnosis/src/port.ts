@@ -1,7 +1,7 @@
 import type { AtomFrontmatter } from './atom.js';
-import type { AtomDomain, AtomType } from './config.js';
-import { ATOM_DOMAINS, ATOM_TYPES } from './config.js';
 import type { PrfParams } from './prf.js';
+import type { AtomDomain, AtomType } from './vocabulary.js';
+import { atomDomains, atomTypes } from './vocabulary.js';
 
 /**
  * Whether a retrieval leg actually ran, and against what.
@@ -75,7 +75,7 @@ export interface RetrievedAtom extends AtomOrigin {
   readonly domain: AtomDomain;
   /**
    * Always populated: unlike `x_domain`, a `type` outside the closed vocabulary
-   * falls back to `DEFAULT_ATOM_TYPE` rather than dropping the atom. An unknown
+   * falls back to `defaultAtomType()` rather than dropping the atom. An unknown
    * domain means the atom was never indexed; an unknown type must not make an
    * indexed atom unreachable.
    */
@@ -163,13 +163,17 @@ export interface RetrieveOptions {
   readonly prf?: PrfParams;
 }
 
-/** The single wording for "an empty type filter is a caller bug". */
-export const EMPTY_TYPES_MESSAGE =
-  `retrieve: "types" MUST name at least one type — omit it to search every type, or pass one of: ${ATOM_TYPES.join(' | ')}`;
+/**
+ * The single wording for "an empty type filter is a caller bug". A FUNCTION,
+ * not a constant: the vocabulary it prints is resolved from the active profile
+ * on first read, and a module-level constant would force that read at import.
+ */
+export const emptyTypesMessage = (): string =>
+  `retrieve: "types" MUST name at least one type — omit it to search every type, or pass one of: ${atomTypes().join(' | ')}`;
 
 /** Refuse an empty `types` at the port boundary, before any candidate is read. */
 export const assertTypeFilter = (types: readonly AtomType[] | undefined): void => {
-  if (types !== undefined && types.length === 0) throw new Error(EMPTY_TYPES_MESSAGE);
+  if (types !== undefined && types.length === 0) throw new Error(emptyTypesMessage());
 };
 
 /**
@@ -177,12 +181,12 @@ export const assertTypeFilter = (types: readonly AtomType[] | undefined): void =
  * profile's, so a caller running under `--profile` is corrected with the domains
  * that instance really declares rather than the shipped ones.
  */
-export const EMPTY_DOMAINS_MESSAGE =
-  `retrieve: "domains" MUST name at least one domain — omit it to search every domain, or pass one of: ${ATOM_DOMAINS.join(' | ')}`;
+export const emptyDomainsMessage = (): string =>
+  `retrieve: "domains" MUST name at least one domain — omit it to search every domain, or pass one of: ${atomDomains().join(' | ')}`;
 
 /** Refuse an empty `domains` at the port boundary, before any candidate is read. */
 export const assertDomainFilter = (domains: readonly AtomDomain[] | undefined): void => {
-  if (domains !== undefined && domains.length === 0) throw new Error(EMPTY_DOMAINS_MESSAGE);
+  if (domains !== undefined && domains.length === 0) throw new Error(emptyDomainsMessage());
 };
 
 /** The outcome of one retrieval call. */

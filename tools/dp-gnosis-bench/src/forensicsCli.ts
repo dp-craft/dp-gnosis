@@ -31,11 +31,10 @@ import { pathToFileURL } from 'node:url';
 
 import { fitToTokenBudget } from '../../dp-gnosis/src/budget.js';
 import {
-  type AtomDomain,
-  DEFAULT_ATOM_TYPE,
   RETRIEVE_TOKEN_BUDGET
 } from '../../dp-gnosis/src/config.js';
 import type { RetrievedAtom } from '../../dp-gnosis/src/port.js';
+import { type AtomDomain, defaultAtomType } from '../../dp-gnosis/src/vocabulary.js';
 import { readQrels } from './beir.js';
 import { readAtomDocs } from './fetch/vault.js';
 import { readRunFile, topicForensics } from './forensics.js';
@@ -253,7 +252,7 @@ const probeAtom = (docId: string, body: string): RetrievedAtom => ({
   id: docId,
   title: docId,
   domain: PROBE_DOMAIN,
-  type: DEFAULT_ATOM_TYPE,
+  type: defaultAtomType(),
   body,
   score: 0,
   sourcePath: `${docId}.md`,

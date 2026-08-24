@@ -20,11 +20,12 @@ import { join } from 'node:path';
 import { runCli } from '../src/cli/cli.js';
 import { explainAtoms, matchedTerms, snippetOf } from '../src/cli/explain.js';
 import { DEFAULT_MAX_PER_DOC, GROUPED_POOL_FLOOR } from '../src/cli/grouping.js';
-import { HELP_TEXT } from '../src/cli/help.js';
-import { DEFAULT_EXCLUDED_TYPES, RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
+import { helpText } from '../src/cli/help.js';
+import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
 import type { RetrievedAtom } from '../src/port.js';
 import { analyze } from '../src/query.js';
 import { fuseRanking, resetRerankProbeCache } from '../src/rerank.js';
+import { defaultExcludedTypes } from '../src/vocabulary.js';
 
 const SNIPPET_MAX = 400;
 
@@ -652,7 +653,7 @@ describe('--min-relevance refuses rather than filtering something it cannot cali
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('--min-relevance requires --rerank');
-    expect(HELP_TEXT).toContain('--min-relevance <p> on `retrieve` and `answer`');
+    expect(helpText()).toContain('--min-relevance <p> on `retrieve` and `answer`');
   });
 });
 
@@ -732,7 +733,7 @@ describe('an empty answer states WHY it is empty, and stays exit 0', () => {
     const note = await noteOf(await makeFixture(), []);
 
     expect(note).toContain(NOTHING_MATCHED);
-    DEFAULT_EXCLUDED_TYPES.forEach(type => expect(note).toContain(type));
+    defaultExcludedTypes().forEach(type => expect(note).toContain(type));
     expect(note).toContain('--include-history');
     expect(note).toContain('Query rephrasing');
   });
@@ -741,7 +742,7 @@ describe('an empty answer states WHY it is empty, and stays exit 0', () => {
     const note = await noteOf(await makeFixture(), ['--type', 'adr,plan']);
 
     expect(note).toContain('--type adr,plan');
-    expect(note).not.toContain(DEFAULT_EXCLUDED_TYPES[0] ?? 'feature-log');
+    expect(note).not.toContain(defaultExcludedTypes()[0] ?? 'feature-log');
   });
 
   it('names an explicit --exclude-type list and its own remedy', async () => {

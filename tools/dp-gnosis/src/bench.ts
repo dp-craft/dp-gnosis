@@ -36,7 +36,7 @@ import { aggregate, scoreQuery } from './bench/metrics.js';
 import { mapSequential } from './bench/sequential.js';
 import type { Thunk, TimingPolicy, TimingSample } from './bench/timing.js';
 import { measureAll, timeValue } from './bench/timing.js';
-import { ATOM_DOMAINS, ATOM_TYPES, type AtomDomain, type AtomType } from './config.js';
+import { type AtomDomain, type AtomType, atomDomains, atomTypes } from './vocabulary.js';
 import type { GoldenQuery, GoldenSet, MinimumMeaningfulDifference } from './goldenSet.js';
 import type { KnowledgePort, RetrievalResult, RetrieveOptions } from './port.js';
 
@@ -136,11 +136,11 @@ export interface BenchOptions {
  * at load time, so reaching here it can only be `null`.
  */
 const asDomain = (value: string | null): AtomDomain | undefined =>
-  value === null ? undefined : ATOM_DOMAINS.find(domain => domain === value);
+  value === null ? undefined : atomDomains().find(domain => domain === value);
 
 /** Same membership test, on the closed `type` vocabulary. */
 const asType = (value: string | null): AtomType | undefined =>
-  value === null ? undefined : ATOM_TYPES.find(type => type === value);
+  value === null ? undefined : atomTypes().find(type => type === value);
 
 // The two filters are INDEPENDENT: a query may carry both, either, or neither,
 // and each is omitted rather than sent as `undefined` so an adapter cannot

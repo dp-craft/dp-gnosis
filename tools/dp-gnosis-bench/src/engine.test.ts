@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.js';
 import type { AdapterName } from '../../dp-gnosis/src/cli/adapter.js';
 import { runCli } from '../../dp-gnosis/src/cli/cli.js';
-import { DEFAULT_ATOM_TYPE, RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import { RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -40,6 +40,7 @@ import {
 import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
 import { auditGold, type GoldAudit } from './goldAudit.js';
 import type { Qrel } from './metrics.js';
+import { defaultAtomType } from '../../dp-gnosis/src/vocabulary.js';
 
 /** A second reranker id — any id the shipped constant is not. */
 const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';
@@ -471,7 +472,7 @@ describe('retrieveDocs', () => {
       id,
       title: id,
       domain: 'docs',
-      type: DEFAULT_ATOM_TYPE,
+      type: defaultAtomType(),
       body: id,
       score: 1,
       sourcePath: `${id}.md`,
@@ -645,7 +646,7 @@ describe('rerankIfRequested — the model reaches the reranker', () => {
     id: 'a1',
     title: 'Photosynthesis',
     domain: 'docs',
-    type: DEFAULT_ATOM_TYPE,
+    type: defaultAtomType(),
     body: 'Marine algae convert sunlight into chemical energy.',
     score: 1,
     sourcePath: 'doc/a1.md',

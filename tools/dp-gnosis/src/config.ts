@@ -1,15 +1,16 @@
 /**
  * Retrieval and authoring policy constants. Deliberately separate from
  * `paths.ts` (SRP): that module owns WHERE things live, this one owns the
- * limits and vocabulary an atom must satisfy.
+ * limits an atom must satisfy.
  *
- * The vocabularies and the path→label tables are DATA, loaded from the shipped
- * ingest profile (`profiles/default.profile.json`); this module only narrows
- * them to the union types the rest of the package is written against.
+ * PURE: nothing here reads the filesystem, at import time or ever. The
+ * vocabularies and the path→label tables are DATA carried by an ingest
+ * profile, and they live in `vocabulary.ts`, which resolves them LAZILY. What
+ * stays here is the one piece that is NOT profile data — the mirrored type
+ * tuple that gives `AtomType` its union — plus the narrowing rule that holds a
+ * profile to it.
  */
-import type { IngestProfile } from './ingestProfile.js';
-import { domainForPath, loadIngestProfile, typeForPath } from './ingestProfile.js';
-import { INGEST_PROFILE_PATH } from './paths.js';
+import { ingestProfilePath } from './paths.js';
 
 /**
  * Hard write-time cap on a single atom's body.
@@ -540,22 +541,14 @@ export const resolveCorpusRoots = (
 };
 
 /**
- * The SHIPPED ingest profile: the ONE place the vocabularies and the
- * path→label tables are authored. Loaded once at module init, so a missing or
- * malformed data file stops the process with the defect named instead of
- * relabelling a whole corpus from built-in values.
+ * The shipped TYPE vocabulary as a literal tuple, and for ONE reason: it is
+ * what gives `AtomType` (`vocabulary.ts`) its union type, which every filter,
+ * adapter and CLI flag is typed against. It decides nothing — the profile is
+ * still the source, and {@link expectVocabulary} refuses to start when the two
+ * disagree, so a type is added to the data file and mirrored here. Domains
+ * carry NO such mirror: they are open by profile, see `atomDomains`.
  */
-export const DEFAULT_INGEST_PROFILE: IngestProfile = loadIngestProfile(INGEST_PROFILE_PATH);
-
-/**
- * The shipped TYPE vocabulary restated as a literal tuple, and for ONE reason:
- * it is what gives `AtomType` its union type, which every filter, adapter and
- * CLI flag is typed against. It decides nothing — the profile is still the
- * source, and `expectVocabulary` refuses to start when the two disagree, so a
- * type is added to the data file and mirrored here. Domains carry NO such
- * mirror: they are open by profile, see `ATOM_DOMAINS`.
- */
-const DECLARED_TYPES = [
+export const DECLARED_TYPES = [
   'knowledge',
   'feature-log',
   'paper',
@@ -581,7 +574,7 @@ const DECLARED_TYPES = [
  * would then lie about what a valid label is.
  *
  * It returns `declared` — the FULL tuple — and NOT the subset it was handed.
- * That is load-bearing, not an oversight: `ATOM_TYPES` is consumed as "every
+ * That is load-bearing, not an oversight: `atomTypes()` is consumed as "every
  * valid label" by `port.ts`, `cli/retrieveCommand.ts` (`asType` and the
  * exclude-type vocabulary), `cli/help.ts` and all three adapters' `asType`
  * fallbacks. Returning the subset while typed as the full tuple would make
@@ -594,142 +587,17 @@ export const expectVocabulary = <T extends readonly string[]>(
 ): T => {
   if (actual.length === 0) {
     throw new Error(
-      `ingest profile "${INGEST_PROFILE_PATH}" declares no ${field} at all — declare at least one of ${declared.join(' | ')}`
+      `ingest profile "${ingestProfilePath()}" declares no ${field} at all — declare at least one of ${declared.join(' | ')}`
     );
   }
   const foreign = actual.find(value => !declared.includes(value));
   if (foreign !== undefined) {
     throw new Error(
-      `ingest profile "${INGEST_PROFILE_PATH}" declares ${field} "${foreign}", which src/config.ts does not mirror — a ${field} value MUST be one of ${declared.join(' | ')}, or the TypeScript union lies about what a valid label is`
+      `ingest profile "${ingestProfilePath()}" declares ${field} "${foreign}", which src/config.ts does not mirror — a ${field} value MUST be one of ${declared.join(' | ')}, or the TypeScript union lies about what a valid label is`
     );
   }
   return declared;
 };
-
-/** Narrow a profile-declared label to its union member, refusing anything else. */
-const expectMember = <T extends string>(value: string, vocabulary: readonly T[], field: string): T => {
-  const known = vocabulary.find(member => member === value);
-  if (known === undefined) {
-    throw new Error(
-      `ingest profile "${INGEST_PROFILE_PATH}" resolved ${field} "${value}", outside the closed vocabulary — replace it with one of ${vocabulary.join(' | ')}`
-    );
-  }
-  return known;
-};
-
-/**
- * The `x_domain` vocabulary of the LOADED profile — open by profile, so a new
- * knowledge domain onboards with a profile file and no TypeScript edit. An
- * unknown domain is still REFUSED, and twice: `parseIngestProfile` rejects a
- * rule naming a label the profile never declares, and ingest rejects the label
- * at write time, because a free-form string fragments on typos and makes an
- * atom silently invisible to every domain-filtered query. Both refusals happen
- * BEFORE an atom exists, so the index side does not re-check — a second check
- * there, against the DEFAULT profile, dropped every atom of any other profile
- * at index time with no diagnostic anywhere.
- */
-export const ATOM_DOMAINS: readonly string[] = DEFAULT_INGEST_PROFILE.domains;
-
-/**
- * A domain label. Unbranded on purpose: the valid set is whatever profile is
- * loaded, so no compile-time union can state it without lying about the other
- * profiles.
- */
-export type AtomDomain = string;
-
-/** One mechanical assignment rule: repo-relative path prefix → domain. */
-export interface SourceRootDomain {
-  readonly prefix: string;
-  readonly domain: AtomDomain;
-}
-
-/**
- * The shipped source→domain assignment table, as declared in the profile data
- * file (`profiles/default.profile.json`, `domainRules`). Ingest MUST derive
- * `x_domain` from this alone, so re-running over unchanged input reproduces
- * identical domains — no per-atom judgement, hence no drift between two
- * ingests of the same corpus. Resolution is longest-prefix-wins; the rows keep
- * their declaration order here so a caller may render the table as authored.
- */
-export const SOURCE_ROOT_DOMAINS: readonly SourceRootDomain[] = DEFAULT_INGEST_PROFILE.domainRules.map(
-  rule => ({ prefix: rule.prefix, domain: expectMember(rule.domain, ATOM_DOMAINS, 'domainRules[].domain') })
-);
-
-/**
- * Resolve the domain for a repo-relative source path, or `undefined` when no
- * declared root claims it (such a source is out of scope for ingest).
- */
-export const domainForSource = (repoRelativePath: string): AtomDomain | undefined => {
-  const domain = domainForPath(DEFAULT_INGEST_PROFILE, repoRelativePath);
-  return domain === undefined ? undefined : expectMember(domain, ATOM_DOMAINS, 'x_domain');
-};
-
-/**
- * The closed `type` vocabulary. Unlike `ATOM_DOMAINS` this one stays CLOSED —
- * an unknown type is REFUSED at write time, because a typo would make the atom
- * silently invisible to every type-filtered query.
- *
- * `knowledge` is the FALLBACK, not the norm — the directory an authored document
- * lives in already carries what kind of document it is (a decision record, a
- * benchmark run, a review), and collapsing all of them into one label discards
- * that. It stays in the vocabulary for the sources no rule below claims.
- *
- * A value here that NO rule claims is deliberate, not an oversight: it is
- * accepted on write while its directory convention is still unsettled, and a
- * guessed path rule would mislabel silently.
- */
-export const ATOM_TYPES = expectVocabulary(DEFAULT_INGEST_PROFILE.types, DECLARED_TYPES, 'types');
-
-/** A member of the closed type vocabulary. */
-export type AtomType = (typeof ATOM_TYPES)[number];
-
-/** The type of a source no prefix and no segment rule claims. */
-export const DEFAULT_ATOM_TYPE: AtomType = expectMember(
-  DEFAULT_INGEST_PROFILE.defaultType,
-  ATOM_TYPES,
-  'defaultType'
-);
-
-/** One mechanical assignment rule: repo-relative path prefix → type. */
-export interface SourceRootType {
-  readonly prefix: string;
-  readonly type: AtomType;
-}
-
-/**
- * The shipped source→type assignment table, as declared in the profile data
- * file (`profiles/default.profile.json`, `typeRules`), and read exactly as
- * `SOURCE_ROOT_DOMAINS` is: longest-prefix-wins, so declaration order is
- * presentation only and a re-run over unchanged input reproduces identical
- * types. A segment rule (also in the profile) overrides every prefix rule.
- */
-export const SOURCE_ROOT_TYPES: readonly SourceRootType[] = DEFAULT_INGEST_PROFILE.typeRules.map(
-  rule => ({ prefix: rule.prefix, type: expectMember(rule.type, ATOM_TYPES, 'typeRules[].type') })
-);
-
-/**
- * Resolve the type for a repo-relative source path. Unlike the domain, an
- * unclaimed source is not out of scope — it simply keeps the `knowledge`
- * fallback.
- */
-export const typeForSource = (repoRelativePath: string): AtomType =>
-  expectMember(typeForPath(DEFAULT_INGEST_PROFILE, repoRelativePath), ATOM_TYPES, 'type');
-
-/**
- * The types the CLI hides from `retrieve` unless the caller asks for them, as
- * declared by the profile (`defaultExcludedTypes`). It is a PRESENTATION
- * default and lives on the CLI path alone: nothing in ingest, the port or an
- * adapter reads it, so a corpus still holds every atom and the bench — which
- * calls the port directly — measures exactly what it always measured.
- *
- * Each value is narrowed against {@link ATOM_TYPES} at load, so a profile
- * naming a type outside the closed vocabulary stops the process with the defect
- * named instead of silently excluding nothing. An absent key reads as an empty
- * list, which is today's behaviour exactly.
- */
-export const DEFAULT_EXCLUDED_TYPES: readonly AtomType[] = (
-  DEFAULT_INGEST_PROFILE.defaultExcludedTypes ?? []
-).map(value => expectMember(value, ATOM_TYPES, 'defaultExcludedTypes[]'));
 
 /**
  * The COLUMNS of the fts5 index, in the order they are declared, inserted and

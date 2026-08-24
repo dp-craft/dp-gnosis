@@ -1,8 +1,9 @@
 import { resolve } from 'node:path';
 
-import { ATOM_TYPES, expectVocabulary } from '../src/config.js';
+import { expectVocabulary } from '../src/config.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { PROFILES_DIR } from '../src/paths.js';
+import { atomTypes } from '../src/vocabulary.js';
 
 /**
  * A profile declares WHICH types its own corpus carries; the shipped tuple
@@ -11,36 +12,36 @@ import { PROFILES_DIR } from '../src/paths.js';
  */
 describe('expectVocabulary', () => {
   it('accepts the full declared vocabulary in declaration order', () => {
-    expect(expectVocabulary([...ATOM_TYPES], ATOM_TYPES, 'types')).toEqual(ATOM_TYPES);
+    expect(expectVocabulary([...atomTypes()], atomTypes(), 'types')).toEqual(atomTypes());
   });
 
   it('accepts a subset given in declaration order', () => {
-    expect(expectVocabulary(['knowledge', 'teaching', 'meta'], ATOM_TYPES, 'types')).toEqual(ATOM_TYPES);
+    expect(expectVocabulary(['knowledge', 'teaching', 'meta'], atomTypes(), 'types')).toEqual(atomTypes());
   });
 
   it('accepts a subset given out of order', () => {
-    expect(expectVocabulary(['meta', 'adr', 'knowledge'], ATOM_TYPES, 'types')).toEqual(ATOM_TYPES);
+    expect(expectVocabulary(['meta', 'adr', 'knowledge'], atomTypes(), 'types')).toEqual(atomTypes());
   });
 
   it('returns the FULL declared tuple, never the subset it was given', () => {
-    const returned = expectVocabulary(['knowledge'], ATOM_TYPES, 'types');
-    expect(returned).toBe(ATOM_TYPES);
-    expect(returned.length).toBe(ATOM_TYPES.length);
+    const returned = expectVocabulary(['knowledge'], atomTypes(), 'types');
+    expect(returned).toBe(atomTypes());
+    expect(returned.length).toBe(atomTypes().length);
   });
 
   it('refuses a member outside the declared vocabulary, naming it and the valid ones', () => {
-    const call = (): readonly string[] => expectVocabulary(['knowledge', 'tax-ruling'], ATOM_TYPES, 'types');
+    const call = (): readonly string[] => expectVocabulary(['knowledge', 'tax-ruling'], atomTypes(), 'types');
     expect(call).toThrow(/tax-ruling/);
     expect(call).toThrow(/lessons-learned/);
   });
 
   it('refuses an empty vocabulary', () => {
-    expect(() => expectVocabulary([], ATOM_TYPES, 'types')).toThrow(/types/);
+    expect(() => expectVocabulary([], atomTypes(), 'types')).toThrow(/types/);
   });
 
   it('accepts the hu-tax profile, which declares four of the shipped types', () => {
     const huTax = loadIngestProfile(resolve(PROFILES_DIR, 'hu-tax.profile.json'));
-    expect(huTax.types.length).toBeLessThan(ATOM_TYPES.length);
-    expect(expectVocabulary(huTax.types, ATOM_TYPES, 'types')).toEqual(ATOM_TYPES);
+    expect(huTax.types.length).toBeLessThan(atomTypes().length);
+    expect(expectVocabulary(huTax.types, atomTypes(), 'types')).toEqual(atomTypes());
   });
 });

@@ -25,7 +25,7 @@ import {
   type RerankResult
 } from './bench/reranker.js';
 import { mapSequential } from './bench/sequential.js';
-import { ATOM_DOMAINS, type AtomDomain } from './config.js';
+import { type AtomDomain, atomDomains } from './vocabulary.js';
 import { type GoldenQuery, type GoldenSet, loadVerifiedGoldenSet } from './goldenSet.js';
 import { ATOMS_DIR, BENCH_WORK_DIR, REPO_ROOT } from './paths.js';
 import type { KnowledgePort, RetrievalResult } from './port.js';
@@ -104,7 +104,7 @@ interface P75Report {
 }
 
 const asDomain = (value: string | null): AtomDomain | undefined =>
-  value === null ? undefined : ATOM_DOMAINS.find(domain => domain === value);
+  value === null ? undefined : atomDomains().find(domain => domain === value);
 
 /** Score one query against one reranker's output. */
 const scoreRerankerQuery = (

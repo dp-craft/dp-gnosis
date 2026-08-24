@@ -13,7 +13,7 @@ import type { GnosisAnswer, GnosisAtom, GnosisExitCode, GnosisSkippedAtom } from
 import type { SkippedAtom } from '../src/budget.js';
 import type { ExplainedAtom } from '../src/cli/explain.js';
 import { EXIT_OK, EXIT_PARTIAL, EXIT_USAGE } from '../src/cli/outcome.js';
-import { DEFAULT_ATOM_TYPE } from '../src/config.js';
+import { defaultAtomType } from '../src/vocabulary.js';
 
 const API_PATH = fileURLToPath(new URL('../src/api.d.ts', import.meta.url));
 
@@ -55,7 +55,7 @@ const EXPLAINED: ExplainedAtom = {
   id: 'ts-testing-layered-test-model',
   title: 'Layered Test Model',
   domain: 'standards',
-  type: DEFAULT_ATOM_TYPE,
+  type: defaultAtomType(),
   body: '# Layered Test Model\n\nprose\n',
   score: 4.25,
   sourcePath: 'vault/ts-testing-layered-test-model.md',

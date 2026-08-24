@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runExtract } from '../scripts/extract-summaries.js';
-import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import {
   loadSummarySidecar,
@@ -13,6 +12,7 @@ import {
   serializeSummarySidecar,
   SUMMARY_SIDECAR_VERSION
 } from '../src/summarySidecar.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 const STANDARDS_ROOT = 'claude-artifacts/standards';
 const BODY =
@@ -125,7 +125,7 @@ describe('loadSummarySidecar', () => {
 
 describe('extract-summaries', () => {
   const profileFor = (root: string): IngestProfile => ({
-    ...DEFAULT_INGEST_PROFILE,
+    ...activeProfile(),
     repoRoot: root,
     corpusRoots: [STANDARDS_ROOT],
   });

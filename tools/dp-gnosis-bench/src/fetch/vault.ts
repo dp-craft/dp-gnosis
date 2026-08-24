@@ -26,7 +26,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 import { parseAtom } from '../../../dp-gnosis/src/atom.js';
-import { DEFAULT_EXCLUDED_TYPES } from '../../../dp-gnosis/src/config.js';
+import { defaultExcludedTypes } from '../../../dp-gnosis/src/vocabulary.js';
 import type { BeirDoc } from '../beir.js';
 import type { BeirDataset, VaultDerivationSource } from '../manifest.js';
 
@@ -161,10 +161,14 @@ const toTypedDoc = (atomsDir: string, relPath: string): TypedDoc | undefined => 
 
 const isTypedDoc = (value: TypedDoc | undefined): value is TypedDoc => value !== undefined;
 
-/** The types the CLI hides from every `retrieve`, read as plain strings. */
-const EXCLUDED_TYPES: readonly string[] = DEFAULT_EXCLUDED_TYPES;
-
-const isServable = (typed: TypedDoc): boolean => !EXCLUDED_TYPES.includes(typed.type);
+/**
+ * The types the CLI hides from every `retrieve`, read as plain strings. A
+ * FUNCTION call, not a module-level constant: the exclusion is profile data and
+ * resolving it at import would read a profile off disk before the caller has
+ * named one.
+ */
+const isServable = (typed: TypedDoc): boolean =>
+  !(defaultExcludedTypes() as readonly string[]).includes(typed.type);
 
 const markdownPaths = (atomsDir: string): readonly string[] =>
   [

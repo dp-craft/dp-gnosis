@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
-import { DEFAULT_INGEST_PROFILE } from '../src/config.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 /**
  * A domain NO shipped profile declares, and deliberately so: onboarding a new
@@ -38,7 +38,7 @@ const makeInstance = async (): Promise<Instance> => {
   const indexPath = join(repoRoot, FOREIGN_DOMAIN, 'index.db');
   const profilePath = join(repoRoot, `${FOREIGN_DOMAIN}.profile.json`);
   const profile = {
-    ...DEFAULT_INGEST_PROFILE,
+    ...activeProfile(),
     name: FOREIGN_DOMAIN,
     domains: [FOREIGN_DOMAIN],
     domainRules: [{ prefix: `${corpusRoot}/`, domain: FOREIGN_DOMAIN }],

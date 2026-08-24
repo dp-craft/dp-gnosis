@@ -1,4 +1,4 @@
-import { ATOM_TYPES, domainForSource, typeForSource } from '../src/config.js';
+import { atomTypes, domainForSource, typeForSource } from '../src/vocabulary.js';
 
 /** The measured prefix→domain table, restated as the contract ingest must satisfy. */
 const DOMAIN_CASES: readonly (readonly [string, string | undefined])[] = [
@@ -74,6 +74,6 @@ describe('typeForSource', () => {
 
   it('resolves every path to a member of the closed vocabulary', () => {
     const resolved = CASES.map(([path]) => typeForSource(path));
-    expect(resolved.every(type => ATOM_TYPES.includes(type))).toBe(true);
+    expect(resolved.every(type => atomTypes().includes(type))).toBe(true);
   });
 });
