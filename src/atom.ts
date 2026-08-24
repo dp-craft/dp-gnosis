@@ -13,8 +13,8 @@
  * Consequence: anything outside the closed subset is REFUSED with a message
  * naming the required form — never guessed at, never re-shaped. The subset is:
  * a `---` opening line, `key: value` scalars with exactly one space after the
- * colon and no padding, one `sources:` block whose entries are `  - <string>`,
- * and a `---` closing line terminated by a newline.
+ * colon and no padding, one `sources:` block of one or more `  - <string>`
+ * entries, and a `---` closing line terminated by a newline.
  *
  * Not validated here (T-04 owns it): id uniqueness, the body size cap, and the
  * `x_domain` vocabulary.
@@ -232,13 +232,18 @@ const countError = (map: ReadonlyMap<string, string>): string | undefined => {
   return bad === undefined ? undefined : `field "${bad}" MUST be a non-negative integer`;
 };
 
-const sourceCountError = (count: number): string =>
-  count === 0
-    ? 'missing required field "sources" — at least one flat source string is required'
-    : `field "sources" MUST hold exactly one flat source string — found ${count}`;
+const MISSING_SOURCES_ERROR =
+  'missing required field "sources" — at least one flat source string is required';
 
+/**
+ * AT LEAST one, not exactly one. `ingest.ts` merges the provenance of a
+ * byte-identical duplicate group into the copy that survives it, so one atom
+ * legitimately represents several source documents and MUST be able to name
+ * them all. The list stays FLAT — the closed subset is unchanged, only its
+ * cardinality.
+ */
 const sourcesError = (sources: readonly string[]): string | undefined =>
-  sources.length === 1 ? undefined : sourceCountError(sources.length);
+  sources.length === 0 ? MISSING_SOURCES_ERROR : undefined;
 
 const validationError = (
   map: ReadonlyMap<string, string>,

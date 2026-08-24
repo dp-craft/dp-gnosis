@@ -287,17 +287,29 @@ describe('parseAtom refusals (closed subset)', () => {
     );
   });
 
-  it('refuses more than one source and names the exactly-one rule', () => {
-    const error = errorOf(withFrontmatter([...VALID_FIELDS, '  - https://example.com/b']));
-    expect(error).toBe(
-      'field "sources" MUST hold exactly one flat source string — found 2'
-    );
+  /**
+   * AT LEAST one, not exactly one: `ingest.ts` merges the provenance of a
+   * byte-identical duplicate group into the surviving copy, so an atom
+   * legitimately names every source document whose body it represents.
+   */
+  it('ACCEPTS more than one source and keeps them in authored order', () => {
+    const text = withFrontmatter([...VALID_FIELDS, '  - https://example.com/b']);
+    const parsed = parseAtom(text);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.atom.frontmatter.sources).toEqual([
+      'https://example.com/a',
+      'https://example.com/b',
+    ]);
   });
 
-  it('refuses the three-source fixture with the same exactly-one message', () => {
-    expect(errorOf(lf(MULTI_SOURCE_LINES))).toBe(
-      'field "sources" MUST hold exactly one flat source string — found 3'
-    );
+  it('round-trips the three-source fixture byte-identically', () => {
+    const text = lf(MULTI_SOURCE_LINES);
+    const parsed = parseAtom(text);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.atom.frontmatter.sources).toHaveLength(3);
+    expect(serializeAtom(parsed.atom.frontmatter, parsed.atom.body)).toBe(text);
   });
 
   it('keeps the empty-sources message distinct from the too-many message', () => {

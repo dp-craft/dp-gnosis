@@ -783,6 +783,61 @@ const duplicateReasons = (
     : [`${DUPLICATE_REASON_PREFIX}${primary}`];
 };
 
+/**
+ * The paths the group's PRIMARY survivor inherits — every member the duplicate
+ * rule refused, in the group's own preference order.
+ *
+ * The primary is the atom `duplicateReasons` already names in
+ * `duplicate-body-of:<primary>`, so the two read one decision. A NON-primary
+ * survivor — the double-gold case — inherits nothing: its own document is
+ * credited in its own right, and claiming the group's other documents would
+ * make two atoms answer for one source.
+ */
+const inheritedByPrimary = (
+  group: readonly PlannedAtom[],
+  gold: ReadonlySet<string>
+): readonly (readonly [string, readonly string[]])[] => {
+  const survivors = survivorsOf(group, gold);
+  const [primary] = survivors;
+  const kept = new Set(survivors);
+  const dropped = group.filter(entry => !kept.has(entry.atom.frontmatter.id));
+  return primary === undefined || dropped.length === 0
+    ? []
+    : [[primary, dropped.map(entry => entry.candidate.sourcePath)]];
+};
+
+/** atom id → the dropped mirrors' source paths it now speaks for. Groups are already ordered. */
+const inheritedSources = (
+  planned: readonly PlannedAtom[],
+  gold: ReadonlySet<string>
+): ReadonlyMap<string, readonly string[]> =>
+  new Map([...groupedByBody(planned, gold)].flatMap(([, group]) => inheritedByPrimary(group, gold)));
+
+/** Own path first, then the inherited ones, deduped — a source is named ONCE. */
+const withInherited = (entry: CheckedAtom, inherited: readonly string[]): CheckedAtom => ({
+  ...entry,
+  atom: {
+    ...entry.atom,
+    frontmatter: {
+      ...entry.atom.frontmatter,
+      sources: [...new Set([...entry.atom.frontmatter.sources, ...inherited])],
+    },
+  },
+});
+
+/**
+ * PROVENANCE MERGE — a second pass over the write set, in the shape
+ * `withDenseOrigin` established. Exact-body dedupe is right for the product: two
+ * copies of one body would spend two pool slots on identical text. What it must
+ * NOT do is lose the dropped document, which is the only record that the text
+ * lives there too. So the atom that survives names every source it represents.
+ */
+const withMergedSources = (
+  writable: readonly CheckedAtom[],
+  inherited: ReadonlyMap<string, readonly string[]>
+): readonly CheckedAtom[] =>
+  writable.map(entry => withInherited(entry, inherited.get(entry.atom.frontmatter.id) ?? []));
+
 /** The duplicate share of a refusal set — a subset of it, never its total. */
 const countDuplicates = (refused: readonly CheckedAtom[]): number =>
   refused.filter(entry => entry.reasons.some(reason => reason.startsWith(DUPLICATE_REASON_PREFIX)))
@@ -882,6 +937,17 @@ const withDenseOrigin = (writable: readonly CheckedAtom[]): readonly CheckedAtom
   );
 };
 
+/** The atoms this run writes: the valid ones, origin-renumbered, provenance-merged. */
+const writeSet = (
+  checked: readonly CheckedAtom[],
+  planned: readonly PlannedAtom[],
+  gold: ReadonlySet<string>
+): readonly CheckedAtom[] =>
+  withMergedSources(
+    withDenseOrigin(checked.filter(entry => entry.reasons.length === 0)),
+    inheritedSources(planned, gold)
+  );
+
 /** Everything the run puts on disk: the atoms, the owner marker, the manifest. */
 interface WritePhase {
   readonly outputDir: string;
@@ -922,11 +988,10 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
   const unmapped = unmappedSkips(loaded, profile);
   const summaries = profileSummaries(repoRoot, profile);
   const candidates = [...loaded.flatMap(source => toCandidates(source, profile, summaries))].sort(byOrder);
-  const checked = checkAtoms(planAtoms(candidates), await readExistingIds(outputDir), {
-    profile,
-    gold: goldOf(options),
-  });
-  const writable = withDenseOrigin(checked.filter(entry => entry.reasons.length === 0));
+  const planned = planAtoms(candidates);
+  const gold = goldOf(options);
+  const checked = checkAtoms(planned, await readExistingIds(outputDir), { profile, gold });
+  const writable = writeSet(checked, planned, gold);
   const refused = checked.filter(entry => entry.reasons.length > 0);
   const skipped = [...unmapped, ...refused.map(toSkip)];
   const duplicates = countDuplicates(refused);
