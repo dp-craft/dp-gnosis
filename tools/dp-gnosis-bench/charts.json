@@ -1,0 +1,115 @@
+{
+  "corpusDocuments": {
+    "vault": 11345,
+    "vault-rephrased": 11345,
+    "vault-hu": 454,
+    "vault-hu-rephrased": 454
+  },
+  "charts": [
+    {
+      "kind": "delta",
+      "id": "dp-gnosis-delta-query-rephrasing",
+      "title": "Query rephrasing — paired delta with 95% bootstrap CI",
+      "comparisons": [
+        {
+          "label": "vault → vault-rephrased",
+          "a": "055516173-fts5-vault",
+          "b": "060429348-fts5-vault-rephrased",
+          "metric": "ndcg10"
+        },
+        {
+          "label": "vault → vault-rephrased",
+          "a": "055516173-fts5-vault",
+          "b": "060429348-fts5-vault-rephrased",
+          "metric": "recall20"
+        },
+        {
+          "label": "vault-hu → vault-hu-rephrased",
+          "a": "060407875-fts5-vault-hu",
+          "b": "060409796-fts5-vault-hu-rephrased",
+          "metric": "ndcg10"
+        },
+        {
+          "label": "vault-hu → vault-hu-rephrased",
+          "a": "060407875-fts5-vault-hu",
+          "b": "060409796-fts5-vault-hu-rephrased",
+          "metric": "recall20"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "dp-gnosis-delta-adapters-vault-hu-ndcg10",
+      "title": "Adapters on vault-hu (depth 100) — nDCG@10 paired delta, all six pairs",
+      "comparisons": [
+        { "label": "fts5 → linear", "a": "060324449", "b": "060332159", "metric": "ndcg10" },
+        { "label": "fts5 → minisearch", "a": "060324449", "b": "060335160", "metric": "ndcg10" },
+        { "label": "fts5 → lancedb", "a": "060324449", "b": "060338756", "metric": "ndcg10" },
+        { "label": "linear → minisearch", "a": "060332159", "b": "060335160", "metric": "ndcg10" },
+        { "label": "linear → lancedb", "a": "060332159", "b": "060338756", "metric": "ndcg10" },
+        {
+          "label": "minisearch → lancedb",
+          "a": "060335160",
+          "b": "060338756",
+          "metric": "ndcg10"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "dp-gnosis-delta-adapters-vault-hu-recall20",
+      "title": "Adapters on vault-hu (depth 100) — R@20 paired delta, all six pairs",
+      "comparisons": [
+        { "label": "fts5 → linear", "a": "060324449", "b": "060332159", "metric": "recall20" },
+        { "label": "fts5 → minisearch", "a": "060324449", "b": "060335160", "metric": "recall20" },
+        { "label": "fts5 → lancedb", "a": "060324449", "b": "060338756", "metric": "recall20" },
+        {
+          "label": "linear → minisearch",
+          "a": "060332159",
+          "b": "060335160",
+          "metric": "recall20"
+        },
+        { "label": "linear → lancedb", "a": "060332159", "b": "060338756", "metric": "recall20" },
+        {
+          "label": "minisearch → lancedb",
+          "a": "060335160",
+          "b": "060338756",
+          "metric": "recall20"
+        }
+      ]
+    },
+    {
+      "kind": "recall-depth",
+      "id": "dp-gnosis-recall-vs-depth",
+      "title": "Recall against retrieval cutoff — how much gold sits outside the reranker's window",
+      "runs": [
+        { "label": "vault (EN, fts5, depth 1000)", "selector": "055516173-fts5-vault" },
+        { "label": "vault-hu (HU, fts5, depth 1000)", "selector": "060407875-fts5-vault-hu" }
+      ]
+    },
+    {
+      "kind": "arms",
+      "id": "dp-gnosis-arms-adapters-vault-hu",
+      "title": "Adapter arms on vault-hu (depth 100)",
+      "metrics": ["ndcg10", "recall20"],
+      "runs": [
+        { "label": "fts5", "selector": "060324449" },
+        { "label": "linear", "selector": "060332159" },
+        { "label": "minisearch", "selector": "060335160" },
+        { "label": "lancedb", "selector": "060338756" }
+      ]
+    },
+    {
+      "kind": "arms",
+      "id": "dp-gnosis-arms-query-rephrasing",
+      "title": "Base vs rephrased queries (fts5, depth 1000)",
+      "metrics": ["ndcg10", "recall20"],
+      "runs": [
+        { "label": "vault", "selector": "055516173-fts5-vault" },
+        { "label": "vault-rephrased", "selector": "060429348-fts5-vault-rephrased" },
+        { "label": "vault-hu", "selector": "060407875-fts5-vault-hu" },
+        { "label": "vault-hu-rephrased", "selector": "060409796-fts5-vault-hu-rephrased" }
+      ]
+    }
+  ]
+}
