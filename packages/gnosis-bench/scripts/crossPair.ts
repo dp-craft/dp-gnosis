@@ -22,7 +22,7 @@
  * usage: tsx scripts/crossPair.ts <dataset> <a.tsv> <b.tsv> <aLabel> <bLabel>
  *   paths are relative to the bench package root; positive Δ means B is ahead
  */
-import { type MetricName, pairedScores, readPerTopic } from '../src/significance.ts';
+import { type MetricName, pairedScores, readPerTopic } from '../src/significance.js';
 
 const [dataset, aPath, bPath, aLabel, bLabel] = process.argv.slice(2);
 if (dataset === undefined || aPath === undefined || bPath === undefined) {

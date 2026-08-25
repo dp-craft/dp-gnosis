@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { PAIR_EXIT_REFUSED, PAIR_EXIT_USAGE, pairReport, parsePairArgs } from './pair.js';
-import { type HistoryRow, PER_TOPIC_DIR } from './report.js';
+import { PAIR_EXIT_REFUSED, PAIR_EXIT_USAGE, pairReport, parsePairArgs } from '../src/pair.js';
+import { type HistoryRow, PER_TOPIC_DIR } from '../src/report.js';
 
 const BASE_ROW: HistoryRow = {
   ts: '2026-08-15T01:00:00.000Z',

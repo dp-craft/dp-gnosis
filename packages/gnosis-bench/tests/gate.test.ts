@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
-import { gateReport, parseGateArgs } from './gate.js';
+import { gateReport, parseGateArgs } from '../src/gate.js';
 import {
   DEFAULT_FIELD_WEIGHTS_TEXT,
   type HistoryRow,
@@ -13,7 +13,7 @@ import {
   PER_TOPIC_DIR,
   perTopicRelPath,
   type RunProvenance
-} from './report.js';
+} from '../src/report.js';
 
 const DATASET = 'vault';
 

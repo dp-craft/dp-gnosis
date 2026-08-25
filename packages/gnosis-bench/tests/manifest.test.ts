@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import type { BrightDataset } from './manifest.js';
-import { datasetsInLayer, enabledDatasets, loadManifest, parseManifest } from './manifest.js';
+import type { BrightDataset } from '../src/manifest.js';
+import { datasetsInLayer, enabledDatasets, loadManifest, parseManifest } from '../src/manifest.js';
 
 const MANIFEST = resolve(fileURLToPath(import.meta.url), '../../datasets.json');
 

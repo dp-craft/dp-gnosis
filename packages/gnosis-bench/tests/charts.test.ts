@@ -11,12 +11,12 @@ import {
   type DeltaChart,
   type RecallDepthChart,
   RERANK_WINDOW
-} from './chartData.js';
-import { CHARTS_EXIT_OK, CHARTS_EXIT_USAGE, main } from './charts.js';
-import { parseChartsSpec } from './chartSpec.js';
-import { renderChartSvg } from './chartSvg.js';
-import { HISTORY_FILE, type HistoryRow, PER_TOPIC_DIR } from './report.js';
-import { SUITE_ROOT } from './run.js';
+} from '../src/chartData.js';
+import { CHARTS_EXIT_OK, CHARTS_EXIT_USAGE, main } from '../src/charts.js';
+import { parseChartsSpec } from '../src/chartSpec.js';
+import { renderChartSvg } from '../src/chartSvg.js';
+import { HISTORY_FILE, type HistoryRow, PER_TOPIC_DIR } from '../src/report.js';
+import { SUITE_ROOT } from '../src/run.js';
 
 const BASE_ROW: HistoryRow = {
   ts: '2026-08-15T01:00:00.000Z',

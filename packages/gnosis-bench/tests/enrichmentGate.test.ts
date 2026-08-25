@@ -11,7 +11,7 @@ import {
   maxStemRun,
   PARAPHRASE_RUN_STEMS,
   scaledLimit
-} from './enrichmentGate.js';
+} from '../src/enrichmentGate.js';
 
 const stems = (text: string): readonly string[] => text.split(' ');
 

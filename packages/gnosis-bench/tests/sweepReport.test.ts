@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import type { Metrics } from './metrics.js';
+import type { Metrics } from '../src/metrics.js';
 import {
   ANALYSIS_DIR,
   bestCell,
@@ -18,7 +18,7 @@ import {
   sweepPerTopicName,
   type SweepProvenance,
   writeSweepReport
-} from './sweepReport.js';
+} from '../src/sweepReport.js';
 
 const root = mkdtempSync(resolve(tmpdir(), 'gnosis-sweep-report-'));
 

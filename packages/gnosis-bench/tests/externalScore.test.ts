@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Qrel } from './beir.js';
-import { alignToQrels, parseTrecRun, unresolvableIds } from './externalScore.js';
+import type { Qrel } from '../src/beir.js';
+import { alignToQrels, parseTrecRun, unresolvableIds } from '../src/externalScore.js';
 
 const line = (queryId: string, docId: string, rank: number): string =>
   `${queryId} Q0 ${docId} ${rank} ${1 / rank} qmd`;

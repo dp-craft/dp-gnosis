@@ -10,5 +10,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts"]
+  "comment": "Typecheck project for the benchmark. `tests/` and `scripts/` are INCLUDED: the suite and the maintenance scripts are TypeScript this repo owns, and leaving them out meant a broken test or script was only ever discovered by running it. noEmit — the benchmark is not published; only @dp/gnosis has a build.",
+  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }

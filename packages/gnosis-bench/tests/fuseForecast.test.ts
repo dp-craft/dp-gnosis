@@ -15,7 +15,7 @@ import {
   RERANK_RRF_K,
   rrfFuse,
   THREE_WAY_SHARE
-} from './fuseForecast.js';
+} from '../src/fuseForecast.js';
 import {
   FUSE_FORECAST_HELP,
   FUSE_LEG_SPECS,
@@ -23,10 +23,10 @@ import {
   parseFuseForecastArgs,
   requireLegRow,
   selectLegRow
-} from './fuseForecastCli.js';
-import type { Qrel } from './metrics.js';
-import type { HistoryRow } from './report.js';
-import { scoreDataset } from './score.js';
+} from '../src/fuseForecastCli.js';
+import type { Qrel } from '../src/metrics.js';
+import type { HistoryRow } from '../src/report.js';
+import { scoreDataset } from '../src/score.js';
 
 /**
  * Fixtures are stated in memory, never read from a shared work dir: the bench

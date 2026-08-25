@@ -4,8 +4,8 @@ import { basename, isAbsolute, resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import type { BeirDoc } from './beir.js';
-import { buildProfile, fileNameFor, materializeCorpus, toMarkdown } from './corpus.js';
+import type { BeirDoc } from '../src/beir.js';
+import { buildProfile, fileNameFor, materializeCorpus, toMarkdown } from '../src/corpus.js';
 
 const root = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-corpus-'));
 

@@ -4,11 +4,11 @@ import { resolve } from 'node:path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { BeirDoc } from './beir.js';
-import { prepareDataset, type PreparedDataset } from './engine.js';
-import type { BeirDataset, DatasetEntry } from './manifest.js';
-import type { Qrel } from './metrics.js';
-import { readPerTopic, type Significance } from './significance.js';
+import type { BeirDoc } from '../src/beir.js';
+import { prepareDataset, type PreparedDataset } from '../src/engine.js';
+import type { BeirDataset, DatasetEntry } from '../src/manifest.js';
+import type { Qrel } from '../src/metrics.js';
+import { readPerTopic, type Significance } from '../src/significance.js';
 import {
   buildGrid,
   measureCell,
@@ -17,8 +17,8 @@ import {
   selectDatasets,
   winnerLine,
   writerFor
-} from './sweep.js';
-import { type SweepCell, sweepPerTopicName } from './sweepReport.js';
+} from '../src/sweep.js';
+import { type SweepCell, sweepPerTopicName } from '../src/sweepReport.js';
 
 const DEFAULT_CELLS = 12;
 const BASELINE_CELLS = 1;

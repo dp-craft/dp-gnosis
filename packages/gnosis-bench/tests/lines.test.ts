@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { countNonEmptyLines, mapNonEmptyLines } from './lines.js';
+import { countNonEmptyLines, mapNonEmptyLines } from '../src/lines.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-lines-'));
 

@@ -11,8 +11,8 @@ import {
   precisionAt,
   readRunFile,
   topicForensics
-} from './forensics.js';
-import { ndcgAt, type Qrel } from './metrics.js';
+} from '../src/forensics.js';
+import { ndcgAt, type Qrel } from '../src/metrics.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-forensics-'));
 

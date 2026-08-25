@@ -26,8 +26,8 @@ import {
   scoresFilePath,
   scoresRelPath,
   writeRunSummary
-} from './report.js';
-import type { TopicScore } from './score.js';
+} from '../src/report.js';
+import type { TopicScore } from '../src/score.js';
 
 const tempResultsDir = (): string => mkdtempSync(resolve(tmpdir(), 'gnosis-bench-report-'));
 

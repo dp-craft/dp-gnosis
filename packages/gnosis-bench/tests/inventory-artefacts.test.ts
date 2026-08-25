@@ -19,7 +19,7 @@ import {
   MTIME_LEAD_TOLERANCE_MS,
   mtimeVerdict,
   summarize
-} from './inventory-artefacts.js';
+} from '../scripts/inventory-artefacts.js';
 
 const ROW_TS = '2026-08-10T12:00:00.000Z';
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DuplicateLink } from './engine.js';
-import { auditGold, rePointQrels } from './goldAudit.js';
-import type { Qrel } from './metrics.js';
+import type { DuplicateLink } from '../src/engine.js';
+import { auditGold, rePointQrels } from '../src/goldAudit.js';
+import type { Qrel } from '../src/metrics.js';
 
 const qrelsOf = (rows: Readonly<Record<string, Readonly<Record<string, number>>>>): ReadonlyMap<string, Qrel> =>
   new Map(Object.entries(rows).map(([topic, graded]) => [topic, new Map(Object.entries(graded))]));

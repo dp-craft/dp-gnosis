@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { type BeirDoc, readCorpus, readQrels, readQueries, readQueryFacets } from './beir.js';
-import { safeDocId } from './docId.js';
+import { type BeirDoc, readCorpus, readQrels, readQueries, readQueryFacets } from '../src/beir.js';
+import { safeDocId } from '../src/docId.js';
 
 const dir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-beir-'));
 

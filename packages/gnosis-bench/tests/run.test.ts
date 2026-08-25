@@ -14,10 +14,10 @@ import type {
 import { DEFAULT_PRF_PARAMS } from '../../gnosis/src/prf.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
 import { EXTRACT_STRATEGY } from '../../gnosis/src/rerank.js';
-import { SCALE_FIELDS, TREATMENT_FIELDS } from './compare.js';
-import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
-import { type DatasetEntry, loadManifest } from './manifest.js';
-import type { Qrel } from './metrics.js';
+import { SCALE_FIELDS, TREATMENT_FIELDS } from '../src/compare.js';
+import { UNREACHABLE_GOLD_CAUSE } from '../src/fetch/vault.js';
+import { type DatasetEntry, loadManifest } from '../src/manifest.js';
+import type { Qrel } from '../src/metrics.js';
 import {
   canonicalFieldWeights,
   type DatasetResult,
@@ -27,7 +27,7 @@ import {
   readHistory,
   recordDataset,
   type RunProvenance
-} from './report.js';
+} from '../src/report.js';
 import {
   applyGate,
   BENCH_DEFAULT_ADAPTER,
@@ -52,7 +52,7 @@ import {
   selectionError,
   warnCollapsingTopics,
   warnRerankPoolBelowDepth
-} from './run.js';
+} from '../src/run.js';
 import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 
 /** A second reranker id — any id the shipped constant is not. */

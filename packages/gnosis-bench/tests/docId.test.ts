@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertNoIdCollisions, safeDocId } from './docId.js';
+import { assertNoIdCollisions, safeDocId } from '../src/docId.js';
 
 /** The filename rule `corpus.ts:fileNameFor` enforces. */
 const FILENAME_SAFE = /^[A-Za-z0-9._-]{1,200}$/;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Metrics, Qrel } from './metrics.js';
+import type { Metrics, Qrel } from '../src/metrics.js';
 import {
   atomSpread,
   documentScores,
@@ -10,7 +10,7 @@ import {
   toDocumentRanking,
   type TopicScore,
   withTopicFacets
-} from './score.js';
+} from '../src/score.js';
 
 const atom = (...originPaths: string[]): { readonly originPaths: readonly string[] } => ({
   originPaths,

@@ -8,7 +8,7 @@ import {
   rPrecisionTopics,
   scoreTopic,
   sdMetrics
-} from './metrics.js';
+} from '../src/metrics.js';
 
 const qrel = new Map([
   ['a', 1],

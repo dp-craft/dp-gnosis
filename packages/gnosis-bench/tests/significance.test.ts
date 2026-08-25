@@ -13,7 +13,7 @@ import {
   perTopicRelPath,
   reportStem,
   type RunProvenance
-} from './report.js';
+} from '../src/report.js';
 import {
   CI_LEVEL,
   pairedScores,
@@ -23,7 +23,7 @@ import {
   readPerTopic,
   SIGNIFICANCE_SEED,
   type TopicScores
-} from './significance.js';
+} from '../src/significance.js';
 
 const BASE_ROW: HistoryRow = {
   ts: '2026-08-14T12:57:00.000Z',

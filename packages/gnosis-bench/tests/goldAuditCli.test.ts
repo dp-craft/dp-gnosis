@@ -5,15 +5,15 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { BeirDoc } from './beir.js';
+import type { BeirDoc } from '../src/beir.js';
 import {
   auditIngestOptions,
   emptyRankingLines,
   emptyRankingTopics,
   scoreRun
-} from './goldAuditCli.js';
-import type { BeirDataset, DatasetEntry } from './manifest.js';
-import type { Qrel } from './metrics.js';
+} from '../src/goldAuditCli.js';
+import type { BeirDataset, DatasetEntry } from '../src/manifest.js';
+import type { Qrel } from '../src/metrics.js';
 
 const DOCS: readonly BeirDoc[] = [{ id: 'd1', title: 'One', text: 'Body one.' }];
 

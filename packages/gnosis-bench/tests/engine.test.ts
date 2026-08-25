@@ -16,7 +16,7 @@ import type {
   RetrieveOptions
 } from '../../gnosis/src/port.js';
 import { type AnalyzerId, DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
-import type { BeirDoc } from './beir.js';
+import type { BeirDoc } from '../src/beir.js';
 import {
   assertCorpusMaterialized,
   assertIngestSound,
@@ -36,10 +36,10 @@ import {
   RERANK_PROBE_CAUSE,
   rerankIfRequested,
   retrieveDocs
-} from './engine.js';
-import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
-import { auditGold, type GoldAudit } from './goldAudit.js';
-import type { Qrel } from './metrics.js';
+} from '../src/engine.js';
+import { UNREACHABLE_GOLD_CAUSE } from '../src/fetch/vault.js';
+import { auditGold, type GoldAudit } from '../src/goldAudit.js';
+import type { Qrel } from '../src/metrics.js';
 import { defaultAtomType } from '../../gnosis/src/vocabulary.js';
 
 /** A second reranker id — any id the shipped constant is not. */

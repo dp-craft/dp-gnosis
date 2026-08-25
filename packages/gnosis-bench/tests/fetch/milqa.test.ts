@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildMilqaFiles, MILQA_SPLIT_FILES, slugify } from './milqa.js';
+import { buildMilqaFiles, MILQA_SPLIT_FILES, slugify } from '../../src/fetch/milqa.js';
 
 const paragraph = (
   section: string,

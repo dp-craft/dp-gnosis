@@ -14,8 +14,8 @@
  * usage: tsx scripts/materialize-beir.ts <beir-dir> <target-dir>
  * exit 0 materialized · 2 bad input · 3 doc/file count mismatch
  */
-import { readCorpus } from '../src/beir.ts';
-import { materializeCorpus } from '../src/corpus.ts';
+import { readCorpus } from '../src/beir.js';
+import { materializeCorpus } from '../src/corpus.js';
 
 const [beirDir, targetDir] = process.argv.slice(2);
 if (beirDir === undefined || targetDir === undefined) {

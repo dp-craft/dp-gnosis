@@ -183,12 +183,13 @@ export default tseslint.config(
   },
   {
     // Test files are exempt from FP/structure rules (principles §IV); formatting still
-    // applies. Globs match this repo's actual layout: `packages/gnosis/tests/` is the
-    // engine's test root, while the benchmark co-locates `*.test.ts` beside its sources
-    // in `src/`, `src/fetch/`, and `scripts/`. MUST stay AFTER the package rule block
+    // applies. Globs match this repo's actual layout: both packages now keep their
+    // suites under `tests/` — the benchmark's colocated `src/*.test.ts` moved there.
+    // MUST stay AFTER the package rule block
     // above, which spreads `projectRules` and would otherwise re-enable these.
     files: [
       'packages/gnosis/tests/**/*.ts',
+      'packages/gnosis-bench/tests/**/*.ts',
       'packages/gnosis/**/*.{test,spec}.ts',
       'packages/gnosis-bench/**/*.{test,spec}.ts',
       'packages/gnosis-bench/fixtures/**',

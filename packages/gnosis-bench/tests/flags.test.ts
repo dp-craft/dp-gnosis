@@ -4,12 +4,15 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { type FlagSpec, GATE_VALUE_FLAGS, unknownFlags } from './flags.js';
-import { PAIR_FLAGS, parsePairArgs } from './pair.js';
-import { parseArgs, RUN_FLAGS } from './run.js';
-import { parseSweepArgs, SWEEP_FLAGS } from './sweep.js';
+import { type FlagSpec, GATE_VALUE_FLAGS, unknownFlags } from '../src/flags.js';
+import { PAIR_FLAGS, parsePairArgs } from '../src/pair.js';
+import { parseArgs, RUN_FLAGS } from '../src/run.js';
+import { parseSweepArgs, SWEEP_FLAGS } from '../src/sweep.js';
 
-const SRC = dirname(fileURLToPath(import.meta.url));
+// The PARSER SOURCES this test reads, not this file's own directory: the suite
+// lives in `tests/` while `flags.ts`, `run.ts`, `pair.ts` and `sweep.ts` stay in
+// `src/`. Anchored on this file so it is independent of the invoking directory.
+const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
 
 const readSource = (file: string): string => readFileSync(resolve(SRC, file), 'utf8');
 

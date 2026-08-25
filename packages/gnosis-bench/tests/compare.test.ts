@@ -10,13 +10,13 @@ import {
   PROVENANCE_FIELDS,
   SCALE_FIELDS,
   TREATMENT_FIELDS
-} from './compare.js';
+} from '../src/compare.js';
 import {
   DEFAULT_FIELD_WEIGHTS_TEXT,
   type HistoryRow,
   NO_ENRICHMENT,
   NO_TYPE_FILTER
-} from './report.js';
+} from '../src/report.js';
 import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 
 /** What an absent rerank doc window on a row means — the values that always held. */

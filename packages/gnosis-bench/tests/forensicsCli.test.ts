@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { readRunFile } from './forensics.js';
+import { readRunFile } from '../src/forensics.js';
 import {
   allGoldInBudget,
   CAUSE_QREL_DRIFT,
@@ -17,10 +17,10 @@ import {
   noiseAtServedK,
   parseForensicsArgs,
   recordedMetrics
-} from './forensicsCli.js';
-import type { Metrics, Qrel } from './metrics.js';
-import type { HistoryRow } from './report.js';
-import { type ParsedMetrics, readPerTopic, type TopicScores } from './significance.js';
+} from '../src/forensicsCli.js';
+import type { Metrics, Qrel } from '../src/metrics.js';
+import type { HistoryRow } from '../src/report.js';
+import { type ParsedMetrics, readPerTopic, type TopicScores } from '../src/significance.js';
 
 /**
  * Provenance of the fixture — sliced from the RECORDED champion run, not synthesized:
