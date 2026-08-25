@@ -25,8 +25,8 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
-import { parseAtom } from '../../../dp-gnosis/src/atom.js';
-import { defaultExcludedTypes } from '../../../dp-gnosis/src/vocabulary.js';
+import { parseAtom } from '../../../gnosis/src/atom.js';
+import { defaultExcludedTypes } from '../../../gnosis/src/vocabulary.js';
 import type { BeirDoc } from '../beir.js';
 import type { BeirDataset, VaultDerivationSource } from '../manifest.js';
 

@@ -47,9 +47,9 @@ import {
   RERANK_FUSION_PRESETS,
   RERANK_MODEL_ID,
   type RerankFusion
-} from '../../dp-gnosis/src/config.js';
-import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
-import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
+} from '../../gnosis/src/config.js';
+import { DEFAULT_PRF_PARAMS } from '../../gnosis/src/prf.js';
+import { DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
 import {
   DEFAULT_FIELD_WEIGHTS_TEXT,
   type HistoryRow,

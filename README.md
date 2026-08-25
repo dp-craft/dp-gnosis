@@ -16,7 +16,7 @@ Development workspace for **gnosis**, a lexical retrieval engine over a vault of
 | Run or read a benchmark | `GNOSIS-BENCH.md` |
 | See where quality stands | `GNOSIS-BASELINES.md` — a snapshot, never a gate |
 | Know what has been ruled out | `GNOSIS-GUIDE.md` § Settled |
-| Use the CLI, author an atom | `tools/dp-gnosis/README.md` |
+| Use the CLI, author an atom | `packages/gnosis/README.md` |
 | Ship the product | `docs/2026-08-24-2111-dp-gnosis-standalone-product-v2.md` |
 
 ## Layout
@@ -25,16 +25,16 @@ The directory shape deliberately **mirrors the repository this was extracted fro
 
 | Path | Role |
 |---|---|
-| `tools/dp-gnosis/` | the engine and its CLI |
-| `tools/dp-gnosis-bench/` | the benchmark — the gate for every engine change |
+| `packages/gnosis/` | the engine and its CLI |
+| `packages/gnosis-bench/` | the benchmark — the gate for every engine change |
 | `dp-gnosis/` | runtime root: the vault, the atom caches, the built indexes. Gitignored |
 | `GNOSIS-*.md` | governance. They travel with the code they govern |
 
 ## Commands
 
 ```bash
-npm install                      # then also: npm --prefix tools/dp-gnosis install
-                                 #            npm --prefix tools/dp-gnosis-bench install
+npm install                      # then also: npm --prefix packages/gnosis install
+                                 #            npm --prefix packages/gnosis-bench install
 
 npm run gnosis -- answer "some keywords"   # query the vault
 npm run gnosis -- ingest && npm run gnosis -- index --adapter fts5   # rebuild after editing documents
@@ -50,6 +50,6 @@ npm run gnosis:bench -- --layer smoke      # the pinned smoke gate
 
 ## Two things that will bite
 
-**The runtime state is not in git.** The vault atoms, the built indexes, the fetched BEIR corpora and `tools/dp-gnosis-bench/results/` are all gitignored. `results/` holds the recorded `.trec` evidence that the byte-identity gates compare against — it is untracked but MUST NOT be deleted.
+**The runtime state is not in git.** The vault atoms, the built indexes, the fetched BEIR corpora and `packages/gnosis-bench/results/` are all gitignored. `results/` holds the recorded `.trec` evidence that the byte-identity gates compare against — it is untracked but MUST NOT be deleted.
 
 **`gitSha` changed meaning on 2026-08-24.** Every benchmark row is stamped with this repository's sha. Rows recorded before the extraction name commits that do not exist here. `GNOSIS-GUIDE.md` § Current measured state carries the boundary and the mapping.

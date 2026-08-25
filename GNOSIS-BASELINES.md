@@ -616,7 +616,7 @@ the arm), so the per-pair window is 8192/1 = **8192**. The pre-arm probe separat
 relevant 0.9953 vs irrelevant 4.39e-06, against the reference qwen3 separation of 0.998 vs ~1e-05.
 
 **What this buys back.** The gap it reproduced across is **60 commits, 12 of them touching
-`tools/dp-gnosis/src`** — including T1.x, T2.1, T2.1a and T2.1d. So the cross-encoder is
+`packages/gnosis/src`** — including T1.x, T2.1, T2.1a and T2.1d. So the cross-encoder is
 deterministic across a large code delta at a fixed serving config, and the G-W1 divergence was
 never non-determinism and never a code regression. **`.trec` byte-identity is therefore usable
 again as an acceptance criterion** — T1.1's clause and T6.3's gate are restored — with the standing
@@ -1033,7 +1033,7 @@ What the table shows at a glance:
 | English `vault` | −0.0459 **n.s.** — recall-only lever | +0.0848 (p=0.0009) |
 | Hungarian `vault-hu` | **+0.1162 (p=0.0080)** — a RANKING lever too | +0.1016 (p=0.0034) |
 
-Consistent with the non-English rule in `tools/dp-gnosis/README.md` (write the STEM the document uses, not the inflected form): on an agglutinative language de-inflection is a genuine lexical-match win, not merely keyword extraction.
+Consistent with the non-English rule in `packages/gnosis/README.md` (write the STEM the document uses, not the inflected form): on an agglutinative language de-inflection is a genuine lexical-match win, not merely keyword extraction.
 
 **Hungarian recall is effectively solved by rephrasing alone: R@100 0.8903 → 0.9919.** Reranking cannot move R@100 (0.0000, `p=1.0000`, zero-width CI — the mechanical identity, not a defect).
 

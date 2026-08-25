@@ -12,7 +12,7 @@
  * corpora. The extraction is `documentSummary` from `ingest.ts` for the same
  * reason — two regexes for one convention drift.
  *
- *   npx tsx tools/dp-gnosis/scripts/extract-summaries.ts --dry-run
+ *   npx tsx packages/gnosis/scripts/extract-summaries.ts --dry-run
  *
  * Exit codes: 0 written (or reported under `--dry-run`) · 2 usage error.
  */

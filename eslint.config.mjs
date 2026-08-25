@@ -1,7 +1,7 @@
 // Flat ESLint config — the repository's sole lint + format toolchain.
 // Extracted from AiChatney's config, reduced to the general TypeScript /
 // functional-programming rule set that applied to its `tools/*` packages
-// (the F-8 block, which listed `tools/dp-gnosis/**`). Everything app-specific
+// (the F-8 block, which listed `packages/gnosis/**`). Everything app-specific
 // — React/JSX/hooks, a11y, browser globals, `src/**` layer + feature-barrel
 // boundaries, electron, and the runner's `eslint-plugin-boundaries` layer tree —
 // is intentionally absent: none of it has a subject in this repo.
@@ -95,13 +95,13 @@ export default tseslint.config(
       'node_modules',
       'coverage',
       // Engine build output (checked-in compiled JS + .d.ts).
-      'tools/dp-gnosis/dist',
+      'packages/gnosis/dist',
       // Benchmark corpora, recorded evidence, and scratch state — all generated.
       // `results/` in particular holds the byte-identity evidence the provenance
       // gates compare against (GNOSIS-BENCH.md § Provenance); it is data, not code.
-      'tools/dp-gnosis-bench/data',
-      'tools/dp-gnosis-bench/results',
-      'tools/dp-gnosis-bench/work',
+      'packages/gnosis-bench/data',
+      'packages/gnosis-bench/results',
+      'packages/gnosis-bench/work',
       // Runtime state (vault atoms, caches, corpora) written by the engine at run time.
       'dp-gnosis/',
       // Python venv for the benchmark's metric-validation scripts.
@@ -170,8 +170,8 @@ export default tseslint.config(
     // FP + complexity + typing atoms surfaced at WARN over pre-existing debt.
     // Promote a package to error via a dedicated decomposition pass.
     files: [
-      'tools/dp-gnosis/**/*.{ts,mjs}',
-      'tools/dp-gnosis-bench/**/*.{ts,mjs}',
+      'packages/gnosis/**/*.{ts,mjs}',
+      'packages/gnosis-bench/**/*.{ts,mjs}',
     ],
     rules: {
       ...projectRules,
@@ -183,15 +183,15 @@ export default tseslint.config(
   },
   {
     // Test files are exempt from FP/structure rules (principles §IV); formatting still
-    // applies. Globs match this repo's actual layout: `tools/dp-gnosis/tests/` is the
+    // applies. Globs match this repo's actual layout: `packages/gnosis/tests/` is the
     // engine's test root, while the benchmark co-locates `*.test.ts` beside its sources
     // in `src/`, `src/fetch/`, and `scripts/`. MUST stay AFTER the package rule block
     // above, which spreads `projectRules` and would otherwise re-enable these.
     files: [
-      'tools/dp-gnosis/tests/**/*.ts',
-      'tools/dp-gnosis/**/*.{test,spec}.ts',
-      'tools/dp-gnosis-bench/**/*.{test,spec}.ts',
-      'tools/dp-gnosis-bench/fixtures/**',
+      'packages/gnosis/tests/**/*.ts',
+      'packages/gnosis/**/*.{test,spec}.ts',
+      'packages/gnosis-bench/**/*.{test,spec}.ts',
+      'packages/gnosis-bench/fixtures/**',
       '**/__tests__/**/*.ts',
       '**/__fixtures__/**/*.ts',
     ],

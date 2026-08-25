@@ -990,7 +990,7 @@ const floorNotes = (budgeted: BudgetedResult): readonly string[] => {
 const NOTHING_MATCHED = 'retrieve: nothing in the vault matched these terms';
 
 const REPHRASE_REMEDY =
-  'the largest lever is the keyword phrasing — rewrite the query per `tools/dp-gnosis/README.md` § Query rephrasing and retrieve again';
+  'the largest lever is the keyword phrasing — rewrite the query per `packages/gnosis/README.md` § Query rephrasing and retrieve again';
 
 /** No filter ran, so the whole vault was searched and phrasing is all that is left. */
 const unfilteredEmptyNote = (): string =>

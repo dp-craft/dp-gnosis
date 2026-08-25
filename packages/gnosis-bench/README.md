@@ -1,6 +1,6 @@
 # dp-gnosis-bench
 
-A retrieval benchmark for `tools/dp-gnosis/`. It drives the SHIPPED path end to
+A retrieval benchmark for `packages/gnosis/`. It drives the SHIPPED path end to
 end — `ingest()` → `buildFts5Index()` → `createPort()` → `port.retrieve()` — so
 a change anywhere in the engine moves the numbers. Scores are DOCUMENT-level:
 retrieved atoms are rolled up to their origin document before scoring, so they
@@ -60,7 +60,7 @@ The gate decides on the **point estimate**: it fails when the paired mean nDCG@1
 
 **`--rerank-doc-max-chars <n>`** and **`--rerank-extract <head|headtail>`** set WHAT the reranker is shown — how much of an atom body reaches it, and which part. Omitted, both fall back to the engine's shipped `RERANK_DOC_MAX_CHARS` (2000) and `EXTRACT_STRATEGY` (`head`), so an unflagged arm re-runs bit-identical. A non-integer, zero or negative width FAILS loudly naming the constraint; it is never clamped. An unknown extraction FAILS naming the valid ones. Either without `--rerank` REFUSES, naming both flags — nothing would rerank, yet the row would carry a width label no cross-encoder ever read. Both are stamped EFFECTIVE as **TREATMENT** fields (`rerankDocMaxChars`, `rerankExtract`), so `--compare` labels a width change `ARM COMPARISON` rather than subtracting it.
 
-**`--budget <n>`** applies the engine's own `fitToTokenBudget` (`tools/dp-gnosis/src/budget.ts`, imported — never re-implemented) to the ranking a consumer would actually receive: it is charged AFTER the rerank and immediately before the atom→document rollup, so it caps the PRESENTATION and never the reranker's candidate pool. **`--served-k <k>`** narrows the window the budget is charged over; omitted, it is `--depth`, so `--budget` alone caps by tokens and by nothing else. A non-integer, zero or negative value of either FAILS loudly naming the constraint; neither is ever clamped. `--served-k` without `--budget` REFUSES, naming both flags — nothing would be capped, yet the row would carry a served window no presentation applied. Both are stamped as **TREATMENT** fields (`tokenBudget`, `servedK`), so `--compare` labels a budget change `ARM COMPARISON`. Absent, no cap is applied and the run is byte-identical to one before the flags existed.
+**`--budget <n>`** applies the engine's own `fitToTokenBudget` (`packages/gnosis/src/budget.ts`, imported — never re-implemented) to the ranking a consumer would actually receive: it is charged AFTER the rerank and immediately before the atom→document rollup, so it caps the PRESENTATION and never the reranker's candidate pool. **`--served-k <k>`** narrows the window the budget is charged over; omitted, it is `--depth`, so `--budget` alone caps by tokens and by nothing else. A non-integer, zero or negative value of either FAILS loudly naming the constraint; neither is ever clamped. `--served-k` without `--budget` REFUSES, naming both flags — nothing would be capped, yet the row would carry a served window no presentation applied. Both are stamped as **TREATMENT** fields (`tokenBudget`, `servedK`), so `--compare` labels a budget change `ARM COMPARISON`. Absent, no cap is applied and the run is byte-identical to one before the flags existed.
 
 **`--hybrid-weight <w>`** applies to `lancedb-hybrid` / `lancedb-hybrid-full` only — `0` pure lexical, `1` pure dense. An out-of-range or non-numeric value FAILS loudly naming the range; it is never clamped. It is recorded as a **TREATMENT** field, so `--compare` labels a weight change `ARM COMPARISON` rather than subtracting it. It is **NOT** `--rerank-weight`: those are two different fusions (leg↔leg vs reranker↔first-pass), and conflating them confounds any sweep.
 
@@ -74,7 +74,7 @@ to force a refetch. `data/` and `work/` are git-ignored; `results/` is tracked.
 
 One entry in `datasets.json`, no code. `domain` / `docShape` / `queryShape` are
 REPORT metadata only — they never reach the ingest profile, whose vocabulary is
-frozen in `tools/dp-gnosis/src/config.ts`.
+frozen in `packages/gnosis/src/config.ts`.
 
 | `format` | Needs | What happens |
 |---|---|---|
@@ -321,7 +321,7 @@ cell costs one cell, not the run.
 
 It measures the SHIPPED reranker configuration, and only that. The blend weight
 `w`, the rerank depth `K` and the widened first pass `k_init` are constants in
-`tools/dp-gnosis/src/config.ts`, not parameters any caller can pass — so this
+`packages/gnosis/src/config.ts`, not parameters any caller can pass — so this
 suite cannot sweep them, and no run here is evidence about a value other than
 the one currently compiled in. Changing one means editing that file and taking a
 new baseline; `--compare` will refuse the delta only if a recorded provenance

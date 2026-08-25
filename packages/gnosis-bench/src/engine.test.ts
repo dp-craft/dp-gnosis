@@ -5,17 +5,17 @@ import { basename, isAbsolute, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.js';
-import type { AdapterName } from '../../dp-gnosis/src/cli/adapter.js';
-import { runCli } from '../../dp-gnosis/src/cli/cli.js';
-import { RERANK_MODEL_ID } from '../../dp-gnosis/src/config.js';
+import { buildLanceDbIndex } from '../../gnosis/src/adapters/lanceDbAdapter.js';
+import type { AdapterName } from '../../gnosis/src/cli/adapter.js';
+import { runCli } from '../../gnosis/src/cli/cli.js';
+import { RERANK_MODEL_ID } from '../../gnosis/src/config.js';
 import type {
   IndexState,
   KnowledgePort,
   RetrievedAtom,
   RetrieveOptions
-} from '../../dp-gnosis/src/port.js';
-import { type AnalyzerId, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
+} from '../../gnosis/src/port.js';
+import { type AnalyzerId, DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
 import type { BeirDoc } from './beir.js';
 import {
   assertCorpusMaterialized,
@@ -40,7 +40,7 @@ import {
 import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
 import { auditGold, type GoldAudit } from './goldAudit.js';
 import type { Qrel } from './metrics.js';
-import { defaultAtomType } from '../../dp-gnosis/src/vocabulary.js';
+import { defaultAtomType } from '../../gnosis/src/vocabulary.js';
 
 /** A second reranker id — any id the shipped constant is not. */
 const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';

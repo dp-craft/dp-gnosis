@@ -7,7 +7,7 @@
  * `bright` (HuggingFace rows API).
  *
  * `domain`, `docShape` and `queryShape` are REPORT metadata. They MUST NOT flow
- * into an ingest profile: `tools/dp-gnosis/src/config.ts` freezes the domain and
+ * into an ingest profile: `packages/gnosis/src/config.ts` freezes the domain and
  * type vocabularies, and an atom carrying an unknown domain is dropped at index
  * time with no error. See `corpus.ts` for the vocabulary actually used.
  *

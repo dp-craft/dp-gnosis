@@ -7,7 +7,7 @@
  * from the arm it was measured under — a CLI serving one route while the suite
  * measures another publishes numbers nobody produced.
  */
-import { BENCH_DEFAULT_ADAPTER } from '../../dp-gnosis-bench/src/run.js';
+import { BENCH_DEFAULT_ADAPTER } from '../../gnosis-bench/src/run.js';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import { RERANK_K_INIT, RERANK_MODEL_ID } from '../src/config.js';
 

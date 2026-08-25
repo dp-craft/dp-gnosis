@@ -30,16 +30,16 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { fusesLegs } from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
-import type { ExtractStrategy } from '../../dp-gnosis/src/bench/reranker.js';
-import { fitToTokenBudget } from '../../dp-gnosis/src/budget.js';
+import { fusesLegs } from '../../gnosis/src/adapters/lanceDbDenseAdapter.js';
+import type { ExtractStrategy } from '../../gnosis/src/bench/reranker.js';
+import { fitToTokenBudget } from '../../gnosis/src/budget.js';
 import {
   ADAPTER_NAMES,
   adapterError,
   type AdapterName,
   denseRouteOf,
   resolveAdapter
-} from '../../dp-gnosis/src/cli/adapter.js';
+} from '../../gnosis/src/cli/adapter.js';
 import {
   ATOM_MAX_CHARS,
   DEFAULT_FIELD_WEIGHTS,
@@ -51,12 +51,12 @@ import {
   RERANK_DOC_MAX_CHARS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
-  type RerankFusion } from '../../dp-gnosis/src/config.js';
-import type { KnowledgePort, RetrievedAtom } from '../../dp-gnosis/src/port.js';
-import { DEFAULT_PRF_PARAMS, type PrfParams } from '../../dp-gnosis/src/prf.js';
-import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
-import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../dp-gnosis/src/rerank.js';
-import { defaultExcludedTypes } from '../../dp-gnosis/src/vocabulary.js';
+  type RerankFusion } from '../../gnosis/src/config.js';
+import type { KnowledgePort, RetrievedAtom } from '../../gnosis/src/port.js';
+import { DEFAULT_PRF_PARAMS, type PrfParams } from '../../gnosis/src/prf.js';
+import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
+import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../gnosis/src/rerank.js';
+import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 import {
   type Qrel,
   readCorpus,
@@ -1689,7 +1689,7 @@ export const RUN_HELP = [
   '',
   'usage: ./bench.sh [flags]   (npm run gnosis:bench -- [flags] from the repo root)',
   '',
-  'flags: tools/dp-gnosis-bench/README.md § Run it — the single owner of the flag table.',
+  'flags: packages/gnosis-bench/README.md § Run it — the single owner of the flag table.',
   '',
   'regression gate:',
   `  --baseline <perTopicPath substring>  the reference run, resolved PER DATASET`,

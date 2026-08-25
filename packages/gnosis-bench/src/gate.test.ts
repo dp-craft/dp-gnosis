@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
+import { DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
 import { gateReport, parseGateArgs } from './gate.js';
 import {
   DEFAULT_FIELD_WEIGHTS_TEXT,

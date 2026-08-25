@@ -42,17 +42,17 @@ import { basename, resolve } from 'node:path';
 
 import Database from 'better-sqlite3';
 
-import { buildFts5Index } from '../../dp-gnosis/src/adapters/fts5Adapter.js';
-import { buildLanceDbIndex } from '../../dp-gnosis/src/adapters/lanceDbAdapter.js';
+import { buildFts5Index } from '../../gnosis/src/adapters/fts5Adapter.js';
+import { buildLanceDbIndex } from '../../gnosis/src/adapters/lanceDbAdapter.js';
 import {
   buildLanceDbDenseIndex,
   createLanceDbDenseAdapter,
   type DenseRoute
-} from '../../dp-gnosis/src/adapters/lanceDbDenseAdapter.js';
-import { createLinearScanAdapter } from '../../dp-gnosis/src/adapters/linearScanAdapter.js';
-import { buildMiniSearchIndex } from '../../dp-gnosis/src/adapters/miniSearchAdapter.js';
-import { parseAtom } from '../../dp-gnosis/src/atom.js';
-import type { ExtractStrategy } from '../../dp-gnosis/src/bench/reranker.js';
+} from '../../gnosis/src/adapters/lanceDbDenseAdapter.js';
+import { createLinearScanAdapter } from '../../gnosis/src/adapters/linearScanAdapter.js';
+import { buildMiniSearchIndex } from '../../gnosis/src/adapters/miniSearchAdapter.js';
+import { parseAtom } from '../../gnosis/src/atom.js';
+import type { ExtractStrategy } from '../../gnosis/src/bench/reranker.js';
 import {
   type AdapterName,
   createPort,
@@ -60,19 +60,19 @@ import {
   type DenseAdapterName,
   denseRouteOf,
   hasPersistentIndex
-} from '../../dp-gnosis/src/cli/adapter.js';
-import type { FieldWeights, RerankFusion } from '../../dp-gnosis/src/config.js';
-import { ingest, type IngestSkip, type IngestSummary } from '../../dp-gnosis/src/ingest.js';
-import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
+} from '../../gnosis/src/cli/adapter.js';
+import type { FieldWeights, RerankFusion } from '../../gnosis/src/config.js';
+import { ingest, type IngestSkip, type IngestSummary } from '../../gnosis/src/ingest.js';
+import type { IngestProfile } from '../../gnosis/src/ingestProfile.js';
 import type {
   IndexState,
   KnowledgePort,
   RetrievalResult,
   RetrievedAtom
-} from '../../dp-gnosis/src/port.js';
-import type { PrfParams } from '../../dp-gnosis/src/prf.js';
-import type { AnalyzerId } from '../../dp-gnosis/src/query.js';
-import { probeRerankDiscrimination, rerankAtoms } from '../../dp-gnosis/src/rerank.js';
+} from '../../gnosis/src/port.js';
+import type { PrfParams } from '../../gnosis/src/prf.js';
+import type { AnalyzerId } from '../../gnosis/src/query.js';
+import { probeRerankDiscrimination, rerankAtoms } from '../../gnosis/src/rerank.js';
 import type { BeirDoc } from './beir.js';
 import { buildProfile, materializeCorpus, type MaterializedCorpus } from './corpus.js';
 import { assertIndexedGoldReachable } from './fetch/vault.js';
@@ -237,7 +237,7 @@ const fail = (message: string, cause: string): never => {
 const emptyIndexMessage = (datasetId: string): string =>
   `dp-gnosis-bench: dataset "${datasetId}" indexed ZERO atoms. The atoms were written but ` +
   'every one was dropped at index time — the usual cause is an ingest profile declaring a ' +
-  'domain outside the frozen ATOM_DOMAINS vocabulary (tools/dp-gnosis/src/config.ts), which ' +
+  'domain outside the frozen ATOM_DOMAINS vocabulary (packages/gnosis/src/config.ts), which ' +
   'fts5Adapter.asDomain discards without an error. Use the shipped "docs" domain (see corpus.ts).';
 
 const lowCoverageMessage = (facts: IngestSoundness, covered: number): string =>

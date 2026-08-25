@@ -1113,7 +1113,7 @@
     }
   ],
   "variant": "keyword-autorephrased",
-  "variantNote": "Auto arm of golden-set.v2.json. Same topic ids and IDENTICAL relevantAtomIds; ONLY the query text differs, produced by the SHIPPED tools/dp-gnosis/src/rephrase.ts path via `npm run gnosis -- retrieve <q> --rephrase` on 2026-08-18. Its pair is golden-set-rephrased.v2.json, the HUMAN rewrite of the same 60 topics. Note the tool rewrote 58 of 60 where the human left 20 byte-identical on README rule 5 (MUST NOT dilute a query that already carries the exact rare term) — that divergence is itself a measurement. No rephraseRule field: a model self-reporting which rule it applied is unverifiable.",
+  "variantNote": "Auto arm of golden-set.v2.json. Same topic ids and IDENTICAL relevantAtomIds; ONLY the query text differs, produced by the SHIPPED packages/gnosis/src/rephrase.ts path via `npm run gnosis -- retrieve <q> --rephrase` on 2026-08-18. Its pair is golden-set-rephrased.v2.json, the HUMAN rewrite of the same 60 topics. Note the tool rewrote 58 of 60 where the human left 20 byte-identical on README rule 5 (MUST NOT dilute a query that already carries the exact rare term) — that divergence is itself a measurement. No rephraseRule field: a model self-reporting which rule it applied is unverifiable.",
   "rephrasedCount": 26,
   "rephraseModel": "qwen38-27b-q4kxl-ctx130k-kvq8-mtp-frog-coding",
   "rephrasePromptVersion": "v2"

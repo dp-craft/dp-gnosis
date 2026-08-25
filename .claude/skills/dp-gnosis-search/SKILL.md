@@ -22,7 +22,7 @@ Answer a human's knowledge question from the curated atom vault, then relay the 
 
 | Rule | Basis |
 |---|---|
-| MUST rewrite a natural-language question into keywords before every `answer` / `retrieve` — the four rules live in `tools/dp-gnosis/README.md` § Query rephrasing | The largest measured lever in the system, larger than adapter choice (indistinguishable) or BM25 tuning (null). Hungarian: nDCG@10 **+0.2407** (p=0.0002), R@20 **+0.2118** (p=0.0001) |
+| MUST rewrite a natural-language question into keywords before every `answer` / `retrieve` — the four rules live in `packages/gnosis/README.md` § Query rephrasing | The largest measured lever in the system, larger than adapter choice (indistinguishable) or BM25 tuning (null). Hungarian: nDCG@10 **+0.2407** (p=0.0002), R@20 **+0.2118** (p=0.0001) |
 | On an English query, treat rephrasing as a **recall** lever, not a precision one | Same paired arms on `vault`: R@100 **+0.0848** (p=0.0009), but nDCG@10 −0.0126 (n.s.). Porter stemming already serves English; it does nothing for agglutinative Hungarian |
 | MUST NOT add synonyms to a query that already carries the corpus's exact rare term | Measured exception to the synonym rule: `how to use llama-swap` beat its own rewrite (P@10 0.60 vs 0.55). Rephrase to **supply** a missing domain term, never to decorate one already present |
 | A non-English query MUST carry the **word stem** the document uses, not the inflected form | Stemming is English Porter on every adapter. `használata` never matches `használ`/`használnak`. This mismatch is what the +0.2407 above is recovering by hand |
@@ -41,7 +41,7 @@ The flag is `--type` (singular), value = comma-separated. `--types` is refused a
 
 ## Workflow
 
-1. **Rewrite the question into keywords, then run it.** MUST NOT send the user's sentence — see the rules table and `tools/dp-gnosis/README.md` § Query rephrasing.
+1. **Rewrite the question into keywords, then run it.** MUST NOT send the user's sentence — see the rules table and `packages/gnosis/README.md` § Query rephrasing.
    ```bash
    npm run gnosis -- answer "<keyword query>" -k 10
    ```
@@ -85,7 +85,7 @@ Atoms of one source document render **together, in reading order**, under one do
 
 An EMPTY answer is stated explicitly — `atoms: 0` / `confidence: none` in the footer (`count: 0` under `--json`), exit 0; read the empty-answer paragraph at the end of this section. A NON-empty answer carries **no calibrated verdict**: a returned atom is not evidence that an answer exists, so the three signals below are how to judge it, in the order to read them. All three are `--json` fields — the pack's text rendering carries `confidence` and the `note`, and a caller that needs the signals below MUST ask for `--json`.
 
-`rerankScore` has a MEASURED per-model scale (`RERANK_CALIBRATION`, `tools/dp-gnosis/src/config.ts`), and `--min-relevance <p>` filters on it. The BANDS are not measured yet (T3.1b), so the flag is opt-in and a caller MUST NOT invent a floor value — pass it only when the user names one.
+`rerankScore` has a MEASURED per-model scale (`RERANK_CALIBRATION`, `packages/gnosis/src/config.ts`), and `--min-relevance <p>` filters on it. The BANDS are not measured yet (T3.1b), so the flag is opt-in and a caller MUST NOT invent a floor value — pass it only when the user names one.
 
 | Signal | Read it as | Trap |
 |---|---|---|
@@ -113,11 +113,11 @@ When the signals are weak: rewrite the query with different keywords and call ag
 |---|---|
 | Requirement | llama-swap serving a reranker over its OpenAI-compatible API at `http://127.0.0.1:9292` |
 | URL override | `DP_GNOSIS_RERANK_URL` |
-| Model id | MUST be read from `RERANK_MODEL_ID` in `tools/dp-gnosis/src/config.ts` — the default is under measurement and MUST NOT be hardcoded here |
+| Model id | MUST be read from `RERANK_MODEL_ID` in `packages/gnosis/src/config.ts` — the default is under measurement and MUST NOT be hardcoded here |
 | Failure | Server down, serving a different model, or failing the discrimination probe → **exit 3**: the first-pass ranking is returned, `--json` `mode` carries NO `+rerank` suffix, and `note` names which of the three happened |
 | Probe | Before the first scoring call of a process, the model scores one fixed relevant/irrelevant pair. A model that answers HTTP 200 with no ranking signal is REFUSED (`rerank-probe-failed`), not ranked with |
 | Behaviour | Reranks the first-pass pool and RRF-fuses that order with it, then applies the budget; `--json` `mode` gains a `+rerank` suffix |
-| Pool | `RERANK_K_INIT` in `tools/dp-gnosis/src/config.ts` is a FLOOR, not a cap — a larger `-k` reranks its own depth. The measured champion depth, and it costs roughly 12s per query |
+| Pool | `RERANK_K_INIT` in `packages/gnosis/src/config.ts` is a FLOOR, not a cap — a larger `-k` reranks its own depth. The measured champion depth, and it costs roughly 12s per query |
 | Tuning flags | `--rerank-model <id>`, `--rerank-profile shipped\|beir-ce`, `--rerank-weight 0…1`. Each REQUIRES `--rerank` and is exit 2 without it; an unknown profile or an out-of-range weight is exit 2, never clamped. Pass none of them unless the user asks for a named arm |
 
 On exit 3 from `--rerank`, the atoms shown ARE usable — they are the first pass. Relay the `note` verbatim and present the result as **unreranked**; a first-pass result MUST NOT be presented as a reranked one. Read `note` (text) or `mode` (`--json`) to tell them apart, never the flag you passed. MUST NOT re-run without `--rerank` — the same ranking is already in hand.
@@ -135,7 +135,7 @@ Causes: the tool answers Hungarian queries in English, and it rewrites queries r
 
 | Fact | Detail |
 |---|---|
-| Model id | `REPHRASE_MODEL_ID` in `tools/dp-gnosis/src/config.ts`; env `DP_GNOSIS_LLM_MODEL` overrides. MUST NOT be hardcoded here |
+| Model id | `REPHRASE_MODEL_ID` in `packages/gnosis/src/config.ts`; env `DP_GNOSIS_LLM_MODEL` overrides. MUST NOT be hardcoded here |
 | Endpoint | the same llama-swap instance as the reranker; env `DP_GNOSIS_RERANK_URL` |
 | Cost | warm ~0.6–1.4 s per NEW query; a repeat is a disk-cache hit and issues no call at all. Cold model load is a one-off ~45–70 s |
 | Output | `query` stays as the user typed it; the rewrite is reported beside it as `queryRewritten`, and text mode prints `retrieve: rephrased "…" -> "…"` |

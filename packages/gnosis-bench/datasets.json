@@ -1,5 +1,5 @@
 {
-  "comment:purpose": "The manifest. Adding a domain is one entry here, no code. `domain` / `docShape` / `queryShape` are REPORT metadata only — they never reach the ingest profile, whose vocabulary is frozen in tools/dp-gnosis/src/config.ts.",
+  "comment:purpose": "The manifest. Adding a domain is one entry here, no code. `domain` / `docShape` / `queryShape` are REPORT metadata only — they never reach the ingest profile, whose vocabulary is frozen in packages/gnosis/src/config.ts.",
   "datasets": [
     {
       "id": "nfcorpus",
@@ -243,7 +243,7 @@
       "source": "data/vault",
       "derive": {
         "atoms": "../../dp-gnosis/vault",
-        "golden": "../dp-gnosis/golden/golden-set.v2.json"
+        "golden": "../gnosis/golden/golden-set.v2.json"
       },
       "domain": "project-vault",
       "docShape": "atom",
@@ -261,7 +261,7 @@
       "source": "data/vault-hu",
       "derive": {
         "atoms": "../../dp-gnosis/cache/atoms-hu",
-        "golden": "../dp-gnosis/golden/golden-set-hu.v1.json"
+        "golden": "../gnosis/golden/golden-set-hu.v1.json"
       },
       "domain": "project-vault-hu",
       "docShape": "atom",
@@ -286,14 +286,14 @@
       ]
     },
     {
-      "comment": "ROW X of the pre-rerank campaign — the query-phrasing ARM of `vault`. Identical corpus, identical topic ids, identical relevantAtomIds; ONLY the query text differs, rewritten to keyword form per tools/dp-gnosis/README.md § Query rephrasing. The bench sends RAW query text, so phrasing — the largest measured quality lever in the system (P@10 0.20 -> 0.80) — is otherwise invisible to it; a committed rephrased golden file makes it a deterministic, perfectly paired experiment. `enabled` is FALSE on purpose: this is an arm, and enabling it would silently change what a bare `gnosis:bench` measures. Run it with `--only vault-rephrased`. 20 of the 60 topics are byte-identical to the base set by design (README rule 5 — MUST NOT dilute a query that already carries the exact rare term), so a whole-set delta is diluted by 33% guaranteed ties and the changed-topic subset MUST be reported alongside it.",
+      "comment": "ROW X of the pre-rerank campaign — the query-phrasing ARM of `vault`. Identical corpus, identical topic ids, identical relevantAtomIds; ONLY the query text differs, rewritten to keyword form per packages/gnosis/README.md § Query rephrasing. The bench sends RAW query text, so phrasing — the largest measured quality lever in the system (P@10 0.20 -> 0.80) — is otherwise invisible to it; a committed rephrased golden file makes it a deterministic, perfectly paired experiment. `enabled` is FALSE on purpose: this is an arm, and enabling it would silently change what a bare `gnosis:bench` measures. Run it with `--only vault-rephrased`. 20 of the 60 topics are byte-identical to the base set by design (README rule 5 — MUST NOT dilute a query that already carries the exact rare term), so a whole-set delta is diluted by 33% guaranteed ties and the changed-topic subset MUST be reported alongside it.",
       "id": "vault-rephrased",
       "format": "beir-local",
       "qrels": "test",
       "source": "data/vault-rephrased",
       "derive": {
         "atoms": "../../dp-gnosis/vault",
-        "golden": "../dp-gnosis/golden/golden-set-rephrased.v2.json"
+        "golden": "../gnosis/golden/golden-set-rephrased.v2.json"
       },
       "domain": "project-vault",
       "docShape": "atom",
@@ -302,14 +302,14 @@
       "layers": []
     },
     {
-      "comment": "AUTO arm of `vault` — the same 60 topics rewritten by the SHIPPED --rephrase path (tools/dp-gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. Pairs against `vault` (what --rephrase buys) and against `vault-rephrased` (how much of the human ceiling it reaches). The tool rewrote 58 of 60 topics where the human deliberately left 20 untouched under README rule 5, so a whole-set delta here is NOT diluted by design ties the way the human arm is. Rewrites are frozen in the golden file, so the arm re-runs bit-identical without a model. `enabled` FALSE like the other arms; run with --only vault-autorephrased.",
+      "comment": "AUTO arm of `vault` — the same 60 topics rewritten by the SHIPPED --rephrase path (packages/gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. Pairs against `vault` (what --rephrase buys) and against `vault-rephrased` (how much of the human ceiling it reaches). The tool rewrote 58 of 60 topics where the human deliberately left 20 untouched under README rule 5, so a whole-set delta here is NOT diluted by design ties the way the human arm is. Rewrites are frozen in the golden file, so the arm re-runs bit-identical without a model. `enabled` FALSE like the other arms; run with --only vault-autorephrased.",
       "id": "vault-autorephrased",
       "format": "beir-local",
       "qrels": "test",
       "source": "data/vault-autorephrased",
       "derive": {
         "atoms": "../../dp-gnosis/vault",
-        "golden": "../dp-gnosis/golden/golden-set-autorephrased.v2.json"
+        "golden": "../gnosis/golden/golden-set-autorephrased.v2.json"
       },
       "domain": "project-vault",
       "docShape": "atom",
@@ -325,7 +325,7 @@
       "source": "data/vault-hu-rephrased",
       "derive": {
         "atoms": "../../dp-gnosis/cache/atoms-hu",
-        "golden": "../dp-gnosis/golden/golden-set-hu-rephrased.v1.json"
+        "golden": "../gnosis/golden/golden-set-hu-rephrased.v1.json"
       },
       "domain": "project-vault-hu",
       "docShape": "atom",
@@ -334,14 +334,14 @@
       "layers": []
     },
     {
-      "comment": "AUTO arm of `vault-hu` — the same 31 topics rewritten by the SHIPPED --rephrase path (tools/dp-gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. It exists so the tool is measured against BOTH its baseline and its human ceiling: `vault-hu` -> this is what --rephrase buys, this -> `vault-hu-rephrased` is how much of the hand-written ceiling it reaches. Rewrites are frozen in the golden file rather than called per run, so the arm is deterministic and re-runs bit-identical without a model. `enabled` FALSE for the same reason as the other arms; run with --only vault-hu-autorephrased.",
+      "comment": "AUTO arm of `vault-hu` — the same 31 topics rewritten by the SHIPPED --rephrase path (packages/gnosis/src/rephrase.ts, qwen38-27b-q4kxl-ctx130k-mtp-coding, prompt v1) instead of by hand. It exists so the tool is measured against BOTH its baseline and its human ceiling: `vault-hu` -> this is what --rephrase buys, this -> `vault-hu-rephrased` is how much of the hand-written ceiling it reaches. Rewrites are frozen in the golden file rather than called per run, so the arm is deterministic and re-runs bit-identical without a model. `enabled` FALSE for the same reason as the other arms; run with --only vault-hu-autorephrased.",
       "id": "vault-hu-autorephrased",
       "format": "beir-local",
       "qrels": "test",
       "source": "data/vault-hu-autorephrased",
       "derive": {
         "atoms": "../../dp-gnosis/cache/atoms-hu",
-        "golden": "../dp-gnosis/golden/golden-set-hu-autorephrased.v1.json"
+        "golden": "../gnosis/golden/golden-set-hu-autorephrased.v1.json"
       },
       "domain": "project-vault-hu",
       "docShape": "atom",

@@ -44,7 +44,7 @@ const MODELS_PATH = '/v1/models';
 const CHAT_PATH = '/v1/chat/completions';
 
 /**
- * The rewriting rules, from `tools/dp-gnosis/README.md` § Query rephrasing —
+ * The rewriting rules, from `packages/gnosis/README.md` § Query rephrasing —
  * the flag EXECUTES the documented rules rather than inventing a second set.
  *
  * The examples are load-bearing, not decoration: measured zero-shot, this model

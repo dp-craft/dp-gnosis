@@ -15,7 +15,7 @@
  * would recover from the comment written here — that round-trip is the point of
  * `sanitizeSummary`, and `tests/backfillSummaries.test.ts` asserts it.
  *
- *   npx tsx tools/dp-gnosis/scripts/backfill-summaries.ts --dry-run --json
+ *   npx tsx packages/gnosis/scripts/backfill-summaries.ts --dry-run --json
  *
  * Exit codes: 0 every target resolved · 3 partial (something failed, all
  * recorded) · 2 usage error.

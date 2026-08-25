@@ -15,7 +15,7 @@
  * with the same function, before they ever reach this layer.
  *
  * The profile's vocabulary is the SHIPPED one (`docs` / `vendor-doc`). The
- * manifest's `domain` field MUST NOT flow in here: `tools/dp-gnosis/src/config.ts`
+ * manifest's `domain` field MUST NOT flow in here: `packages/gnosis/src/config.ts`
  * freezes `ATOM_DOMAINS` at import time and `fts5Adapter.asDomain` narrows
  * against it, so an atom with an unknown domain is dropped at index time — an
  * empty index and zero results, with no error anywhere.
@@ -23,7 +23,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { IngestProfile } from '../../dp-gnosis/src/ingestProfile.js';
+import type { IngestProfile } from '../../gnosis/src/ingestProfile.js';
 import type { BeirDoc } from './beir.js';
 
 const MARKDOWN_EXT = '.md';

@@ -231,7 +231,7 @@ const summaryLines = (totals: InventoryTotals): readonly string[] => [
 
 const HELP = `inventory-artefacts — join history.jsonl rows to the artefacts they name.
 
-Usage: npx tsx tools/dp-gnosis-bench/scripts/inventory-artefacts.ts [flags]
+Usage: npx tsx packages/gnosis-bench/scripts/inventory-artefacts.ts [flags]
 
   --results <dir>   Results directory (default: <bench>/results)
   --format <fmt>    tsv (default) | summary

@@ -63,7 +63,7 @@ interface Availability {
 }
 
 const skipReason = (adapter: AdapterName, probe: Availability): string =>
-  `index: ${adapter} was not built — ${probe.reason ?? UNKNOWN_REASON}; run \`npm install\` in tools/dp-gnosis to enable it`;
+  `index: ${adapter} was not built — ${probe.reason ?? UNKNOWN_REASON}; run \`npm install\` in packages/gnosis to enable it`;
 
 /**
  * `--enrichment` is OPT-IN at index time, with no default path: an absent flag

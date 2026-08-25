@@ -29,7 +29,7 @@
  * refuse to subtract two numbers that were never comparable.
  *
  * The stem convention (`YYYY-MM-DD-HHMM`) is the repo's, from
- * `tools/dp-gnosis/src/bench/report.ts:26`.
+ * `packages/gnosis/src/bench/report.ts:26`.
  *
  * `readHistory` NEVER throws. The file is append-only and hand-inspectable; a
  * truncated or hand-edited line must cost one row, not the entire record.
@@ -42,7 +42,7 @@ import {
   DEFAULT_FIELD_WEIGHTS,
   type FieldWeights,
   FTS_COLUMNS
-} from '../../dp-gnosis/src/config.js';
+} from '../../gnosis/src/config.js';
 import type { TopicFacets } from './beir.js';
 import { countNonEmptyLines } from './lines.js';
 import type { Metrics } from './metrics.js';

@@ -8,7 +8,7 @@ MUST NOT quote a number produced here without the provenance rules in § Provena
 
 | I want to… | Go to |
 |---|---|
-| Run a benchmark | § Benchmarking, then `tools/dp-gnosis-bench/README.md` |
+| Run a benchmark | § Benchmarking, then `packages/gnosis-bench/README.md` |
 | Choose a suite size | § Layers |
 | Know which metric answers my question | § What to measure, when |
 | Know whether two rows are comparable | § Provenance — scale vs treatment |
@@ -17,7 +17,7 @@ MUST NOT quote a number produced here without the provenance rules in § Provena
 
 ## Benchmarking
 
-`./tools/dp-gnosis-bench/bench.sh`, or `npm run gnosis:bench -- <flags>` from the repo root.
+`./packages/gnosis-bench/bench.sh`, or `npm run gnosis:bench -- <flags>` from the repo root.
 
 | Flag | Effect |
 |---|---|
@@ -39,7 +39,7 @@ MUST NOT quote a number produced here without the provenance rules in § Provena
 | `--baseline <perTopicPath substring>` | The reference run the REGRESSION GATE pairs against, resolved PER DATASET (`row.dataset` ∩ selector) with `pair.ts:resolveRun`'s semantics. Ambiguous or unmatched fails loudly naming selector AND dataset. Meaningless alone — refuses without `--fail-under` |
 | `--fail-under <Δ nDCG@10>` | The tolerated drop. **Gates on the POINT ESTIMATE, never on significance**: `vault-hu`'s MDE is 0.05–0.07, so requiring a significant delta would let a real regression through on the corpus least able to detect one. p and the 95% CI are PRINTED beside the verdict, they do not decide it. Negative or non-finite REFUSES, never clamped |
 
-**A missing `scifact` corpus makes the smoke gate exit 1, not 4.** `scifact` is the only `beir-local` entry sourced outside `tools/dp-gnosis-bench/data/` (`../../docs/benchmarks/2026-08-14-external-suite/data/scifact`, gitignored), so a fresh worktree that symlinks only `data/` fails that dataset. The gate then prints `NOT RUN — the run exited 1` and pairs nothing: exit 1 is a MISSING CORPUS, exit 4 is a regression. MUST NOT read one as the other.
+**A missing `scifact` corpus makes the smoke gate exit 1, not 4.** `scifact` is the only `beir-local` entry sourced outside `packages/gnosis-bench/data/` (`../../docs/benchmarks/2026-08-14-external-suite/data/scifact`, gitignored), so a fresh worktree that symlinks only `data/` fails that dataset. The gate then prints `NOT RUN — the run exited 1` and pairs nothing: exit 1 is a MISSING CORPUS, exit 4 is a regression. MUST NOT read one as the other.
 
 `--only` selects from ALL manifest entries, including `enabled: false` ones (`enabled` means "member of the DEFAULT suite"). An unknown id, or a selection that resolves to nothing, FAILS loudly by name.
 
@@ -63,11 +63,11 @@ Per-topic TSVs and TREC run files are always written, **as each dataset complete
 
 **Exit 4 is the regression gate**, and a gate that CANNOT COMPARE exits 4 as well — a `SCALE_FIELDS` move, a missing per-topic file or a differing topic set all fail it, because a gate that cannot pair MUST NOT report a pass. The message distinguishes the two; the exit code deliberately does not.
 
-**`metrics.ts` is externally attested — for the measures `pytrec_eval` also computes.** It reproduces nDCG@10, R@100, P@5, P@10 and MAP on scifact and nfcorpus to floating-point noise (max |diff| 4.4e-16). **Two measures are NOT attested and MUST NOT be quoted as if they were**: `rbpResidual` has no `pytrec_eval` counterpart at all, and `rPrecision` is attested only where `R ≤ depth` — on nfcorpus **22 of 323 topics** hold more relevant documents than the run retrieved to, so they score `undefined` and the run-level number is a mean over the remaining 301, with that count recorded beside it as `rPrecisionTopics`. Setup and invocation: `tools/dp-gnosis-bench/README.md` § Validate the metrics. Two conventions MUST be matched or the comparison manufactures a false disagreement — average over the **qrels** topic set (a zero-hit topic has no lines in the run file and `trec_eval` would silently omit it; on nfcorpus that alone shifts nDCG@10 by 0.015), and do not re-dedupe ids the run file already holds at document level.
+**`metrics.ts` is externally attested — for the measures `pytrec_eval` also computes.** It reproduces nDCG@10, R@100, P@5, P@10 and MAP on scifact and nfcorpus to floating-point noise (max |diff| 4.4e-16). **Two measures are NOT attested and MUST NOT be quoted as if they were**: `rbpResidual` has no `pytrec_eval` counterpart at all, and `rPrecision` is attested only where `R ≤ depth` — on nfcorpus **22 of 323 topics** hold more relevant documents than the run retrieved to, so they score `undefined` and the run-level number is a mean over the remaining 301, with that count recorded beside it as `rPrecisionTopics`. Setup and invocation: `packages/gnosis-bench/README.md` § Validate the metrics. Two conventions MUST be matched or the comparison manufactures a false disagreement — average over the **qrels** topic set (a zero-hit topic has no lines in the run file and `trec_eval` would silently omit it; on nfcorpus that alone shifts nDCG@10 by 0.015), and do not re-dedupe ids the run file already holds at document level.
 
 ### BM25 k1×b sweep
 
-`npm run gnosis:sweep` — flags, grid defaults and run order are owned by `tools/dp-gnosis-bench/README.md` § Sweep BM25 k1 and b. Fixed to the `linear` adapter, the only one that accepts `k1`/`b`.
+`npm run gnosis:sweep` — flags, grid defaults and run order are owned by `packages/gnosis-bench/README.md` § Sweep BM25 k1 and b. Fixed to the `linear` adapter, the only one that accepts `k1`/`b`.
 
 **A sweep result CANNOT be shipped on `fts5`.** SQLite compiles k1/b in. Treat a winning cell as evidence about how the corpus responds to length normalisation, not as a setting that can be switched on.
 
@@ -169,8 +169,8 @@ An nDCG@10 gain that does not raise the binding recall buys nothing downstream �
 | **`linear` vs `fts5` disagree by a sign-flipping offset** | Both leading hypotheses (IDF formula; the `title` field) were tested by direct experiment and **refuted**. A third mechanism dominates on long-atom corpora. Every cross-adapter claim carries an unexplained term |
 | **BEIR does NOT cover the chunker** | BEIR documents are short — scifact's 5,183 documents yield 5,202 atoms — so chunking is near a no-op across all seven Tier-1 datasets. A chunker regression would pass the entire external suite unnoticed. **The vault corpora remain the only chunker signal.** The suite covers the scorer, tokenizer and index layer |
 | **`vault-hu` is underpowered** | Smallest detectable Δ nDCG@10 ≈**0.05–0.07** at 31 topics, against ≈**0.015** for `vault` at 60 — both derived from observed paired-CI width in the campaign analysis §8. Topic count explains only √(60/31) ≈ 1.4× of that 4.8× gap; the rest is a smaller per-topic difference sd. A null on `vault-hu` means "cannot tell", not "no difference". **MUST NOT quote any other MDE figure for these corpora** |
-| **`tools/dp-gnosis-bench/scripts/` is type-checked by NO project** | The repo's `tsconfig.scripts.json` excludes it and the package's own `tsconfig.json` includes `src/**` only, so `validate-metrics.py`'s TS siblings — `inventory-artefacts.ts` today — are outside the commit gate's `tsc -b`. They break silently against a `src/` change and only a hand-run reveals it. Owner decision 2026-08-18: recorded, not fixed |
-| **A rerank batch is accounted in BYTES against a TOKEN cap** | `chunkDocuments` (`tools/dp-gnosis/src/bench/reranker.ts` — ENGINE code on the serving path, not bench-owned) sizes batches with `estimateTokens` = `Buffer.byteLength(text,'utf8')` against `MAX_BATCH_TOKENS = 8000`, while the server's `-ub` cap is per query-document pair in real tokens. No overflow today, but the conflation sets batch size by byte length: at pool 100 a 2000-char window packs 3 docs/batch (34 requests) and a 4000-char window packs 1 (100 requests), a **~3× round-trip cost that is a batching artefact, not a model cost**. MUST NOT report a width arm's wall-time as a property of the reranker. Headroom is thinner than it looks — a corpus averaging ≥2 bytes/char would trip `RerankOversizeError` on a single 4000-char document |
+| **`packages/gnosis-bench/scripts/` is type-checked by NO project** | The repo's `tsconfig.scripts.json` excludes it and the package's own `tsconfig.json` includes `src/**` only, so `validate-metrics.py`'s TS siblings — `inventory-artefacts.ts` today — are outside the commit gate's `tsc -b`. They break silently against a `src/` change and only a hand-run reveals it. Owner decision 2026-08-18: recorded, not fixed |
+| **A rerank batch is accounted in BYTES against a TOKEN cap** | `chunkDocuments` (`packages/gnosis/src/bench/reranker.ts` — ENGINE code on the serving path, not bench-owned) sizes batches with `estimateTokens` = `Buffer.byteLength(text,'utf8')` against `MAX_BATCH_TOKENS = 8000`, while the server's `-ub` cap is per query-document pair in real tokens. No overflow today, but the conflation sets batch size by byte length: at pool 100 a 2000-char window packs 3 docs/batch (34 requests) and a 4000-char window packs 1 (100 requests), a **~3× round-trip cost that is a batching artefact, not a model cost**. MUST NOT report a width arm's wall-time as a property of the reranker. Headroom is thinner than it looks — a corpus averaging ≥2 bytes/char would trip `RerankOversizeError` on a single 4000-char document |
 | No skip-reason breakdown | Benign drops read as unexplained attrition |
 | Grid winners are selection-uncorrected | A best-of-N cell's p-value is optimistically biased — see § What to measure |
 | Sweep is `linear`-only | By necessity — no other adapter accepts k1/b — but it means sweep results never describe production |

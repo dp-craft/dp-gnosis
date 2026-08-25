@@ -20,7 +20,7 @@
  * `undefined` on a depth-100 run, and plotting that as 0 would draw a collapse
  * the run never measured.
  */
-import { RERANK_K_INIT } from '../../dp-gnosis/src/config.js';
+import { RERANK_K_INIT } from '../../gnosis/src/config.js';
 import type { ChartSpec, ChartsSpec, DeltaComparisonSpec, RunRefSpec } from './chartSpec.js';
 import { scaleChanges } from './compare.js';
 import { describeRun, resolveRun } from './pair.js';

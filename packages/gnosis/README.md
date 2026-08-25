@@ -6,11 +6,11 @@ Retrieval over a curated vault of markdown **atoms** — one document chunked in
 
 ## Layout
 
-Code is `tools/dp-gnosis/` — a **liftable unit** (own `package.json`, own tests). Data is ONE top-level directory with two typed children.
+Code is `packages/gnosis/` — a **liftable unit** (own `package.json`, own tests). Data is ONE top-level directory with two typed children.
 
 | Path | Tracked? | Contents |
 |---|---|---|
-| `tools/dp-gnosis/` | yes | the package: `src/`, `golden/golden-set.v1.json` (frozen relevance set) |
+| `packages/gnosis/` | yes | the package: `src/`, `golden/golden-set.v1.json` (frozen relevance set) |
 | `dp-gnosis/vault/` | yes | the knowledge unit |
 | `dp-gnosis/vault/atoms/` | **gitignored** | retrievable atoms — the ONLY root an adapter reads. Ignored because `ingest` still materialises it from repo docs (machine output) |
 | `dp-gnosis/vault/proposals/` | gitignored | pre-admission drafts; unretrievable **by location**, never filtered after the fact |
@@ -20,7 +20,7 @@ Every path is owned by `src/paths.ts` and anchored on that file's own location �
 
 ## CLI
 
-`npm run gnosis -- <command> [args] [flags]` (script: `tsx tools/dp-gnosis/src/cli/main.ts`).
+`npm run gnosis -- <command> [args] [flags]` (script: `tsx packages/gnosis/src/cli/main.ts`).
 
 A bare invocation, `--help` or `-h` prints help and exits 0. An **unknown flag is a hard error, never ignored** — a silently dropped `--jsn` would hand an agent a wrong answer under a success code.
 
@@ -51,7 +51,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 
 ### Flags
 
-**This table is the WHOLE flag vocabulary, and it is test-locked.** `tests/readmeFlags.test.ts` asserts it equals `FLAGS` (`src/cli/args.ts`) in **both** directions, so a flag can neither go undocumented nor be documented into existence. `--hybrid-weight` used to sit here and this CLI **refuses it** — it is a BENCH flag, owned by `tools/dp-gnosis-bench/README.md`.
+**This table is the WHOLE flag vocabulary, and it is test-locked.** `tests/readmeFlags.test.ts` asserts it equals `FLAGS` (`src/cli/args.ts`) in **both** directions, so a flag can neither go undocumented nor be documented into existence. `--hybrid-weight` used to sit here and this CLI **refuses it** — it is a BENCH flag, owned by `packages/gnosis-bench/README.md`.
 
 | Flag | Value | Default |
 |---|---|---|
@@ -60,8 +60,8 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `--index-path` | file for `fts5`/`minisearch`, **directory** for every `lancedb*` route | per-adapter path under `dp-gnosis/cache/index/` |
 | `--repo-root` | dir | repo root |
 | `--profile` | file — one named instance: its vocabulary, its labelling tables AND its own `repoRoot` / `corpusRoots` / `atomsDir` / `indexPath`. Each profile MUST own its `atomsDir` AND its `indexPath` — an atoms directory is stamped with its owner and refuses a second profile | none, the built-in defaults. Precedence is **flag > profile > default**, so `--atoms-dir` / `--index-path` / `--repo-root` still outrank whatever the profile states |
-| `--golden-set` | file | `tools/dp-gnosis/golden/golden-set.v1.json` |
-| `--gold-ids` | dir or file — **`ingest` only**, the golden set(s) the EXACT-BODY dedupe breaks ties against: when two source documents produce a byte-identical body, the judged copy survives. A path that cannot be read exits **3** naming it — ingest MUST NOT dedupe against a gold set it could not read | the loaded profile's `goldIdsPath`, which the shipped profiles declare as `tools/dp-gnosis/golden`; a profile that declares none ingests with NO gold tie-break |
+| `--golden-set` | file | `packages/gnosis/golden/golden-set.v1.json` |
+| `--gold-ids` | dir or file — **`ingest` only**, the golden set(s) the EXACT-BODY dedupe breaks ties against: when two source documents produce a byte-identical body, the judged copy survives. A path that cannot be read exits **3** naming it — ingest MUST NOT dedupe against a gold set it could not read | the loaded profile's `goldIdsPath`, which the shipped profiles declare as `packages/gnosis/golden`; a profile that declares none ingests with NO gold tie-break |
 | `-k` | positive integer | `5` |
 | `--format` | `text\|json\|xml` — **`retrieve` and `answer`**; `xml` is **`retrieve` only**, since the answer pack is already a delimited block | `text` |
 | `--json` | boolean — alias for `--format json`, on `retrieve` and `answer` | off |
@@ -316,7 +316,7 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 | `minisearch` | `cache/index/atoms-minisearch.json` | **optional** | measured for its load-vs-query cost profile |
 | `lancedb` | `cache/index/atoms-lancedb/` (a tree) | **optional** | LanceDB's BM25 FTS path only — no vectors. A v2-readiness probe |
 
-`minisearch` and `lancedb` are `optionalDependencies` loaded by lazy dynamic import. An absent one is **reported, never hidden**: `index` exits 3 with the loader's own reason, and `retrieve` reports `indexState: "unavailable"` (exit 3). Enable with `npm install` in `tools/dp-gnosis`.
+`minisearch` and `lancedb` are `optionalDependencies` loaded by lazy dynamic import. An absent one is **reported, never hidden**: `index` exits 3 with the loader's own reason, and `retrieve` reports `indexState: "unavailable"` (exit 3). Enable with `npm install` in `packages/gnosis`.
 
 ### Configuration
 
@@ -383,8 +383,8 @@ Both new profiles set `atomsDir` AND `indexPath` because the defaults are per-ad
 Onboarding a new domain is two commands against the new file:
 
 ```bash
-npm run gnosis -- ingest --profile tools/dp-gnosis/profiles/<name>.profile.json
-npm run gnosis -- index  --profile tools/dp-gnosis/profiles/<name>.profile.json
+npm run gnosis -- ingest --profile packages/gnosis/profiles/<name>.profile.json
+npm run gnosis -- index  --profile packages/gnosis/profiles/<name>.profile.json
 ```
 
 ## MCP surface — one tool over stdio
@@ -409,7 +409,7 @@ The exit code is the contract and is mirrored, never flattened:
 | 3 | the SAME pack, with the payload's `note` appended — a PARTIAL is a real answer with something refused, and flagging it would discard a good pack |
 | 2, or a payload with no `pack` | `isError: true`, text = the payload's `error` — a usage failure MUST NOT read as an empty answer |
 
-A malformed line answers `-32700` (`id: null`), an unknown method `-32601`, an unknown tool name `-32602`. Acceptance over real stdio: `bash tools/dp-gnosis/scripts/mcp-smoke.sh [question]` — exit 0 when both handshake and call come back well formed.
+A malformed line answers `-32700` (`id: null`), an unknown method `-32601`, an unknown tool name `-32602`. Acceptance over real stdio: `bash packages/gnosis/scripts/mcp-smoke.sh [question]` — exit 0 when both handshake and call come back well formed.
 
 ## Second consumer — point another client at this vault, without editing TypeScript
 
@@ -434,7 +434,7 @@ absolute-path launch sufficient.
   "mcpServers": {
     "dp-gnosis": {
       "command": "<REPO>/node_modules/.bin/tsx",
-      "args": ["<REPO>/tools/dp-gnosis/src/mcp/main.ts"]
+      "args": ["<REPO>/packages/gnosis/src/mcp/main.ts"]
     }
   }
 }
@@ -457,8 +457,8 @@ A vault IS a folder of markdown, so it needs no MCP at all — it needs a **prof
 contract (never write into the vault, exclude `.obsidian/`, rebuild after editing); the launch is:
 
 ```
-<REPO>/node_modules/.bin/tsx <REPO>/tools/dp-gnosis/src/cli/main.ts \
-  --profile <REPO>/tools/dp-gnosis/profiles/<your>.profile.json \
+<REPO>/node_modules/.bin/tsx <REPO>/packages/gnosis/src/cli/main.ts \
+  --profile <REPO>/packages/gnosis/profiles/<your>.profile.json \
   answer "your keywords here"
 ```
 
@@ -473,8 +473,8 @@ and the query REFUSES with exit 3 rather than answering from it. That is the cor
 end for a consumer who does not know the two commands that clear it:
 
 ```
-<REPO>/node_modules/.bin/tsx <REPO>/tools/dp-gnosis/src/cli/main.ts [--profile <p>] ingest
-<REPO>/node_modules/.bin/tsx <REPO>/tools/dp-gnosis/src/cli/main.ts [--profile <p>] index
+<REPO>/node_modules/.bin/tsx <REPO>/packages/gnosis/src/cli/main.ts [--profile <p>] ingest
+<REPO>/node_modules/.bin/tsx <REPO>/packages/gnosis/src/cli/main.ts [--profile <p>] index
 ```
 
 **Both, in that order, every time the documents change.** `ingest` rewrites the atoms; `index` rebuilds the search

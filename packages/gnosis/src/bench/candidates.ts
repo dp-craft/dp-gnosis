@@ -51,7 +51,7 @@ export interface SkippedAdapter {
 }
 
 const FTS5_UNAVAILABLE =
-  'optional dependency better-sqlite3 could not be loaded (missing package or native binding) — run `npm install` in tools/dp-gnosis to include this adapter';
+  'optional dependency better-sqlite3 could not be loaded (missing package or native binding) — run `npm install` in packages/gnosis to include this adapter';
 
 export const isAvailable = (candidate: AdapterCandidate): boolean =>
   candidate.unavailableReason === undefined;
@@ -95,7 +95,7 @@ const unavailableCandidate = (name: string, reason: string): AdapterCandidate =>
 
 /** Why an optional-dependency adapter was skipped, in the report's own words. */
 const optionalReason = (packageName: string, reason: string | undefined): string =>
-  `optional dependency ${packageName} could not be loaded (${reason ?? 'no reason reported'}) — run \`npm install\` in tools/dp-gnosis to include this adapter`;
+  `optional dependency ${packageName} could not be loaded (${reason ?? 'no reason reported'}) — run \`npm install\` in packages/gnosis to include this adapter`;
 
 /** The reference line: no index at all, so `index` is a stated no-op of 0 bytes. */
 export const linearScanCandidate = (): AdapterCandidate => ({

@@ -12,9 +12,9 @@
  * It calls the model, so it needs llama-swap serving `REPHRASE_MODEL_ID` on
  * `RERANK_DEFAULT_URL` (a GPU). It writes ONE file, the one named by `--out`.
  *
- *   npx tsx tools/dp-gnosis/scripts/regenerate-autorephrased-golden.ts \
- *     --base tools/dp-gnosis/golden/golden-set.v2.json \
- *     --out  tools/dp-gnosis/golden/golden-set-autorephrased.v2.json
+ *   npx tsx packages/gnosis/scripts/regenerate-autorephrased-golden.ts \
+ *     --base packages/gnosis/golden/golden-set.v2.json \
+ *     --out  packages/gnosis/golden/golden-set-autorephrased.v2.json
  *
  * It goes through `rephraseQuery` itself rather than the CLI, so the rewrite is
  * the SHIPPED one — including the rule-5 guard, which returns a query unchanged

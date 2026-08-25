@@ -39,12 +39,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { parseAtom } from '../../dp-gnosis/src/atom.js';
+import { parseAtom } from '../../gnosis/src/atom.js';
 import {
   type EnrichmentRecord,
   loadEnrichmentSidecar
-} from '../../dp-gnosis/src/enrichment.js';
-import { analyze } from '../../dp-gnosis/src/query.js';
+} from '../../gnosis/src/enrichment.js';
+import { analyze } from '../../gnosis/src/query.js';
 
 /** The measurement ran and the report was written. */
 export const ENRICHMENT_GATE_EXIT_OK = 0;
@@ -344,7 +344,7 @@ export const gateReport = (
 };
 
 export const ENRICHMENT_GATE_HELP =
-  'usage: npx tsx tools/dp-gnosis-bench/src/enrichmentGate.ts <sidecar.jsonl> <atomsDir>\n';
+  'usage: npx tsx packages/gnosis-bench/src/enrichmentGate.ts <sidecar.jsonl> <atomsDir>\n';
 
 export const main = (argv: readonly string[]): number => {
   const [sidecar, atomsDir] = argv;

@@ -49,7 +49,7 @@ Conventions aligned with `metrics.ts` (`metrics.ts:1-33`), and why each matters:
 5. GRADED QRELS — nfcorpus grades are 1..3; a grade <= 0 is non-relevant on both
    sides (`relevantCount` filters `gain > 0`; trec_eval likewise).
 
-Setup (one-off), from `tools/dp-gnosis-bench`:
+Setup (one-off), from `packages/gnosis-bench`:
 
     python3 -m venv .venv && .venv/bin/pip install pytrec_eval numpy
 

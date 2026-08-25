@@ -619,7 +619,7 @@ const pruneOrphans = async (
  * though it would have been retrievable. On BEIR TREC-COVID that was 42 139 of
  * 171 332 records, costing 3 135 relevant judgments (12.71%) across 50 of 50
  * topics. The rule stays as written — per plan decision D6 the benchmark's need
- * is met in the bench projection (`tools/dp-gnosis-bench/src/corpus.ts`), so a
+ * is met in the bench projection (`packages/gnosis-bench/src/corpus.ts`), so a
  * benchmark corpus shape does not bend a vault authoring rule.
  */
 const emptyBodyReasons = (planned: PlannedAtom): readonly string[] =>

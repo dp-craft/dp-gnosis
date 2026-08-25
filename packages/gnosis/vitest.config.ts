@@ -7,11 +7,11 @@ import { defineConfig } from 'vitest/config';
 //
 // ALSO collected by `vitest.tools.config.ts` so `npm run test:tools` covers this
 // package. This config stays the package-local entry point: it owns adapter-gated
-// optionalDependencies that resolve from `tools/dp-gnosis/node_modules`, and a
+// optionalDependencies that resolve from `packages/gnosis/node_modules`, and a
 // missing one skips its adapter (lazy dynamic import) rather than failing either
 // suite.
 //
-// Running bare `vitest tools/dp-gnosis` against the APPLICATION config prints
+// Running bare `vitest packages/gnosis` against the APPLICATION config prints
 // "No test files found" and exits 0 — a false green. Always use `gnosis:test`.
 // `root` defaults to `process.cwd()`, NOT the config directory — measured: from
 // the repo root, `include: ['tests/**/*.test.ts']` matched nothing and printed

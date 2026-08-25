@@ -4,16 +4,16 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { ATOM_MAX_CHARS, DEFAULT_FIELD_WEIGHTS, DEFAULT_RERANK_PRESET, EMBED_MODEL_ID, RERANK_DOC_MAX_CHARS, RERANK_FUSION_PRESETS, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_K, RERANK_RRF_WEIGHT } from '../../dp-gnosis/src/config.js';
+import { ATOM_MAX_CHARS, DEFAULT_FIELD_WEIGHTS, DEFAULT_RERANK_PRESET, EMBED_MODEL_ID, RERANK_DOC_MAX_CHARS, RERANK_FUSION_PRESETS, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_K, RERANK_RRF_WEIGHT } from '../../gnosis/src/config.js';
 import type {
   IndexState,
   KnowledgePort,
   RetrievedAtom,
   RetrieveOptions
-} from '../../dp-gnosis/src/port.js';
-import { DEFAULT_PRF_PARAMS } from '../../dp-gnosis/src/prf.js';
-import { ANALYZERS, DEFAULT_ANALYZER } from '../../dp-gnosis/src/query.js';
-import { EXTRACT_STRATEGY } from '../../dp-gnosis/src/rerank.js';
+} from '../../gnosis/src/port.js';
+import { DEFAULT_PRF_PARAMS } from '../../gnosis/src/prf.js';
+import { ANALYZERS, DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
+import { EXTRACT_STRATEGY } from '../../gnosis/src/rerank.js';
 import { SCALE_FIELDS, TREATMENT_FIELDS } from './compare.js';
 import { UNREACHABLE_GOLD_CAUSE } from './fetch/vault.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
@@ -53,7 +53,7 @@ import {
   warnCollapsingTopics,
   warnRerankPoolBelowDepth
 } from './run.js';
-import { defaultExcludedTypes } from '../../dp-gnosis/src/vocabulary.js';
+import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 
 /** A second reranker id — any id the shipped constant is not. */
 const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';

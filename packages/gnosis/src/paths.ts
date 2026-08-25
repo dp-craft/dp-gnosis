@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
  * default identical to what it always was.
  *
  * The DEFAULT root is anchored on this file's own location —
- * `<repo>/tools/dp-gnosis/src/paths.ts` — so the values are identical no matter
+ * `<repo>/packages/gnosis/src/paths.ts` — so the values are identical no matter
  * which directory a CLI, a test, or a hook was invoked from. `process.cwd()` is
  * deliberately NOT used: it makes the vault location depend on the caller's
  * shell.
@@ -30,7 +30,7 @@ export const repoRoot = (): string => resolve(srcDir(), '..', '..', '..');
  * This package's own directory, which carries the authored, tracked assets
  * (`profiles/`, `golden/`). It is anchored on THIS FILE's location — one level
  * above `src/` in the repository, one level above `dist/` in an install — and
- * NOT on `repoRoot()`: `<root>/tools/dp-gnosis` is a fact about the development
+ * NOT on `repoRoot()`: `<root>/packages/gnosis` is a fact about the development
  * checkout, and an installed package sits at `<prefix>/@dp/gnosis` instead, so
  * the derived form resolved a profile path that does not exist and the CLI died
  * on `--help`. The value is identical to the old one in the checkout.

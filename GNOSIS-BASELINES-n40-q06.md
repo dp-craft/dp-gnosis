@@ -4,7 +4,7 @@
 
 Measured 2026-08-21, adapter `fts5`, on a **verified-clean GPU**.
 
-The arms span `gitSha` 7763d9b8 → e1658b24 because an unrelated session committed to this repo while they ran. **No gnosis code moved**: `git diff --stat 7763d9b8..e1658b24 -- tools/dp-gnosis tools/dp-gnosis-bench/src` is empty, and the two headline runs — recorded on either side of one of those commits — produced byte-identical `.trec` files. The sha variation is provenance noise, not a treatment.
+The arms span `gitSha` 7763d9b8 → e1658b24 because an unrelated session committed to this repo while they ran. **No gnosis code moved**: `git diff --stat 7763d9b8..e1658b24 -- packages/gnosis packages/gnosis-bench/src` is empty, and the two headline runs — recorded on either side of one of those commits — produced byte-identical `.trec` files. The sha variation is provenance noise, not a treatment.
 
 **This file exists to remove excuses, not to describe the served path.** `GNOSIS-BASELINES.md` records what dp-gnosis actually ships (`qwen3-reranker-4b`, pool 100). Everything here is dp-gnosis deliberately **handicapped down to qmd 2.8.3's operating point** so that the comparison in `docs/analysis/2026-08-21-dp-gnosis-vs-qmd-head-to-head.md` rests on matched settings instead of disclosed asymmetries.
 
@@ -167,7 +167,7 @@ Depth 40 on both sides. `nfcorpus` averages ~38 relevant documents per topic, so
 
 ## Not measured — the architecture-parity arm
 
-The deepest form of parity would run dp-gnosis on `lancedb-hybrid` at `--hybrid-weight 0.25`, matching qmd's dense⊕lexical *architecture* rather than only its knobs. **It was not run**: `@lancedb/lancedb` and `apache-arrow` are declared `optionalDependencies` of `tools/dp-gnosis` but are not installed in this tree, so the arm needs an install plus a full `bge-m3` embedding pass over 6628 atoms. `GNOSIS-GUIDE.md` § Settled already records the dense leg as neutral at best on these corpora, and qmd's own dense-dominated pool reaching a *worse* first stage (above) is independent evidence in the same direction — so the arm is expected to confirm rather than discover. Recorded as deliberately skipped, not overlooked.
+The deepest form of parity would run dp-gnosis on `lancedb-hybrid` at `--hybrid-weight 0.25`, matching qmd's dense⊕lexical *architecture* rather than only its knobs. **It was not run**: `@lancedb/lancedb` and `apache-arrow` are declared `optionalDependencies` of `packages/gnosis` but are not installed in this tree, so the arm needs an install plus a full `bge-m3` embedding pass over 6628 atoms. `GNOSIS-GUIDE.md` § Settled already records the dense leg as neutral at best on these corpora, and qmd's own dense-dominated pool reaching a *worse* first stage (above) is independent evidence in the same direction — so the arm is expected to confirm rather than discover. Recorded as deliberately skipped, not overlooked.
 
 ## Provenance
 

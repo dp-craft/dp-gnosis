@@ -8,7 +8,7 @@
 # handler directly and cannot see the framing or the process binding.
 #
 # Exit 0 = both responses present and well formed. Exit 1 = one is missing or
-# malformed. Run from the repo root: bash tools/dp-gnosis/scripts/mcp-smoke.sh
+# malformed. Run from the repo root: bash packages/gnosis/scripts/mcp-smoke.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -24,7 +24,7 @@ printf '%s\n%s\n' "$INIT" '{"jsonrpc":"2.0","method":"notifications/initialized"
 printf '%s\n' "$CALL" >>"$OUT.in"
 
 # stderr stays visible: it is where any diagnostic belongs, and stdout is the protocol.
-(cd "$ROOT" && npx tsx tools/dp-gnosis/src/mcp/main.ts <"$OUT.in" >"$OUT")
+(cd "$ROOT" && npx tsx packages/gnosis/src/mcp/main.ts <"$OUT.in" >"$OUT")
 
 echo "--- responses ---"
 cat "$OUT"

@@ -1,4 +1,4 @@
-<!-- LLM-PRIMARY: OPEN plan (2026-08-24) — SUPERSEDES docs/plans/2026-08-22-1354-dp-gnosis-standalone-product.md. Turn tools/dp-gnosis into `gnosis`, a standalone npm-installable product, IN A SEPARATE REPOSITORY at ../dp-gnosis. Three owner directives revise the v1 plan: (1) llama-swap STAYS as a parametrizable backend — local node-llama-cpp is ADDITIVE, not a replacement; (2) every phase re-verifies its premises against the tree before touching it — v1 drifted in 2 days; (3) extraction happens FIRST, not after phase 5. 9 phases. Read GNOSIS-GUIDE.md first. -->
+<!-- LLM-PRIMARY: OPEN plan (2026-08-24) — SUPERSEDES docs/plans/2026-08-22-1354-dp-gnosis-standalone-product.md. Turn packages/gnosis into `gnosis`, a standalone npm-installable product, IN A SEPARATE REPOSITORY at ../dp-gnosis. Three owner directives revise the v1 plan: (1) llama-swap STAYS as a parametrizable backend — local node-llama-cpp is ADDITIVE, not a replacement; (2) every phase re-verifies its premises against the tree before touching it — v1 drifted in 2 days; (3) extraction happens FIRST, not after phase 5. 9 phases. Read GNOSIS-GUIDE.md first. -->
 
 # dp-gnosis → `gnosis` — the standalone product plan, v2
 
@@ -58,8 +58,8 @@ That objection is **discharged, not overruled**, by moving the gate with the cod
 | `vault-hu` atoms | `dp-gnosis/cache/atoms-hu/` | **No** — it is a *cache*, and the guide records that the repo ingest never writes it |
 | `corpus-hu` sources | `dp-gnosis/corpus-hu/` | **No** |
 | `scifact` | `docs/benchmarks/2026-08-14-external-suite/data/scifact` | **No** — and its absence makes the smoke gate exit **1**, not 4 |
-| bench `data/` `results/` `work/` | `tools/dp-gnosis-bench/` | **No** |
-| golden sets | `tools/dp-gnosis/golden/*.json` | **Yes** (10 files) |
+| bench `data/` `results/` `work/` | `packages/gnosis-bench/` | **No** |
+| golden sets | `packages/gnosis/golden/*.json` | **Yes** (10 files) |
 
 A git-only move therefore produces a benchmark **with no corpora** — and, per the project's own recurring failure class, one that would report that as data rather than as an error. `vault-hu` is the worst case: it is reproducible from no repository at all and exists solely as a local cache directory. **Phase 1 copies these directories physically and verifies atom counts against `corpus-manifest.json` before anything else runs.**
 
@@ -71,11 +71,11 @@ This is the same class as the documented corpus boundary, and it gets the same t
 
 ### H3. Hoisted dependencies
 
-Neither package is an npm workspace member; both have their own `package.json`, lockfile and `node_modules`. But `tsx`, `vitest`, `better-sqlite3` and `@types/better-sqlite3` currently resolve from the **root** `devDependencies`. `better-sqlite3` is already declared in `tools/dp-gnosis/package.json`; **`tsx` and `vitest` are not** and must be added, or the extracted repo's own test command finds nothing.
+Neither package is an npm workspace member; both have their own `package.json`, lockfile and `node_modules`. But `tsx`, `vitest`, `better-sqlite3` and `@types/better-sqlite3` currently resolve from the **root** `devDependencies`. `better-sqlite3` is already declared in `packages/gnosis/package.json`; **`tsx` and `vitest` are not** and must be added, or the extracted repo's own test command finds nothing.
 
 ### H4. In-flight campaign work
 
-Active worktrees `gnosis-a`, `gnosis-c`, `gnosis-g`, `gnosis-i` sit on `050-gnosis-*` branches, plus `.claude/worktrees/050-dp-gnosis*`, `gnosis-wave2-safe`, `gnosis-wave4`. Extraction MUST NOT strand them. **Phase 1 is additive**: the new repo is created and verified while `tools/dp-gnosis/` stays in place; removal from AiChatney is a separate, later step (phase 4), after the package consumption path is proven.
+Active worktrees `gnosis-a`, `gnosis-c`, `gnosis-g`, `gnosis-i` sit on `050-gnosis-*` branches, plus `.claude/worktrees/050-dp-gnosis*`, `gnosis-wave2-safe`, `gnosis-wave4`. Extraction MUST NOT strand them. **Phase 1 is additive**: the new repo is created and verified while `packages/gnosis/` stays in place; removal from AiChatney is a separate, later step (phase 4), after the package consumption path is proven.
 
 ## The API surface — what must survive, exactly
 
@@ -89,8 +89,8 @@ The audit narrowed this considerably. **The runner does not touch dp-gnosis at a
 
 And there is exactly **one** TypeScript importer in the whole repository:
 
-- `tools/task-dag/src/nav/knowledge.ts` — `import type { GnosisAnswer, GnosisAtom } from '../../../dp-gnosis/src/api.js'`
-- `tools/task-dag/tests/nav-knowledge.test.ts` — `await import('../../dp-gnosis/src/mcp/protocol.js')` for `answerArgv`
+- `tools/task-dag/src/nav/knowledge.ts` — `import type { GnosisAnswer, GnosisAtom } from '../../../gnosis/src/api.js'`
+- `tools/task-dag/tests/nav-knowledge.test.ts` — `await import('../../gnosis/src/mcp/protocol.js')` for `answerArgv`
 
 Everything else is a CLI shell-out: the root `gnosis*` scripts, the `dp-gnosis-search` skill (`npm run gnosis -- answer …`), and `runner.config.json`'s `knowledge.command` (currently `enabled: false`).
 
@@ -122,10 +122,10 @@ Phase order changes from v1: **extraction moves to the front** (directive 3), an
 | # | Work | Exit criterion | Benchmark gate |
 |---|---|---|---|
 | **0** | Relax `expectVocabulary` to a **subset** of `DECLARED_TYPES`, order-independent, still refusing an unknown member and still **returning `declared`** (the full tuple — `ATOM_TYPES` is consumed as *"every valid label"*, so returning a subset would make `AtomType` lie). Correct the now-stale `fts5` single-column row in `GNOSIS-GUIDE.md` | `hu-tax.profile.json` loads as `DEFAULT_INGEST_PROFILE`; both suites green | No — behaviour-neutral on the shipped profile |
-| **1** | **EXTRACT** to `../dp-gnosis` via `git subtree split` (history preserved; `git-filter-repo` is not installed). Carries engine + bench + all six `GNOSIS-*.md`. Physically copy the untracked corpora (H1) and verify atom counts against `corpus-manifest.json`. Add `tsx` + `vitest` as devDeps (H3). Own eslint + vitest configs. Record the **provenance boundary** (H2). **Additive — `tools/dp-gnosis/` stays in AiChatney** (H4) | Both suites green *in the new repo*; `npm run gnosis:bench` runs there and produces the vault + vault-hu champion arms | **Yes — `.trec` byte-identity.** Same serving config, so identity is the valid criterion |
+| **1** | **EXTRACT** to `../dp-gnosis` via `git subtree split` (history preserved; `git-filter-repo` is not installed). Carries engine + bench + all six `GNOSIS-*.md`. Physically copy the untracked corpora (H1) and verify atom counts against `corpus-manifest.json`. Add `tsx` + `vitest` as devDeps (H3). Own eslint + vitest configs. Record the **provenance boundary** (H2). **Additive — `packages/gnosis/` stays in AiChatney** (H4) | Both suites green *in the new repo*; `npm run gnosis:bench` runs there and produces the vault + vault-hu champion arms | **Yes — `.trec` byte-identity.** Same serving config, so identity is the valid criterion |
 | **2** | Decouple from repo layout: `src/env.ts` (XDG + `~/Library` + `%APPDATA%`); delete `REPO_ROOT` / `GNOSIS_ROOT` / `DOCS_TEST_DIR`; split `config.ts` → constants + `src/vocabulary.ts` (profile-derived, resolved from the active topic, **not** eagerly at import); `CORPUS_ROOTS` default `['.']`; `sourceRoot` gets **no default** (absent ⇒ refuse, naming the topic — never `process.cwd()`); drop `p70`/`p75`/`bench` verb/golden set from the *shipped* surface (they stay in the bench package); per-domain index-empty diagnostic | `gnosis retrieve` runs under `HOME=$(mktemp -d)` from a directory with no repo above it; the bench still reproduces the champion arms | **Yes — `.trec` byte-identity** |
 | **3** | YAML config + `loadTopicsConfig`; `--topic`; `gnosis topic add/list/show/rm/rename`; `update`; `status`; `migrate <profile.json>`; ingest **0-file refusal** (exit 3, reporting what *is* there). Reuse `parseIngestProfile` — do not replace it | A YAML topic and the equivalent `--profile` JSON produce **identical output** | Yes — `.trec` byte-identity |
-| **4** | Packaging: drop `private`, add `bin` / `engines` / `files`, `tsconfig.build.json` with `tsc` emit (**not** a bundler — it would fight native resolution and break the lazy-optional-import gating), shebang; `init`, `doctor`, `cleanup`; `install.sh` / `install.ps1`; message catalog (EN filled). **Publish the API surface** (`exports` map + `search()`), re-point `tools/task-dag` to `@dp/gnosis/api`, re-point `runner.config.json`, rewrite the root `gnosis*` scripts as wrappers, rewrite `CLAUDE.md`'s routing row. **Then remove `tools/dp-gnosis*` from AiChatney** | On a clean container: `npm i -g <tarball>` → `init` → `topic add` → `update` → `search` returns atoms, no repo present, **llama-swap backend**. AiChatney's `taskdag:test` and the `dp-gnosis-search` skill still pass unchanged | No ranking code moves — phases 1–3 arms are the regression check |
+| **4** | Packaging: drop `private`, add `bin` / `engines` / `files`, `tsconfig.build.json` with `tsc` emit (**not** a bundler — it would fight native resolution and break the lazy-optional-import gating), shebang; `init`, `doctor`, `cleanup`; `install.sh` / `install.ps1`; message catalog (EN filled). **Publish the API surface** (`exports` map + `search()`), re-point `tools/task-dag` to `@dp/gnosis/api`, re-point `runner.config.json`, rewrite the root `gnosis*` scripts as wrappers, rewrite `CLAUDE.md`'s routing row. **Then remove `packages/gnosis*` from AiChatney** | On a clean container: `npm i -g <tarball>` → `init` → `topic add` → `update` → `search` returns atoms, no repo present, **llama-swap backend**. AiChatney's `taskdag:test` and the `dp-gnosis-search` skill still pass unchanged | No ranking code moves — phases 1–3 arms are the regression check |
 | **5** | `src/model/` seam, **`httpProvider` only**. Extend the existing `ChatProvider` rather than inventing one; fold `rerank` + `embed`'s private `Endpoint` structs and the **enrichment** hop into it. Re-key `RERANK_CALIBRATION` per backend | Suites green; a champion arm is **byte-identical** to phase 4's | **Yes, and identity IS the criterion** — a pure refactor that moves a byte is a defect |
 | **6** | `localProvider` + node-llama-cpp (`optionalDependencies`, lazy import catching **all** errors) + `hf:` download/cache + the three presets + `--offline` + GPU detection + **the local calibration probe**. llama-swap remains the default | Local backend returns atoms; `RERANK_CALIBRATION.local` either measured or deliberately empty; the preset table's VRAM column **measured**, not estimated | **Yes, and identity is FORBIDDEN** — serving-config change. Paired permutation + bootstrap CI against the 2026-08-22 champions (`vault` 0.5871 / `vault-hu` 0.8021) at a **pre-registered** tolerance, plus BEIR Tier-1 par. **Only on pass may the default flip** |
 | **7** | HU message catalog + HU config template; **English README** (install, converter recommendations); the `gnosis` skill; `gnosis mcp` subcommand; publish | `npm i -g @dp/gnosis && gnosis init && gnosis doctor` green on three OSes | No |
@@ -144,7 +144,7 @@ Phase order changes from v1: **extraction moves to the front** (directive 3), an
 
 ```bash
 npm run gnosis:test                                                   # engine
-npx vitest run --config vitest.tools.config.ts tools/dp-gnosis-bench  # bench
+npx vitest run --config vitest.tools.config.ts packages/gnosis-bench  # bench
 ```
 
 After phase 1 these become the new repo's own `npm test` / `npm run bench:test`.

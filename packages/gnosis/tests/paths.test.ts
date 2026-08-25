@@ -37,7 +37,7 @@ describe('paths', () => {
   });
 
   it('anchors REPO_ROOT on this package, not the working directory', () => {
-    expect(REPO_ROOT.endsWith('/tools/dp-gnosis')).toBe(false);
+    expect(REPO_ROOT.endsWith('/packages/gnosis')).toBe(false);
     expect(ATOMS_DIR).toContain('/dp-gnosis/vault/atoms');
   });
 });
