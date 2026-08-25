@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Development workspace for @dp/gnosis — the engine and its benchmark, extracted from AiChatney so the quality gate lives in the same repository as the change it gates.",
+  "license": "GPL-3.0-or-later",
   "engines": {
     "node": ">=22"
   },
@@ -23,7 +24,7 @@
     "gnosis:goldaudit": "tsx packages/gnosis-bench/src/goldAuditCli.ts",
     "bench:test": "vitest run --config packages/gnosis-bench/vitest.config.ts",
     "test": "npm run gnosis:test && npm run bench:test",
-    "typecheck": "tsc -p packages/gnosis/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/gnosis/tsconfig.json --noEmit && tsc -p packages/gnosis-bench/tsconfig.json --noEmit",
     "lint": "eslint ."
   },
   "devDependencies": {

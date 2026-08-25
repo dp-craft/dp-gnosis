@@ -1,0 +1,56 @@
+# The gates, in the order CONTRIBUTING.md states them.
+#
+# The two test suites run SEQUENTIALLY, as separate steps rather than one
+# parallel job matrix. Run concurrently they have produced a false red once
+# already — they share a work directory (handbook/GNOSIS-GUIDE.md § Landmines).
+# Splitting them across parallel jobs would reintroduce exactly that.
+#
+# The benchmark itself (`npm run gnosis:bench`) is NOT run here: it needs a
+# reranker served at 127.0.0.1:9292 with warm models, and the recorded `.trec`
+# evidence in packages/gnosis-bench/results/, which is untracked. A retrieval
+# quality change is gated by a measured local run, not by CI.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Engine suite
+        run: npm run gnosis:test
+
+      - name: Benchmark suite
+        run: npm run bench:test
+
+      - name: Build the published surface
+        run: npm run build -w @dp/gnosis
+
+      - name: Check the published tarball
+        run: npm pack --dry-run -w @dp/gnosis
