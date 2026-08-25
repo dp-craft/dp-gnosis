@@ -3,7 +3,7 @@
  * (`packages/gnosis/vitest.config.ts`) and is run by `npm run gnosis:test`.
  *
  * The two MUST be run SEQUENTIALLY — run concurrently they have produced a
- * false red once already (GNOSIS-GUIDE.md § Landmines).
+ * false red once already (handbook/GNOSIS-GUIDE.md § Landmines).
  *
  * `root` is anchored on THIS FILE's directory, not `process.cwd()`, exactly as
  * the engine's config already does: `npm run bench:test` invokes vitest from

@@ -6,7 +6,7 @@
  * assertions below pin the two properties that matter: an UNSET call sends the
  * byte-identical text every recorded run was scored on, and a SET call sends the
  * window it named. A default that drifted would re-base every recorded row
- * without a provenance change, which is the failure class GNOSIS-GUIDE.md
+ * without a provenance change, which is the failure class handbook/GNOSIS-GUIDE.md
  * § Landmines is built around.
  *
  * No live server: `fetch` is stubbed, and the documents the client posted are

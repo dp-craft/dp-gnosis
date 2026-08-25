@@ -95,7 +95,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 
 **An unfiltered `retrieve` excludes `defaultExcludedTypes`** — never on ingest, so those types stay ingested and indexed, and `--include-history` searches them. **Corrected 2026-08-22 (`16` § 5 C7/C9): "never in the bench" was false.** The bench subtracts the SAME list when it derives `vault` / `vault-hu` (`fetch/vault.ts`, off `--include-history`); it is untouched only on a non-derived dataset. Recorded numbers still stand — every one was measured under the same filter — but a CLI result is still not a bench result: the CLI drops these types while scanning one index over the whole vault, the bench indexes only the survivors, so the two compute different collection statistics.
 
-**The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `GNOSIS-BASELINES.md` § Phase D.
+**The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `handbook/GNOSIS-BASELINES.md` § Phase D.
 
 **Under `--budget-mode bytes` — the default — `--max-tokens` counts an upper bound, so it over-reserves.** The estimator charges each atom its UTF-8 byte length; why that bounds the real token count is derived in `estimateTokens` (`src/budget.ts`) and not repeated here. The reserve is measured: on 2026-08-18 over this vault, 5 558 bytes of real atom bodies tokenized to 1 414 tokens — **3.93 bytes/token**, read off `usage.prompt_tokens` against the tokenizer of `qwen38-27b-q4kxl-high-ctx130k-mtp-coding`. So in `bytes` the bound over-reserves **~3.9x**, and the `64000` default admits roughly **16 000 real tokens**. In `bytes`, size the flag at about 4x the context you actually mean to fill. **`--budget-mode tokens` charges the served model's real token count, so none of that reserve applies** — the number you pass is the number of tokens you get, and it is sized 1:1 with the context you mean to fill. In either mode an atom that does not fit the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size, and the run exits **3** — a truncated context is a partial result, never a clean one.
 
@@ -449,7 +449,7 @@ no rephrasing of its own.
 call in the same session **0.2 s**. The first call pays `tsx` transpilation of the source tree plus opening the
 14k-atom `fts5` index; the session then holds both. An MCP server is long-lived, so the cold cost is paid once per
 client launch, not per question. **This is the NO-rerank path** — adding `--rerank` costs ≈12 s per query on top
-(`GNOSIS-BASELINES.md` § Serving path), and the MCP tool does not enable it.
+(`handbook/GNOSIS-BASELINES.md` § Serving path), and the MCP tool does not enable it.
 
 ### Obsidian
 

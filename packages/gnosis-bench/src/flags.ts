@@ -5,7 +5,7 @@
  * silence while the run still recorded the label that flag was meant to set — a
  * typo'd `--rerank-model` left the reranker on its default and the history row
  * still named the cross-encoder that never scored anything. That is the
- * recurring failure class of GNOSIS-GUIDE.md § Landmines: a component produced
+ * recurring failure class of handbook/GNOSIS-GUIDE.md § Landmines: a component produced
  * nothing and the pipeline recorded it as data. The gate flags escaped it only
  * by accident, through their mutual requirement.
  */

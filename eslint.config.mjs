@@ -98,7 +98,7 @@ export default tseslint.config(
       'packages/gnosis/dist',
       // Benchmark corpora, recorded evidence, and scratch state — all generated.
       // `results/` in particular holds the byte-identity evidence the provenance
-      // gates compare against (GNOSIS-BENCH.md § Provenance); it is data, not code.
+      // gates compare against (handbook/GNOSIS-BENCH.md § Provenance); it is data, not code.
       'packages/gnosis-bench/data',
       'packages/gnosis-bench/results',
       'packages/gnosis-bench/work',

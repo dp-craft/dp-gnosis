@@ -748,7 +748,7 @@ describe('provenanceOf — which reranker the row is attributed to', () => {
 
   /**
    * The EFFECTIVE window, never the constant. A row reading `2000` while 4000
-   * characters were scored is the provenance failure GNOSIS-GUIDE.md § Landmines
+   * characters were scored is the provenance failure handbook/GNOSIS-GUIDE.md § Landmines
    * is built around — the arm would be subtracted as a like-for-like delta.
    */
   it('stamps the EFFECTIVE doc window a width arm named, not the shipped constant', () => {

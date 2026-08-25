@@ -62,7 +62,7 @@ const TIMEOUT_MS = 60000;
 /**
  * The DISCRIMINATION PROBE's own ceiling, deliberately far above `TIMEOUT_MS`.
  * llama-swap loads a model on demand and the first `/v1/rerank` call after an
- * eviction was MEASURED at 1 m 59 s — past the 60 s abort (GNOSIS-GUIDE.md
+ * eviction was MEASURED at 1 m 59 s — past the 60 s abort (handbook/GNOSIS-GUIDE.md
  * § Landmines, the cold-reranker row). The probe IS the warm-up that landmine
  * requires before an arm, so it MUST NOT itself time out on a cold load.
  */
@@ -638,7 +638,7 @@ const probeOnce = (endpoint: Endpoint): Promise<RerankProbeOutcome> => {
  * The SERVING path's gate: the refusal to report, or `undefined` when this
  * endpoint discriminates and may be scored with. Memoised per process, so the
  * probe is paid once and doubles as the warm-up the cold-load landmine requires
- * (GNOSIS-GUIDE.md § Landmines) — hence the probe's own long timeout.
+ * (handbook/GNOSIS-GUIDE.md § Landmines) — hence the probe's own long timeout.
  *
  * It is called BEFORE `rerankAtoms`, because a model whose rank head this build
  * cannot use answers HTTP 200 with well-formed numbers: nothing downstream of

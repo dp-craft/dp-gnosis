@@ -12,7 +12,7 @@
  *
  * | Convention | Why |
  * |---|---|
- * | average over the QRELS topic set | a topic the run retrieved nothing for has no lines in the file; dropping it flatters the run (measured 0.015 nDCG@10 on nfcorpus, GNOSIS-BENCH.md § Benchmarking) |
+ * | average over the QRELS topic set | a topic the run retrieved nothing for has no lines in the file; dropping it flatters the run (measured 0.015 nDCG@10 on nfcorpus, handbook/GNOSIS-BENCH.md § Benchmarking) |
  * | order by the RANK COLUMN | line order is the producer's convenience, rank is its claim |
  *
  * A doc id the corpus does not hold, or a run that shares no topic with the

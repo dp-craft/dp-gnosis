@@ -6,7 +6,7 @@
  * a recorded run, pairing two arms) can only touch a row whose artefacts still
  * exist. `results/runs/` and `results/per-topic/` are gitignored, so the history
  * log is a set of PROMISES about files nothing tracks. This script turns those
- * promises into measured facts, and — per `GNOSIS-GUIDE.md` § Landmines — dates
+ * promises into measured facts, and — per `handbook/GNOSIS-GUIDE.md` § Landmines — dates
  * every artefact against its own row, because a stale untracked derived file
  * reads exactly like a code defect.
  *

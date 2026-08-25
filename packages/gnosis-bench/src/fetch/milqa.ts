@@ -3,7 +3,7 @@
  * into the BEIR layout on disk.
  *
  * WHY THIS DATASET EXISTS HERE. `vault-hu` is the only Hungarian corpus the
- * suite carries and it holds 31 topics, an MDE of 0.05–0.07 (`GNOSIS-BENCH.md`
+ * suite carries and it holds 31 topics, an MDE of 0.05–0.07 (`handbook/GNOSIS-BENCH.md`
  * § Known harness gaps). At that power a Hungarian analyzer question, a PRF cell
  * or a stemming change cannot be DECIDED — every result reads "cannot tell", and
  * a null on it has repeatedly been mistaken for "no difference". MILQA carries
@@ -46,7 +46,7 @@
  *
  * The corpus text opens with `# <article> > <section>` because that is the vault
  * ATOM convention: an atom carries its heading line in the indexed body
- * (`GNOSIS-GUIDE.md` § heading composition), so a corpus built without one would
+ * (`handbook/GNOSIS-GUIDE.md` § heading composition), so a corpus built without one would
  * measure a body shape the engine never sees in production.
  *
  * IDEMPOTENT like every fetcher here: a `corpus.jsonl` already on disk means the

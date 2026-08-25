@@ -12,7 +12,7 @@
  *    that matches nothing, or two runs, refuses NAMING BOTH the selector and the
  *    dataset.
  * 2. **It gates on the POINT ESTIMATE, never on significance.** `vault-hu`'s
- *    minimum detectable effect is 0.05–0.07 (`GNOSIS-GUIDE.md` § Known harness
+ *    minimum detectable effect is 0.05–0.07 (`handbook/GNOSIS-GUIDE.md` § Known harness
  *    gaps), so requiring `p < ALPHA` before failing would wave a real 0.04
  *    regression through on the corpus least able to detect one. The p-value and
  *    the bootstrap interval are PRINTED beside the verdict — they say how well

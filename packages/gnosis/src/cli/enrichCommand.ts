@@ -10,7 +10,7 @@
  * The sidecar defaults BESIDE the atoms directory rather than inside it: an
  * atoms directory is stamped with its owning profile and pruned wholesale on
  * re-ingest, and a sidecar living there would be destroyed by the very command
- * whose output it survives (GNOSIS-GUIDE.md § Landmines, shared work
+ * whose output it survives (handbook/GNOSIS-GUIDE.md § Landmines, shared work
  * directory). One profile, one atoms dir, one sidecar beside it.
  *
  * A refusal is a PARTIAL result, never a failure of the whole run: whatever

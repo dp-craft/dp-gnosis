@@ -1,5 +1,5 @@
 /**
- * The serving defaults ARE the measured champion (`GNOSIS-BASELINES.md`
+ * The serving defaults ARE the measured champion (`handbook/GNOSIS-BASELINES.md`
  * § Serving path, 2026-08-18 at `gitSha` b64d5bff): `fts5` + `qwen3-reranker-4b`
  * over a pool of 100, scoring `vault` nDCG@10 0.5040 and `vault-hu` 0.6929.
  *

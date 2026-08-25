@@ -3,7 +3,7 @@
  * whole value is telling apart "the row says the file is there" from "the file
  * is there" — so the tests fabricate a results directory where one row's run
  * file is missing, one row carries no `runPath` at all, and one artefact is
- * backdated far behind its row (GNOSIS-GUIDE.md § Landmines: a stale untracked
+ * backdated far behind its row (handbook/GNOSIS-GUIDE.md § Landmines: a stale untracked
  * derived artefact reads exactly like a code defect).
  */
 import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';

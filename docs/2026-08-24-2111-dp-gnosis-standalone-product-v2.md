@@ -1,4 +1,4 @@
-<!-- LLM-PRIMARY: OPEN plan (2026-08-24) — SUPERSEDES docs/plans/2026-08-22-1354-dp-gnosis-standalone-product.md. Turn packages/gnosis into `gnosis`, a standalone npm-installable product, IN A SEPARATE REPOSITORY at ../dp-gnosis. Three owner directives revise the v1 plan: (1) llama-swap STAYS as a parametrizable backend — local node-llama-cpp is ADDITIVE, not a replacement; (2) every phase re-verifies its premises against the tree before touching it — v1 drifted in 2 days; (3) extraction happens FIRST, not after phase 5. 9 phases. Read GNOSIS-GUIDE.md first. -->
+<!-- LLM-PRIMARY: OPEN plan (2026-08-24) — SUPERSEDES docs/plans/2026-08-22-1354-dp-gnosis-standalone-product.md. Turn packages/gnosis into `gnosis`, a standalone npm-installable product, IN A SEPARATE REPOSITORY at ../dp-gnosis. Three owner directives revise the v1 plan: (1) llama-swap STAYS as a parametrizable backend — local node-llama-cpp is ADDITIVE, not a replacement; (2) every phase re-verifies its premises against the tree before touching it — v1 drifted in 2 days; (3) extraction happens FIRST, not after phase 5. 9 phases. Read handbook/GNOSIS-GUIDE.md first. -->
 
 # dp-gnosis → `gnosis` — the standalone product plan, v2
 
@@ -20,7 +20,7 @@ Plus one hazard neither v1 nor the directives named, found by audit: **the bench
 
 `models.backend: llama-swap | local` is a supported, documented, first-class choice. Consequences that differ from v1:
 
-- `httpProvider` is **not** a compatibility shim being kept alive out of politeness. It is the **currently measured path** — every recorded baseline in `GNOSIS-BASELINES.md` lives on it — and it stays the **default** until, and unless, phase 6's paired gate passes for `local`.
+- `httpProvider` is **not** a compatibility shim being kept alive out of politeness. It is the **currently measured path** — every recorded baseline in `handbook/GNOSIS-BASELINES.md` lives on it — and it stays the **default** until, and unless, phase 6's paired gate passes for `local`.
 - `local` exists to serve the non-technical user who cannot administer a model server. It is **additive**.
 - `RERANK_CALIBRATION` must be re-keyed per **backend** — `Record<'llama-swap' | 'local', Record<string, RerankCalibration>>` — precisely *because* both backends persist side by side. v1 reached the same conclusion from the assumption that `local` would take over; it is more urgent when both are live, because a single-keyed table silently applies one backend's measured scale to the other's raw scores.
 - Documentation must present the choice as a **tradeoff**, not a migration: llama-swap = you already run a server, you get the measured champion; local = zero setup, models auto-downloaded, quality gated separately.
@@ -33,7 +33,7 @@ v1 premises that are **stale**:
 
 | Drift | Detail |
 |---|---|
-| **`fts5` is no longer single-column** | `FTS_COLUMNS` = `body, short, long, doc_desc, keywords, entities, questions`, with BM25F weighting via `DEFAULT_FIELD_WEIGHTS` + `--field-weights`. `GNOSIS-GUIDE.md` still says *"single-column … column weighting is impossible without a schema change"* — **that guide row is now stale and must be corrected** (a third correction, alongside v1's two). |
+| **`fts5` is no longer single-column** | `FTS_COLUMNS` = `body, short, long, doc_desc, keywords, entities, questions`, with BM25F weighting via `DEFAULT_FIELD_WEIGHTS` + `--field-weights`. `handbook/GNOSIS-GUIDE.md` still says *"single-column … column weighting is impossible without a schema change"* — **that guide row is now stale and must be corrected** (a third correction, alongside v1's two). |
 | **An enrichment pipeline landed** (`1e987316`) | `src/enrich.ts`, `src/enrichment.ts`, `src/chat.ts`, `src/cli/enrichCommand.ts`, and a 6th CLI verb `enrich`. One model call per atom → JSONL sidecar. It is a **model-backed ingest-side hop**, so it belongs to the provider seam (phase 5) that v1 scoped to four clients. |
 | **A provider abstraction already exists** | `src/chat.ts` exports `ChatProvider` + `createHttpChatProvider`, already shared by rephrase / synthesize / enrich. Only `rerank` and `embed` still carry private `Endpoint` structs. v1's `src/model/` work is **partly pre-built**; phase 5 extends `ChatProvider`, it does not invent it. |
 | **`src/api.d.ts` exists** | A zero-dependency leaf consumer contract — `GnosisExitCode`, `GnosisRequest`, `GnosisSkippedAtom`, `GnosisAtom`, `GnosisAnswer` — guarded by `tests/apiContract.test.ts`. Its docblock states it is a leaf *so a consumer package can compile it under its own `rootDir`*. **That design anticipated this extraction.** |
@@ -67,7 +67,7 @@ A git-only move therefore produces a benchmark **with no corpora** — and, per 
 
 `run.ts:currentGitSha(SUITE_ROOT)` stamps every recorded result with the **AiChatney** git sha; `report.ts` persists it and `compare.ts` prints it. After extraction the sha names a different repository with a different history, so every pre-extraction row's `gitSha` becomes uninterpretable in the new repo's terms.
 
-This is the same class as the documented corpus boundary, and it gets the same treatment: **recorded in `GNOSIS-GUIDE.md` as a boundary, with the mapping `<last AiChatney sha> → <extraction commit>`**, and a standing rule that a pre-boundary sha MUST NOT be read as a commit in the new repo.
+This is the same class as the documented corpus boundary, and it gets the same treatment: **recorded in `handbook/GNOSIS-GUIDE.md` as a boundary, with the mapping `<last AiChatney sha> → <extraction commit>`**, and a standing rule that a pre-boundary sha MUST NOT be read as a commit in the new repo.
 
 ### H3. Hoisted dependencies
 
@@ -121,7 +121,7 @@ Phase order changes from v1: **extraction moves to the front** (directive 3), an
 
 | # | Work | Exit criterion | Benchmark gate |
 |---|---|---|---|
-| **0** | Relax `expectVocabulary` to a **subset** of `DECLARED_TYPES`, order-independent, still refusing an unknown member and still **returning `declared`** (the full tuple — `ATOM_TYPES` is consumed as *"every valid label"*, so returning a subset would make `AtomType` lie). Correct the now-stale `fts5` single-column row in `GNOSIS-GUIDE.md` | `hu-tax.profile.json` loads as `DEFAULT_INGEST_PROFILE`; both suites green | No — behaviour-neutral on the shipped profile |
+| **0** | Relax `expectVocabulary` to a **subset** of `DECLARED_TYPES`, order-independent, still refusing an unknown member and still **returning `declared`** (the full tuple — `ATOM_TYPES` is consumed as *"every valid label"*, so returning a subset would make `AtomType` lie). Correct the now-stale `fts5` single-column row in `handbook/GNOSIS-GUIDE.md` | `hu-tax.profile.json` loads as `DEFAULT_INGEST_PROFILE`; both suites green | No — behaviour-neutral on the shipped profile |
 | **1** | **EXTRACT** to `../dp-gnosis` via `git subtree split` (history preserved; `git-filter-repo` is not installed). Carries engine + bench + all six `GNOSIS-*.md`. Physically copy the untracked corpora (H1) and verify atom counts against `corpus-manifest.json`. Add `tsx` + `vitest` as devDeps (H3). Own eslint + vitest configs. Record the **provenance boundary** (H2). **Additive — `packages/gnosis/` stays in AiChatney** (H4) | Both suites green *in the new repo*; `npm run gnosis:bench` runs there and produces the vault + vault-hu champion arms | **Yes — `.trec` byte-identity.** Same serving config, so identity is the valid criterion |
 | **2** | Decouple from repo layout: `src/env.ts` (XDG + `~/Library` + `%APPDATA%`); delete `REPO_ROOT` / `GNOSIS_ROOT` / `DOCS_TEST_DIR`; split `config.ts` → constants + `src/vocabulary.ts` (profile-derived, resolved from the active topic, **not** eagerly at import); `CORPUS_ROOTS` default `['.']`; `sourceRoot` gets **no default** (absent ⇒ refuse, naming the topic — never `process.cwd()`); drop `p70`/`p75`/`bench` verb/golden set from the *shipped* surface (they stay in the bench package); per-domain index-empty diagnostic | `gnosis retrieve` runs under `HOME=$(mktemp -d)` from a directory with no repo above it; the bench still reproduces the champion arms | **Yes — `.trec` byte-identity** |
 | **3** | YAML config + `loadTopicsConfig`; `--topic`; `gnosis topic add/list/show/rm/rename`; `update`; `status`; `migrate <profile.json>`; ingest **0-file refusal** (exit 3, reporting what *is* there). Reuse `parseIngestProfile` — do not replace it | A YAML topic and the equivalent `--profile` JSON produce **identical output** | Yes — `.trec` byte-identity |
@@ -166,7 +166,7 @@ npm run gnosis:bench    # vault + vault-hu champion arm: fts5 + PRF + 4b + pool 
 3. `npm ci` in the new repo resolves without the root hoist.
 4. Both suites green **in the new repo**.
 5. Champion arms reproduce **byte-identically** against the AiChatney-recorded `.trec`.
-6. Provenance boundary recorded in `GNOSIS-GUIDE.md`.
+6. Provenance boundary recorded in `handbook/GNOSIS-GUIDE.md`.
 7. AiChatney is **untouched** and still green.
 
 **Isolation test (phase 2):** `HOME=$(mktemp -d) node dist/cli/main.js retrieve …` from a directory with no repo above it. If it finds anything by walking upward, the decoupling is not done.

@@ -48,7 +48,7 @@ export type AdapterName = (typeof ADAPTER_NAMES)[number];
  * are asserted equal (`tests/defaults.test.ts`) so the CLI can never serve a
  * route the suite does not measure.
  *
- * Measured (`GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at `gitSha`
+ * Measured (`handbook/GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at `gitSha`
  * b64d5bff): the champion arm is `fts5` + `RERANK_MODEL_ID` over a pool of
  * `RERANK_K_INIT`, scoring `vault` nDCG@10 0.5040 and `vault-hu` 0.6929, above
  * every `linear` arm recorded there.

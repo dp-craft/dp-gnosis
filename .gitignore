@@ -13,7 +13,7 @@ benchmark-data/corpus-hu/
 
 # Benchmark working state. `results/` holds the RECORDED EVIDENCE the
 # byte-identity gates compare against — it is untracked but MUST NOT be
-# deleted; see GNOSIS-BENCH.md § Provenance.
+# deleted; see handbook/GNOSIS-BENCH.md § Provenance.
 packages/gnosis-bench/data/
 packages/gnosis-bench/results/
 packages/gnosis-bench/work/

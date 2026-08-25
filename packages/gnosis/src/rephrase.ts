@@ -16,7 +16,7 @@
  * CACHED ON DISK, keyed by `(model, prompt version, query)` — the same three
  * inputs that determine the answer. A cache that outlived a prompt change would
  * serve the old prompt's rewrites with a fresh mtime, the stale-derived-artefact
- * landmine in GNOSIS-GUIDE.md § Landmines. A HIT short-circuits before the
+ * landmine in handbook/GNOSIS-GUIDE.md § Landmines. A HIT short-circuits before the
  * catalogue call, so a warm cache works with llama-swap stopped.
  *
  * The refusal split and message shape are `rerank.ts`'s, deliberately: the two

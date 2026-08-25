@@ -165,7 +165,7 @@ export const DEFAULT_BUDGET_MODE: BudgetMode = 'bytes';
  * One id, one model: a run that does not carry the id cannot be told from one
  * that used another model, so `--rerank-model` records what it selects.
  *
- * The measured champion (`GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at
+ * The measured champion (`handbook/GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at
  * `gitSha` b64d5bff): `fts5` + this model over a pool of {@link RERANK_K_INIT}
  * scores `vault` nDCG@10 0.5040 and `vault-hu` 0.6929.
  *
@@ -199,7 +199,7 @@ export const RERANK_URL_ENV_VAR = 'DP_GNOSIS_RERANK_URL';
  * cap — `retrieveCommand.ts` resolves the first pass as `max(k, RERANK_K_INIT)`,
  * so a caller asking for more keeps its own `k`.
  *
- * The champion pool (`GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at
+ * The champion pool (`handbook/GNOSIS-BASELINES.md` § Serving path, 2026-08-18 at
  * `gitSha` b64d5bff): `fts5` + {@link RERANK_MODEL_ID} at this depth scores
  * `vault` nDCG@10 0.5040 and `vault-hu` 0.6929, against 0.4911 / 0.6277 for the
  * same pair at pool 20. Hungarian's whole gain is this depth, not the model.
@@ -356,7 +356,7 @@ export const REPHRASE_MODEL_ENV_VAR = 'DP_GNOSIS_LLM_MODEL';
 
 /**
  * Generous enough to absorb a COLD llama-swap load: this model measured 69 s
- * from eviction, and a reranker load measured 1 m 59 s (GNOSIS-GUIDE.md
+ * from eviction, and a reranker load measured 1 m 59 s (handbook/GNOSIS-GUIDE.md
  * § Landmines). A warm rewrite takes 0.6–1.4 s, so this ceiling is only ever
  * paid once per eviction.
  */
@@ -369,7 +369,7 @@ export const REPHRASE_MAX_TOKENS = 120;
  * Bumped whenever `REPHRASE_SYSTEM_PROMPT` changes — it is part of the cache
  * key. A cache that outlived a prompt change would serve one prompt's rewrites
  * under another's name with a fresh mtime, which is the stale-derived-artefact
- * landmine in GNOSIS-GUIDE.md § Landmines.
+ * landmine in handbook/GNOSIS-GUIDE.md § Landmines.
  *
  * `v2` (2026-08-18) replaces the prompt that FAILED its own acceptance —
  * inert on Hungarian, significantly harmful on English
