@@ -52,7 +52,7 @@ const EXIT_PARTIAL = 3;
 const EXIT_USAGE = 2;
 
 const DEFAULTS = {
-  atomsDir: 'dp-gnosis/vault/atoms',
+  atomsDir: 'benchmark-data/vault/atoms',
   model: 'qwen35b-a3b-q5km-ctx130k-mtp-sharp-coding',
   url: 'http://127.0.0.1:9292',
   headChars: 4000,

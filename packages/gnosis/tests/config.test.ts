@@ -9,8 +9,8 @@ const DOMAIN_CASES: readonly (readonly [string, string | undefined])[] = [
   ['claude-artifacts/speckit/workflow.md', 'standards'],
   ['doc/85-teaching/retrieval-101.md', 'docs'],
   ['.claude/agents/code-logic-writer.md', 'claude'],
-  ['dp-gnosis/corpus-hu/odoo/bevezetes.md', 'docs'],
-  ['dp-gnosis/cache/bench/corpus-ext/sql-postgresql/x.md', 'docs'],
+  ['benchmark-data/corpus-hu/odoo/bevezetes.md', 'docs'],
+  ['benchmark-data/cache/bench/corpus-ext/sql-postgresql/x.md', 'docs'],
   ['src/db/idb.ts', undefined],
 ];
 
@@ -28,9 +28,9 @@ describe('domainForSource', () => {
   });
 
   it('claims the external benchmark corpus root without claiming its parents', () => {
-    expect(domainForSource('dp-gnosis/cache/bench/corpus-ext/css-sass/x.md')).toBe('docs');
-    expect(domainForSource('dp-gnosis/cache/bench/other/x.md')).toBeUndefined();
-    expect(domainForSource('dp-gnosis/cache/index.json')).toBeUndefined();
+    expect(domainForSource('benchmark-data/cache/bench/corpus-ext/css-sass/x.md')).toBe('docs');
+    expect(domainForSource('benchmark-data/cache/bench/other/x.md')).toBeUndefined();
+    expect(domainForSource('benchmark-data/cache/index.json')).toBeUndefined();
   });
 });
 
@@ -48,7 +48,7 @@ const CASES: readonly (readonly [string, string])[] = [
   ['claude-artifacts/standards/TS-TESTING.md', 'standard'],
   ['doc/40-code-standards/naming.md', 'standard'],
   ['doc/50-testing-strategy/layers.md', 'standard'],
-  ['dp-gnosis/cache/bench/corpus-ext/sql-postgresql/x.md', 'vendor-doc'],
+  ['benchmark-data/cache/bench/corpus-ext/sql-postgresql/x.md', 'vendor-doc'],
 ];
 
 describe('typeForSource', () => {

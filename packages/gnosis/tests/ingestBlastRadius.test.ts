@@ -110,7 +110,7 @@ const offencesIn = (file: string, source: string): readonly Offence[] => [
 
 describe('no test may ingest into the production vault', () => {
   it('resolves ATOMS_DIR to the tracked vault, so the guard has a real subject', () => {
-    expect(ATOMS_DIR.endsWith(join('dp-gnosis', 'vault', 'atoms'))).toBe(true);
+    expect(ATOMS_DIR.endsWith(join('benchmark-data', 'vault', 'atoms'))).toBe(true);
   });
 
   it('scans a non-empty set of sibling test files', () => {

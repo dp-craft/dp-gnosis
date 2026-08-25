@@ -72,7 +72,7 @@ export interface ProfileSpec {
  * Title as the single H1, text as the body — the shape a BEIR doc actually has.
  *
  * A record whose `text` is empty repeats its title as body prose, because
- * `emptyBodyReasons` (`dp-gnosis/src/ingest.ts:498-510`) discards an atom whose
+ * `emptyBodyReasons` (`packages/gnosis/src/ingest.ts:498-510`) discards an atom whose
  * HEADING-STRIPPED chunk body is empty — a different string from the one the
  * index reads. Measured: fts5 returns scifact doc `4983` for "newborn", a term
  * carried only by its title, so those records ARE retrievable; the gate drops

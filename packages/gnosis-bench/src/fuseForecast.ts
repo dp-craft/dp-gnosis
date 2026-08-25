@@ -30,7 +30,7 @@ import type { Qrel } from './metrics.js';
 import type { HistoryRow } from './report.js';
 import { type DatasetScore, scoreDataset } from './score.js';
 
-/** The engine's RRF constant (`dp-gnosis/src/config.ts:RERANK_RRF_K`), restated for an offline fuse. */
+/** The engine's RRF constant (`packages/gnosis/src/config.ts:RERANK_RRF_K`), restated for an offline fuse. */
 export const RERANK_RRF_K = 20;
 
 /** The depth every fusable leg was retrieved to, and the depth a fusion is truncated to. */

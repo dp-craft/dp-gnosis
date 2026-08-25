@@ -103,7 +103,7 @@ export default tseslint.config(
       'packages/gnosis-bench/results',
       'packages/gnosis-bench/work',
       // Runtime state (vault atoms, caches, corpora) written by the engine at run time.
-      'dp-gnosis/',
+      'benchmark-data/',
       // Python venv for the benchmark's metric-validation scripts.
       '**/.venv',
       '**/*.config.*',

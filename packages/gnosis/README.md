@@ -11,10 +11,10 @@ Code is `packages/gnosis/` — a **liftable unit** (own `package.json`, own test
 | Path | Tracked? | Contents |
 |---|---|---|
 | `packages/gnosis/` | yes | the package: `src/`, `golden/golden-set.v1.json` (frozen relevance set) |
-| `dp-gnosis/vault/` | yes | the knowledge unit |
-| `dp-gnosis/vault/atoms/` | **gitignored** | retrievable atoms — the ONLY root an adapter reads. Ignored because `ingest` still materialises it from repo docs (machine output) |
-| `dp-gnosis/vault/proposals/` | gitignored | pre-admission drafts; unretrievable **by location**, never filtered after the fact |
-| `dp-gnosis/cache/` | **gitignored** | derived + disposable: `cache/index/<per-adapter>`, `cache/bench/` scratch corpora |
+| `benchmark-data/vault/` | yes | the knowledge unit |
+| `benchmark-data/vault/atoms/` | **gitignored** | retrievable atoms — the ONLY root an adapter reads. Ignored because `ingest` still materialises it from repo docs (machine output) |
+| `benchmark-data/vault/proposals/` | gitignored | pre-admission drafts; unretrievable **by location**, never filtered after the fact |
+| `benchmark-data/cache/` | **gitignored** | derived + disposable: `cache/index/<per-adapter>`, `cache/bench/` scratch corpora |
 
 Every path is owned by `src/paths.ts` and anchored on that file's own location — never `process.cwd()`. `ingest` is deterministic: re-running over an unchanged corpus rewrites byte-identical files, so a non-empty `git diff` over the vault means a source doc actually changed.
 
@@ -56,8 +56,8 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | Flag | Value | Default |
 |---|---|---|
 | `--adapter` | `linear\|fts5\|minisearch\|lancedb\|lancedb-vec\|lancedb-hybrid\|lancedb-hybrid-full` | `fts5` — the measured champion, and what the bench measures |
-| `--atoms-dir` | dir | `dp-gnosis/vault/atoms` |
-| `--index-path` | file for `fts5`/`minisearch`, **directory** for every `lancedb*` route | per-adapter path under `dp-gnosis/cache/index/` |
+| `--atoms-dir` | dir | `benchmark-data/vault/atoms` |
+| `--index-path` | file for `fts5`/`minisearch`, **directory** for every `lancedb*` route | per-adapter path under `benchmark-data/cache/index/` |
 | `--repo-root` | dir | repo root |
 | `--profile` | file — one named instance: its vocabulary, its labelling tables AND its own `repoRoot` / `corpusRoots` / `atomsDir` / `indexPath`. Each profile MUST own its `atomsDir` AND its `indexPath` — an atoms directory is stamped with its owner and refuses a second profile | none, the built-in defaults. Precedence is **flag > profile > default**, so `--atoms-dir` / `--index-path` / `--repo-root` still outrank whatever the profile states |
 | `--golden-set` | file | `packages/gnosis/golden/golden-set.v1.json` |
@@ -246,7 +246,7 @@ npm run gnosis -- ingest --json
 
 # 2. Build an adapter index (no-op, exit 0, for `linear`).
 npm run gnosis -- index --adapter fts5
-# index: fts5 — built at <repo>/dp-gnosis/cache/index/atoms-fts5.db
+# index: fts5 — built at <repo>/benchmark-data/cache/index/atoms-fts5.db
 
 # 3. Rank atoms. Query is keywords, NOT a sentence — see § Query rephrasing.
 npm run gnosis -- retrieve "testing strategy layered test model coverage thresholds" -k 5 --json
@@ -276,7 +276,7 @@ npm run gnosis -- retrieve "functional programming immutability pure functions" 
 <retrieved_context query="functional programming immutability pure functions" adapter="linear" mode="lexical:bm25-linear" indexState="ready" count="1">
   <document id="typescript-typescript-principles-functional-programming-mandatory" score="24.0523" domain="standards">
     <metadata>
-      <source>dp-gnosis/vault/atoms/typescript-typescript-principles-functional-programming-mandatory.md</source>
+      <source>benchmark-data/vault/atoms/typescript-typescript-principles-functional-programming-mandatory.md</source>
       <section>Functional Programming (MANDATORY)</section>
     </metadata>
     <content>
@@ -349,8 +349,8 @@ The four location keys are OPTIONAL, and a relative one resolves against the dir
 
 | Location | Flag | Profile key | Default |
 |---|---|---|---|
-| atoms | `--atoms-dir` | `atomsDir` | `dp-gnosis/vault/atoms` |
-| index | `--index-path` | `indexPath` | per-adapter, under `dp-gnosis/cache/index/` |
+| atoms | `--atoms-dir` | `atomsDir` | `benchmark-data/vault/atoms` |
+| index | `--index-path` | `indexPath` | per-adapter, under `benchmark-data/cache/index/` |
 | repo root | `--repo-root` | `repoRoot` | the repository root |
 | corpus scope | `DP_GNOSIS_CORPUS_ROOTS` | `corpusRoots` | `CORPUS_ROOTS` (`src/config.ts`) |
 
@@ -372,9 +372,9 @@ Three profiles ship. `web-research` and `hu-tax` are the worked proof that a new
 
 | Profile file | Domain(s) | Corpus it reads | Atoms dir · index path | Corpus ships? |
 |---|---|---|---|---|
-| `profiles/default.profile.json` | `runner` `standards` `adr` `docs` `claude` | repo `CORPUS_ROOTS` under the repository root | defaults — `dp-gnosis/vault/atoms` · per-adapter under `dp-gnosis/cache/index/` | yes (this repo) |
-| `profiles/web-research.profile.json` | `web-research` | `docs/research` under the repository root | `dp-gnosis/cache/atoms-web-research` · `dp-gnosis/cache/index/atoms-web-research-fts5.db` | yes (this repo) |
-| `profiles/hu-tax.profile.json` | `hu-tax` | `analizis` `leiras` `melo` under the mount point `dp-gnosis/corpora/hu-tax` | `dp-gnosis/cache/atoms-hu-tax` · `dp-gnosis/cache/index/atoms-hu-tax-fts5.db` | **no** — profile only |
+| `profiles/default.profile.json` | `runner` `standards` `adr` `docs` `claude` | repo `CORPUS_ROOTS` under the repository root | defaults — `benchmark-data/vault/atoms` · per-adapter under `benchmark-data/cache/index/` | yes (this repo) |
+| `profiles/web-research.profile.json` | `web-research` | `docs/research` under the repository root | `benchmark-data/cache/atoms-web-research` · `benchmark-data/cache/index/atoms-web-research-fts5.db` | yes (this repo) |
+| `profiles/hu-tax.profile.json` | `hu-tax` | `analizis` `leiras` `melo` under the mount point `benchmark-data/corpora/hu-tax` | `benchmark-data/cache/atoms-hu-tax` · `benchmark-data/cache/index/atoms-hu-tax-fts5.db` | **no** — profile only |
 
 **`hu-tax` ships without its corpus.** Its `repoRoot` names a MOUNT POINT the owner puts or symlinks their Hungarian vault into; `--repo-root` outranks it (flag > profile > default), so the same file reads a vault mounted anywhere. With nothing mounted, `ingest` REFUSES and exits non-zero without writing anything, naming the unmatched corpus root and the mount point it looked under — `corpus root "analizis" matched no markdown files under <repoRoot> — fix or remove it in CORPUS_ROOTS …`. Three different facts, and only the last is exit 3: a REFUSED INGEST (this case — a misconfigured root, nothing written), an EMPTY CORPUS (roots that resolve but hold no atom-worthy content), and `index-empty` (exit 3 — an index holding nothing over a NON-EMPTY atoms directory).
 
@@ -643,8 +643,8 @@ An unlabelled document is **dropped whole** — never chunked, never indexed, ne
 | `claude-artifacts/` | `standards` | yes |
 | `doc/` | `docs` | yes |
 | `.claude/` | `claude` | no — override only |
-| `dp-gnosis/corpus-hu/` | `docs` | no — override only |
-| `dp-gnosis/cache/bench/corpus-ext/` | `docs` | no — override only |
+| `benchmark-data/corpus-hu/` | `docs` | no — override only |
+| `benchmark-data/cache/bench/corpus-ext/` | `docs` | no — override only |
 
 **`docs/` (with an s) is a corpus root as of T2.1, and a `docs/` domain prefix claims it.** It was invisible to retrieval before that — it matched no root and no prefix, so it failed at the SCOPE gate and was not even listed in `skipped[]`. What made the root usable is the profile's three-entry `excludePaths` — `docs/tmp/`, `docs/benchmarks/`, `doc/_meta/corpus-digest.md` — dropped by path BEFORE anything is read, so they are ingested nowhere and counted nowhere. `docs/` holds 22 808 markdown files and 22 597 of them are machine output (`docs/tmp` 12 211, `docs/benchmarks` 10 386). `doc/_meta/corpus-digest.md` is excluded as a NAVIGATION artefact, not as generated bulk: it produces 204 atoms carrying one line of vocabulary from every document in the corpus, so it scores on almost any query. Only that one file — the rest of `doc/_meta/` is authored and stays. A DIRECTORY entry MUST carry a trailing slash, because the match is a plain repo-relative `startsWith` prefix: `docs/benchmarks/` MUST NOT swallow the sibling `docs/benchmarking/`, which is authored and kept. The ~211 authored files under `docs/` remain (~3 400 atoms), and `docs/research/`, `docs/plans/`, `docs/implementation-lessons-learned/`, `docs/adrs/`, `docs/reviews/` and `docs/analysis/` each carry a type rule of their own.
 
@@ -667,7 +667,7 @@ An unlabelled document is **dropped whole** — never chunked, never indexed, ne
 | `claude-artifacts/standards/` | `standard` | reference / normative rule |
 | `doc/40-code-standards/` | `standard` | reference / normative rule |
 | `doc/50-testing-strategy/` | `standard` | reference / normative rule |
-| `dp-gnosis/cache/bench/corpus-ext/` | `vendor-doc` | external published doc (benchmark corpus) |
+| `benchmark-data/cache/bench/corpus-ext/` | `vendor-doc` | external published doc (benchmark corpus) |
 | anything else | `knowledge` | fallback prose — the type nobody filters on |
 
 ### 3. Structure rules — the chunker decides where atoms begin

@@ -42,14 +42,14 @@ export const repoRoot = (): string => resolve(srcDir(), '..', '..', '..');
 const packageDir = (): string => resolve(srcDir(), '..');
 
 /**
- * The single top-level directory dp-gnosis owns (`<root>/dp-gnosis`). Both the
+ * The single top-level directory dp-gnosis owns (`<root>/benchmark-data`). Both the
  * tracked vault and the disposable cache hang off it, so the package occupies
  * ONE entry at the repo root instead of two siblings whose names implied no
  * relationship.
  */
-const gnosisRoot = (root: string = repoRoot()): string => resolve(root, 'dp-gnosis');
+const gnosisRoot = (root: string = repoRoot()): string => resolve(root, 'benchmark-data');
 
-/** The markdown atom vault, the liftable knowledge unit (`<root>/dp-gnosis/vault`). */
+/** The markdown atom vault, the liftable knowledge unit (`<root>/benchmark-data/vault`). */
 export const vaultRoot = (root: string = repoRoot()): string => resolve(gnosisRoot(root), 'vault');
 
 /** Tracked, curated atoms — the ONLY root the indexer is allowed to read. */
@@ -60,7 +60,7 @@ export const proposalsDir = (root: string = repoRoot()): string =>
   resolve(vaultRoot(root), 'proposals');
 
 /**
- * Derived, disposable runtime state (`<root>/dp-gnosis/cache`). Gitignored as a
+ * Derived, disposable runtime state (`<root>/benchmark-data/cache`). Gitignored as a
  * whole; everything under it is rebuildable from `atomsDir()`.
  */
 export const runtimeRoot = (root: string = repoRoot()): string => resolve(gnosisRoot(root), 'cache');

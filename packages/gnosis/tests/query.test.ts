@@ -153,7 +153,7 @@ describe('buildQuery', () => {
  */
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const SAMPLE_DIRS: readonly string[] = [
-  resolve(REPO_ROOT, 'dp-gnosis/vault/atoms'),
+  resolve(REPO_ROOT, 'benchmark-data/vault/atoms'),
   resolve(REPO_ROOT, 'claude-artifacts'),
   resolve(REPO_ROOT, 'docs'),
 ];

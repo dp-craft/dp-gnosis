@@ -2,7 +2,7 @@
   "name": "@dp/gnosis",
   "version": "0.1.0",
   "type": "module",
-  "description": "Retrieval over a curated markdown atom vault. Liftable unit: code here, vault at dp-gnosis/vault/, cache at dp-gnosis/cache/.",
+  "description": "Retrieval over a curated markdown atom vault. Liftable unit: code here, vault at benchmark-data/vault/, cache at benchmark-data/cache/.",
   "engines": {
     "node": ">=22"
   },

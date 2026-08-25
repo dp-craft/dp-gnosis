@@ -4,7 +4,7 @@
  * Every corpus the bench measures is a WORKING COPY under the bench work
  * directory, never the live vault. Two reasons, both load-bearing:
  * (a) the single-atom incremental-update metric MUTATES the corpus, and a
- *     benchmark that edits `dp-gnosis/vault/atoms/` is a benchmark that corrupts the
+ *     benchmark that edits `benchmark-data/vault/atoms/` is a benchmark that corrupts the
  *     thing it measures;
  * (b) an index built beside a copy cannot be left stale against the real vault.
  */

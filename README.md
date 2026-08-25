@@ -27,7 +27,7 @@ The directory shape deliberately **mirrors the repository this was extracted fro
 |---|---|
 | `packages/gnosis/` | the engine and its CLI |
 | `packages/gnosis-bench/` | the benchmark — the gate for every engine change |
-| `dp-gnosis/` | runtime root: the vault, the atom caches, the built indexes. Gitignored |
+| `benchmark-data/` | runtime root: the vault, the atom caches, the built indexes. Gitignored |
 | `GNOSIS-*.md` | governance. They travel with the code they govern |
 
 ## Commands

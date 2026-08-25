@@ -19,10 +19,10 @@ describe('paths', () => {
   });
 
   it('composes the vault and cache trees under one top-level dp-gnosis dir', () => {
-    expect(VAULT_ROOT).toBe(`${REPO_ROOT}/dp-gnosis/vault`);
+    expect(VAULT_ROOT).toBe(`${REPO_ROOT}/benchmark-data/vault`);
     expect(ATOMS_DIR).toBe(`${VAULT_ROOT}/atoms`);
     expect(PROPOSALS_DIR).toBe(`${VAULT_ROOT}/proposals`);
-    expect(RUNTIME_ROOT).toBe(`${REPO_ROOT}/dp-gnosis/cache`);
+    expect(RUNTIME_ROOT).toBe(`${REPO_ROOT}/benchmark-data/cache`);
     expect(INDEX_DIR).toBe(`${RUNTIME_ROOT}/index`);
   });
 
@@ -38,7 +38,7 @@ describe('paths', () => {
 
   it('anchors REPO_ROOT on this package, not the working directory', () => {
     expect(REPO_ROOT.endsWith('/packages/gnosis')).toBe(false);
-    expect(ATOMS_DIR).toContain('/dp-gnosis/vault/atoms');
+    expect(ATOMS_DIR).toContain('/benchmark-data/vault/atoms');
   });
 });
 

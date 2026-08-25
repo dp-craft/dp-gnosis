@@ -21,7 +21,7 @@ import { activeProfile } from './vocabulary.js';
  * WAVE-1 INGEST — a knowingly TEMPORARY write path.
  *
  * This module reads local markdown and writes atoms STRAIGHT INTO
- * `dp-gnosis/vault/atoms/`. The admission gate, the `proposals/` staging boundary and
+ * `benchmark-data/vault/atoms/`. The admission gate, the `proposals/` staging boundary and
  * the "only validated, reviewed atoms reach the vault" invariant all arrive in
  * Wave 2, which REPLACES this module. Do not mistake it for the finished write
  * path and do not build on its file-writing behaviour.
@@ -33,7 +33,7 @@ import { activeProfile } from './vocabulary.js';
  * corpus always yields byte-identical atom files. That is why `sources` carries
  * the repo-relative source path — provenance is the smaller half of the reason.
  * The larger half is DRIFT DETECTION: because a re-run reproduces every byte, a
- * non-empty `git diff` over `dp-gnosis/vault/atoms/` after re-ingesting means the
+ * non-empty `git diff` over `benchmark-data/vault/atoms/` after re-ingesting means the
  * underlying document actually changed. Without byte-stability that signal is
  * lost in incidental churn, and an atom can silently outlive the doc it came
  * from. Encounter-order-dependent ids, absolute paths and timestamps would each
@@ -516,7 +516,7 @@ const manifestAtom = (planned: PlannedAtom): ManifestAtom => ({
  * The manifest sits BESIDE the atoms directory, not inside it: the vault's
  * `atoms/` is gitignored precisely because it is regenerable, so a manifest
  * written into it could never be committed — and an uncommittable manifest
- * re-anchors nothing. One directory up (`dp-gnosis/vault/corpus-manifest.json`
+ * re-anchors nothing. One directory up (`benchmark-data/vault/corpus-manifest.json`
  * for the real vault) is tracked, is where a reader already looks for the
  * vault, and follows any profile that points `atomsDir` elsewhere.
  */

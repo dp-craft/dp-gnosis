@@ -242,7 +242,7 @@
       "qrels": "test",
       "source": "data/vault",
       "derive": {
-        "atoms": "../../dp-gnosis/vault",
+        "atoms": "../../benchmark-data/vault",
         "golden": "../gnosis/golden/golden-set.v2.json"
       },
       "domain": "project-vault",
@@ -260,7 +260,7 @@
       "qrels": "test",
       "source": "data/vault-hu",
       "derive": {
-        "atoms": "../../dp-gnosis/cache/atoms-hu",
+        "atoms": "../../benchmark-data/cache/atoms-hu",
         "golden": "../gnosis/golden/golden-set-hu.v1.json"
       },
       "domain": "project-vault-hu",
@@ -292,7 +292,7 @@
       "qrels": "test",
       "source": "data/vault-rephrased",
       "derive": {
-        "atoms": "../../dp-gnosis/vault",
+        "atoms": "../../benchmark-data/vault",
         "golden": "../gnosis/golden/golden-set-rephrased.v2.json"
       },
       "domain": "project-vault",
@@ -308,7 +308,7 @@
       "qrels": "test",
       "source": "data/vault-autorephrased",
       "derive": {
-        "atoms": "../../dp-gnosis/vault",
+        "atoms": "../../benchmark-data/vault",
         "golden": "../gnosis/golden/golden-set-autorephrased.v2.json"
       },
       "domain": "project-vault",
@@ -324,7 +324,7 @@
       "qrels": "test",
       "source": "data/vault-hu-rephrased",
       "derive": {
-        "atoms": "../../dp-gnosis/cache/atoms-hu",
+        "atoms": "../../benchmark-data/cache/atoms-hu",
         "golden": "../gnosis/golden/golden-set-hu-rephrased.v1.json"
       },
       "domain": "project-vault-hu",
@@ -340,7 +340,7 @@
       "qrels": "test",
       "source": "data/vault-hu-autorephrased",
       "derive": {
-        "atoms": "../../dp-gnosis/cache/atoms-hu",
+        "atoms": "../../benchmark-data/cache/atoms-hu",
         "golden": "../gnosis/golden/golden-set-hu-autorephrased.v1.json"
       },
       "domain": "project-vault-hu",

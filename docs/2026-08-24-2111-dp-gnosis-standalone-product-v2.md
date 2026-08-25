@@ -54,9 +54,9 @@ That objection is **discharged, not overruled**, by moving the gate with the cod
 
 | Asset | Path | Tracked? |
 |---|---|---|
-| `vault` atoms | `dp-gnosis/vault/atoms/` | **No** — only `corpus-manifest.json` is tracked |
-| `vault-hu` atoms | `dp-gnosis/cache/atoms-hu/` | **No** — it is a *cache*, and the guide records that the repo ingest never writes it |
-| `corpus-hu` sources | `dp-gnosis/corpus-hu/` | **No** |
+| `vault` atoms | `benchmark-data/vault/atoms/` | **No** — only `corpus-manifest.json` is tracked |
+| `vault-hu` atoms | `benchmark-data/cache/atoms-hu/` | **No** — it is a *cache*, and the guide records that the repo ingest never writes it |
+| `corpus-hu` sources | `benchmark-data/corpus-hu/` | **No** |
 | `scifact` | `docs/benchmarks/2026-08-14-external-suite/data/scifact` | **No** — and its absence makes the smoke gate exit **1**, not 4 |
 | bench `data/` `results/` `work/` | `packages/gnosis-bench/` | **No** |
 | golden sets | `packages/gnosis/golden/*.json` | **Yes** (10 files) |

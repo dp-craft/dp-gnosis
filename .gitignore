@@ -3,13 +3,13 @@ node_modules/
 dist/
 
 # Runtime state — regenerable, never committed.
-dp-gnosis/cache/
-dp-gnosis/vault/atoms/
-dp-gnosis/vault-ext/atoms/
-dp-gnosis/vault-mdn/atoms/
+benchmark-data/cache/
+benchmark-data/vault/atoms/
+benchmark-data/vault-ext/atoms/
+benchmark-data/vault-mdn/atoms/
 
 # The Hungarian corpus is the owner's private material.
-dp-gnosis/corpus-hu/
+benchmark-data/corpus-hu/
 
 # Benchmark working state. `results/` holds the RECORDED EVIDENCE the
 # byte-identity gates compare against — it is untracked but MUST NOT be

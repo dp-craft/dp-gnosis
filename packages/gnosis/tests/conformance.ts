@@ -9,7 +9,7 @@
  * Fixtures are built in temp directories with `serializeAtom`, never hand-rolled
  * strings: a hand-written fixture drifts from the real atom grammar the moment
  * the grammar changes, and then the suite asserts against a format nobody ships.
- * The real `dp-gnosis/vault/atoms/` vault is NEVER touched.
+ * The real `benchmark-data/vault/atoms/` vault is NEVER touched.
  */
 import { execFile } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
