@@ -124,7 +124,7 @@ describe('no test may ingest into the production vault', () => {
   });
 
   it('reports an unpinned ingest argv when one is introduced', () => {
-    const planted = "await runCli(['ingest', '--budget-mode', 'tokens']);";
+    const planted = 'await runCli([\'ingest\', \'--budget-mode\', \'tokens\']);';
 
     expect(offencesIn('planted.test.ts', planted).map(offence => offence.why)).toContain(
       'ingest argv states no --atoms-dir or --profile'
@@ -140,7 +140,7 @@ describe('no test may ingest into the production vault', () => {
   });
 
   it('reports an ingest call site that names the production atoms dir', () => {
-    const planted = "await runCli(['ingest', '--atoms-dir', ATOMS_DIR]);";
+    const planted = 'await runCli([\'ingest\', \'--atoms-dir\', ATOMS_DIR]);';
 
     expect(offencesIn('planted.test.ts', planted).map(offence => offence.why)).toContain(
       'ingest call site names the production ATOMS_DIR'

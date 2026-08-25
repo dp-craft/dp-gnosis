@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { BeirDataset } from '../../src/manifest.js';
+import { defaultExcludedTypes } from '../../../gnosis/src/vocabulary.js';
 import {
   assertGoldReachable,
   assertIndexedGoldReachable,
@@ -15,7 +15,7 @@ import {
   UNREACHABLE_GOLD_CAUSE,
   UNREACHABLE_GOLD_FLOOR
 } from '../../src/fetch/vault.js';
-import { defaultExcludedTypes } from '../../../gnosis/src/vocabulary.js';
+import type { BeirDataset } from '../../src/manifest.js';
 
 const typedAtom = (id: string, title: string, body: string, type: string): string =>
   `---\ntype: ${type}\nid: ${id}\ntitle: ${title}\nx_domain: docs\nstatus: stable\nsources:\n  - src/${id}.md\n---\n${body}`;

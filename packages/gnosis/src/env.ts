@@ -42,42 +42,42 @@ const GNOSIS_VARS: Readonly<Record<DirKind, string>> = {
   config: 'GNOSIS_CONFIG_HOME',
   data: 'GNOSIS_DATA_HOME',
   cache: 'GNOSIS_CACHE_HOME',
-  state: 'GNOSIS_STATE_HOME'
+  state: 'GNOSIS_STATE_HOME',
 };
 
 const XDG_VARS: Readonly<Record<DirKind, string>> = {
   config: 'XDG_CONFIG_HOME',
   data: 'XDG_DATA_HOME',
   cache: 'XDG_CACHE_HOME',
-  state: 'XDG_STATE_HOME'
+  state: 'XDG_STATE_HOME',
 };
 
 const XDG_FALLBACKS: Readonly<Record<DirKind, readonly string[]>> = {
   config: ['.config'],
   data: ['.local', 'share'],
   cache: ['.cache'],
-  state: ['.local', 'state']
+  state: ['.local', 'state'],
 };
 
 const DARWIN_FALLBACKS: Readonly<Record<DirKind, readonly string[]>> = {
   config: ['Library', 'Application Support'],
   data: ['Library', 'Application Support'],
   cache: ['Library', 'Caches'],
-  state: ['Library', 'Logs']
+  state: ['Library', 'Logs'],
 };
 
 const WIN_VARS: Readonly<Record<DirKind, string>> = {
   config: 'APPDATA',
   data: 'APPDATA',
   cache: 'LOCALAPPDATA',
-  state: 'LOCALAPPDATA'
+  state: 'LOCALAPPDATA',
 };
 
 const WIN_FALLBACKS: Readonly<Record<DirKind, readonly string[]>> = {
   config: ['AppData', 'Roaming'],
   data: ['AppData', 'Roaming'],
   cache: ['AppData', 'Local'],
-  state: ['AppData', 'Local']
+  state: ['AppData', 'Local'],
 };
 
 /** A set-but-blank variable carries no path; it MUST read as unset. */

@@ -36,9 +36,9 @@ import { aggregate, scoreQuery } from './bench/metrics.js';
 import { mapSequential } from './bench/sequential.js';
 import type { Thunk, TimingPolicy, TimingSample } from './bench/timing.js';
 import { measureAll, timeValue } from './bench/timing.js';
-import { type AtomDomain, type AtomType, atomDomains, atomTypes } from './vocabulary.js';
 import type { GoldenQuery, GoldenSet, MinimumMeaningfulDifference } from './goldenSet.js';
 import type { KnowledgePort, RetrievalResult, RetrieveOptions } from './port.js';
+import { type AtomDomain, atomDomains, type AtomType, atomTypes } from './vocabulary.js';
 
 /** First ceiling rung: roughly 1.4x the seed corpus. */
 export const SYNTHETIC_RUNG_SMALL = 1000;

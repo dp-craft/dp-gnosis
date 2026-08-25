@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { BeirDataset } from '../../src/manifest.js';
 import { ensureBeirDataset } from '../../src/fetch/beirZip.js';
+import type { BeirDataset } from '../../src/manifest.js';
 
 // `unzip` is a real subprocess; the fake stands in for it and materialises the
 // tree the archive would have contained, so the fetcher's post-unzip contract

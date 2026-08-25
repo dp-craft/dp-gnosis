@@ -131,7 +131,7 @@ describe('--help flag scoping', () => {
     '--max-tokens',
     '--rerank',
     '--rephrase',
-    '--max-per-doc'
+    '--max-per-doc',
   ];
 
   it('scopes no flag to `retrieve` only', () => {

@@ -14,6 +14,7 @@ import type {
 import { DEFAULT_PRF_PARAMS } from '../../gnosis/src/prf.js';
 import { ANALYZERS, DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
 import { EXTRACT_STRATEGY } from '../../gnosis/src/rerank.js';
+import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 import { SCALE_FIELDS, TREATMENT_FIELDS } from '../src/compare.js';
 import { UNREACHABLE_GOLD_CAUSE } from '../src/fetch/vault.js';
 import { type DatasetEntry, loadManifest } from '../src/manifest.js';
@@ -53,7 +54,6 @@ import {
   warnCollapsingTopics,
   warnRerankPoolBelowDepth
 } from '../src/run.js';
-import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 
 /** A second reranker id — any id the shipped constant is not. */
 const OTHER_MODEL = 'jina-reranker-v2-base-multilingual';

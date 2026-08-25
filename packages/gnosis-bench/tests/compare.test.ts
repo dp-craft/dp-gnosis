@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EMBED_MODEL_ID, HYBRID_FUSION, RERANK_MODEL_ID } from '../../gnosis/src/config.js';
 import { DEFAULT_PRF_PARAMS } from '../../gnosis/src/prf.js';
 import { DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
+import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 import {
   compareAll,
   compareLastTwo,
@@ -17,7 +18,6 @@ import {
   NO_ENRICHMENT,
   NO_TYPE_FILTER
 } from '../src/report.js';
-import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 
 /** What an absent rerank doc window on a row means — the values that always held. */
 const LEGACY_RERANK_DOC_CHARS = 2000;

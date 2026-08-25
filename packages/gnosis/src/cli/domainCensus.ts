@@ -56,8 +56,8 @@ interface FileFacts {
 const markdownPaths = (atomsDir: string): readonly string[] =>
   existsSync(atomsDir)
     ? readdirSync(atomsDir, { recursive: true, encoding: 'utf8' }).filter(rel =>
-      rel.endsWith(MARKDOWN_EXT)
-    )
+        rel.endsWith(MARKDOWN_EXT)
+      )
     : [];
 
 const factsOfText = (text: string): FileFacts => {

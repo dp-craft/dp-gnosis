@@ -38,8 +38,8 @@ import { stemTerm, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 import {
   type AtomDomain,
-  type AtomType,
   atomDomains,
+  type AtomType,
   atomTypes,
   defaultAtomType
 } from '../vocabulary.js';

@@ -104,6 +104,11 @@ export default tseslint.config(
       'packages/gnosis-bench/work',
       // Runtime state (vault atoms, caches, corpora) written by the engine at run time.
       'benchmark-data/',
+      // Recorded artefacts of past campaigns, kept as evidence of a run rather
+      // than as maintained code — same category as `results/` above. The one
+      // lintable file here, `docs/test/2026-08-11T16-22-v2-m3/rerank-test.mts`,
+      // is the throwaway driver of a 2026-08-11 reranker measurement.
+      'packages/gnosis/docs/',
       // Python venv for the benchmark's metric-validation scripts.
       '**/.venv',
       '**/*.config.*',

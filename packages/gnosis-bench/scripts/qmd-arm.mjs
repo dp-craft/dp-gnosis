@@ -39,7 +39,7 @@ const argValue = (name, fallback) => {
   return at === -1 ? fallback : process.argv[at + 1];
 };
 
-const missingFlags = () => REQUIRED_FLAGS.filter((name) => argValue(name, undefined) === undefined);
+const missingFlags = () => REQUIRED_FLAGS.filter(name => argValue(name, undefined) === undefined);
 
 const parseArgs = () => ({
   qmd: argValue('--qmd', ''),
@@ -49,20 +49,20 @@ const parseArgs = () => ({
   outRaw: argValue('--out-raw', ''),
   depth: Number(argValue('--depth', String(DEFAULT_DEPTH))),
   tag: argValue('--tag', DEFAULT_TAG),
-  extra: argValue('--extra', '').split(/\s+/).filter((token) => token.length > 0),
+  extra: argValue('--extra', '').split(/\s+/).filter(token => token.length > 0),
 });
 
-const readTopics = (path) =>
+const readTopics = path =>
   readFileSync(path, 'utf8')
     .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line));
+    .filter(line => line.trim().length > 0)
+    .map(line => JSON.parse(line));
 
 const buildQueryArgs = (text, cfg) => [
   'query', text, '-n', String(cfg.depth), '--json', '--full-path', '--explain', ...cfg.extra,
 ];
 
-const firstLine = (err) => String(err && err.message ? err.message : err).split('\n')[0];
+const firstLine = err => String(err && err.message ? err.message : err).split('\n')[0];
 
 const queryQmd = (text, cfg) => {
   try {
@@ -82,7 +82,7 @@ const queryQmd = (text, cfg) => {
 
 /** Chunks -> documents: first occurrence wins, then truncate to depth. */
 const rollupDocs = (results, depth) => {
-  const docIds = results.map((r) => basename(String(r.file), '.md'));
+  const docIds = results.map(r => basename(String(r.file), '.md'));
   return docIds.filter((id, index) => docIds.indexOf(id) === index).slice(0, depth);
 };
 
@@ -106,22 +106,22 @@ const percentile = (sortedMs, q) => {
   return sortedMs[at];
 };
 
-const maxOf = (values) => values.reduce((acc, v) => (v > acc ? v : acc), 0);
+const maxOf = values => values.reduce((acc, v) => (v > acc ? v : acc), 0);
 
-const summarize = (records) => {
-  const sortedMs = records.map((r) => r.ms).sort((a, b) => a - b);
+const summarize = records => {
+  const sortedMs = records.map(r => r.ms).sort((a, b) => a - b);
   return {
     topics: records.length,
-    failures: records.filter((r) => r.failed).length,
+    failures: records.filter(r => r.failed).length,
     queryMs: sortedMs.reduce((acc, v) => acc + v, 0),
     queryP50Ms: percentile(sortedMs, 0.5),
     queryP95Ms: percentile(sortedMs, 0.95),
-    chunksReturnedMax: maxOf(records.map((r) => r.chunks)),
-    docsReturnedMax: maxOf(records.map((r) => r.ranking.length)),
+    chunksReturnedMax: maxOf(records.map(r => r.chunks)),
+    docsReturnedMax: maxOf(records.map(r => r.ranking.length)),
   };
 };
 
-const prepareOutputs = (cfg) => {
+const prepareOutputs = cfg => {
   mkdirSync(dirname(cfg.outRun), { recursive: true });
   mkdirSync(dirname(cfg.outRaw), { recursive: true });
   writeFileSync(cfg.outRaw, '');
@@ -139,10 +139,10 @@ const main = () => {
   // Sequential and back-to-back on purpose: a cold model reload between topics
   // would contaminate the p50 this arm reports.
   for (const topic of readTopics(cfg.queries)) records.push(processTopic(topic, cfg));
-  const lines = records.flatMap((record) => trecLines(record, cfg.tag));
+  const lines = records.flatMap(record => trecLines(record, cfg.tag));
   writeFileSync(cfg.outRun, lines.length > 0 ? `${lines.join('\n')}\n` : '');
   process.stdout.write(`${JSON.stringify(summarize(records))}\n`);
-  process.exitCode = records.some((r) => r.failed) ? 3 : 0;
+  process.exitCode = records.some(r => r.failed) ? 3 : 0;
 };
 
 main();

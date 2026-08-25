@@ -14,15 +14,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 async function main() {
   const args = process.argv.slice(2);
   const [port, modelName, mbt, maxDocs] = args;
-  
+
   // Output dir: docs/test/YYYY-MM-DD_HH-mm-ss
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
   const outputDir = join(__dirname, 'docs', 'test', `${ts}-${modelName}`);
   await mkdir(outputDir, { recursive: true });
-  
+
   // Copy this script for run details
   await cp(join(__dirname, 'rerank-test.mts'), join(outputDir, 'rerank-test.mts'));
-  
+
   const goldenSet = loadVerifiedGoldenSet();
   const corpus = await materializeRealCorpus(ATOMS_DIR, BENCH_WORK_DIR, 'seed');
   const fts5 = await fts5Candidate();
@@ -31,7 +31,7 @@ async function main() {
   const fts5Port = fts5.open(fts5Location);
 
   const client = createRerankerClient(`http://127.0.0.1:${port}`, modelName, 300000, parseInt(mbt), parseInt(maxDocs));
-  
+
   const strategies = [
     { name: 'head-200', strategy: 'head', docMaxChars: 200 },
     { name: 'headTail-512', strategy: 'headTail', docMaxChars: 512 },
@@ -39,7 +39,7 @@ async function main() {
   ];
 
   const results: any[] = [];
-  
+
   for (const s of strategies) {
     console.log('  ' + s.name + ':');
     const recalls: number[] = [];
@@ -53,7 +53,7 @@ async function main() {
       const rerankedIds = reranked.sort((a, b) => b.relevanceScore - a.relevanceScore).map((r, idx) => retrieval.atoms[r.index].id).slice(0, 200);
       const rec = recallAtK(rerankedIds, query.relevantAtomIds, 200);
       if (rec !== undefined) recalls.push(rec);
-      if (i % 10 === 0) console.log(`    Query ${i+1}/${goldenSet.queries.length} done`);
+      if (i % 10 === 0) console.log(`    Query ${i + 1}/${goldenSet.queries.length} done`);
     }
     const avgRecall = recalls.reduce((a, b) => a + b, 0) / recalls.length;
     console.log('    recall@200: ' + avgRecall.toFixed(4) + ' (' + recalls.length + ' queries)');
@@ -71,11 +71,11 @@ async function main() {
     goldenSet: { queries: goldenSet.queries.length },
     results,
   };
-  
+
   const jsonPath = join(outputDir, 'results.json');
   await writeFile(jsonPath, JSON.stringify(report, null, 2));
   console.log('Saved: ' + jsonPath);
-  
+
   // Save markdown summary
   let md = `# Reranker Benchmark: ${modelName}\n\n`;
   md += `- **Model**: ${modelName}\n`;
@@ -96,14 +96,14 @@ async function main() {
     md += `| Query | recall@200 |\n`;
     md += `|---|---|\n`;
     r.perQuery.forEach((v: number, i: number) => {
-      md += `| ${i+1} | ${v.toFixed(4)} |\n`;
+      md += `| ${i + 1} | ${v.toFixed(4)} |\n`;
     });
     md += `\n`;
   }
-  
+
   const mdPath = join(outputDir, 'results.md');
   await writeFile(mdPath, md);
   console.log('Saved: ' + mdPath);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(e); process.exit(1); });

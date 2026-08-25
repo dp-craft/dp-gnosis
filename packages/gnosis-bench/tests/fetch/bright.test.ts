@@ -17,7 +17,6 @@ interface AsyncBufferLike {
   slice: (start: number, end?: number) => ArrayBuffer | Promise<ArrayBuffer>;
 }
 
-import type { BrightDataset } from '../../src/manifest.js';
 import {
   brightDataDir,
   buildBrightFiles,
@@ -27,6 +26,7 @@ import {
   surrogateId,
   titleOf
 } from '../../src/fetch/bright.js';
+import type { BrightDataset } from '../../src/manifest.js';
 
 const RAW_DOC_ID = 'insects_attracted_to_light/Proximate_and_ultimate_causation.txt';
 const SAFE_DOC_ID = 'insects_attracted_to_light_Proximate_and_ultimate_causation_txt';

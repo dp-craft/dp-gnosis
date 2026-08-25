@@ -19,7 +19,7 @@ describe('env — user directory resolution', () => {
         XDG_CONFIG_HOME: '/x/cfg',
         XDG_DATA_HOME: '/x/data',
         XDG_CACHE_HOME: '/x/cache',
-        XDG_STATE_HOME: '/x/state'
+        XDG_STATE_HOME: '/x/state',
       };
       expect(configHome(env, 'linux')).toBe('/x/cfg/gnosis');
       expect(dataHome(env, 'linux')).toBe('/x/data/gnosis');
@@ -77,7 +77,7 @@ describe('env — user directory resolution', () => {
         XDG_CACHE_HOME: '/x/cache',
         XDG_STATE_HOME: '/x/state',
         APPDATA: '/r',
-        LOCALAPPDATA: '/l'
+        LOCALAPPDATA: '/l',
       };
       expect(configHome(env, 'linux')).toBe('/g/cfg/gnosis');
       expect(dataHome(env, 'darwin')).toBe('/g/data/gnosis');
@@ -128,7 +128,7 @@ describe('env — user directory resolution', () => {
         configHome(EMPTY, 'linux'),
         dataHome(EMPTY, 'darwin'),
         cacheHome(EMPTY, 'win32'),
-        stateHome(EMPTY, 'linux')
+        stateHome(EMPTY, 'linux'),
       ];
       expect(defaults.every(p => p.startsWith(`${HOME}/`))).toBe(true);
       expect(defaults.some(p => p.startsWith('~'))).toBe(false);
