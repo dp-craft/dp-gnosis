@@ -25,6 +25,8 @@
  * | treatment | `embedModel` | a different ENCODER behind the dense leg |
  * | treatment | `analyzer` | a different ANALYSIS chain in the index, so different terms |
  * | treatment | `fieldWeights` | a different `bm25()` WEIGHT per column, so a different ranking over one index |
+ * | treatment | `bodySource` | a different TEXT in the `body` column — the summary-only index arm |
+ * | treatment | `keywordFilter` | a different KEYWORD SET in the index — the novel-keyword arm, which drops keywords already echoed by the body |
  * | treatment | `enrichment` | a different number of atoms carrying ENRICHMENT text — the ingest-enrichment arm |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
  * | treatment | `provenanceMerge` | a different SCORING SEMANTICS — whether a deduped atom credits every source document whose body it represents |
@@ -41,6 +43,8 @@
  * precisely the thing a delta is supposed to measure.
  */
 import {
+  DEFAULT_BODY_SOURCE,
+  DEFAULT_KEYWORD_FILTER,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
   HYBRID_FUSION,
@@ -93,6 +97,8 @@ export const TREATMENT_FIELDS = [
   'analyzer',
   'fieldWeights',
   'enrichment',
+  'bodySource',
+  'keywordFilter',
   'queryAdjacency',
   'provenanceMerge',
   'prf',
@@ -256,6 +262,13 @@ const LEGACY_RERANK_RRF_WEIGHT = 0.5;
  * label. Reading either as unset instead would relabel the whole recorded
  * history as an arm nobody ever ran.
  *
+ * `bodySource` follows the same backfill: no row recorded before the source was
+ * selectable could have built its `body` column from anything but the atom, so
+ * an absent one reads as `DEFAULT_BODY_SOURCE` rather than as a moved treatment.
+ *
+ * `keywordFilter` follows it too: no row recorded before the filter existed could
+ * have dropped a keyword, so an absent one reads as `DEFAULT_KEYWORD_FILTER`.
+ *
  * `tokenBudget` / `servedK` have NO default and MUST NOT be given one: absence
  * means no cap was applied, which is a real arm rather than an older value, so a
  * budgeted row against an unbudgeted one is the experiment.
@@ -264,6 +277,8 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   analyzer: DEFAULT_ANALYZER,
   fieldWeights: DEFAULT_FIELD_WEIGHTS_TEXT,
   enrichment: NO_ENRICHMENT,
+  bodySource: DEFAULT_BODY_SOURCE,
+  keywordFilter: DEFAULT_KEYWORD_FILTER,
   rerankModel: RERANK_MODEL_ID,
   hybridWeight: HYBRID_FUSION.rerankWeight,
   embedModel: EMBED_MODEL_ID,

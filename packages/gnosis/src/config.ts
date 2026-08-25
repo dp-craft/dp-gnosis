@@ -648,6 +648,64 @@ export const DEFAULT_FIELD_WEIGHTS: FieldWeights = {
 };
 
 /**
+ * WHERE the fts5 `body` column takes its text from at INDEX BUILD time — a
+ * closed vocabulary, exactly as {@link FTS_COLUMNS} is, because an unrecognised
+ * spelling would build a body from nothing and report success.
+ *
+ * `--field-weights body=0` is NOT the same treatment and cannot replace this:
+ * `bm25()` normalises by the row's TOTAL token count across ALL columns, so a
+ * POPULATED body at weight 0 still lengthens every row. Only replacing the text
+ * the column HOLDS makes a summary-only index expressible.
+ *
+ * | value | what `body` holds |
+ * |---|---|
+ * | `atom` | the atom's own body — today's index, byte for byte |
+ * | `long` | the sidecar's `long` summary alone |
+ * | `long+keywords` | that summary followed by the sidecar's keywords |
+ */
+export const BODY_SOURCES = ['atom', 'long', 'long+keywords'] as const;
+
+/** A member of the closed body-source vocabulary. */
+export type BodySource = (typeof BODY_SOURCES)[number];
+
+/**
+ * THE ATOM'S OWN BODY, deliberately. Every recorded fts5 number was measured on
+ * an index whose `body` column holds the corpus, so the default is the only
+ * value that keeps those numbers reproducible.
+ */
+export const DEFAULT_BODY_SOURCE: BodySource = 'atom';
+
+/**
+ * WHETHER the fts5 build drops keywords that merely RE-EMIT body vocabulary — a
+ * closed vocabulary, exactly as {@link BODY_SOURCES} is, because an unrecognised
+ * spelling would silently pick a filter nobody asked for.
+ *
+ * A keyword whose every analysed term is already in the atom's body adds no new
+ * posting to the inverted index, and `bm25()` normalises by the row's TOTAL
+ * token count — so it cannot help the row and it does lengthen it.
+ *
+ * | value | which keywords reach the index |
+ * |---|---|
+ * | `none` | every generated keyword — today's index, byte for byte |
+ * | `novel` | only keywords carrying at least one term the body does not |
+ *
+ * The ECHO RATE is a property of the corpus and the generator, NOT a constant:
+ * measured 71.3 % of 300 `vault` keywords and 78.7 % of 1018 `nfcorpus`
+ * keywords. A run MUST read its own rate off its own report.
+ */
+export const KEYWORD_FILTERS = ['none', 'novel'] as const;
+
+/** A member of the closed keyword-filter vocabulary. */
+export type KeywordFilter = (typeof KEYWORD_FILTERS)[number];
+
+/**
+ * NO FILTERING, deliberately. Every recorded fts5 number was measured on an
+ * index carrying every generated keyword, so the default is the only value that
+ * keeps those numbers reproducible.
+ */
+export const DEFAULT_KEYWORD_FILTER: KeywordFilter = 'none';
+
+/**
  * The model the enrichment pass calls, served on the same llama-swap instance as
  * the reranker and the rewriter. Probed byte-identical across two runs at
  * {@link ENRICH_TEMPERATURE} / {@link ENRICH_SEED}, which is what makes a
@@ -662,7 +720,26 @@ export const ENRICH_MODEL_ENV_VAR = 'DP_GNOSIS_ENRICH_MODEL';
 export const ENRICH_TEMPERATURE = 0.8;
 export const ENRICH_SEED = 11;
 
-/** Enough for six fields including 12–15 questions, and no more. */
+/**
+ * How many BUMPED seeds one atom may be retried at after {@link ENRICH_SEED}
+ * fails to decode — the C9 ladder, 11 → 12 → 13 → 14. Fixed, never random:
+ * generation is deterministic, so an atom that degenerates at one seed
+ * degenerates at it forever and the run can never pass it. MEASURED: the atom
+ * that halted a 3505-atom run at 755 successes decoded in 455, 495 and 466
+ * tokens at seeds 12, 13 and 14. Retried on the DECODE class only — a transport
+ * fault refuses at once, since retrying an outage would quadruple the run and
+ * bury its cause.
+ */
+export const ENRICH_SEED_RETRIES = 3;
+
+/**
+ * MEASURED, not a budget: normal atoms finish with `stop` at 366–506 completion
+ * tokens, so this cap carries ~2.4× headroom. A truncation here therefore signals
+ * a RUNAWAY — degenerate repetition under constrained decoding — not a field that
+ * did not fit. Raising the cap was tested to 4000 and does NOT help: the same
+ * atom hit 1200, 1600, 2048 and 4000 with `finish_reason: "length"` every time.
+ * The correction is the seed ladder ({@link ENRICH_SEED_RETRIES}), not a bigger cap.
+ */
 export const ENRICH_MAX_TOKENS = 1200;
 
 /** As generous as the other local-model hops: a COLD model load dominates. */

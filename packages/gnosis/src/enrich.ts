@@ -34,6 +34,7 @@ import { dirname, resolve } from 'node:path';
 import type { Atom } from './atom.js';
 import { parseAtom } from './atom.js';
 import type { ChatProvider, ChatRequest } from './chat.js';
+import { ENRICH_SEED, ENRICH_SEED_RETRIES } from './config.js';
 import type { EnrichmentFields, EnrichmentRecord } from './enrichment.js';
 import {
   atomKeyOf,
@@ -199,11 +200,12 @@ export const enrichmentUserMessage = (entry: AtomEntry): string =>
     entry.atom.body,
   ].join('\n');
 
-const chatRequestFor = (entry: AtomEntry): ChatRequest => ({
+const chatRequestFor = (entry: AtomEntry, seed: number): ChatRequest => ({
   system: ENRICHMENT_SYSTEM_PROMPT,
   user: enrichmentUserMessage(entry),
   schema: ENRICHMENT_SCHEMA,
   schemaName: ENRICHMENT_SCHEMA_NAME,
+  seed,
 });
 
 const MARKDOWN_EXT = '.md';
@@ -315,10 +317,22 @@ const schemaFailure = (entry: AtomEntry, generator: string): string =>
 /** What one generation contributed, and the message that ended the run. */
 interface RunState {
   readonly enriched: number;
+  /** Ids that decoded only after a seed bump, in the order the walk met them. */
+  readonly retriedIds: readonly string[];
   readonly failure: string | undefined;
 }
 
-const START: RunState = { enriched: 0, failure: undefined };
+const START: RunState = { enriched: 0, retriedIds: [], failure: undefined };
+
+/**
+ * The seeds one atom may be asked at, after {@link ENRICH_SEED} itself — the C9
+ * ladder. Fixed and ordered, never random: the whole point is that a re-run
+ * reproduces the sidecar it produced last time.
+ */
+const BUMPED_SEEDS: readonly number[] = Array.from(
+  { length: ENRICH_SEED_RETRIES },
+  (_unused, step) => ENRICH_SEED + step + 1
+);
 
 const appendRecord = (sidecarPath: string, record: EnrichmentRecord): void => {
   mkdirSync(dirname(sidecarPath), { recursive: true });
@@ -344,22 +358,91 @@ export interface EnrichmentReport {
   readonly skipped: number;
   /** Stale atoms a `--limit` left for the next run; `0` without one. */
   readonly deferred: number;
+  /**
+   * Atoms that decoded only after a seed bump. NOT a sidecar field: a record
+   * carries no attempt count, so this run report is the ONLY place the fact is
+   * visible, and an operator who cannot see it cannot tell a clean run from one
+   * that walked the ladder.
+   */
+  readonly retried: number;
+  /** Which atoms those were — the provenance a bare count cannot carry. */
+  readonly retriedIds: readonly string[];
   /** The refusal that STOPPED the run; `undefined` when every target succeeded. */
   readonly failure: string | undefined;
 }
+
+/**
+ * One generation at one seed. `retryable` is the DECODE class and nothing else:
+ * a schema-invalid answer is the same fault as unparseable content — the model
+ * produced something the contract forbids — while a transport fault is a
+ * property of the server that no seed touches.
+ */
+type Attempt =
+  | { readonly ok: true; readonly fields: ModelFields }
+  | { readonly ok: false; readonly error: string; readonly retryable: boolean };
+
+/** The atom being generated and the run it belongs to — the ladder's subject. */
+interface Target {
+  readonly entry: AtomEntry;
+  readonly options: EnrichAtomsOptions;
+}
+
+const attemptAt = async (target: Target, seed: number): Promise<Attempt> => {
+  const { entry, options } = target;
+  const outcome = await options.provider.complete(chatRequestFor(entry, seed));
+  if (!outcome.ok) return { ok: false, error: outcome.error, retryable: outcome.kind === 'decode' };
+  const fields = toModelFields(outcome.value);
+  return fields === undefined
+    ? { ok: false, error: schemaFailure(entry, options.provider.id), retryable: true }
+    : { ok: true, fields };
+};
+
+/** What the ladder settled on, and how many of its seeds that cost. */
+interface LadderOutcome {
+  readonly attempt: Attempt;
+  /** 1 when the base seed decoded; up to {@link ENRICH_SEED_RETRIES} + 1. */
+  readonly seedsTried: number;
+}
+
+/**
+ * The atom, asked at `seed` and then at each of `rest` until one decodes.
+ * Recursive so the calls stay strictly sequential and stop at the first success,
+ * exactly as the walk itself does.
+ */
+const climbLadder = async (
+  target: Target,
+  seed: number,
+  rest: readonly number[]
+): Promise<LadderOutcome> => {
+  const attempt = await attemptAt(target, seed);
+  const [next, ...remaining] = rest;
+  return attempt.ok || !attempt.retryable || next === undefined
+    ? { attempt, seedsTried: seed - ENRICH_SEED + 1 }
+    : await climbLadder(target, next, remaining);
+};
+
+/** The existing refusal, plus what the ladder spent — never instead of it. */
+const withSeedsTried = (error: string, seedsTried: number): string =>
+  seedsTried <= 1
+    ? error
+    : `${error} (${seedsTried} seeds tried: ${Array.from({ length: seedsTried }, (_unused, step) => ENRICH_SEED + step).join(', ')} — every one failed to decode, so this atom is not a transient fault.)`;
 
 const generateOne = async (
   state: RunState,
   entry: AtomEntry,
   options: EnrichAtomsOptions
 ): Promise<RunState> => {
-  const outcome = await options.provider.complete(chatRequestFor(entry));
-  if (!outcome.ok) return { ...state, failure: outcome.error };
-  const fields = toModelFields(outcome.value);
-  if (fields === undefined)
-    return { ...state, failure: schemaFailure(entry, options.provider.id) };
-  appendRecord(options.sidecarPath, recordFor(entry, fields, options.provider.id));
-  return { enriched: state.enriched + 1, failure: undefined };
+  const { attempt, seedsTried } = await climbLadder({ entry, options }, ENRICH_SEED, BUMPED_SEEDS);
+  if (!attempt.ok) return { ...state, failure: withSeedsTried(attempt.error, seedsTried) };
+  appendRecord(options.sidecarPath, recordFor(entry, attempt.fields, options.provider.id));
+  return {
+    enriched: state.enriched + 1,
+    retriedIds:
+      seedsTried > 1
+        ? [...state.retriedIds, entry.atom.frontmatter.id]
+        : state.retriedIds,
+    failure: undefined,
+  };
 };
 
 /** How often a long run says where it is. An 11-hour silent run is unreadable. */
@@ -437,6 +520,8 @@ export const enrichAtoms = async (options: EnrichAtomsOptions): Promise<Enrichme
     enriched: run.enriched,
     skipped: entries.length - stale.length,
     deferred: stale.length - targets.length,
+    retried: run.retriedIds.length,
+    retriedIds: run.retriedIds,
     failure: run.failure,
   };
 };

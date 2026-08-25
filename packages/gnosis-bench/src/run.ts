@@ -42,12 +42,18 @@ import {
 } from '../../gnosis/src/cli/adapter.js';
 import {
   ATOM_MAX_CHARS,
+  BODY_SOURCES,
+  type BodySource,
+  DEFAULT_BODY_SOURCE,
   DEFAULT_FIELD_WEIGHTS,
+  DEFAULT_KEYWORD_FILTER,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
   type FieldWeights,
   FTS_COLUMNS,
   type FtsColumn,
+  KEYWORD_FILTERS,
+  type KeywordFilter,
   RERANK_DOC_MAX_CHARS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
@@ -245,6 +251,20 @@ export interface CliOptions {
    */
   readonly enrichmentPath: string | undefined;
   /**
+   * WHERE the index build takes the `body` column's text from. Never
+   * `undefined`: every run builds that column from something, and
+   * `DEFAULT_BODY_SOURCE` — the atom body — is what every recorded row was
+   * measured on.
+   */
+  readonly bodySource: BodySource;
+  /**
+   * WHETHER the index build dropped keywords that merely re-emit body
+   * vocabulary. Never `undefined`: every run either filtered or did not, and
+   * `DEFAULT_KEYWORD_FILTER` — no filtering — is what every recorded row was
+   * measured on.
+   */
+  readonly keywordFilter: KeywordFilter;
+  /**
    * RM3 pseudo-relevance feedback: the first pass builds a term model and the
    * ranking is REPLACED by the weighted rescore. Recorded on every row like
    * `queryAdjacency`, because every run either expanded or did not.
@@ -439,6 +459,59 @@ const resolveEnrichmentPath = (
     `dp-gnosis-bench: adapter "${adapter}" does not honour ${ENRICHMENT_FLAG} "${value}" — ` +
       `only "${ENRICHMENT_AWARE_ADAPTER}" builds enrichment columns, and the row would name a ` +
       'sidecar nothing indexed'
+  );
+};
+
+const BODY_SOURCE_FLAG = '--body-source';
+
+/** The ONE adapter whose index build has a `body` column to generate. */
+const BODY_SOURCE_AWARE_ADAPTER: AdapterName = 'fts5';
+
+const asBodySource = (value: string): BodySource => {
+  const source = BODY_SOURCES.find(name => name === value);
+  if (source !== undefined) return source;
+  throw new Error(
+    `dp-gnosis-bench: unknown ${BODY_SOURCE_FLAG} "${value}" — use ${BODY_SOURCES.join(', ')}`
+  );
+};
+
+/**
+ * `--body-source` on any adapter but `fts5` REFUSES, for the reason
+ * `--enrichment` does: no other build has a `body` column it composes, so the
+ * row would record a TREATMENT whose text never reached an index.
+ */
+const resolveBodySource = (adapter: AdapterName, value: string | undefined): BodySource => {
+  if (value === undefined) return DEFAULT_BODY_SOURCE;
+  if (adapter === BODY_SOURCE_AWARE_ADAPTER) return asBodySource(value);
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour ${BODY_SOURCE_FLAG} "${value}" — ` +
+      `only "${BODY_SOURCE_AWARE_ADAPTER}" composes its body column, and the row would name a ` +
+      'text nothing indexed'
+  );
+};
+
+const KEYWORD_FILTER_FLAG = '--keyword-filter';
+
+const asKeywordFilter = (value: string): KeywordFilter => {
+  const filter = KEYWORD_FILTERS.find(name => name === value);
+  if (filter !== undefined) return filter;
+  throw new Error(
+    `dp-gnosis-bench: unknown ${KEYWORD_FILTER_FLAG} "${value}" — use ${KEYWORD_FILTERS.join(', ')}`
+  );
+};
+
+/**
+ * `--keyword-filter` on any adapter but `fts5` REFUSES, for the reason
+ * `--body-source` does: no other build has a keyword column to filter, so the
+ * row would record a TREATMENT nothing applied.
+ */
+const resolveKeywordFilter = (adapter: AdapterName, value: string | undefined): KeywordFilter => {
+  if (value === undefined) return DEFAULT_KEYWORD_FILTER;
+  if (adapter === BODY_SOURCE_AWARE_ADAPTER) return asKeywordFilter(value);
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour ${KEYWORD_FILTER_FLAG} "${value}" — ` +
+      `only "${BODY_SOURCE_AWARE_ADAPTER}" composes its keyword column, and the row would name a ` +
+      'filter nothing applied'
   );
 };
 
@@ -800,6 +873,8 @@ export const RUN_FLAGS: FlagSpec = {
     PRF_ALPHA_FLAG,
     FIELD_WEIGHTS_FLAG,
     ENRICHMENT_FLAG,
+    BODY_SOURCE_FLAG,
+    KEYWORD_FILTER_FLAG,
     ...GATE_VALUE_FLAGS,
   ],
   boolean: [
@@ -847,6 +922,8 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     queryAdjacency: checkAdjacencyAdapter(adapter, argv.includes(QUERY_ADJACENCY_FLAG)),
     fieldWeights: resolveFieldWeights(adapter, flagValue(argv, FIELD_WEIGHTS_FLAG)),
     enrichmentPath: resolveEnrichmentPath(adapter, flagValue(argv, ENRICHMENT_FLAG)),
+    bodySource: resolveBodySource(adapter, flagValue(argv, BODY_SOURCE_FLAG)),
+    keywordFilter: resolveKeywordFilter(adapter, flagValue(argv, KEYWORD_FILTER_FLAG)),
     prf,
     prfDocs: parsePrfCount(PRF_DOCS_FLAG, flagValue(argv, PRF_DOCS_FLAG), prf),
     prfTerms: parsePrfCount(PRF_TERMS_FLAG, flagValue(argv, PRF_TERMS_FLAG), prf),
@@ -1270,6 +1347,16 @@ export interface PrepareArm {
    * what `sweep.ts` and every recorded run built.
    */
   readonly enrichmentPath?: string | undefined;
+  /**
+   * WHERE the fts5 build takes the `body` column from. Absent means the atom
+   * body, which is what `sweep.ts` and every recorded run built.
+   */
+  readonly bodySource?: BodySource | undefined;
+  /**
+   * WHETHER the fts5 build dropped echoed keywords. Absent means none were
+   * dropped, which is what `sweep.ts` and every recorded run built.
+   */
+  readonly keywordFilter?: KeywordFilter | undefined;
 }
 
 /**
@@ -1330,6 +1417,8 @@ export const prepareOf = (request: PrepareRequest): Promise<PreparedDataset> =>
     adapter: request.arm.adapter,
     analyzer: request.arm.analyzer,
     enrichmentPath: request.arm.enrichmentPath,
+    bodySource: request.arm.bodySource,
+    keywordFilter: request.arm.keywordFilter,
     ...(request.goldIds === undefined ? {} : { goldIds: request.goldIds }),
   });
 
@@ -1380,6 +1469,8 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
       adapter: options.adapter,
       analyzer: options.analyzer,
       enrichmentPath: options.enrichmentPath,
+      bodySource: options.bodySource,
+      keywordFilter: options.keywordFilter,
     },
     goldIds: goldIdsOf(entry, qrels),
   });
@@ -1602,6 +1693,8 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   hybridWeight: options.hybridWeight,
   analyzer: options.analyzer,
   fieldWeights: canonicalFieldWeights(options.fieldWeights),
+  bodySource: options.bodySource,
+  keywordFilter: options.keywordFilter,
   queryAdjacency: options.queryAdjacency,
   provenanceMerge: PROVENANCE_MERGE,
   ...prfProvenance(options),

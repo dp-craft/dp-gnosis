@@ -22,6 +22,7 @@
     "gnosis:forensics": "tsx packages/gnosis-bench/src/forensicsCli.ts",
     "gnosis:fuseforecast": "tsx packages/gnosis-bench/src/fuseForecastCli.ts",
     "gnosis:goldaudit": "tsx packages/gnosis-bench/src/goldAuditCli.ts",
+    "gnosis:enrichgate": "tsx packages/gnosis-bench/src/enrichmentGate.ts",
     "bench:test": "vitest run --config packages/gnosis-bench/vitest.config.ts",
     "test": "npm run gnosis:test && npm run bench:test",
     "typecheck": "tsc -p packages/gnosis/tsconfig.json --noEmit && tsc -p packages/gnosis-bench/tsconfig.json --noEmit",

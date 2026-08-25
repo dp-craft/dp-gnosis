@@ -211,3 +211,74 @@ describe('every refusal names its own correction', () => {
     expect(!outcome.ok && outcome.error).toContain('append-only');
   });
 });
+
+describe('a refusal states its CLASS, so a caller retries only what a retry can fix', () => {
+  it('classes content that is not JSON as a DECODE failure', async () => {
+    stubServer(['gen'], 'Sure! Here is the summary of the fragment.');
+    const outcome = await createHttpChatProvider({
+      baseUrl: 'http://stub',
+      model: 'gen',
+    }).complete(REQUEST);
+    expect(!outcome.ok && outcome.kind).toBe('decode');
+  });
+
+  it('classes empty content as a DECODE failure — nothing decoded', async () => {
+    stubServer(['gen'], '   ');
+    const outcome = await createHttpChatProvider({
+      baseUrl: 'http://stub',
+      model: 'gen',
+    }).complete(REQUEST);
+    expect(!outcome.ok && outcome.kind).toBe('decode');
+  });
+
+  it('classes an unreachable server as TRANSPORT — no seed fixes an outage', async () => {
+    vi.stubGlobal('fetch', async (): Promise<unknown> => {
+      throw new Error('connect ECONNREFUSED');
+    });
+    const outcome = await createHttpChatProvider({
+      baseUrl: 'http://stub',
+      model: 'gen',
+    }).complete(REQUEST);
+    expect(!outcome.ok && outcome.kind).toBe('transport');
+  });
+
+  it('classes a model the catalogue does not serve as TRANSPORT', async () => {
+    stubServer(['someone-else'], '{"short":"s"}');
+    const outcome = await createHttpChatProvider({
+      baseUrl: 'http://stub',
+      model: 'gen',
+    }).complete(REQUEST);
+    expect(!outcome.ok && outcome.kind).toBe('transport');
+  });
+
+  it('classes an HTTP error on the generation call as TRANSPORT', async () => {
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> =>
+      url.endsWith('/v1/models')
+        ? okResponse({ data: [{ id: 'gen' }] })
+        : { ok: false, status: 500, text: async (): Promise<string> => 'boom' }
+    );
+    const outcome = await createHttpChatProvider({
+      baseUrl: 'http://stub',
+      model: 'gen',
+    }).complete(REQUEST);
+    expect(!outcome.ok && outcome.kind).toBe('transport');
+    expect(!outcome.ok && outcome.error).toContain('HTTP 500');
+  });
+});
+
+describe('the seed travels WITH the request, so a caller can bump it', () => {
+  it('sends the stated seed instead of the shipped one', async () => {
+    const calls = stubServer(['gen'], '{"short":"s"}');
+    await createHttpChatProvider({ baseUrl: 'http://stub', model: 'gen' }).complete({
+      ...REQUEST,
+      seed: ENRICH_SEED + 2,
+    });
+    expect(chatBodyOf(calls).seed).toBe(ENRICH_SEED + 2);
+  });
+
+  it('falls back to the shipped seed when the request states none', async () => {
+    const calls = stubServer(['gen'], '{"short":"s"}');
+    await createHttpChatProvider({ baseUrl: 'http://stub', model: 'gen' }).complete(REQUEST);
+    expect(chatBodyOf(calls).seed).toBe(ENRICH_SEED);
+  });
+});

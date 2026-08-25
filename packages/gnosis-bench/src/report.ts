@@ -137,6 +137,20 @@ export interface RunProvenance {
    */
   readonly fieldWeights: string;
   /**
+   * WHERE the index build took the `body` column's text from. Absent on an
+   * externally-scored row, which built no index at all, and on every row
+   * recorded before the source was selectable — those all indexed the atom
+   * body, which is how `compare.ts` reads an absent one.
+   */
+  readonly bodySource?: string | undefined;
+  /**
+   * WHETHER the index build dropped keywords already echoed by the body. Absent
+   * on an externally-scored row, which built no index, and on every row recorded
+   * before the filter existed — those dropped nothing, which is how `compare.ts`
+   * reads an absent one.
+   */
+  readonly keywordFilter?: string | undefined;
+  /**
    * Whether the QUERY-SIDE adjacency treatment was applied. Required for the
    * reason `analyzer` is: every run either applied it or did not, and a row
    * omitting it could not be told apart from one measured under the other arm.
@@ -424,6 +438,22 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    */
   readonly fieldWeights?: string;
   /**
+   * WHERE this row's `body` column came from — TREATMENT provenance
+   * (`compare.ts`), so an arm that indexed summaries is labelled a comparison
+   * instead of being subtracted from a body-indexed row. Absent on every row
+   * recorded before the source was selectable; those indexed the atom body,
+   * which is {@link DEFAULT_BODY_SOURCE}, and that is how `compare.ts` reads an
+   * absent one.
+   */
+  readonly bodySource?: string;
+  /**
+   * WHETHER echoed keywords were dropped from the index — TREATMENT provenance
+   * (`compare.ts`). Absent on every row recorded before the filter existed;
+   * those dropped nothing, which is {@link DEFAULT_KEYWORD_FILTER}, and that is
+   * how `compare.ts` reads an absent one.
+   */
+  readonly keywordFilter?: string;
+  /**
    * How many atoms this row's index carried enrichment text for — TREATMENT
    * provenance (`compare.ts`). Absent on every row recorded before the sidecar
    * existed; those merged nothing, which is {@link NO_ENRICHMENT}, and that is
@@ -664,6 +694,11 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   embedModel: provenance.embedModel,
   analyzer: provenance.analyzer,
   fieldWeights: provenance.fieldWeights,
+  // A run that built no index writes no key at all — never a body source it
+  // never composed.
+  ...(provenance.bodySource === undefined ? {} : { bodySource: provenance.bodySource }),
+  // Same rule: a run that built no index names no filter it never applied.
+  ...(provenance.keywordFilter === undefined ? {} : { keywordFilter: provenance.keywordFilter }),
   // A run that built no index writes no key at all — never a `0` claiming a
   // sidecar was consulted and found empty.
   ...(result.enrichment === undefined ? {} : { enrichment: result.enrichment }),

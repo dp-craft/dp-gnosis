@@ -9,7 +9,13 @@
  * driven by an LLM can have. Every rejection names the valid alternatives.
  */
 
-import { BUDGET_MODES, FTS_COLUMNS, RERANK_PRESET_NAMES } from '../config.js';
+import {
+  BODY_SOURCES,
+  BUDGET_MODES,
+  FTS_COLUMNS,
+  KEYWORD_FILTERS,
+  RERANK_PRESET_NAMES
+} from '../config.js';
 import { ADAPTER_NAMES } from './adapter.js';
 
 type FlagSpec =
@@ -86,6 +92,13 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // `enrich` and `index`: the JSONL enrichment sidecar `enrich` WRITES and
   // `index` READS. One flag for one artefact, so the two cannot drift apart.
   '--enrichment': { kind: 'value', placeholder: '<file>' },
+  // `index` only: WHERE the fts5 `body` column takes its text from. The default
+  // is the atom body — today's index, byte for byte — and a generated source
+  // REPLACES it, which no column weight can express.
+  '--body-source': { kind: 'value', placeholder: `<${BODY_SOURCES.join('|')}>` },
+  // `index` only: WHETHER a keyword that merely re-emits body vocabulary reaches
+  // the index. The default keeps every keyword — today's index, byte for byte.
+  '--keyword-filter': { kind: 'value', placeholder: `<${KEYWORD_FILTERS.join('|')}>` },
   // `enrich` only: the E2 pilot bound — enrich at most n not-yet-fresh atoms.
   '--limit': { kind: 'value', placeholder: '<n>' },
   // `enrich` only: the generator id, for this run alone.

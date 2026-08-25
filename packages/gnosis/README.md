@@ -44,7 +44,16 @@ A bare invocation, `--help` or `-h` prints help and exits 0. An **unknown flag i
 
 Callers MUST branch on the code. `3` is not a failure and MUST NOT be retried blindly.
 
-`index` adds one exit-3 case of its own: the build wrote an index holding **0 atoms** while the atoms directory holds at least one `.md` file — `reason: index-empty`. An EMPTY atoms directory is an empty corpus, not this case, and stays 0.
+`index` adds three exit-3 cases of its own: the build wrote an index holding **0 atoms** while the atoms directory holds at least one `.md` file — `reason: index-empty`. An EMPTY atoms directory is an empty corpus, not this case, and stays 0.
+
+The other two are a build that produced **none** of what its caller asked for. Both wrote a real, queryable index and refused the treatment that was named, which is exactly what exit 3 means here:
+
+| Case | `reason` |
+|---|---|
+| `--enrichment` named and **0** records merged — every enrichment column empty, so the index ranks exactly as an unenriched one | `enrichment-none-merged` |
+| a generated `--body-source` that left **every** indexed atom with an empty body — no body term reaches any atom | `body-source-all-empty` |
+
+A **partial** failure stays exit 0 with its warning: some records merged, or some atoms have a body. When both total failures fire, the reason names the enrichment one — a generated body is built FROM the sidecar, so a sidecar that merged nothing is why every body is empty.
 
 Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER `--budget-mode` — real atoms were delivered and real atoms were refused) · `indexState unavailable` · `indexState mismatched` (**the index is REFUSED — no search ran**) · a refused `--rephrase` (raw query searched) · a refused `--rerank` (**first-pass ranking returned**, `mode` keeps NO `+rerank` suffix, refusal in `note`). A rerank refusal is never exit 2 — `RERANK_K_INIT` is 100, so discarding the run would bin a full 100-candidate first pass over an unreachable reranker.
 
@@ -54,7 +63,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 |---|---|---|
 | `ingest` | **none** (passing one is exit 2) | `--atoms-dir`, `--repo-root`, `--json` |
 | `enrich` | none | `--atoms-dir`, `--enrichment`, `--limit`, `--enrich-model`, `--profile`, `--json` |
-| `index` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--enrichment`, `--json` |
+| `index` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--enrichment`, `--body-source`, `--keyword-filter`, `--json` |
 | `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` |
 | `answer <query…>` | query terms, joined with spaces | every `retrieve` flag except `--flat` and `--format xml`, both exit 2 |
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
@@ -97,6 +106,8 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `--synthesize` | boolean — **`answer` only**, synthesize an answer over the pack with the 27B. Every `[^atom-id]` MUST resolve or the command hard-fails; `INSUFFICIENT` is an allowed answer | off |
 | `--field-weights` | `col=w[,col=w]` over the fts5 columns `body`, `short`, `long`, `doc_desc`, `keywords`, `entities`, `questions` — **`retrieve` and `answer`**, BM25F column weights stated as OVERRIDES over the shipped vector, so an unnamed column keeps its default and `--field-weights questions=2` leaves `body` where it was. An unknown column name exits 2 listing the vocabulary | `body=1` with every enrichment column at `0` — `DEFAULT_FIELD_WEIGHTS` (`src/config.ts`); an absent sidecar therefore reproduces today's ranking byte for byte |
 | `--enrichment` | file — **`enrich` and `index`**; the JSONL sidecar `enrich` appends to and `index` merges into the enrichment columns. On `index` it is strictly OPT-IN: with the flag absent every enrichment column is empty and the build is what it has always been | `enrichment.jsonl` beside the atoms directory on `enrich` (`ENRICHMENT_FILE_NAME`, `src/cli/enrichCommand.ts`); **no default on `index`**, which builds unenriched unless the flag names a file |
+| `--keyword-filter` | `none` or `novel` — **`index` only**, WHETHER a generated keyword that merely RE-EMITS body vocabulary reaches the index. Under `novel` a keyword is dropped when EVERY term it analyses to is already a term of the atom's analysed body: it adds no posting, and `bm25()` normalises by the row's TOTAL token count, so it can only dilute. The build stamps what it kept and dropped, and `index` prints both with the ECHO RATE. **That rate is corpus- and language-dependent and MUST be read off the run's own report, never assumed** — measured **71.3 %** of 300 keywords on the `vault` corpus and **78.7 %** of 1018 on `nfcorpus`, and neither number predicts a third corpus, a different generator, or another language. A name outside the vocabulary exits 2 | `none` — every generated keyword, `DEFAULT_KEYWORD_FILTER` (`src/config.ts`); the index every recorded number was measured on |
+| `--body-source` | `atom`, `long` or `long+keywords` — **`index` only**, WHERE the fts5 `body` column takes its text from. A generated source REPLACES the atom body with the sidecar's text; `--field-weights body=0` cannot express that, because `bm25()` normalises by the row's TOTAL token count and a populated body still lengthens every row. An atom with no sidecar record gets an EMPTY body under a generated source — the build reports `emptyBodyAtoms` and warns, without moving the exit code. A name outside the vocabulary exits 2 | `atom` — the atom's own body, `DEFAULT_BODY_SOURCE` (`src/config.ts`); the index every recorded number was measured on |
 | `--limit` | positive integer — **`enrich` only**, enrich at most this many atoms that are not already fresh. A pilot bound, so a bad prompt costs minutes instead of hours. Non-integer or non-positive exits 2 | unset — every not-yet-fresh atom is enriched |
 | `--enrich-model` | generator id — **`enrich` only**, the chat model the records are generated by and STAMPED with. A model change makes every record written under the previous one stale, so the next run regenerates them | `qwen35b-a3b-q5km-ctx130k-mtp-frog-coding` — `ENRICH_MODEL_ID` (`src/config.ts`), overridable by `DP_GNOSIS_ENRICH_MODEL` |
 | `--help` / `-h` | boolean | off |
@@ -200,8 +211,8 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 | Command | Keys |
 |---|---|
 | `ingest` | `command`, `written`, `skipped[{source,title,reasons[]}]` |
-| `enrich` | `command`, `model`, `promptVersion`, `atoms`, `enriched`, `skipped`, `sidecar`, plus `note` when a refusal STOPPED the run (exit 3) |
-| `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note`, `reason` (present ONLY on the `index-empty` exit 3 — an index WAS built, so `built` stays `true`, and it holds no atoms) |
+| `enrich` | `command`, `model`, `promptVersion`, `atoms`, `enriched`, `skipped`, `sidecar`, `retried` (atoms that decoded only after a seed bump) and `retriedIds` (which ones — a provenance fact, since those records were generated at a bumped seed), plus `note` when a refusal STOPPED the run (exit 3) |
+| `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note`, `reason` (present ONLY on the `index-empty` exit 3 — an index WAS built, so `built` stays `true`, and it holds no atoms), `enrichmentRecords` (**`fts5` with `--enrichment` only** — how many atoms the build MERGED a sidecar record into, read back off the index's own `enrichment_records` stamp rather than recounted from the sidecar, so it reports what LANDED and not what was offered), `enrichmentWarning` (present ONLY when `--enrichment` named a file and `enrichmentRecords` is `0` — the index then ranks exactly as an unenriched one. Like the domain-census `warning` it does NOT move the exit code, and it carries its own key so both warnings can fire on one build) |
 | `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `prf` (`{fbDocs,fbTerms,alpha,source}` — present ONLY when a feedback pass ran; `source` is `flag` or `profile`), `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable`, when a `--rephrase` / `--rerank` refusal degraded the run, or when `count` is `0` |
 | `answer` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `documents`, `poolSize`, `prf` (as under `retrieve`), `budgetMode`, `maxTokens`, `packTokens`, `confidence`, `pack` (the rendered block verbatim), `citations[]` (its `[^atom-id]`s, in pack order), `atoms[]` (each as under `retrieve`, plus `originIndex`, `originCount`, `headingChain`, `summary` when the atom's frontmatter carried them), `skipped[{id,sourcePath,estimatedTokens}]`, `neutralised`, plus `synthesized` and `answer` (both present with `--synthesize` only), and `note` when an over-budget atom was skipped, a per-document cap shortened the delivery, or a `--rephrase` / `--rerank` refusal degraded the run |
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
@@ -275,6 +286,50 @@ npm run gnosis -- bench --json
 ```
 
 `bench` measures at k=5 over the seed vault plus two synthetic ceiling rungs, cold and warm regimes side by side. It picks **no winner** — a human reads the report.
+
+### Enrichment — generate the sidecar, then actually use it
+
+Three commands. **The second is the one that gets forgotten**, and forgetting it used to be silent.
+
+```bash
+# 1. GENERATE. Append-only and resumable — re-running continues where it stopped.
+#    --limit N first if you want to price it before committing hours.
+npm run gnosis -- enrich --json
+# {"command":"enrich","atoms":3605,"enriched":3505,"skipped":100,
+#  "retried":1,"retriedIds":["med-2045-…"],"sidecar":"…/enrichment.jsonl","exitCode":0}
+
+# 2. MERGE it into the index. `index` has NO default sidecar path: omit the flag and
+#    every enrichment column builds EMPTY, ranking exactly as an unenriched index.
+npm run gnosis -- index --adapter fts5 --enrichment …/enrichment.jsonl
+# index: 3605 enrichment record(s) merged from …/enrichment.jsonl
+
+# 3. WEIGHT the columns. Weights are OVERRIDES, so an unnamed column keeps its
+#    default and `body` stays at 1.
+npm run gnosis -- retrieve "…" --field-weights questions=1,keywords=0.5
+```
+
+**Step 2 reports what LANDED, not what was offered** — the count is read back off the index's own
+`enrichment_records` stamp. Read it every time; it is the only thing that distinguishes a working
+enrichment from a sidecar that never reached the index.
+
+| what went wrong | what you see | exit |
+|---|---|---|
+| `--enrichment` omitted | no `enrichmentRecords` key at all | 0 |
+| sidecar named, ids do not match this atoms dir | `enrichmentRecords: 0` + a warning naming the cause | **3** |
+| some atoms not yet enriched | `enrichmentRecords: <n>` below the atom count | 0 |
+| an atom the generator cannot decode at the base seed | `retried` / `retriedIds` on `enrich` | 0 |
+| four seeds all failed to decode one atom | the refusal names every seed tried | **3** |
+
+Two index-build variants change WHAT is indexed rather than how it is weighted — both `index`-only,
+both `fts5`-only, both default to today's behaviour byte for byte. See their rows in § Flags:
+
+| flag | what it does |
+|---|---|
+| `--body-source long\|long+keywords` | the `body` column holds GENERATED text instead of the atom body — a summary-only index. **Not** the same as `--field-weights body=0`, which leaves the body populated and still lengthening every row |
+| `--keyword-filter novel` | drops generated keywords that merely re-emit body vocabulary, and reports `keywordsKept` / `keywordsDropped` so the rate is read off YOUR corpus |
+
+**Which weights to use is a measured question and is not answered here.** `DEFAULT_FIELD_WEIGHTS`
+ships every enrichment column at `0`, so enrichment is inert until you weight it deliberately.
 
 ### `xml` shape
 

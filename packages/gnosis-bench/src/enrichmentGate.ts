@@ -344,7 +344,7 @@ export const gateReport = (
 };
 
 export const ENRICHMENT_GATE_HELP =
-  'usage: npx tsx packages/gnosis-bench/src/enrichmentGate.ts <sidecar.jsonl> <atomsDir>\n';
+  'usage: npm run gnosis:enrichgate -- <sidecar.jsonl> <atomsDir>\n';
 
 export const main = (argv: readonly string[]): number => {
   const [sidecar, atomsDir] = argv;

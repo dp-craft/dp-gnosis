@@ -32,7 +32,7 @@ import {
 import type { OutputFormat } from './format.js';
 import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { helpText } from './help.js';
-import { runIndexCommand } from './indexCommand.js';
+import { BODY_SOURCE_FLAG, KEYWORD_FILTER_FLAG, runIndexCommand } from './indexCommand.js';
 import { GOLD_IDS_FLAG, runIngestCommand } from './ingestCommand.js';
 import { resolveLocations } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
@@ -196,6 +196,13 @@ const ENRICH_COMMAND = 'enrich';
 
 const INDEX_COMMAND = 'index';
 
+/**
+ * `--body-source` and `--keyword-filter` each decide what an index BUILD writes,
+ * so only the build honours them. Accepting either on `retrieve` would let a
+ * caller believe a ranking came from text the index it read never held.
+ */
+const INDEX_ONLY_FLAGS: readonly string[] = [BODY_SOURCE_FLAG, KEYWORD_FILTER_FLAG];
+
 const ENRICH_ONLY_FLAGS: readonly string[] = [LIMIT_FLAG, ENRICH_MODEL_FLAG];
 
 const SIDECAR_COMMANDS: readonly string[] = [ENRICH_COMMAND, INDEX_COMMAND];
@@ -231,6 +238,11 @@ const misplacedIngestFlag = (args: ParsedArgs): string | undefined =>
     ? undefined
     : INGEST_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
+const misplacedIndexFlag = (args: ParsedArgs): string | undefined =>
+  args.command === INDEX_COMMAND
+    ? undefined
+    : INDEX_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
+
 const misplacedSidecarFlag = (args: ParsedArgs): string | undefined =>
   SIDECAR_COMMANDS.includes(args.command ?? '')
     ? undefined
@@ -245,6 +257,7 @@ const SCOPE_CHECKS: readonly ((args: ParsedArgs) => string | undefined)[] = [
   misplacedAnswerFlag,
   misplacedEnrichFlag,
   misplacedIngestFlag,
+  misplacedIndexFlag,
   misplacedSidecarFlag,
 ];
 

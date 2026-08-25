@@ -61,7 +61,12 @@ import {
   denseRouteOf,
   hasPersistentIndex
 } from '../../gnosis/src/cli/adapter.js';
-import type { FieldWeights, RerankFusion } from '../../gnosis/src/config.js';
+import type {
+  BodySource,
+  FieldWeights,
+  KeywordFilter,
+  RerankFusion
+} from '../../gnosis/src/config.js';
 import { ingest, type IngestSkip, type IngestSummary } from '../../gnosis/src/ingest.js';
 import type { IngestProfile } from '../../gnosis/src/ingestProfile.js';
 import type {
@@ -158,6 +163,18 @@ export interface PrepareDatasetOptions {
    * moves neither length normalisation nor any score.
    */
   readonly enrichmentPath?: string | undefined;
+  /**
+   * WHERE the fts5 build takes the `body` column's text from. Absent means the
+   * atom body — today's index byte for byte, and what every recorded run was
+   * prepared with.
+   */
+  readonly bodySource?: BodySource | undefined;
+  /**
+   * WHETHER the fts5 build drops keywords that merely re-emit body vocabulary.
+   * Absent means every keyword — today's index byte for byte, and what every
+   * recorded run was prepared with.
+   */
+  readonly keywordFilter?: KeywordFilter | undefined;
   /**
    * Document ids the dataset's golden set judges, handed to the engine's
    * exact-body dedupe so a mirrored document keeps the copy the judgments can
@@ -432,6 +449,8 @@ const ingestAndProbe = async (
     indexPath: paths.indexPath,
     ...(options.analyzer === undefined ? {} : { analyzer: options.analyzer }),
     ...(options.enrichmentPath === undefined ? {} : { enrichmentPath: options.enrichmentPath }),
+    ...(options.bodySource === undefined ? {} : { bodySource: options.bodySource }),
+    ...(options.keywordFilter === undefined ? {} : { keywordFilter: options.keywordFilter }),
   });
   return { ingestMs: ingestedAt - startedAt, probeMs: Date.now() - ingestedAt };
 };

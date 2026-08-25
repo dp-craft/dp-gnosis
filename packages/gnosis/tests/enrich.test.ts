@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import type { AtomFrontmatter } from '../src/atom.js';
 import { serializeAtom } from '../src/atom.js';
 import type { ChatOutcome, ChatProvider, ChatRequest } from '../src/chat.js';
+import { ENRICH_SEED, ENRICH_SEED_RETRIES } from '../src/config.js';
 import {
   enrichAtoms,
   ENRICHMENT_SCHEMA,
@@ -301,7 +302,9 @@ describe('--limit bounds a pilot batch without losing the rest', () => {
 describe('a refusal STOPS the run, and never writes a partial record', () => {
   it('stops on a refused call, carrying its message', async () => {
     const fixture = await makeFixture(['a', 'b', 'c']);
-    const provider = fakeProvider((): ChatOutcome => ({ ok: false, error: 'model not served' }));
+    const provider = fakeProvider(
+      (): ChatOutcome => ({ ok: false, error: 'model not served', kind: 'transport' })
+    );
     const report = await enrichAtoms({ ...fixture, provider });
     expect(report).toMatchObject({ enriched: 0, failure: 'model not served' });
     expect(provider.requests.length).toBe(1);
@@ -319,7 +322,7 @@ describe('a refusal STOPS the run, and never writes a partial record', () => {
     const fixture = await makeFixture(['a']);
     await enrichAtoms({
       ...fixture,
-      provider: fakeProvider((): ChatOutcome => ({ ok: false, error: 'down' })),
+      provider: fakeProvider((): ChatOutcome => ({ ok: false, error: 'down', kind: 'transport' })),
     });
     expect(loadEnrichmentSidecar(fixture.sidecarPath).size).toBe(0);
   });
@@ -328,7 +331,9 @@ describe('a refusal STOPS the run, and never writes a partial record', () => {
     const fixture = await makeFixture(['a', 'b']);
     const provider = fakeProvider(
       (req: ChatRequest): ChatOutcome =>
-        req.user.includes('Title a') ? { ok: true, value: FIELDS } : { ok: false, error: 'down' }
+        req.user.includes('Title a')
+          ? { ok: true, value: FIELDS }
+          : { ok: false, error: 'down', kind: 'transport' }
     );
     const report = await enrichAtoms({ ...fixture, provider });
     expect(report).toMatchObject({ enriched: 1, failure: 'down' });
@@ -378,5 +383,80 @@ describe('the sidecar line is the serializer\'s, byte for byte', () => {
     expect(await readFile(fixture.sidecarPath, 'utf8')).toBe(
       record === undefined ? '' : serializeEnrichmentRecord(record)
     );
+  });
+});
+
+/**
+ * C9 — the seed-bump ladder. The measured defect: one atom decoded UNBOUNDEDLY
+ * at the shipped seed (`finish_reason: "length"` at 1200, 1600, 2048 and 4000
+ * tokens) while the SAME atom at seed 12, 13 and 14 decoded in 455–495 tokens.
+ * Generation being deterministic, the run could never get past it.
+ */
+const seedsOf = (provider: FakeProvider): readonly (number | undefined)[] =>
+  provider.requests.map(req => req.seed);
+
+/** Fails to decode at the stated seeds, answers normally at every other one. */
+const decodeFailsAt =
+  (...failing: readonly number[]) =>
+    (req: ChatRequest): ChatOutcome =>
+      failing.includes(req.seed ?? ENRICH_SEED)
+        ? { ok: false, error: 'response_format was not honoured', kind: 'decode' }
+        : { ok: true, value: FIELDS };
+
+describe('C9 — a decode failure retries the SAME atom at a bumped seed', () => {
+  it('retries at seed+1 and enriches, reporting the atom as retried', async () => {
+    const fixture = await makeFixture(['a']);
+    const provider = fakeProvider(decodeFailsAt(ENRICH_SEED));
+    const report = await enrichAtoms({ ...fixture, provider });
+    expect(report).toMatchObject({ enriched: 1, retried: 1, retriedIds: ['a'], failure: undefined });
+    expect(seedsOf(provider)).toEqual([ENRICH_SEED, ENRICH_SEED + 1]);
+  });
+
+  it('climbs the whole ladder — 11 then 12, 13, 14 — and never randomises it', async () => {
+    const fixture = await makeFixture(['a']);
+    const provider = fakeProvider(decodeFailsAt(ENRICH_SEED, ENRICH_SEED + 1, ENRICH_SEED + 2));
+    const report = await enrichAtoms({ ...fixture, provider });
+    expect(report).toMatchObject({ enriched: 1, retried: 1 });
+    expect(seedsOf(provider)).toEqual([11, 12, 13, 14]);
+    expect(ENRICH_SEED_RETRIES).toBe(3);
+  });
+
+  it('retries a SCHEMA-invalid answer too — it is the same decode class', async () => {
+    const fixture = await makeFixture(['a']);
+    const provider = fakeProvider((req: ChatRequest): ChatOutcome =>
+      req.seed === ENRICH_SEED ? { ok: true, value: { short: 'only one field' } } : { ok: true, value: FIELDS }
+    );
+    const report = await enrichAtoms({ ...fixture, provider });
+    expect(report).toMatchObject({ enriched: 1, retried: 1 });
+    expect(provider.requests.length).toBe(2);
+  });
+
+  it('REFUSES a transport failure immediately — an outage MUST NOT be retried 4x', async () => {
+    const fixture = await makeFixture(['a']);
+    const provider = fakeProvider(
+      (): ChatOutcome => ({ ok: false, error: 'server down: ECONNREFUSED', kind: 'transport' })
+    );
+    const report = await enrichAtoms({ ...fixture, provider });
+    expect(provider.requests.length).toBe(1);
+    expect(report).toMatchObject({ enriched: 0, retried: 0, failure: 'server down: ECONNREFUSED' });
+  });
+
+  it('exhausts the ladder, then refuses with the existing message plus the seeds tried', async () => {
+    const fixture = await makeFixture(['a']);
+    const provider = fakeProvider(() => ({ ok: false, error: 'response_format was not honoured', kind: 'decode' }));
+    const report = await enrichAtoms({ ...fixture, provider });
+    expect(provider.requests.length).toBe(ENRICH_SEED_RETRIES + 1);
+    expect(report.failure).toContain('response_format was not honoured');
+    expect(report.failure).toContain('4 seeds');
+    expect(report.failure).toContain('11, 12, 13, 14');
+    expect(loadEnrichmentSidecar(fixture.sidecarPath).size).toBe(0);
+  });
+
+  it('leaves an atom that decodes at the BASE seed byte-identical — one call, no note', async () => {
+    const fixture = await makeFixture(['a', 'b']);
+    const provider = fakeProvider(answersWith(FIELDS));
+    const report = await enrichAtoms({ ...fixture, provider });
+    expect(seedsOf(provider)).toEqual([ENRICH_SEED, ENRICH_SEED]);
+    expect(report).toMatchObject({ enriched: 2, retried: 0, retriedIds: [] });
   });
 });

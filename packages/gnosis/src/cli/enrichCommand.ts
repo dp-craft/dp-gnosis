@@ -76,8 +76,18 @@ const deferredNote = (report: EnrichmentReport): string =>
     ? ''
     : `; ${report.deferred} stale atom(s) left for the next run by ${LIMIT_FLAG}`;
 
+/**
+ * The seed ladder leaves no trace in the sidecar — a record carries no attempt
+ * count — so the run report is the ONLY place an operator learns that an atom
+ * decoded on a bumped seed rather than the shipped one.
+ */
+const retriedNote = (report: EnrichmentReport): string =>
+  report.retried === 0
+    ? ''
+    : `; ${report.retried} atom(s) decoded only after a seed bump (${report.retriedIds.join(', ')})`;
+
 const summaryText = (report: EnrichmentReport, sidecar: string): string =>
-  `enrich: ${report.enriched} enriched, ${report.skipped} already fresh of ${report.atoms} atom(s) → ${sidecar}${deferredNote(report)}`;
+  `enrich: ${report.enriched} enriched, ${report.skipped} already fresh of ${report.atoms} atom(s) → ${sidecar}${deferredNote(report)}${retriedNote(report)}`;
 
 const textOf = (report: EnrichmentReport, sidecar: string): string =>
   report.failure === undefined
@@ -100,6 +110,8 @@ const outcomeFor = (
     atoms: report.atoms,
     enriched: report.enriched,
     skipped: report.skipped,
+    retried: report.retried,
+    retriedIds: report.retriedIds,
     sidecar,
     ...(report.failure === undefined ? {} : { note: report.failure }),
   },

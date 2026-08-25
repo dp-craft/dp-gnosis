@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { ATOM_MAX_CHARS, DEFAULT_FIELD_WEIGHTS, DEFAULT_RERANK_PRESET, EMBED_MODEL_ID, RERANK_DOC_MAX_CHARS, RERANK_FUSION_PRESETS, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_K, RERANK_RRF_WEIGHT } from '../../gnosis/src/config.js';
+import { ATOM_MAX_CHARS, DEFAULT_BODY_SOURCE, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, EMBED_MODEL_ID, RERANK_DOC_MAX_CHARS, RERANK_FUSION_PRESETS, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_K, RERANK_RRF_WEIGHT } from '../../gnosis/src/config.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -73,6 +73,8 @@ describe('parseArgs', () => {
       queryAdjacency: false,
       fieldWeights: DEFAULT_FIELD_WEIGHTS,
       enrichmentPath: undefined,
+      bodySource: DEFAULT_BODY_SOURCE,
+      keywordFilter: DEFAULT_KEYWORD_FILTER,
       prf: false,
       includeHistory: false,
     });
@@ -93,6 +95,8 @@ describe('parseArgs', () => {
         queryAdjacency: false,
         fieldWeights: DEFAULT_FIELD_WEIGHTS,
         enrichmentPath: undefined,
+        bodySource: DEFAULT_BODY_SOURCE,
+        keywordFilter: DEFAULT_KEYWORD_FILTER,
         prf: false,
         includeHistory: false,
       });

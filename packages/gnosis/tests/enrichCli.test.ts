@@ -102,6 +102,8 @@ interface Payload {
   readonly atoms?: number;
   readonly enriched?: number;
   readonly skipped?: number;
+  readonly retried?: number;
+  readonly retriedIds?: readonly string[];
   readonly sidecar?: string;
   readonly note?: string;
   readonly error?: string;
@@ -160,6 +162,10 @@ describe('each new flag is refused everywhere it cannot be honoured', () => {
     expect(result.stderr).toContain(`unknown flag "${flag}"`);
   });
 
+  // The sidecar named here does not exist, so NOTHING merges — a build that
+  // produced none of what it was asked for, which exits PARTIAL. What this case
+  // proves is unchanged: `index` HONOURS the flag rather than refusing it as
+  // unknown, and a usage refusal would be EXIT_USAGE.
   it('honours --enrichment on BOTH sides of the artefact it names', async () => {
     const fixture = await makeFixture();
     const result = await runCli([
@@ -174,7 +180,7 @@ describe('each new flag is refused everywhere it cannot be honoured', () => {
       join(fixture.repoRoot, 'absent.jsonl'),
       '--json',
     ]);
-    expect(result.exitCode).toBe(EXIT_OK);
+    expect(result.exitCode).toBe(EXIT_PARTIAL);
   });
 });
 
@@ -320,5 +326,49 @@ describe('a refusal is a PARTIAL result, not a crash', () => {
     const fixture = await makeFixture();
     const result = await runCli(['enrich', '--atoms-dir', fixture.atomsDir, LIMIT_FLAG, '2.5']);
     expect(result.exitCode).toBe(EXIT_USAGE);
+  });
+});
+
+/**
+ * Serves the generator, but answers the FIRST generation with prose the strict
+ * decoder never produced — the C9 defect in miniature. Every later call decodes.
+ */
+const stubServerFailingFirst = (served: string): void => {
+  const state = { calls: 0 };
+  vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+    if (url.endsWith('/v1/models')) return okResponse({ data: [{ id: served }] });
+    state.calls += 1;
+    const content = state.calls === 1 ? 'Sure! Here is the summary.' : JSON.stringify(FIELDS);
+    return okResponse({ choices: [{ message: { content } }] });
+  });
+};
+
+describe('C9 — a seed bump is PROVENANCE the operator can read off the run', () => {
+  it('reports the retried count and the ids in data, and names them in text', async () => {
+    stubServerFailingFirst(ENRICH_MODEL_ID);
+    const fixture = await makeFixture();
+    const payload = await enrich(fixture);
+    expect(payload).toMatchObject({ exitCode: EXIT_OK, enriched: 2, retried: 1 });
+    expect(payload.retriedIds).toEqual(['alpha']);
+  });
+
+  it('names the seed bump in the text summary a human reads', async () => {
+    stubServerFailingFirst(ENRICH_MODEL_ID);
+    const fixture = await makeFixture();
+    const result = await runCli([
+      'enrich',
+      '--atoms-dir',
+      fixture.atomsDir,
+      '--repo-root',
+      fixture.repoRoot,
+    ]);
+    expect(result.stdout).toContain('seed bump');
+    expect(result.stdout).toContain('alpha');
+  });
+
+  it('reports zero retries on a run where every atom decoded at the base seed', async () => {
+    stubServer(ENRICH_MODEL_ID);
+    const fixture = await makeFixture();
+    expect(await enrich(fixture)).toMatchObject({ retried: 0, retriedIds: [] });
   });
 });

@@ -55,6 +55,14 @@ export interface ChatRequest {
   readonly user: string;
   readonly schema: object;
   readonly schemaName: string;
+  /**
+   * The decoding seed for THIS call, overriding {@link ENRICH_SEED}. It travels
+   * with the request because the seed is the caller's retry lever (the C9
+   * ladder): the same atom re-asked at a bumped seed is a different generation,
+   * and nothing else about the call may move. Omitted = the shipped seed, so a
+   * caller that states none sends byte-identically the body it always sent.
+   */
+  readonly seed?: number;
 }
 
 /**
@@ -65,7 +73,21 @@ export interface ChatRequest {
  */
 export type ChatOutcome =
   | { readonly ok: true; readonly value: unknown; readonly usage?: unknown }
-  | { readonly ok: false; readonly error: string };
+  | { readonly ok: false; readonly error: string; readonly kind: ChatFailureKind };
+
+/**
+ * WHY a generation failed, as a discriminator rather than a message a caller
+ * would have to string-match. The two classes take opposite corrections:
+ *
+ * - `decode` — the server answered, and what came back is not the schema-shaped
+ *   JSON `response_format` promised (prose, nothing at all, a truncated run-on).
+ *   Re-asking the SAME atom at a different seed is a different generation, so
+ *   this class is worth retrying.
+ * - `transport` — the call itself did not land: server down, model not served,
+ *   an HTTP status, a timeout. No seed changes any of those, and retrying one
+ *   per atom would multiply a long run's cost while burying the real cause.
+ */
+export type ChatFailureKind = 'decode' | 'transport';
 
 /** One generator, named by the id every record it produces is stamped with. */
 export interface ChatProvider {
@@ -193,7 +215,7 @@ const chatBody = (model: string, req: ChatRequest): unknown => ({
     json_schema: { name: req.schemaName, strict: true, schema: req.schema },
   },
   temperature: ENRICH_TEMPERATURE,
-  seed: ENRICH_SEED,
+  seed: req.seed ?? ENRICH_SEED,
   max_tokens: ENRICH_MAX_TOKENS,
   chat_template_kwargs: { enable_thinking: false },
 });
@@ -243,20 +265,20 @@ const parsedContent = (content: string): unknown | undefined => {
 const toOutcome = (endpoint: Endpoint, payload: unknown): ChatOutcome => {
   const content = messageContent(payload);
   if (content.trim().length === 0)
-    return { ok: false, error: callFailedMessage(endpoint, EMPTY_CONTENT) };
+    return { ok: false, error: callFailedMessage(endpoint, EMPTY_CONTENT), kind: 'decode' };
   const value = parsedContent(content);
   return value === undefined
-    ? { ok: false, error: callFailedMessage(endpoint, NOT_JSON) }
+    ? { ok: false, error: callFailedMessage(endpoint, NOT_JSON), kind: 'decode' }
     : { ok: true, value, usage: usageOf(payload) };
 };
 
 const completeAt = async (endpoint: Endpoint, req: ChatRequest): Promise<ChatOutcome> => {
   const refusal = await catalogueRefusal(endpoint);
-  if (refusal !== undefined) return { ok: false, error: refusal };
+  if (refusal !== undefined) return { ok: false, error: refusal, kind: 'transport' };
   const completion = await fetchCompletion(endpoint, req);
   return completion.ok
     ? toOutcome(endpoint, completion.payload)
-    : { ok: false, error: callFailedMessage(endpoint, completion.cause) };
+    : { ok: false, error: callFailedMessage(endpoint, completion.cause), kind: 'transport' };
 };
 
 /**

@@ -68,10 +68,14 @@ import Database from 'better-sqlite3';
 
 import { type Atom, parseAtom } from '../atom.js';
 import {
+  type BodySource,
+  DEFAULT_BODY_SOURCE,
   DEFAULT_FIELD_WEIGHTS,
+  DEFAULT_KEYWORD_FILTER,
   type FieldWeights,
   FTS_COLUMNS,
-  type FtsColumn
+  type FtsColumn,
+  type KeywordFilter
 } from '../config.js';
 import { CORPUS_MANIFEST_FILE, readManifestDigest } from '../corpusManifest.js';
 import { type EnrichmentRecord, loadEnrichmentSidecar } from '../enrichment.js';
@@ -142,6 +146,32 @@ export const INDEX_SCHEMA_VERSION = '2';
  * which are the same empty index and very different facts.
  */
 const ENRICHMENT_RECORDS_KEY = 'enrichment_records';
+/**
+ * The two keys a GENERATED-body build writes, and a default build does not write
+ * at all. Their absence is what makes an `atom`-bodied index the same file it
+ * has always been — a row stating the default would change every index ever
+ * rebuilt, and every recorded number is reproducible only from an unchanged one.
+ */
+const BODY_SOURCE_KEY = 'body_source';
+/**
+ * How many indexed atoms got an EMPTY `body` under a generated source — a
+ * sidecar record that is missing, or one whose generated text is blank. Those
+ * rows are unreachable by any body term while the build reports success, which
+ * is this project's failure class, so the count is STAMPED rather than inferred.
+ */
+const EMPTY_BODY_ATOMS_KEY = 'empty_body_atoms';
+/**
+ * The three keys a FILTERED-keyword build writes, and an unfiltered build does
+ * not write at all — their absence is what keeps today's index the same file it
+ * has always been, for the reason {@link BODY_SOURCE_KEY}'s absence does.
+ *
+ * The two counts are stamped rather than left to be recounted: what the sidecar
+ * OFFERED and what the index HOLDS differ by exactly the echo the filter
+ * removed, and that difference is the fact an operator needs about THEIR corpus.
+ */
+const KEYWORD_FILTER_KEY = 'keyword_filter';
+const KEYWORDS_KEPT_KEY = 'keywords_kept';
+const KEYWORDS_DROPPED_KEY = 'keywords_dropped';
 /**
  * Columns come from {@link FTS_COLUMNS} rather than a literal: the declaration
  * order, the insert order and the `bm25()` weight order are then the SAME list,
@@ -216,6 +246,21 @@ export interface BuildFts5IndexOptions extends Fts5IndexLocation {
    * normalisation nor any score.
    */
   readonly enrichmentPath?: string | undefined;
+  /**
+   * WHERE the `body` column takes its text from. Absent means
+   * {@link DEFAULT_BODY_SOURCE} — the atom's own body, which is today's index
+   * byte for byte. A generated source REPLACES the body rather than adding a
+   * column: `--field-weights body=0` cannot express that, because `bm25()`
+   * normalises by the row's total token count and a populated body still
+   * lengthens every row.
+   */
+  readonly bodySource?: BodySource | undefined;
+  /**
+   * WHETHER a keyword that merely re-emits body vocabulary reaches the index.
+   * Absent means {@link DEFAULT_KEYWORD_FILTER} — every keyword, which is
+   * today's index byte for byte.
+   */
+  readonly keywordFilter?: KeywordFilter | undefined;
 }
 
 /**
@@ -295,6 +340,47 @@ const collectEntries = (
     .map(rel => toEntry(atomsDir, rel, enrichment))
     .filter(isDefined);
 
+/** Everything the TEXT of one column depends on, for one build. */
+interface TextSpec {
+  readonly analyzer: AnalyzerId;
+  readonly bodySource: BodySource;
+  readonly keywordFilter: KeywordFilter;
+}
+
+/**
+ * A keyword is NOVEL unless every term it analyses to is already a body term.
+ * A keyword analysing to nothing carries no term the body lacks, so it is not
+ * novel — and it contributes no token either way.
+ */
+const isNovelKeyword = (
+  keyword: string,
+  bodyTerms: ReadonlySet<string>,
+  analyzer: AnalyzerId
+): boolean => !analyze(keyword, analyzer).every(term => bodyTerms.has(term));
+
+/**
+ * The keywords THIS entry contributes under the chosen filter.
+ *
+ * SAFE UNDER THE NON-IDEMPOTENCY LANDMINE (`analyze(analyze(x)) !== analyze(x)`
+ * for 4.3 % of terms): both sides are analysed from RAW text — the atom body as
+ * `parseAtom` returned it, and the sidecar's raw keyword strings. Nothing is
+ * read back out of the inverted index, so no term is ever analysed twice.
+ */
+const filteredKeywords = (
+  record: EnrichmentRecord,
+  body: string,
+  spec: TextSpec
+): readonly string[] =>
+  spec.keywordFilter === DEFAULT_KEYWORD_FILTER
+    ? record.keywords
+    : record.keywords.filter(keyword =>
+        isNovelKeyword(keyword, new Set(analyze(body, spec.analyzer)), spec.analyzer)
+      );
+
+/** The keywords one entry contributes; NONE when no sidecar record matched it. */
+const keptKeywords = (entry: IndexEntry, spec: TextSpec): readonly string[] =>
+  entry.enrichment === undefined ? [] : filteredKeywords(entry.enrichment, entry.body, spec);
+
 /**
  * Column → the text a record contributes. `body` is absent on purpose: it comes
  * from the atom, not the sidecar, and listing it here would let a record
@@ -305,20 +391,58 @@ const collectEntries = (
  * token instead of one unsearchable run.
  */
 const ENRICHMENT_TEXT: Readonly<
-  Record<Exclude<FtsColumn, 'body'>, (record: EnrichmentRecord) => string>
+  Record<Exclude<FtsColumn, 'body'>, (entry: IndexEntry, spec: TextSpec) => string>
 > = {
-  short: record => record.short,
-  long: record => record.long,
-  doc_desc: record => record.doc_description,
-  keywords: record => record.keywords.join(' '),
-  entities: record => record.entities.join(' '),
-  questions: record => record.questions.join(' '),
+  short: entry => entry.enrichment?.short ?? '',
+  long: entry => entry.enrichment?.long ?? '',
+  doc_desc: entry => entry.enrichment?.doc_description ?? '',
+  keywords: (entry, spec) => keptKeywords(entry, spec).join(' '),
+  entities: entry => entry.enrichment?.entities.join(' ') ?? '',
+  questions: entry => entry.enrichment?.questions.join(' ') ?? '',
+};
+
+const joinText = (parts: readonly string[]): string =>
+  parts.filter(part => part.trim().length > 0).join(' ');
+
+/**
+ * Body source → the text the `body` column holds. A generated source reads the
+ * SIDECAR, so an atom with no record yields `''` — an empty body, counted by
+ * {@link EMPTY_BODY_ATOMS_KEY} rather than passed off as an indexed atom.
+ */
+const BODY_TEXT: Readonly<Record<BodySource, (entry: IndexEntry, spec: TextSpec) => string>> = {
+  atom: entry => entry.body,
+  long: entry => entry.enrichment?.long ?? '',
+  'long+keywords': (entry, spec) =>
+    entry.enrichment === undefined
+      ? ''
+      : joinText([entry.enrichment.long, keptKeywords(entry, spec).join(' ')]),
 };
 
 /** An unenriched atom yields `''` for every enrichment column — no tokens, no effect. */
-const columnText = (column: FtsColumn, entry: IndexEntry): string => {
-  if (column === 'body') return entry.body;
-  return entry.enrichment === undefined ? '' : ENRICHMENT_TEXT[column](entry.enrichment);
+const columnText = (column: FtsColumn, entry: IndexEntry, spec: TextSpec): string =>
+  column === 'body'
+    ? BODY_TEXT[spec.bodySource](entry, spec)
+    : ENRICHMENT_TEXT[column](entry, spec);
+
+/** Atoms whose `body` column ends up holding nothing under the chosen source. */
+const emptyBodyAtoms = (entries: readonly IndexEntry[], spec: TextSpec): number =>
+  entries.filter(entry => BODY_TEXT[spec.bodySource](entry, spec).trim().length === 0).length;
+
+/** What the keyword filter kept and what it dropped, across the whole build. */
+export interface KeywordCensus {
+  readonly kept: number;
+  readonly dropped: number;
+}
+
+/**
+ * OFFERED minus KEPT, counted over the entries the index actually holds — a
+ * sidecar record matching no atom offers nothing to this build, so counting the
+ * sidecar would report an echo rate for a corpus that was never indexed.
+ */
+const keywordCensus = (entries: readonly IndexEntry[], spec: TextSpec): KeywordCensus => {
+  const offered = entries.flatMap(entry => entry.enrichment?.keywords ?? []).length;
+  const kept = entries.flatMap(entry => keptKeywords(entry, spec)).length;
+  return { kept, dropped: offered - kept };
 };
 
 /** One `index_meta` row, as the build states it. */
@@ -328,8 +452,7 @@ interface StampRow {
 }
 
 /** What one build stamps into the index it produces. */
-interface StampSpec {
-  readonly analyzer: AnalyzerId;
+interface StampSpec extends TextSpec {
   /**
    * `undefined` when no corpus manifest sits beside the atoms dir. NO row is
    * written then — an empty string would claim a corpus identity the build never
@@ -338,12 +461,43 @@ interface StampSpec {
   readonly corpusDigest: string | undefined;
   /** How many atoms were joined to a sidecar record; `0` when none were. */
   readonly enrichmentRecords: number;
+  /** How many atoms that source left with an empty `body`. */
+  readonly emptyBodyAtoms: number;
+  /** How many keywords the chosen filter kept, and how many it dropped. */
+  readonly keywordCensus: KeywordCensus;
 }
+
+/**
+ * The generated-body rows, written ONLY when a build really generated a body.
+ * A default build stamps neither, so it stays the index it has always been.
+ */
+const bodySourceRows = (spec: StampSpec): readonly StampRow[] =>
+  spec.bodySource === DEFAULT_BODY_SOURCE
+    ? []
+    : [
+        { key: BODY_SOURCE_KEY, value: spec.bodySource },
+        { key: EMPTY_BODY_ATOMS_KEY, value: String(spec.emptyBodyAtoms) },
+      ];
+
+/**
+ * The filtered-keyword rows, written ONLY when a build really filtered. An
+ * unfiltered build stamps none, so it stays the index it has always been.
+ */
+const keywordFilterRows = (spec: StampSpec): readonly StampRow[] =>
+  spec.keywordFilter === DEFAULT_KEYWORD_FILTER
+    ? []
+    : [
+        { key: KEYWORD_FILTER_KEY, value: spec.keywordFilter },
+        { key: KEYWORDS_KEPT_KEY, value: String(spec.keywordCensus.kept) },
+        { key: KEYWORDS_DROPPED_KEY, value: String(spec.keywordCensus.dropped) },
+      ];
 
 const stampRows = (spec: StampSpec): readonly StampRow[] => [
   { key: ANALYZER_KEY, value: spec.analyzer },
   { key: SCHEMA_VERSION_KEY, value: INDEX_SCHEMA_VERSION },
   { key: ENRICHMENT_RECORDS_KEY, value: String(spec.enrichmentRecords) },
+  ...bodySourceRows(spec),
+  ...keywordFilterRows(spec),
   ...(spec.corpusDigest === undefined
     ? []
     : [{ key: CORPUS_DIGEST_KEY, value: spec.corpusDigest }]),
@@ -373,7 +527,9 @@ const writeEntries = (
       // would hold terms the query can never spell.
       fts.run(
         index + 1,
-        ...FTS_COLUMNS.map(column => analyzeToText(columnText(column, entry), spec.analyzer))
+        ...FTS_COLUMNS.map(column =>
+          analyzeToText(columnText(column, entry, spec), spec.analyzer)
+        )
       );
     });
   })();
@@ -390,8 +546,16 @@ const writeEntries = (
  * that answers every query with nothing and reports success — so the count is
  * returned rather than discarded, and the caller gates on it.
  */
+/** Every text choice this build makes, each absent one falling back to today's. */
+const textSpecOf = (options: BuildFts5IndexOptions): TextSpec => ({
+  analyzer: options.analyzer ?? DEFAULT_ANALYZER,
+  bodySource: options.bodySource ?? DEFAULT_BODY_SOURCE,
+  keywordFilter: options.keywordFilter ?? DEFAULT_KEYWORD_FILTER,
+});
+
 export const buildFts5Index = (options: BuildFts5IndexOptions): number => {
   const entries = collectEntries(options.atomsDir, loadEnrichment(options.enrichmentPath));
+  const text = textSpecOf(options);
   rmSync(options.indexPath, { force: true });
   mkdirSync(dirname(options.indexPath), { recursive: true });
   const db = new Database(options.indexPath);
@@ -399,9 +563,11 @@ export const buildFts5Index = (options: BuildFts5IndexOptions): number => {
   db.exec(CREATE_FTS_SQL);
   db.exec(CREATE_INDEX_META_SQL);
   writeEntries(db, entries, {
-    analyzer: options.analyzer ?? DEFAULT_ANALYZER,
+    ...text,
     corpusDigest: readManifestDigest(options.atomsDir),
     enrichmentRecords: entries.filter(entry => entry.enrichment !== undefined).length,
+    emptyBodyAtoms: emptyBodyAtoms(entries, text),
+    keywordCensus: keywordCensus(entries, text),
   });
   db.close();
   return entries.length;
@@ -426,6 +592,65 @@ const stampValue = (db: Database.Database, key: string): string | undefined =>
   hasIndexMeta(db)
     ? (db.prepare(SELECT_INDEX_META_SQL).get(key) as { readonly value: string } | undefined)?.value
     : undefined;
+
+/**
+ * How many sidecar records THIS index merged, read back off the stamp the build
+ * wrote inside the same transaction as the rows it describes. Read rather than
+ * recomputed: counting the sidecar would report what was OFFERED, and the fact a
+ * caller needs is what was MERGED — the two differ precisely when a sidecar was
+ * written for a different atoms dir, which is the failure worth reporting.
+ *
+ * `undefined` when the file carries no such stamp. That absence is a fact about
+ * the index, never a zero: a zero is a build that merged nothing.
+ */
+export const readEnrichmentRecords = (indexPath: string): number | undefined => {
+  const db = new Database(indexPath, { readonly: true });
+  const value = stampValue(db, ENRICHMENT_RECORDS_KEY);
+  db.close();
+  return value === undefined ? undefined : asRecordCount(value);
+};
+
+/**
+ * How many atoms THIS index left with an empty `body` column, read back off the
+ * stamp. `undefined` on every index built from the atom body — those have no
+ * generated body to be empty, which is a different fact from a zero.
+ */
+export const readEmptyBodyAtoms = (indexPath: string): number | undefined => {
+  const db = new Database(indexPath, { readonly: true });
+  const value = stampValue(db, EMPTY_BODY_ATOMS_KEY);
+  db.close();
+  return value === undefined ? undefined : asRecordCount(value);
+};
+
+/**
+ * What the keyword filter kept and dropped in THIS index, read back off the
+ * stamp the build wrote. `undefined` on every unfiltered build — those dropped
+ * nothing because no filter ran, which is a different fact from a zero.
+ *
+ * The ECHO RATE this census states is a property of the corpus and the
+ * generator, never a constant: an operator MUST read it off their OWN run.
+ */
+export const readKeywordCensus = (indexPath: string): KeywordCensus | undefined => {
+  const db = new Database(indexPath, { readonly: true });
+  const kept = stampValue(db, KEYWORDS_KEPT_KEY);
+  const dropped = stampValue(db, KEYWORDS_DROPPED_KEY);
+  db.close();
+  return censusOf(
+    kept === undefined ? undefined : asRecordCount(kept),
+    dropped === undefined ? undefined : asRecordCount(dropped)
+  );
+};
+
+/** Both counts or neither — half a census would state an echo rate nobody built. */
+const censusOf = (
+  kept: number | undefined,
+  dropped: number | undefined
+): KeywordCensus | undefined =>
+  kept === undefined || dropped === undefined ? undefined : { kept, dropped };
+
+/** A stamp this build cannot read as a count is reported as ABSENT, not as 0. */
+const asRecordCount = (value: string): number | undefined =>
+  Number.isInteger(Number(value)) ? Number(value) : undefined;
 
 /**
  * An index built before the stamp existed carries no `index_meta`. `porter-fold`
