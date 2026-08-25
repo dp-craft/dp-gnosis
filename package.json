@@ -3,10 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Development workspace for @dp/gnosis \u2014 the engine and its benchmark, extracted from AiChatney so the quality gate lives in the same repository as the change it gates.",
+  "description": "Development workspace for @dp/gnosis — the engine and its benchmark, extracted from AiChatney so the quality gate lives in the same repository as the change it gates.",
   "engines": {
     "node": ">=22"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "gnosis": "tsx packages/gnosis/src/cli/main.ts",
     "gnosis:mcp": "tsx packages/gnosis/src/mcp/main.ts",

@@ -33,8 +33,7 @@ The directory shape deliberately **mirrors the repository this was extracted fro
 ## Commands
 
 ```bash
-npm install                      # then also: npm --prefix packages/gnosis install
-                                 #            npm --prefix packages/gnosis-bench install
+npm install                      # one lockfile, npm workspaces — installs both packages
 
 npm run gnosis -- answer "some keywords"   # query the vault
 npm run gnosis -- ingest && npm run gnosis -- index --adapter fts5   # rebuild after editing documents
