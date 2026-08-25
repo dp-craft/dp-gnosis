@@ -1,3 +1,5 @@
+<!-- LLM-PRIMARY: The dp-gnosis retrieval benchmark — HOW to run it. Sole owner of the bench flag table (bench.sh and sweep.sh), the dataset manifest formats, the recorded artefacts and how to read them, and the pytrec_eval attestation. WHAT to measure and whether two rows may be subtracted is handbook/GNOSIS-BENCH.md. -->
+
 # dp-gnosis-bench
 
 A retrieval benchmark for `packages/gnosis/`. It drives the SHIPPED path end to
@@ -6,17 +8,36 @@ a change anywhere in the engine moves the numbers. Scores are DOCUMENT-level:
 retrieved atoms are rolled up to their origin document before scoring, so they
 stay comparable across a chunker change.
 
+**This file owns HOW to run it** — every flag, the datasets, the artefacts and
+how to read them. **`handbook/GNOSIS-BENCH.md` owns WHAT to measure** — the
+suite layers, which metric answers which question, the provenance rules that
+decide whether two rows may be subtracted, and the known harness gaps. Read that
+before quoting any number this suite produces.
+
+## The corpora are public, and none is republished here
+
+The benchmark's datasets are downloaded on demand from the URLs declared in
+`datasets.json` — BEIR (nfcorpus, scifact, arguana, …) and Hungarian
+[SzegedAI/MILQA](https://huggingface.co/datasets/SzegedAI/MILQA), CC-BY-SA-4.0.
+No corpus is redistributed by this project. `vault` and `vault-hu` are derived
+from the private vault this repository was extracted from and are skipped
+without it.
+
 ## Run it
 
 ```
 ./bench.sh                      # every enabled dataset, depth 100
 ./bench.sh --only nfcorpus      # one dataset (csv for several)
-./bench.sh --depth 20           # retrieval depth; R@100 needs depth 100
+./bench.sh --layer smoke        # a named suite layer: smoke|par|full
+./bench.sh --adapter <name>     # which adapter to measure; default fts5
+./bench.sh --depth 20           # retrieval depth, default 100; R@100 needs depth 100
 ./bench.sh --rerank             # add the reranker arm (see the caveat below)
 ./bench.sh --rerank-model <id>  # which cross-encoder to call; requires --rerank
+./bench.sh --rerank --rerank-profile beir-ce    # the FUSION RULE; requires --rerank
+./bench.sh --rerank --rerank-weight 0.6         # raw RRF weight override; requires --rerank
 ./bench.sh --rerank --rerank-pool 20   # EXPLICIT candidate pool; bypasses the engine floor
 ./bench.sh --rerank --rerank-doc-max-chars 4000 --rerank-extract headtail   # WHAT the reranker is shown
-./bench.sh --analyzer <id>      # which analysis chain builds AND queries; fts5 only
+./bench.sh --analyzer <id>      # which analysis chain builds AND queries; fts5 only (a key of ANALYZERS)
 ./bench.sh --query-adjacency    # add the phrase disjunct to multi-term query tokens; fts5 only
 ./bench.sh --enrichment <file>  # JSONL sidecar joined into the enrichment columns; fts5 only
 ./bench.sh --field-weights questions=2,keywords=0.5   # bm25() weight per column; fts5 only
@@ -35,6 +56,28 @@ unknown flag now REFUSES rather than being ignored, so a stale one fails loudly.
 `npm run gnosis:bench -- --only nfcorpus` is the same entry point from the repo
 root. `--help` prints the exit codes; the flags are documented here, once.
 
+**`--only` selects from ALL manifest entries, including `enabled: false` ones** —
+`enabled` means "member of the DEFAULT suite", not "runnable". An unknown id, or
+a selection that resolves to nothing, FAILS loudly by name.
+
+**`--layer <smoke|par|full>`** runs a named suite layer; membership is authored
+per entry in `datasets.json` (`"layers": [...]`), which is the list's only owner.
+It composes with `--only` as an INTERSECTION, and an empty intersection fails
+loudly naming both flags rather than passing as a silent no-op. Measured layer
+cost is in `handbook/GNOSIS-BENCH.md` § Layers.
+
+**`--adapter <name>`** is which adapter to measure; an unknown name fails loudly.
+Default `fts5`, asserted equal to the CLI's own default by the engine's
+`defaults.test.ts`.
+
+**`--rerank-profile <shipped|beir-ce>`** selects the rerank arm's FUSION RULE and
+**`--rerank-weight <w>`** overrides the RRF weight raw, for measuring the fusion
+parameter itself. Both require `--rerank`, and an unknown profile name fails
+loudly. `rerankProfile` and `rerankWeight` are recorded as TREATMENT fields, so
+two fusion arms can never be silently subtracted — `--compare` labels the pair
+`ARM COMPARISON`. What each preset does, and the constants behind them, are in
+`handbook/GNOSIS-GUIDE.md` § Rerank.
+
 | Exit | Meaning |
 |---|---|
 | 0 | every selected dataset ran and was recorded |
@@ -46,6 +89,12 @@ root. `--help` prints the exit codes; the flags are documented here, once.
 The gate decides on the **point estimate**: it fails when the paired mean nDCG@10 difference falls below `-failUnder`. The permutation p and the bootstrap CI are printed beside it but are **not** the gate — `vault-hu`'s MDE is 0.05–0.07 (`handbook/GNOSIS-BENCH.md` § Known harness gaps), so requiring significance would let a real regression through on the corpus least able to detect one. A pairing the harness REFUSES — a `SCALE_FIELDS` move, a missing per-topic file, differing topic sets — exits 4 as well, with the refusal's own reason: a gate that cannot compare has verified nothing, and reporting that as a pass is the failure class the suite exists to prevent. Absent both flags, a run is byte-identical to one before they existed.
 
 **`--results-dir <path>`** is a `gnosis:pair` flag, not a `bench.sh` one. It selects which results directory `history.jsonl` and every recorded `perTopicPath` are resolved against; absent, it is the suite's own `results/`, so every existing invocation is byte-identical. It exists so a run recorded OUTSIDE the tracked history can be adjudicated by exactly the same paired test: an EXTERNAL system's arm MUST NOT enter `results/history.jsonl`, because `compare.ts` and the regression gate read that file and neither may ever pair a gnosis row against a foreign one. The isolated directory carries its own `history.jsonl` plus a copy of the gnosis row being compared, and the comparison is the same `significance.ts` statistic.
+
+**`--analyzer <id>`** names the analysis chain that builds AND queries the index
+— a key of `ANALYZERS` (`query.ts`). An unknown id fails loudly naming the valid
+chains. On any adapter but `fts5` a non-default id REFUSES, because only `fts5`
+builds its index with the named chain and the run would otherwise record a
+treatment it never applied. Recorded as the TREATMENT field `analyzer`.
 
 **`--query-adjacency`** is OFF by default and applies to `fts5` only — no other adapter reads the option, so naming it elsewhere REFUSES rather than recording a treatment the run never applied. On, a raw query token that analyzes to two or more terms contributes its multi-term phrase as an EXTRA disjunct beside its individual terms: additive scoring, never a filter, so a document lacking the phrase still matches on the terms. Recorded as `queryAdjacency`, a **TREATMENT** field, so `--compare` labels it `ARM COMPARISON` rather than subtracting it.
 

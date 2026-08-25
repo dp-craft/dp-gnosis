@@ -1,8 +1,18 @@
-<!-- LLM-PRIMARY: dp-gnosis — lexical retrieval over a markdown atom vault: layout, CLI contract, query-rephrasing rules, LLM integration prompt. -->
+<!-- LLM-PRIMARY: The gnosis engine and its CLI contract — data layout, exit codes, the whole flag vocabulary, output formats, `answer` and `--synthesize`, the `--json` key shape, adapters, configuration and profiles, plus the MANDATORY query-rephrasing rules and the LLM integration prompt. Authoring rules are in AUTHORING.md; consumer integration in INTEGRATION.md. -->
 
-# dp-gnosis
+# dp-gnosis — the engine and its CLI
 
 Retrieval over a curated vault of markdown **atoms** — one document chunked into ~3.2k-char, frontmatter-tagged units, ranked by BM25. No embeddings, no server, no network.
+
+This file is the **CLI reference**. Three neighbours own the rest:
+
+| I want to… | Read |
+|---|---|
+| Write documents so they become retrievable atoms | `packages/gnosis/AUTHORING.md` |
+| Serve this vault to an MCP client, Obsidian or another consumer | `packages/gnosis/INTEGRATION.md` |
+| Change retrieval quality, or read the measured state | `handbook/GNOSIS-GUIDE.md` |
+
+New here? The product overview and the shortest path to a first query are in the repository's root `README.md`.
 
 ## Layout
 
@@ -320,7 +330,7 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 
 ### Configuration
 
-`CORPUS_ROOTS` (`src/config.ts`) is the corpus SCOPE — the only thing deciding what `ingest` reads. Default: `['doc', 'claude-artifacts', 'RUNNER-*.md']`.
+`CORPUS_ROOTS` (`src/config.ts`) is the corpus SCOPE — the only thing deciding what `ingest` reads. Default: `['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md']` (`config.ts`). **In THIS repository `doc/` and `RUNNER-*.md` do not exist**, so a bare `ingest` exits 2 naming the unmatched root — override with `DP_GNOSIS_CORPUS_ROOTS` or a profile's `corpusRoots`.
 
 | Entry form | Resolution |
 |---|---|
@@ -387,115 +397,13 @@ npm run gnosis -- ingest --profile packages/gnosis/profiles/<name>.profile.json
 npm run gnosis -- index  --profile packages/gnosis/profiles/<name>.profile.json
 ```
 
-## MCP surface — one tool over stdio
 
-`npm run gnosis:mcp` serves the vault to any MCP client over stdio. Zero new dependencies: three files in `src/mcp/` over node builtins, and the protocol constants are MIRRORED from `@modelcontextprotocol/sdk` 1.27.1 rather than imported (default `2025-11-25`; the four older versions it lists are accepted and echoed).
+## Integrating another consumer
 
-Framing is **newline-delimited JSON-RPC 2.0** — one object per line, NOT LSP `Content-Length` framing. **stdout is the protocol**: only response lines reach it, every diagnostic goes to stderr, and a notification (`notifications/initialized`) gets no response at all.
-
-| Tool | Argument | Meaning |
-|---|---|---|
-| `gnosis_answer` | `question` (string, REQUIRED) | The question, in the words it would be searched with — see § Query rephrasing |
-| | `k` (integer, optional) | Omit it to take the CLI's own default; this surface states no second default |
-| | `domain` (string, optional) | Validated against the LOADED profile's domain vocabulary, exactly as `--domain` is |
-
-The tool runs `answer <question> [-k <k>] --json [--domain <d>]` through `runCli` and reads the pack OUT of that payload — **one code path**, so the returned text is byte-identical to the `pack` field of the same `answer --json` invocation. It is asserted by `tests/mcpProtocol.test.ts`, not assumed; a second rendering would drift from the CLI's the first time either changed.
-
-The exit code is the contract and is mirrored, never flattened:
-
-| CLI exit | MCP result |
-|---|---|
-| 0 | `content[0].text` = the pack, no `isError` |
-| 3 | the SAME pack, with the payload's `note` appended — a PARTIAL is a real answer with something refused, and flagging it would discard a good pack |
-| 2, or a payload with no `pack` | `isError: true`, text = the payload's `error` — a usage failure MUST NOT read as an empty answer |
-
-A malformed line answers `-32700` (`id: null`), an unknown method `-32601`, an unknown tool name `-32602`. Acceptance over real stdio: `bash packages/gnosis/scripts/mcp-smoke.sh [question]` — exit 0 when both handshake and call come back well formed.
-
-## Second consumer — point another client at this vault, without editing TypeScript
-
-`17` DoD #5. Everything here is a **client-side** snippet: nothing in this repository has to change, and the
-repository deliberately ships **no `.mcp.json`** — the file belongs to the consumer, whose absolute paths differ.
-
-**Two absolute paths are the whole configuration**, and both are stable properties of the checkout:
-
-| Placeholder | What to substitute | Why absolute |
-|---|---|---|
-| `<REPO>` | the absolute path of this checkout, e.g. `/home/dev/work/dippe/AiChatney` | an MCP client launches the server with an unspecified working directory |
-| `<NODE_BIN>` | the directory holding `node`, e.g. `/home/dev/.nvm/versions/node/v24.14.0/bin` | needed only when the client's `PATH` does not already carry a Node ≥ 22 — `tsx`'s shebang is `env node` |
-
-**The server does not read the working directory.** `REPO_ROOT` is derived from the module's own location
-(`src/paths.ts`), so the vault, the index and the profile resolve identically from any cwd. That is what makes an
-absolute-path launch sufficient.
-
-### opencode / Claude Desktop / Cursor / Zed — stdio MCP
-
-```json
-{
-  "mcpServers": {
-    "dp-gnosis": {
-      "command": "<REPO>/node_modules/.bin/tsx",
-      "args": ["<REPO>/packages/gnosis/src/mcp/main.ts"]
-    }
-  }
-}
-```
-
-One tool, `gnosis_answer` — § MCP surface owns its argument contract. **Rewrite the question into keywords before
-calling it** (§ Query rephrasing); it is the largest measured quality lever in the system and the MCP surface applies
-no rephrasing of its own.
-
-**Measured latency, so a consumer does not read the first call as a hang.** Over stdio from a clean shell
-(`env -i`, cwd `/tmp`), on this machine: handshake **0.2 s**, the FIRST `tools/call` **34–52 s**, and the SECOND
-call in the same session **0.2 s**. The first call pays `tsx` transpilation of the source tree plus opening the
-14k-atom `fts5` index; the session then holds both. An MCP server is long-lived, so the cold cost is paid once per
-client launch, not per question. **This is the NO-rerank path** — adding `--rerank` costs ≈12 s per query on top
-(`handbook/GNOSIS-BASELINES.md` § Serving path), and the MCP tool does not enable it.
-
-### Obsidian
-
-A vault IS a folder of markdown, so it needs no MCP at all — it needs a **profile**. § Obsidian owns the usage
-contract (never write into the vault, exclude `.obsidian/`, rebuild after editing); the launch is:
-
-```
-<REPO>/node_modules/.bin/tsx <REPO>/packages/gnosis/src/cli/main.ts \
-  --profile <REPO>/packages/gnosis/profiles/<your>.profile.json \
-  answer "your keywords here"
-```
-
-The profile's `repoRoot` points at the vault directory, `corpusRoots` at the folders inside it to search, and
-`atomsDir` / `indexPath` at locations **outside** the vault. Every profile MUST own its own two — § Profiles states
-why sharing either one destroys the other instance's corpus.
-
-### The refresh step — half the deliverable
-
-**A stale index refuses; nothing rebuilds it.** `indexState` returns `stale` when the corpus moved under the index
-and the query REFUSES with exit 3 rather than answering from it. That is the correct behaviour and it is also a dead
-end for a consumer who does not know the two commands that clear it:
-
-```
-<REPO>/node_modules/.bin/tsx <REPO>/packages/gnosis/src/cli/main.ts [--profile <p>] ingest
-<REPO>/node_modules/.bin/tsx <REPO>/packages/gnosis/src/cli/main.ts [--profile <p>] index
-```
-
-**Both, in that order, every time the documents change.** `ingest` rewrites the atoms; `index` rebuilds the search
-index WHOLESALE from them — there is no incremental update, so an edited note is invisible until `index` has run.
-
-| Rule | Why |
-|---|---|
-| `ingest` PRUNES | the atoms tree is made to hold exactly the current run's write set. Point it at a throwaway `--atoms-dir` for any read-only experiment, never at a live one |
-| Restart the MCP server after a refresh | the session holds an open index handle; a rebuilt index reaches an already-running server only on relaunch |
-| An `ingest` that matches no files THROWS | a typo'd corpus root would otherwise index zero documents in silence — see § Exit codes for the code it leaves |
-
-## Obsidian — usage contract
-
-Point a profile's `repoRoot` at the vault directory and its `corpusRoots` at the folders inside it to search. Everything else follows the profile rules above.
-
-| Rule | Why |
-|---|---|
-| dp-gnosis NEVER writes into the vault | Atoms are written to the profile's own `atomsDir`, outside the vault — which is exactly why each profile MUST own one (§ Profiles) |
-| Exclude `.obsidian` and every template folder through `excludePaths` | They are configuration and skeletons, not knowledge; an excluded prefix is dropped before read, so it enters no count and no `skipped[]`. Directory prefixes need a trailing slash |
-| Re-run `index` after editing the vault | The index is built WHOLESALE from the atoms; there is no incremental update, so an edited note is invisible until the rebuild |
-| A stale or foreign index is REFUSED at query time | `indexState` `stale` (the corpus moved under it) or `mismatched` (it belongs to another profile) refuses rather than answering from it — a plausible answer over yesterday's vault is worse than none |
+The MCP server (`npm run gnosis:mcp`, one tool `gnosis_answer`), the client
+configuration for opencode / Claude Desktop / Cursor / Zed, the Obsidian route
+and the ingest+index refresh step all live in
+**`packages/gnosis/INTEGRATION.md`**.
 
 ## Query rephrasing (MANDATORY before every `retrieve`)
 
@@ -619,103 +527,13 @@ calibrated threshold; these are the three signals you have, in this order.
   authoritative.
 ```
 
-## Authoring rules — how a document becomes a retrievable atom
 
-Every rule below is checkable **before the file is saved**. All of them are derived from `src/config.ts`, `src/chunker.ts`, `src/ingest.ts`, `src/atom.ts`, `src/retrievability.ts` — not from intent.
+## Authoring — how a document becomes a retrievable atom
 
-### 1. Rule zero — location decides everything
+The two gates a file must clear (scope, then labelling), the path→type table,
+the chunker's size rules, the frontmatter an author actually controls and the
+pre-save checklist are in **`packages/gnosis/AUTHORING.md`**.
 
-A file must clear **two independent gates**, in order. Scope (what `ingest` reads) and labelling (what a read file is tagged) are separate decisions.
-
-| Gate | Owner | Failure |
-|---|---|---|
-| **Scope** — is the path under a corpus root? | `CORPUS_ROOTS` = `['doc', 'claude-artifacts', 'RUNNER-*.md']` (or `DP_GNOSIS_CORPUS_ROOTS`) | never read, never reported |
-| **Label** — does a prefix claim it? | `SOURCE_ROOT_DOMAINS`, longest prefix wins | `x_domain` is `undefined` → the document yields **zero** candidates; reported once in `skipped[]`, run exits 3 |
-
-An unlabelled document is **dropped whole** — never chunked, never indexed, never retrievable. A caller querying for it gets a normal exit 0 and other atoms; there is **no error at query time**.
-
-| Path prefix | `x_domain` | In default scope? |
-|---|---|---|
-| `RUNNER-` | `runner` | yes (`RUNNER-*.md` glob) |
-| `tools/agentic-code-runner/` | `runner` | no — override only |
-| `claude-artifacts/standards/` | `standards` | yes |
-| `doc/40-code-standards/90-decisions/` | `adr` | yes |
-| `claude-artifacts/` | `standards` | yes |
-| `doc/` | `docs` | yes |
-| `.claude/` | `claude` | no — override only |
-| `benchmark-data/corpus-hu/` | `docs` | no — override only |
-| `benchmark-data/cache/bench/corpus-ext/` | `docs` | no — override only |
-
-**`docs/` (with an s) is a corpus root as of T2.1, and a `docs/` domain prefix claims it.** It was invisible to retrieval before that — it matched no root and no prefix, so it failed at the SCOPE gate and was not even listed in `skipped[]`. What made the root usable is the profile's three-entry `excludePaths` — `docs/tmp/`, `docs/benchmarks/`, `doc/_meta/corpus-digest.md` — dropped by path BEFORE anything is read, so they are ingested nowhere and counted nowhere. `docs/` holds 22 808 markdown files and 22 597 of them are machine output (`docs/tmp` 12 211, `docs/benchmarks` 10 386). `doc/_meta/corpus-digest.md` is excluded as a NAVIGATION artefact, not as generated bulk: it produces 204 atoms carrying one line of vocabulary from every document in the corpus, so it scores on almost any query. Only that one file — the rest of `doc/_meta/` is authored and stays. A DIRECTORY entry MUST carry a trailing slash, because the match is a plain repo-relative `startsWith` prefix: `docs/benchmarks/` MUST NOT swallow the sibling `docs/benchmarking/`, which is authored and kept. The ~211 authored files under `docs/` remain (~3 400 atoms), and `docs/research/`, `docs/plans/`, `docs/implementation-lessons-learned/`, `docs/adrs/`, `docs/reviews/` and `docs/analysis/` each carry a type rule of their own.
-
-### 2. Type table — what the directory says the document is
-
-`SOURCE_ROOT_TYPES`, longest prefix wins. The `95-brainstorms` **whole-segment** rule is checked first and **overrides every prefix rule**. Anything unclaimed falls back to `knowledge`.
-
-| Path rule | `type` | What it is for / what query it answers |
-|---|---|---|
-| segment `95-brainstorms` (any parent) | `brainstorm` | pre-decisional exploration — **not ratified** |
-| `doc/90-history/10-feature-log/` | `feature-log` | development history |
-| `doc/80-research-library/papers/` | `paper` | external paper |
-| `doc/90-history/20-benchmark-runs/` | `benchmark` | measured run |
-| `doc/90-history/30-reviews/` | `review` | found defects |
-| `doc/40-code-standards/90-decisions/` | `adr` | ratified decision |
-| `doc/80-research-library/vendor-docs/` | `vendor-doc` | external published doc |
-| `doc/85-teaching/` | `teaching` | teaching material |
-| `doc/_meta/` | `meta` | vault conventions |
-| `claude-artifacts/agentic-runner-rules/` | `runner-rule` | normative rule for the runner |
-| `claude-artifacts/standards/` | `standard` | reference / normative rule |
-| `doc/40-code-standards/` | `standard` | reference / normative rule |
-| `doc/50-testing-strategy/` | `standard` | reference / normative rule |
-| `benchmark-data/cache/bench/corpus-ext/` | `vendor-doc` | external published doc (benchmark corpus) |
-| anything else | `knowledge` | fallback prose — the type nobody filters on |
-
-### 3. Structure rules — the chunker decides where atoms begin
-
-The chunker strips the document's own YAML frontmatter, then splits on **heading boundaries**; a `#` inside a fence never splits. Each chunk becomes one atom.
-
-| Constant | Value | Effect on a section |
-|---|---|---|
-| `ATOM_MIN_CHARS` | 200 | under-floor body is **merged into a neighbour in the same heading branch** — it loses its own atom and its own title |
-| `ATOM_CHUNK_TARGET_CHARS` | 3200 | packing target when a section must be sub-split |
-| `ATOM_MAX_CHARS` | 4000 | over-cap section is sub-split into parts titled ` (i/n)` |
-| `ATOM_FENCE_MAX_CHARS` | 8000 | `bodyMaxChars` returns this **only when the body's first content line opens a fence** (one leading `# chain` line is skipped first) — otherwise 4000. Above 8000 even a fenced block is split |
-
-The body of every atom is prefixed with `# <heading chain joined by " > ">`; the prefix is dropped when it would push the body over its cap. Content preceding the first heading becomes a chunk whose chunk-title is `(preamble)`.
-
-Author rules that follow mechanically:
-
-| MUST | Why |
-|---|---|
-| Give every section a heading | a heading boundary is the only place an atom can begin |
-| Keep a section at or under ~3200 characters | over 4000 it is cut into ` (i/n)` parts that each stand alone |
-| Give a section at or over 200 characters of prose | under the floor it is absorbed and its heading text may survive only inside another atom's body |
-| Put an oversize indivisible figure in ONE fenced block | a fence-opening body gets the 8000 cap; unfenced, it is cut at 4000 |
-| Give a section prose of its own | a section whose body is empty once HTML comments are stripped is **refused** with a reason (it would index nothing) |
-
-### 4. Metadata the author actually controls
-
-| Atom field | Where it comes from | Author-settable? |
-|---|---|---|
-| `title` | the chunk's **leaf heading**; promoted to the full `>`-joined chain only when that leaf heading is ambiguous across source files; ` (i/n)` appended for a split section. An empty resolution falls back to the **document title** = source frontmatter `title:` → else first H1 → else filename stem (hyphens → spaces) | via headings |
-| `summary` | the **first** `<!-- LLM-PRIMARY: … -->` comment anywhere in the document, whitespace-collapsed; copied onto **every** atom of that document; omitted when absent | yes |
-| `x_domain` / `type` | path alone (§1, §2) | by location only |
-| `sources` | the repo-relative source path | no |
-| `status` | ingest writes `stable` for **every** atom, unconditionally | **no** |
-| `stale_after` | ingest never emits it | **no** |
-
-`isRetrievable` excludes an atom only when `status` is `deprecated` or `stale_after` is strictly past. Ingest produces neither, so **writing a `status:` or `stale_after:` field into a source document does nothing** — the source frontmatter is stripped by the chunker, and only its `title:` is read. Measured: 0 atoms in the vault carry a non-`stable` status. Lifecycle control is a Wave-2 concern; MUST NOT be authored today expecting effect.
-
-### 5. Pre-save checklist
-
-1. Is the path under `doc/`, `docs/` (outside `docs/tmp` and `docs/benchmarks`), `claude-artifacts/`, or a repo-root `RUNNER-*.md`?
-2. Does a `SOURCE_ROOT_DOMAINS` prefix claim it, so `x_domain` resolves?
-3. Does the directory give the `type` a caller would filter on, or does it silently fall back to `knowledge`?
-4. Does every block of prose sit under a heading?
-5. Is every section between 200 and ~3200 characters, with any oversize figure inside a single fence?
-6. Does the document carry an `<!-- LLM-PRIMARY: … -->` line as its summary?
-7. Is any section's whole body an HTML comment (it would be refused)?
-
-**Consolidation is proposed, not implemented.** `docs/benchmarks/2026-08-13-dp-gnosis-hu-en-measurement-results.md` §9.5 proposes collapsing the 12 types into **7** (`feature-log`, `record`, `reference`, `explanation`, `brainstorm`, `decision`, `tutorial`; origin moved to a separate `project` axis) — the revision that supersedes the earlier 12 → 6 form in the same section on measured grounds. Nothing of it is in the code; the 12-value vocabulary above is what runs.
-
-**The measured stake.** A `type` filter carrying the *correct* type is the single largest quality lever measured: recall@10 0.5353 → 0.6552, **+12 recall points** on the 11k English repo corpus (oracle ceiling, §4 of the same report). A *wrong* type returns **0.0000 recall in 1 498 of 1 498 cells** (M1, §9.5). A misfiled document is therefore not mislabelled — it is unreachable under any type-filtered query.
+A misfiled document is not mislabelled — it is unreachable under any
+type-filtered query, with no error at query time. Read that file before adding
+documents to a vault.

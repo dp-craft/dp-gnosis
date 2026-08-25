@@ -1,51 +1,45 @@
-<!-- LLM-PRIMARY: Repository entry point. This is the DEVELOPMENT workspace for the gnosis retrieval engine and its benchmark, extracted from AiChatney on 2026-08-24. Read handbook/GNOSIS-GUIDE.md before any engine or benchmark work. There is NO corpus in this repository: a fresh clone searches nothing, and that is exit 0 by design. The end-user product README does not exist yet. -->
+<!-- LLM-PRIMARY: Product front page for gnosis — what it is, how to install it, how to ask it a question. A lexical BM25 search engine over a folder of markdown, with an optional cross-encoder reranker and an MCP server. There is NO corpus in this repository: a fresh clone searches nothing, and that is exit 0 by design. Contributors start at CONTRIBUTING.md; engine and benchmark work starts at handbook/GNOSIS-GUIDE.md. -->
 
-# dp-gnosis
+# gnosis
 
-Development workspace for **gnosis**, a lexical retrieval engine over a vault of markdown *atoms*, and for the benchmark that gates every change to it.
+**Search your own markdown from the command line — or hand it to an LLM as one citable block of evidence.**
 
-**Not yet an installable product.** Turning it into one is the job of `docs/2026-08-24-2111-dp-gnosis-standalone-product-v2.md`, which owns the phase plan and its gates. Phases 0 and 1 are done.
+Point gnosis at a folder of markdown. It splits each document into **atoms** — small, self-contained, frontmatter-tagged units — indexes them with BM25, and ranks them against your keywords. No embeddings, no cloud, no network call on the default path. The whole thing is a Node CLI and a SQLite file.
 
-## Read this first
+It exists because a retrieval tool that quietly returns nothing is worse than one that fails. Every stage here refuses out loud instead of handing back a plausible empty answer.
 
-`handbook/GNOSIS-GUIDE.md` is the entry point for **all** work here — architecture, the open landmines, the served path, and what is settled. MUST NOT open engine source, launch a benchmark, or hand-roll a test command before routing through it.
+## What you can do with it
 
-| I want to… | Go to |
+| | Command |
 |---|---|
-| Understand the pipeline, or place a change | `handbook/GNOSIS-GUIDE.md`, then `handbook/GNOSIS-DATA-FLOW.md` |
-| Run or read a benchmark | `handbook/GNOSIS-BENCH.md` |
-| See where quality stands | `handbook/GNOSIS-BASELINES.md` — a snapshot, never a gate |
-| Know what has been ruled out | `handbook/GNOSIS-GUIDE.md` § Settled |
-| Use the CLI, author an atom | `packages/gnosis/README.md` |
-| Ship the product | `docs/2026-08-24-2111-dp-gnosis-standalone-product-v2.md` |
+| Search your notes for keywords | `npm run gnosis -- retrieve "llama-swap model swap local server"` |
+| Get one paste-ready, citable block for an LLM prompt | `npm run gnosis -- answer "bm25 length normalisation"` |
+| Get a written answer *with* its sources | `npm run gnosis -- answer "…" --synthesize` |
+| Serve the vault to Claude Desktop, Cursor, Zed or opencode | `npm run gnosis:mcp` |
+| Sharpen the ranking with a cross-encoder | add `--rerank` |
 
-## Layout
+## Install
 
-`packages/gnosis/src/` sits three levels below the repository root, which is what `paths.ts:repoRoot()` resolves against. That was true of the old `tools/dp-gnosis/src/` too, which is why the flatten of 2026-08-25 was semantically inert and its `.trec` byte-identity gate held across all four smoke datasets.
-
-| Path | Role |
-|---|---|
-| `packages/gnosis/` | the engine and its CLI |
-| `packages/gnosis-bench/` | the benchmark — the gate for every engine change |
-| `benchmark-data/` | runtime root: the vault, the atom caches, the built indexes. Gitignored |
-| `handbook/` | governance — the six `GNOSIS-*.md`. They travel with the code they govern |
-
-## Quickstart — there is no corpus in this repository
-
-**A fresh clone has nothing to search.** `benchmark-data/vault/atoms/` is gitignored, and the documents the measured vault was built from live in the private repository this was extracted from. Only `corpus-manifest.json` is tracked, as the digest anchor for the vault the baselines were measured against.
-
-That matters because of how the engine treats an empty corpus: **a genuinely empty atoms directory is not an error.** `index` and `answer` both exit 0 and hand back an empty knowledge pack, deliberately — an empty index over an empty corpus is the correct answer, and the `index-empty` refusal (exit 3) is reserved for the real defect, where markdown files *are* present and none of them reached the index. So on a fresh clone you get silence, not a complaint.
-
-Point it at your own markdown instead:
+You need **Node 22 or newer**. There is no npm package yet — you clone it.
 
 ```bash
-npm install
+git clone <this-repo> dp-gnosis
+cd dp-gnosis
+npm install          # one lockfile, npm workspaces
+```
 
-# 1. Chunk your documents into atoms. DP_GNOSIS_CORPUS_ROOTS names the trees to walk.
-DP_GNOSIS_CORPUS_ROOTS=docs,handbook \
+That is the whole install. `better-sqlite3` and `stemmer` are the only required dependencies.
+
+## Your first search, in three commands
+
+gnosis reads markdown from the roots named in `DP_GNOSIS_CORPUS_ROOTS`. Point it at your own folders:
+
+```bash
+# 1. Chunk your documents into atoms.
+DP_GNOSIS_CORPUS_ROOTS=docs \
   npm run gnosis -- ingest --atoms-dir /tmp/my-atoms
 
-# 2. Build the index. NEVER skip this — see below.
+# 2. Build the search index. Do NOT skip this — see below.
 npm run gnosis -- index --adapter fts5 \
   --atoms-dir /tmp/my-atoms --index-path /tmp/my-atoms.db
 
@@ -54,42 +48,62 @@ npm run gnosis -- answer "some keywords" --adapter fts5 \
   --atoms-dir /tmp/my-atoms --index-path /tmp/my-atoms.db
 ```
 
-Those exact commands, run against this repository's own `docs/` and `handbook/`, produce 3141 atoms and answer queries over them.
+Those exact commands, run against this repository's own `docs/`, produce **3141 atoms** and answer queries over them.
 
-Query with **keywords, not a question** — it is the largest measured lever on retrieval quality here.
+**Step 1 exits 3, and that is correct.** Exit 3 means *partial* — atoms were written AND something was refused, here 118 duplicate or empty sections listed in `skipped[]`. Read them; do not retry blindly.
 
-## Benchmark corpora fetch themselves
+**A file needs to clear TWO gates, not one.** `DP_GNOSIS_CORPUS_ROOTS` decides what is READ; a separate path→domain rule decides what is LABELLED, and an unlabelled file is dropped whole. Adding `handbook` to the roots above writes **zero** extra atoms for exactly that reason. `packages/gnosis/AUTHORING.md` owns both gates — read it before pointing gnosis at a new tree.
 
-The benchmark's datasets are public and are downloaded on demand from the URLs declared in `packages/gnosis-bench/datasets.json` — BEIR (nfcorpus, scifact, arguana, …) and Hungarian [SzegedAI/MILQA](https://huggingface.co/datasets/SzegedAI/MILQA), CC-BY-SA-4.0. No corpus is republished by this project.
+**`ingest` and `index` are one operation in two commands**, and the second is the half that gets forgotten. An `ingest` alone leaves the index carrying the old digest, and the next query refuses with exit 3 rather than answering from a stale index.
 
-```bash
-npm run gnosis:bench -- --layer smoke   # fetches what it needs, then measures
-```
+For a permanent setup, put those paths in a **profile file** instead of repeating the flags — `packages/gnosis/README.md` § Profiles.
 
-The `vault` and `vault-hu` datasets in that run are derived from the private vault and will be skipped without it.
+## Ask with keywords, not with a question
 
-## Commands
+This is a lexical engine. It matches stemmed words; it has no idea what a question *means*. Rewriting a natural-language question into keywords is **the single largest measured lever on result quality in this system** — larger than which adapter you pick.
 
-```bash
-npm install                      # one lockfile, npm workspaces — installs both packages
+| Don't ask | Ask |
+|---|---|
+| `how do I start the e2e tests` | `run e2e end-to-end playwright test command spec` |
+| `what llm service solutions are available` | `llm provider service ollama openrouter gemini anthropic` |
 
-npm run gnosis -- answer "some keywords"   # query the vault
-npm run gnosis -- ingest && npm run gnosis -- index --adapter fts5   # rebuild after editing documents
+The six rules, the measured effect (precision@10 0.20 → 0.80) and the exception that matters most are in `packages/gnosis/README.md` § Query rephrasing. If you are wiring gnosis into an agent, copy that file's § LLM integration prompt verbatim into the tool definition.
 
-npm run typecheck                # both packages
-npm run lint
-npm run gnosis:test              # engine suite
-npm run bench:test               # benchmark suite
-npm test                         # the two suites, sequentially
-npm run gnosis:bench -- --layer smoke      # the pinned smoke gate
-```
+## There is no corpus in this repository
 
-**Run the two suites SEQUENTIALLY.** Run concurrently they have produced a false red once already (`handbook/GNOSIS-GUIDE.md` § Landmines).
+**A fresh clone has nothing to search.** `benchmark-data/vault/atoms/` is gitignored, and the documents the measured vault was built from live in the private repository this was extracted from. Only `corpus-manifest.json` is tracked, as the digest anchor the recorded baselines were measured against.
 
-**`ingest` and `index` are one operation in two commands**, and the second half is the half that gets forgotten. An `ingest` alone leaves the index carrying the old digest, and the next query refuses with exit 3 — correctly, and silently as far as any test suite is concerned.
+That matters because of how the engine treats an empty corpus: **a genuinely empty atoms directory is not an error.** `index` and `answer` both exit 0 and hand back an empty knowledge pack, deliberately — an empty index over an empty corpus is the correct answer. The `index-empty` refusal (exit 3) is reserved for the real defect, where markdown files *are* present and none of them reached the index. So on a fresh clone you get silence, not a complaint.
 
-## Two things that will bite
+Point it at your own markdown, as above.
 
-**The runtime state is not in git.** The vault atoms, the built indexes, the fetched BEIR corpora and `packages/gnosis-bench/results/` are all gitignored. `results/` holds the recorded `.trec` evidence that the byte-identity gates compare against — it is untracked but MUST NOT be deleted.
+## Under the hood
 
-**`gitSha` changed meaning on 2026-08-24.** Every benchmark row is stamped with this repository's sha. Rows recorded before the extraction name commits that do not exist here. `handbook/GNOSIS-GUIDE.md` § Current measured state carries the boundary and the mapping.
+For readers who want the technical shape before committing to it:
+
+| | |
+|---|---|
+| **Ranking** | BM25. Four lexical adapters — `fts5` (SQLite FTS5, the default and the measured champion), `linear` (reference BM25 in TypeScript), `minisearch`, `lancedb`. Three dense/hybrid routes exist as **measurement** routes and are deliberately not shipped |
+| **Chunking** | Documents split on heading boundaries into ~3200-character atoms, each carrying its heading chain so a heading's terms stay searchable |
+| **Query expansion** | RM3 pseudo-relevance feedback, **on by default** on the shipped profiles. Pure SQLite, no network. Turn it off with `--no-prf` |
+| **Reranking** | Optional cross-encoder over HTTP (`--rerank`, default `qwen3-reranker-4b`), RRF-fused with the first pass. This is the one network hop in the ranking path, and it is opt-in |
+| **Output** | `text`, `json` or `xml`; `answer` renders one delimited knowledge pack with `[^atom-id]` citations |
+| **Refusals** | Exit 3 means *partial* — real output was produced and something was refused. A stale or foreign index is refused rather than answered from |
+| **Measurement** | A benchmark package gates every engine change against BEIR, BRIGHT and two real corpora. Its datasets are public and download themselves on first use |
+
+## Where to go next
+
+| I want to… | Read |
+|---|---|
+| Use the CLI — every command, flag, exit code and output format | `packages/gnosis/README.md` |
+| Write documents so they become retrievable atoms | `packages/gnosis/AUTHORING.md` |
+| Wire it into an MCP client, Obsidian, or another consumer | `packages/gnosis/INTEGRATION.md` |
+| Run or read the benchmark | `packages/gnosis-bench/README.md` |
+| Contribute code — gates, layout, PR rules | `CONTRIBUTING.md` |
+| Change retrieval quality, or understand the pipeline | `handbook/GNOSIS-GUIDE.md` — **read it first**; it owns the landmines |
+
+## Status
+
+**Not yet an installable product.** Turning it into one is the job of `docs/2026-08-24-2111-dp-gnosis-standalone-product-v2.md`, which owns the phase plan and its gates. Phases 0 and 1 are done.
+
+Licensed **GPL-3.0-or-later**. Security policy: `SECURITY.md`.

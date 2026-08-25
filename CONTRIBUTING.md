@@ -2,7 +2,7 @@
 
 # Contributing
 
-Thanks for looking at this. Before anything else: **read `handbook/GNOSIS-GUIDE.md`.** It is the entry point for architecture, the open landmines, the served path, and what has already been ruled out. Most wasted effort here has been on questions that file already answers.
+Thanks for looking at this. Before anything else: **read `handbook/GNOSIS-GUIDE.md`.** It is the entry point for the landmines, the served path, the adapter verdicts and what has already been ruled out (the pipeline itself is `handbook/GNOSIS-DATA-FLOW.md`). Most wasted effort here has been on questions that file already answers.
 
 ## Setup
 
@@ -23,6 +23,12 @@ npm run bench:test     # benchmark suite
 
 `npm test` runs the two suites in sequence and is the shorthand.
 
+A retrieval-quality change carries one more gate, the pinned smoke run:
+
+```bash
+npm run gnosis:bench -- --layer smoke
+```
+
 ### Run the two suites sequentially
 
 Run concurrently they have produced a false red once already — they share a work directory. `npm test` chains them with `&&` for exactly this reason. Do not "speed it up" by running them in parallel.
@@ -38,6 +44,8 @@ A green `npm test` is not evidence that a narrower command passes. Different col
 ```bash
 npm run gnosis -- ingest && npm run gnosis -- index --adapter fts5
 ```
+
+**In THIS repository a bare `ingest` exits 2**: the shipped `CORPUS_ROOTS` default (`config.ts`) still names `doc/` and `RUNNER-*.md`, which came from the repository gnosis was extracted from and do not exist here. Name the roots you mean — `DP_GNOSIS_CORPUS_ROOTS=docs ...` — or point `--profile` at one that declares its own `corpusRoots`.
 
 An `ingest` alone leaves the index carrying the previous digest, and the next query refuses with exit 3 — correctly, and silently as far as any test suite is concerned.
 
@@ -79,11 +87,13 @@ Treat any all-zero metric row, any `p = 1.0000`, and any zero-width confidence i
 |---|---|
 | `packages/gnosis/` | the engine, its CLI, its MCP server, its library entry |
 | `packages/gnosis-bench/` | the benchmark — the gate for every engine change |
-| `handbook/` | governance: the six `GNOSIS-*.md`, which travel with the code they govern |
+| `handbook/` | governance: the seven `GNOSIS-*.md`, which travel with the code they govern |
 | `benchmark-data/` | runtime root: vault, atom caches, built indexes. Gitignored |
 | `docs/` | plans, research, analysis, benchmark write-ups |
 
 Files under `docs/` are named `YYYY-MM-DD-HHMM-<kebab-slug>.md` and live in a kind subdirectory (`plans/`, `brainstorm/`, `research/`, `analysis/`, `benchmarks/`).
+
+**`packages/gnosis/src/` sits three levels below the repository root**, which is what `paths.ts:repoRoot()` resolves against. That was true of the old `tools/dp-gnosis/src/` too, which is why the flatten of 2026-08-25 was semantically inert and its `.trec` byte-identity gate held across all four smoke datasets. A move that changes that depth changes where every default path resolves.
 
 ## Licence
 
