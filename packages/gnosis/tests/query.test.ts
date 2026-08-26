@@ -215,8 +215,10 @@ describe('analyzer chains', () => {
     expect(analyze(midWord, 'nostem-nofold')).toEqual(['használata', 'cafés']);
   });
 
-  it('exposes exactly the five named chains', () => {
+  it('exposes exactly the seven named chains', () => {
     expect(Object.keys(ANALYZERS).sort()).toEqual([
+      'hulight-fold',
+      'ident-hulight-fold',
       'ident-porter-fold',
       'nostem-fold',
       'nostem-nofold',

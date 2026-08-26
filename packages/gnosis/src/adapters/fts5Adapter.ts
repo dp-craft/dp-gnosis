@@ -98,7 +98,8 @@ import {
   ANALYZERS,
   analyzeToText,
   DEFAULT_ANALYZER,
-  identifierTermOf
+  identifierTermOf,
+  partsAnalyzerOf
 } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 import {
@@ -814,22 +815,24 @@ const disjunctsOf = (run: readonly string[], adjacency: boolean): readonly strin
     ? [...run.map(escapeTerm), escapeTerm(run.join(' '))]
     : [escapeTerm(run.join(' '))];
 
-/** The one chain whose query side emits a whole-token alternative. */
-const IDENT_ANALYZER: AnalyzerId = 'ident-porter-fold';
-
 /**
- * The disjuncts one chunk contributes under `ident-porter-fold`.
+ * The disjuncts one chunk contributes under an IDENT chain.
  *
- * The chunk is analyzed with `porter-fold` — the PARTS chain — rather than with
- * the ident chain, because the ident chain flattens the whole-token term into
- * the same list as the parts and `disjunctsOf` would then weld them into one
- * nonsense phrase. An identifier-shaped chunk becomes a PARENTHESISED group:
- * the unstemmed whole-token literal OR whatever the chunk already emitted, so
- * an atom that spells the identifier whole and one that spells its parts both
- * match. Anything else is byte-identical to the non-ident path.
+ * The chunk is analyzed with `partsAnalyzer` — the PARTS chain `query.ts` pairs
+ * with the ident chain — rather than with the ident chain itself, because the
+ * ident chain flattens the whole-token term into the same list as the parts and
+ * `disjunctsOf` would then weld them into one nonsense phrase. An
+ * identifier-shaped chunk becomes a PARENTHESISED group: the unstemmed
+ * whole-token literal OR whatever the chunk already emitted, so an atom that
+ * spells the identifier whole and one that spells its parts both match.
+ * Anything else is byte-identical to the non-ident path.
  */
-const identDisjuncts = (chunk: string, adjacency: boolean): readonly string[] => {
-  const parts = analyze(chunk, 'porter-fold');
+const identDisjuncts = (
+  chunk: string,
+  partsAnalyzer: AnalyzerId,
+  adjacency: boolean
+): readonly string[] => {
+  const parts = analyze(chunk, partsAnalyzer);
   if (parts.length === 0) return [];
   const whole = identifierTermOf(chunk, parts);
   const inner = disjunctsOf(parts, adjacency);
@@ -845,14 +848,22 @@ const plainDisjuncts = (
   return run.length === 0 ? [] : disjunctsOf(run, adjacency);
 };
 
+/**
+ * EVERY ident chain takes the ident path, resolved from `partsAnalyzerOf` rather
+ * than compared against one literal id — the index side gained a second ident
+ * chain, and a query side that knew only the first would analyze it as plain
+ * text and emit a phrase the index never holds.
+ */
 const chunkDisjuncts = (
   chunk: string,
   analyzer: AnalyzerId,
   adjacency: boolean
-): readonly string[] =>
-  analyzer === IDENT_ANALYZER
-    ? identDisjuncts(chunk, adjacency)
-    : plainDisjuncts(chunk, analyzer, adjacency);
+): readonly string[] => {
+  const partsAnalyzer = partsAnalyzerOf(analyzer);
+  return partsAnalyzer === undefined
+    ? plainDisjuncts(chunk, analyzer, adjacency)
+    : identDisjuncts(chunk, partsAnalyzer, adjacency);
+};
 
 /**
  * QUERY SIDE of the shared analyzer. `analyzer` is the chain STAMPED into the

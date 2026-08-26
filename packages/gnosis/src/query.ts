@@ -138,9 +138,158 @@ const PORTER_FOLD_STAGES: readonly Stage[] = [
   stemTokens,
 ];
 
-/** Run the `porter-fold` stages over ONE raw token, seeded the way `analyze` seeds. */
-const porterFoldParts = (raw: string): readonly string[] =>
-  PORTER_FOLD_STAGES.reduce<readonly string[]>((tokens, stage) => stage(tokens), [raw]);
+/**
+ * HUNGARIAN LIGHT STEMMING — the suffix stripper the `hulight-fold` chain runs
+ * INSTEAD OF Porter.
+ *
+ * It is lexicon-free and pure by construction: an agglutinative language cannot
+ * be served by an English suffix table, and a word list would be exactly the
+ * hand-maintained magic constant COMMON.md §III forbids. It runs AFTER
+ * `foldTokens`, so it only ever sees lowercase ASCII — `kötelezettségek` reaches
+ * it as `kotelezettsegek` — which is what lets the suffix tables be plain ASCII
+ * rather than a cross product of accented spellings.
+ *
+ * `MIN_STEM_LENGTH` is the whole safety mechanism: over-stemming an
+ * agglutinative language collapses unrelated words onto one term and is
+ * invisible in the numbers, so EVERY cut is refused when it would leave a
+ * shorter stem, and a refused cut ends its step with the token unchanged.
+ */
+const MIN_STEM_LENGTH = 4;
+
+const cutChars = (token: string, count: number): string =>
+  token.length - count < MIN_STEM_LENGTH ? token : token.slice(0, token.length - count);
+
+/** One step of the stemmer: token in, token out — unchanged when nothing matched. */
+type StemStep = (token: string) => string;
+
+/**
+ * One terminal-inflection rule: the cut token, or `undefined` when the rule does
+ * not MATCH. The distinction matters because step 1 applies at most one rule —
+ * the first that matches — and a match whose cut is refused still ends the step.
+ */
+type SuffixRule = (token: string) => string | undefined;
+
+/**
+ * Suffix tables are matched LONGEST-FIRST: each list is ordered so that no entry
+ * precedes a longer entry ending in it, and `find` takes the first hit.
+ */
+const suffixRule =
+  (suffixes: readonly string[]): SuffixRule =>
+    token => {
+      const hit = suffixes.find(suffix => token.endsWith(suffix));
+      return hit === undefined ? undefined : cutChars(token, hit.length);
+    };
+
+const stripStep =
+  (suffixes: readonly string[]): StemStep =>
+    token =>
+      suffixRule(suffixes)(token) ?? token;
+
+/**
+ * Instrumental assimilation: `-val`/`-vel` assimilates its `v` to the stem-final
+ * consonant, so the surface form doubles it (`cimkékkel`). Cut the case ending,
+ * then the consonant it copied.
+ */
+const DOUBLED_INSTRUMENTAL_RE = /([bcdfghjklmnpqrstvwxyz])\1(al|el)$/;
+
+const assimilatedInstrumental: SuffixRule = token => {
+  if (!DOUBLED_INSTRUMENTAL_RE.test(token)) return undefined;
+  const stripped = cutChars(token, 2);
+  return stripped === token ? token : cutChars(stripped, 1);
+};
+
+const NOMINALIZER_ACCUSATIVE: readonly string[] = ['ast', 'est', 'ost', 'ist', 'ust'];
+
+const CASE_SUFFIXES: readonly string[] = [
+  'kent', 'ban', 'ben', 'bol', 'rol', 'tol', 'hoz', 'hez', 'nak', 'nek',
+  'val', 'vel', 'nal', 'nel', 'ert', 'ba', 'be', 'ra', 're', 'ig', 'ul', 'on', 'en',
+];
+
+/**
+ * The accusative is cut ONLY after a vowel or a linking vowel. There is
+ * deliberately NO bare consonant+`t` rule: it fires on stems that legitimately
+ * end in `t` (`kozpont`, `csoport`) and MEASURABLY creates new vocabulary gaps —
+ * a query term the index no longer holds under any spelling.
+ */
+const VOWEL_ACCUSATIVE_RE = /[aeiou]t$/;
+
+const vowelAccusative: SuffixRule = token =>
+  VOWEL_ACCUSATIVE_RE.test(token) ? cutChars(token, 1) : undefined;
+
+const LINKING_ACCUSATIVE: readonly string[] = ['at', 'et', 'ot'];
+
+const VERBAL_SUFFIXES: readonly string[] = [
+  'hattam', 'hettem', 'ottam', 'ettem', 'attam', 'tettem', 'ttunk', 'ttam', 'ttem',
+  'tunk', 'tam', 'tem', 'juk', 'jon', 'jen', 'jek', 'jak', 'jam', 'jem', 'jal', 'jel',
+  'unk', 'ani', 'eni', 'ni', 'va', 've', 'ok', 'om', 'em', 'am', 'sz',
+];
+
+/** Step 1 — terminal inflection, at most ONE rule, the first that matches. */
+const TERMINAL_RULES: readonly SuffixRule[] = [
+  assimilatedInstrumental,
+  suffixRule(NOMINALIZER_ACCUSATIVE),
+  suffixRule(CASE_SUFFIXES),
+  vowelAccusative,
+  suffixRule(LINKING_ACCUSATIVE),
+  suffixRule(VERBAL_SUFFIXES),
+];
+
+const stripTerminal: StemStep = token =>
+  TERMINAL_RULES.reduce<string | undefined>((hit, rule) => hit ?? rule(token), undefined) ?? token;
+
+const POSSESSIVE_SUFFIXES: readonly string[] = [
+  'juk', 'jai', 'jei', 'unk', 'ja', 'je', 'uk', 'ik', 'om', 'od', 'am', 'ad',
+  'em', 'ed', 'a', 'e', 'm', 'd',
+];
+
+const PLURAL_SUFFIXES: readonly string[] = ['ok', 'ek', 'ak', 'ik', 'k'];
+
+const DERIVATIONAL_SUFFIXES: readonly string[] = ['as', 'es', 'os', 'is', 'us', 's'];
+
+/**
+ * A stem left ending in a doubled consonant is usually an artefact of the cut
+ * before it, so undo the doubling — above the minimum only, where the doubling
+ * cannot be the whole short stem. Lexicon-free, it also fires on a stem whose
+ * own spelling doubles (`bevall` → `beval`); both spellings then collapse onto
+ * ONE term, which is the point on the index and query sides alike.
+ */
+const DOUBLED_FINAL_RE = /([bcdfghjklmnpqrstvwxyz])\1$/;
+
+const undouble: StemStep = token =>
+  token.length > MIN_STEM_LENGTH && DOUBLED_FINAL_RE.test(token) ? cutChars(token, 1) : token;
+
+const HU_LIGHT_STEPS: readonly StemStep[] = [
+  stripTerminal,
+  stripStep(POSSESSIVE_SUFFIXES),
+  stripStep(PLURAL_SUFFIXES),
+  stripStep(DERIVATIONAL_SUFFIXES),
+  undouble,
+];
+
+/** Strip Hungarian inflection off ONE already-folded, already-lowercased token. */
+export const huLightStem = (token: string): string =>
+  HU_LIGHT_STEPS.reduce((stem, step) => step(stem), token);
+
+export const huLightStemTokens: Stage = tokens => tokens.map(huLightStem);
+
+/**
+ * `hulight-fold` REPLACES the Porter stage rather than chaining after it: Porter
+ * is English-only and its `-s` rule truncates native Hungarian words
+ * (`bevallás` → `bevallá`), so running both would stem each token under two
+ * unrelated grammars.
+ *
+ * CORPUS-SCOPED. This chain is opt-in (`--analyzer hulight-fold`) and MUST NOT
+ * be proposed as `DEFAULT_ANALYZER` — see that docblock: `ident-porter-fold`
+ * shipped as the default on a plausible argument and was REVERTED on measured
+ * harm to the primary corpus. A Hungarian chain earns the default only from a
+ * measurement on the corpus it would become the default FOR.
+ */
+const HULIGHT_FOLD_STAGES: readonly Stage[] = [
+  splitTokens,
+  lowercaseTokens,
+  foldTokens,
+  huLightStemTokens,
+];
 
 const WHITESPACE_SPLIT_RE = /\s+/;
 /**
@@ -201,24 +350,34 @@ export const identifierTermOf = (raw: string, parts: readonly string[]): string 
   return isRedundantWhole(whole, parts) ? undefined : whole;
 };
 
-const identTokensOf = (raw: string): readonly string[] => {
-  const parts = porterFoldParts(raw);
-  const whole = identifierTermOf(raw, parts);
-  return whole === undefined ? parts : [whole, ...parts];
-};
-
 /**
  * ONE composite stage rather than a list of them: the whole-token term and the
  * parts belong to the SAME raw token, and a `Stage` chain sees only a flat token
- * list, which loses that pairing after the first split. So this stage does its
- * own whitespace split — the raw-token boundary — and runs the `porter-fold`
- * stages per token internally.
+ * list, which loses that pairing after the first split. So the stage does its
+ * own whitespace split — the raw-token boundary — and runs the PARTS chain per
+ * token internally.
+ *
+ * The parts chain is a PARAMETER rather than a hard-coded `porter-fold`, because
+ * the identifier mechanism is orthogonal to which grammar stems the parts: a
+ * copy per parts chain is a second place for the whole-token rule to drift away
+ * from `identifierTermOf`, which the query side also reads.
  */
-export const identPorterFoldStage: Stage = tokens =>
-  tokens
-    .flatMap(token => token.split(WHITESPACE_SPLIT_RE))
-    .filter(nonEmpty)
-    .flatMap(identTokensOf);
+const identStageOver = (partsStages: readonly Stage[]): Stage => {
+  const identTokensOf = (raw: string): readonly string[] => {
+    const parts = partsStages.reduce<readonly string[]>((tokens, stage) => stage(tokens), [raw]);
+    const whole = identifierTermOf(raw, parts);
+    return whole === undefined ? parts : [whole, ...parts];
+  };
+  return tokens =>
+    tokens
+      .flatMap(token => token.split(WHITESPACE_SPLIT_RE))
+      .filter(nonEmpty)
+      .flatMap(identTokensOf);
+};
+
+export const identPorterFoldStage: Stage = identStageOver(PORTER_FOLD_STAGES);
+
+export const identHuLightFoldStage: Stage = identStageOver(HULIGHT_FOLD_STAGES);
 
 /**
  * The named analyzers. `porter-fold` IS the original behaviour —
@@ -227,6 +386,10 @@ export const identPorterFoldStage: Stage = tokens =>
  * INDEPENDENTLY (what a non-English corpus needs to be measured against), and
  * `ident-porter-fold` ADDS an unstemmed whole-token term for every
  * identifier-shaped raw token beside the `porter-fold` parts it already emits.
+ *
+ * `hulight-fold` swaps the Porter stage for the Hungarian light stemmer, and
+ * `ident-hulight-fold` is to it exactly what `ident-porter-fold` is to
+ * `porter-fold`. Both are CORPUS-SCOPED and opt-in — see `HULIGHT_FOLD_STAGES`.
  */
 export const ANALYZERS = {
   'porter-fold': PORTER_FOLD_STAGES,
@@ -234,10 +397,32 @@ export const ANALYZERS = {
   'nostem-fold': [splitTokens, lowercaseTokens, foldTokens],
   'nostem-nofold': [splitTokens, lowercaseTokens],
   'ident-porter-fold': [identPorterFoldStage],
+  'hulight-fold': HULIGHT_FOLD_STAGES,
+  'ident-hulight-fold': [identHuLightFoldStage],
 } as const satisfies Readonly<Record<string, readonly Stage[]>>;
 
 /** The name of a chain in `ANALYZERS`. */
 export type AnalyzerId = keyof typeof ANALYZERS;
+
+/**
+ * For each IDENT chain, the chain its PARTS come from — the ONE place that
+ * pairing is written down.
+ *
+ * The query side (`toMatchExpression`) must analyze a chunk with the PARTS chain
+ * rather than with the ident chain, because the ident chain flattens the
+ * whole-token term into the same list as the parts and the adapter would then
+ * weld them into one nonsense phrase. Keyed on the chain id, not on a literal:
+ * a query path that recognised only `ident-porter-fold` would silently do that
+ * welding for every ident chain added after it.
+ */
+const IDENT_PARTS_ANALYZERS: ReadonlyMap<AnalyzerId, AnalyzerId> = new Map<AnalyzerId, AnalyzerId>([
+  ['ident-porter-fold', 'porter-fold'],
+  ['ident-hulight-fold', 'hulight-fold'],
+]);
+
+/** The parts chain of an ident chain, or `undefined` when `id` is not one. */
+export const partsAnalyzerOf = (id: AnalyzerId): AnalyzerId | undefined =>
+  IDENT_PARTS_ANALYZERS.get(id);
 
 /**
  * The default everywhere.
