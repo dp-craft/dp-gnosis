@@ -26,7 +26,7 @@
  */
 import Database from 'better-sqlite3';
 
-import { analyze, type AnalyzerId } from '../query.js';
+import { analyze, type AnalyzerId, identifierTermOf, partsAnalyzerOf } from '../query.js';
 import { FTS_TABLE } from './fts5Adapter.js';
 
 /** One analysed query term and the number of atoms its posting list reaches. */
@@ -37,6 +37,10 @@ export interface QueryTermPostings {
    * number an operator can act on ("how many atoms can this term reach"). Not
    * `cnt` (total instances): a term in one atom fifty times still reaches one
    * atom, and reach is what a vocabulary hole is about.
+   *
+   * For a multi-part identifier under an ident chain this is an UPPER BOUND,
+   * not an exact count — see {@link probesOf}. Zero still means zero: the
+   * phrase reaches nothing, which is the only claim the gap report makes.
    */
   readonly postings: number;
 }
@@ -82,15 +86,92 @@ const SELECT_POSTINGS_SQL = `SELECT doc AS doc FROM temp.${VOCAB_TABLE} WHERE te
  *   not hold: zero rows, and a clean "gap" reported for a term that is present.
  *
  * The equality is therefore a plain `term = ?` bind against the vocabulary — no
- * second analysis anywhere on this path.
+ * second analysis anywhere on this path. That holds for the ident path too: a
+ * probe's parts were analysed ONCE from the raw query token, and each part is
+ * bound here directly, never analysed again.
  */
-const postingsOf = (statement: Database.Statement, term: string): QueryTermPostings => {
+const bindTerm = (statement: Database.Statement, term: string): number => {
   const row = statement.get(term) as { readonly doc: number } | undefined;
-  return { term, postings: row === undefined ? 0 : row.doc };
+  return row === undefined ? 0 : row.doc;
+};
+
+/**
+ * What one reported term is asked about. `parts` EMPTY is the original
+ * behaviour — one `term = ?` bind on the term itself. A non-empty `parts` is
+ * the phrase case: the term is never in the vocabulary under that spelling and
+ * is judged through its parts instead.
+ */
+interface TermProbe {
+  readonly term: string;
+  readonly parts: readonly string[];
+}
+
+const directProbe = (term: string): TermProbe => ({ term, parts: [] });
+
+/**
+ * The phrase bound. A phrase matches an atom only when EVERY part is in it, so
+ * its reach is at most the reach of its RAREST part — `min` is therefore an
+ * upper bound, and it is exactly zero as soon as one part has no postings,
+ * which is the REAL gap the diagnostic exists to name.
+ */
+const phrasePostings = (statement: Database.Statement, parts: readonly string[]): number =>
+  Math.min(...parts.map(part => bindTerm(statement, part)));
+
+const postingsOf = (statement: Database.Statement, probe: TermProbe): QueryTermPostings => ({
+  term: probe.term,
+  postings:
+    probe.parts.length === 0
+      ? bindTerm(statement, probe.term)
+      : phrasePostings(statement, probe.parts),
+});
+
+/** The query's own whitespace split — the RAW-token boundary an ident chain pairs on. */
+const WHITESPACE_RE = /\s+/;
+
+const nonEmpty = (chunk: string): boolean => chunk.length > 0;
+
+/**
+ * ONE raw query token under an ident chain: the whole-token term it earns (if
+ * any) followed by the parts, which is byte for byte what `analyze` emits for
+ * that token — only the whole token's POSTINGS are read differently.
+ *
+ * Why they must be: `analyze(token, 'ident-*')` emits `ado_bevallas_2024`, but
+ * fts5's `unicode61` tokenizer splits `_` at INDEX time, so an ident-built
+ * index holds NO underscore-bearing term and a byte-for-byte bind on the whole
+ * token can only report a gap. Retrieval nonetheless REACHES those atoms —
+ * `toMatchExpression` emits the identifier as a PHRASE of its parts — so the
+ * gap was FALSE, and reported hardest on the very terms the ident chain exists
+ * to protect. A multi-part identifier is therefore judged as that phrase.
+ *
+ * A token yielding ONE part keeps the plain single bind: there is no phrase,
+ * and the whole token may legitimately be its own vocabulary term.
+ */
+const identProbes = (chunk: string, partsAnalyzer: AnalyzerId): readonly TermProbe[] => {
+  const parts = analyze(chunk, partsAnalyzer);
+  const whole = identifierTermOf(chunk, parts);
+  const partProbes = parts.map(directProbe);
+  if (whole === undefined) return partProbes;
+  return [{ term: whole, parts: parts.length > 1 ? parts : [] }, ...partProbes];
+};
+
+/**
+ * Every term the query contributes, in analysis order. A NON-ident chain takes
+ * the untouched path — `analyze` the whole query, bind each term. An ident
+ * chain is resolved through `partsAnalyzerOf` rather than compared against one
+ * literal id, for the reason the query path does the same: a diagnostic that
+ * knew only the first ident chain would report false gaps for every one added
+ * after it.
+ */
+const probesOf = (query: string, analyzer: AnalyzerId): readonly TermProbe[] => {
+  const partsAnalyzer = partsAnalyzerOf(analyzer);
+  return partsAnalyzer === undefined
+    ? analyze(query, analyzer).map(directProbe)
+    : query.split(WHITESPACE_RE).filter(nonEmpty).flatMap(chunk => identProbes(chunk, partsAnalyzer));
 };
 
 /** Distinct, order-preserving: a term repeated in the query is ONE vocabulary fact. */
-const distinctTerms = (terms: readonly string[]): readonly string[] => [...new Set(terms)];
+const distinctProbes = (probes: readonly TermProbe[]): readonly TermProbe[] =>
+  probes.filter((probe, index) => probes.findIndex(other => other.term === probe.term) === index);
 
 /**
  * The counts, derived from the per-term rows alone — pure, so a caller holding
@@ -118,7 +199,9 @@ export const readVocabularyGap = (
   const db = new Database(indexPath, { readonly: true });
   db.exec(CREATE_VOCAB_SQL);
   const statement = db.prepare(SELECT_POSTINGS_SQL);
-  const terms = distinctTerms(analyze(query, analyzer)).map(term => postingsOf(statement, term));
+  const terms = distinctProbes(probesOf(query, analyzer)).map(probe =>
+    postingsOf(statement, probe)
+  );
   db.close();
   return summarizeVocabularyGap(terms);
 };

@@ -180,3 +180,91 @@ describe('retrieve — a query carrying an invented term', () => {
     expect(outcome.text).toContain('"borogov"');
   });
 });
+
+/**
+ * The IDENT-CHAIN case. `analyze(x, 'ident-hulight-fold')` emits the WHOLE
+ * identifier token beside its parts, but fts5's `unicode61` tokenizer splits
+ * `_` at INDEX time — so an ident-built index holds ZERO underscore-bearing
+ * terms and a byte-for-byte `term = ?` bind on the whole token can only ever
+ * report a gap. Retrieval REACHES those atoms (`toMatchExpression` emits the
+ * identifier as a PHRASE of its parts), so the gap is FALSE: the diagnostic
+ * would report its worst number on the arm the ident chain exists to improve.
+ *
+ * The fix judges a multi-part identifier by its parts — zero when any part is
+ * missing, otherwise the rarest part's postings, which is an UPPER BOUND on the
+ * phrase's reach. The parts come from analysing the RAW query token ONCE with
+ * the parts chain; nothing on the vocabulary side is ever re-analysed.
+ */
+const IDENT_ANALYZER = 'ident-hulight-fold';
+
+/** `ado` sits in BOTH atoms, `bevallas`/`2024` in one — so the bound is 1, not 2. */
+const IDENT_ATOMS: readonly AtomSpec[] = [
+  { id: 'ident-a', body: 'ado_bevallas_2024 kezelese a rendszerben' },
+  { id: 'ident-b', body: 'ado alapu szamitas selector' },
+];
+
+let identAtomsDir = '';
+let identIndexPath = '';
+
+const identGapFor = (query: string): ReturnType<typeof readVocabularyGap> =>
+  readVocabularyGap(identIndexPath, query, readIndexAnalyzer(identIndexPath));
+
+const postingsFor = (
+  gap: ReturnType<typeof readVocabularyGap>,
+  term: string
+): number | undefined => gap.terms.find(entry => entry.term === term)?.postings;
+
+beforeEach(() => {
+  identAtomsDir = resolve(root, 'ident-atoms');
+  identIndexPath = resolve(root, 'ident-index', 'atoms.db');
+  mkdirSync(identAtomsDir, { recursive: true });
+  IDENT_ATOMS.forEach(spec =>
+    writeFileSync(resolve(identAtomsDir, `${spec.id}.md`), atomText(spec), 'utf8')
+  );
+  buildFts5Index({ atomsDir: identAtomsDir, indexPath: identIndexPath, analyzer: IDENT_ANALYZER });
+});
+
+describe('readVocabularyGap — a NON-ident chain is untouched by the ident path', () => {
+  it('binds each analysed part directly, with no whole-token term', () => {
+    const gap = gapFor('stability_rules');
+    expect(gap.terms).toEqual([
+      { term: 'stabil', postings: 1 },
+      { term: 'rule', postings: 1 },
+    ]);
+    expect(gap.gapTerms).toEqual([]);
+  });
+});
+
+describe('readVocabularyGap — an ident chain judges an identifier by its PARTS', () => {
+  it('reports the whole identifier as REACHABLE when every part is present', () => {
+    const gap = identGapFor('ado_bevallas_2024');
+    expect(postingsFor(gap, 'ado_bevallas_2024')).toBeGreaterThan(0);
+    expect(gap.gapTerms).not.toContain('ado_bevallas_2024');
+  });
+
+  it('bounds the identifier by its RAREST part, never by its commonest', () => {
+    const gap = identGapFor('ado_bevallas_2024');
+    expect(postingsFor(gap, 'ado')).toBe(2);
+    expect(postingsFor(gap, 'beval')).toBe(1);
+    expect(postingsFor(gap, 'ado_bevallas_2024')).toBe(1);
+  });
+
+  it('names the WHOLE token the query supplied, not one of its parts', () => {
+    const gap = identGapFor('ado_bevallas_2024');
+    expect(gap.terms[0]?.term).toBe('ado_bevallas_2024');
+  });
+
+  it('reports a real gap when EVERY part is absent', () => {
+    const gap = identGapFor('borogove_wabe_2099');
+    expect(postingsFor(gap, 'borogove_wabe_2099')).toBe(0);
+    expect(gap.gapTerms).toContain('borogove_wabe_2099');
+  });
+
+  it('reports a real gap when ONE part is absent — a phrase needs them all', () => {
+    const gap = identGapFor('ado_borogove');
+    expect(postingsFor(gap, 'ado')).toBe(2);
+    expect(postingsFor(gap, 'borogo')).toBe(0);
+    expect(postingsFor(gap, 'ado_borogove')).toBe(0);
+    expect(gap.gapTerms).toContain('ado_borogove');
+  });
+});
