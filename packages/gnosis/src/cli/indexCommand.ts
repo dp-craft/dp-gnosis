@@ -26,6 +26,7 @@
  */
 import {
   buildFts5Index,
+  type BuildFts5IndexOptions,
   type KeywordCensus,
   readEmptyBodyAtoms,
   readEnrichmentRecords,
@@ -49,6 +50,7 @@ import {
   type KeywordFilter,
   parseEnrichmentColumns
 } from '../config.js';
+import type { AnalyzerId } from '../query.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -165,6 +167,15 @@ const enrichmentColumnsError = (flags: FlagValues): string | undefined => {
 };
 
 /**
+ * The profile's chain, passed only when the profile STATES one: the option is
+ * absent-means-`DEFAULT_ANALYZER`, and an explicit `undefined` is a different
+ * value from an absent key under `exactOptionalPropertyTypes`.
+ */
+const analyzerOption = (
+  analyzer: AnalyzerId | undefined
+): Pick<BuildFts5IndexOptions, 'analyzer'> => (analyzer === undefined ? {} : { analyzer });
+
+/**
  * `--enrichment` is OPT-IN at index time, with no default path: an absent flag
  * builds the single-column index this adapter has always built, byte for byte.
  * Defaulting to a conventional location would let a sidecar that happens to
@@ -180,6 +191,7 @@ const buildFts5 = async (context: CommandContext): Promise<string | number> =>
       bodySource: bodySourceOf(context.flags),
       keywordFilter: keywordFilterOf(context.flags),
       enrichmentColumns: enrichmentColumnsOf(context.flags),
+      ...analyzerOption(context.profile.defaultAnalyzer),
     })
   );
 

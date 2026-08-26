@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 import type { PrfParams } from './prf.js';
+import type { AnalyzerId } from './query.js';
+import { ANALYZERS } from './query.js';
 
 /**
  * The ingest PROFILE: the closed label vocabularies and the mechanical
@@ -111,6 +113,21 @@ export interface IngestProfile {
    * profile that states none ingests byte for byte as before.
    */
   readonly summarySidecar?: string | undefined;
+  /**
+   * The analyzer chain this instance BUILDS ITS INDEX WITH. It is an
+   * index-build default, not a retrieve-time one: the chain is STAMPED into the
+   * index and the query side reads the stamp back, so query and index can never
+   * disagree about how a term was analyzed — stating it here changes one build,
+   * never one query in isolation. ABSENT means `DEFAULT_ANALYZER`, so an
+   * existing profile builds the same index byte for byte.
+   *
+   * It is CORPUS-scoped for the same reason `atomMaxChars` is: a
+   * language-specific chain is a property of the documents, not of the tool, and
+   * one that pays on this corpus COSTS accuracy on another language's. A chain
+   * measured on one vault MUST therefore be stated by that vault's profile
+   * rather than promoted to the shipped default.
+   */
+  readonly defaultAnalyzer?: AnalyzerId | undefined;
 }
 
 /**
@@ -120,7 +137,7 @@ export interface IngestProfile {
  */
 type ProfileDefaults = Pick<
   IngestProfile,
-  'excludePaths' | 'defaultExcludedTypes' | 'defaultPrf' | 'summarySidecar'
+  'excludePaths' | 'defaultExcludedTypes' | 'defaultPrf' | 'summarySidecar' | 'defaultAnalyzer'
 >;
 
 /** The location half of a profile — what T-3 added to the vocabulary half. */
@@ -150,6 +167,7 @@ const KNOWN_KEYS: readonly string[] = [
   'defaultExcludedTypes',
   'defaultPrf',
   'summarySidecar',
+  'defaultAnalyzer',
 ];
 
 const fail = (source: string, detail: string): never => {
@@ -434,6 +452,32 @@ const summarySidecarOf = (
     : fail(source, 'field "summarySidecar" is present but is not a non-empty string');
 };
 
+/** The chain ids a profile may name, listed in a refusal so a typo is correctable. */
+const ANALYZER_IDS: readonly string[] = Object.keys(ANALYZERS);
+
+const isAnalyzerId = (value: unknown): value is AnalyzerId =>
+  isString(value) && ANALYZER_IDS.includes(value);
+
+/**
+ * The optional index-build chain. An unknown id is REFUSED with the offending
+ * value and the known ids beside it: falling back to `DEFAULT_ANALYZER` would
+ * build an index analyzed differently from the one the profile asked for, and
+ * the only symptom is a corpus that quietly stops matching its own language.
+ */
+const defaultAnalyzerOf = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string
+): AnalyzerId | undefined => {
+  const value = raw['defaultAnalyzer'];
+  if (value === undefined) return undefined;
+  return isAnalyzerId(value)
+    ? value
+    : fail(
+        source,
+        `field "defaultAnalyzer" is "${String(value)}", not a known analyzer chain — replace it with one of ${ANALYZER_IDS.join(' | ')}`
+      );
+};
+
 const defaultsOf = (
   raw: Readonly<Record<string, unknown>>,
   source: string,
@@ -443,6 +487,7 @@ const defaultsOf = (
   defaultExcludedTypes: defaultExcludedTypeList(raw, source, types),
   defaultPrf: defaultPrfOf(raw, source),
   summarySidecar: summarySidecarOf(raw, source),
+  defaultAnalyzer: defaultAnalyzerOf(raw, source),
 });
 
 const locationsOf = (
