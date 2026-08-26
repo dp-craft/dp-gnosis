@@ -32,7 +32,12 @@ import {
 import type { OutputFormat } from './format.js';
 import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { helpText } from './help.js';
-import { BODY_SOURCE_FLAG, KEYWORD_FILTER_FLAG, runIndexCommand } from './indexCommand.js';
+import {
+  BODY_SOURCE_FLAG,
+  ENRICHMENT_COLUMNS_FLAG,
+  KEYWORD_FILTER_FLAG,
+  runIndexCommand
+} from './indexCommand.js';
 import { GOLD_IDS_FLAG, runIngestCommand } from './ingestCommand.js';
 import { resolveLocations } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
@@ -197,11 +202,16 @@ const ENRICH_COMMAND = 'enrich';
 const INDEX_COMMAND = 'index';
 
 /**
- * `--body-source` and `--keyword-filter` each decide what an index BUILD writes,
- * so only the build honours them. Accepting either on `retrieve` would let a
- * caller believe a ranking came from text the index it read never held.
+ * `--body-source`, `--keyword-filter` and `--enrichment-columns` each decide what
+ * an index BUILD writes, so only the build honours them. Accepting one on
+ * `retrieve` would let a caller believe a ranking came from text the index it
+ * read never held.
  */
-const INDEX_ONLY_FLAGS: readonly string[] = [BODY_SOURCE_FLAG, KEYWORD_FILTER_FLAG];
+const INDEX_ONLY_FLAGS: readonly string[] = [
+  BODY_SOURCE_FLAG,
+  KEYWORD_FILTER_FLAG,
+  ENRICHMENT_COLUMNS_FLAG,
+];
 
 const ENRICH_ONLY_FLAGS: readonly string[] = [LIMIT_FLAG, ENRICH_MODEL_FLAG];
 

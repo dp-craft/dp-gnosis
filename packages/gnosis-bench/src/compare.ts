@@ -27,6 +27,7 @@
  * | treatment | `fieldWeights` | a different `bm25()` WEIGHT per column, so a different ranking over one index |
  * | treatment | `bodySource` | a different TEXT in the `body` column — the summary-only index arm |
  * | treatment | `keywordFilter` | a different KEYWORD SET in the index — the novel-keyword arm, which drops keywords already echoed by the body |
+ * | treatment | `enrichmentColumns` | a different SET OF POPULATED columns — the arm that carries only some of the six enrichment columns |
  * | treatment | `enrichment` | a different number of atoms carrying ENRICHMENT text — the ingest-enrichment arm |
  * | treatment | `queryAdjacency` | a different QUERY expression — the phrase disjunct, or not |
  * | treatment | `provenanceMerge` | a different SCORING SEMANTICS — whether a deduped atom credits every source document whose body it represents |
@@ -44,6 +45,7 @@
  */
 import {
   DEFAULT_BODY_SOURCE,
+  DEFAULT_ENRICHMENT_COLUMNS,
   DEFAULT_KEYWORD_FILTER,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
@@ -99,6 +101,7 @@ export const TREATMENT_FIELDS = [
   'enrichment',
   'bodySource',
   'keywordFilter',
+  'enrichmentColumns',
   'queryAdjacency',
   'provenanceMerge',
   'prf',
@@ -269,6 +272,10 @@ const LEGACY_RERANK_RRF_WEIGHT = 0.5;
  * `keywordFilter` follows it too: no row recorded before the filter existed could
  * have dropped a keyword, so an absent one reads as `DEFAULT_KEYWORD_FILTER`.
  *
+ * `enrichmentColumns` likewise: no row recorded before the columns were
+ * selectable could have left one out, so an absent one reads as
+ * `DEFAULT_ENRICHMENT_COLUMNS` — every column — rather than as a narrowed arm.
+ *
  * `tokenBudget` / `servedK` have NO default and MUST NOT be given one: absence
  * means no cap was applied, which is a real arm rather than an older value, so a
  * budgeted row against an unbudgeted one is the experiment.
@@ -279,6 +286,7 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   enrichment: NO_ENRICHMENT,
   bodySource: DEFAULT_BODY_SOURCE,
   keywordFilter: DEFAULT_KEYWORD_FILTER,
+  enrichmentColumns: DEFAULT_ENRICHMENT_COLUMNS,
   rerankModel: RERANK_MODEL_ID,
   hybridWeight: HYBRID_FUSION.rerankWeight,
   embedModel: EMBED_MODEL_ID,

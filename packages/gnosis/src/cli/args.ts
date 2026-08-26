@@ -10,10 +10,13 @@
  */
 
 import {
+  ALL_ENRICHMENT_COLUMNS,
   BODY_SOURCES,
   BUDGET_MODES,
+  ENRICHMENT_COLUMNS,
   FTS_COLUMNS,
   KEYWORD_FILTERS,
+  NO_ENRICHMENT_COLUMNS,
   RERANK_PRESET_NAMES
 } from '../config.js';
 import { ADAPTER_NAMES } from './adapter.js';
@@ -99,6 +102,13 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // `index` only: WHETHER a keyword that merely re-emits body vocabulary reaches
   // the index. The default keeps every keyword — today's index, byte for byte.
   '--keyword-filter': { kind: 'value', placeholder: `<${KEYWORD_FILTERS.join('|')}>` },
+  // `index` only: WHICH enrichment columns the build populates. The default is
+  // every one of them — today's index, byte for byte — and a subset leaves the
+  // rest EMPTY rather than dropping them, since the schema is fixed.
+  '--enrichment-columns': {
+    kind: 'value',
+    placeholder: `<${ALL_ENRICHMENT_COLUMNS}|${NO_ENRICHMENT_COLUMNS}|${ENRICHMENT_COLUMNS.slice(0, 2).join(',')}>`,
+  },
   // `enrich` only: the E2 pilot bound — enrich at most n not-yet-fresh atoms.
   '--limit': { kind: 'value', placeholder: '<n>' },
   // `enrich` only: the generator id, for this run alone.

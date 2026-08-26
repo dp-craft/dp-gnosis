@@ -45,15 +45,19 @@ import {
   BODY_SOURCES,
   type BodySource,
   DEFAULT_BODY_SOURCE,
+  DEFAULT_ENRICHMENT_COLUMN_SPEC,
   DEFAULT_FIELD_WEIGHTS,
   DEFAULT_KEYWORD_FILTER,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
+  type EnrichmentColumnSpec,
+  enrichmentColumnVocabulary,
   type FieldWeights,
   FTS_COLUMNS,
   type FtsColumn,
   KEYWORD_FILTERS,
   type KeywordFilter,
+  parseEnrichmentColumns,
   RERANK_DOC_MAX_CHARS,
   RERANK_K_INIT,
   RERANK_MODEL_ID,
@@ -264,6 +268,12 @@ export interface CliOptions {
    * measured on.
    */
   readonly keywordFilter: KeywordFilter;
+  /**
+   * WHICH enrichment columns the index build populated. Never `undefined`: every
+   * run populated some set, and `DEFAULT_ENRICHMENT_COLUMN_SPEC` — all six — is
+   * what every recorded row was measured on.
+   */
+  readonly enrichmentColumns: EnrichmentColumnSpec;
   /**
    * RM3 pseudo-relevance feedback: the first pass builds a term model and the
    * ranking is REPLACED by the weighted rescore. Recorded on every row like
@@ -512,6 +522,34 @@ const resolveKeywordFilter = (adapter: AdapterName, value: string | undefined): 
     `dp-gnosis-bench: adapter "${adapter}" does not honour ${KEYWORD_FILTER_FLAG} "${value}" — ` +
       `only "${BODY_SOURCE_AWARE_ADAPTER}" composes its keyword column, and the row would name a ` +
       'filter nothing applied'
+  );
+};
+
+const ENRICHMENT_COLUMNS_FLAG = '--enrichment-columns';
+
+const asEnrichmentColumns = (value: string): EnrichmentColumnSpec => {
+  const parsed = parseEnrichmentColumns(value);
+  if (parsed.ok) return parsed.spec;
+  throw new Error(
+    `dp-gnosis-bench: unknown ${ENRICHMENT_COLUMNS_FLAG} "${value}" — use ${enrichmentColumnVocabulary()}`
+  );
+};
+
+/**
+ * `--enrichment-columns` on any adapter but `fts5` REFUSES, for the reason
+ * `--keyword-filter` does: no other build HAS enrichment columns, so the row
+ * would record a TREATMENT nothing selected.
+ */
+const resolveEnrichmentColumns = (
+  adapter: AdapterName,
+  value: string | undefined
+): EnrichmentColumnSpec => {
+  if (value === undefined) return DEFAULT_ENRICHMENT_COLUMN_SPEC;
+  if (adapter === BODY_SOURCE_AWARE_ADAPTER) return asEnrichmentColumns(value);
+  throw new Error(
+    `dp-gnosis-bench: adapter "${adapter}" does not honour ${ENRICHMENT_COLUMNS_FLAG} "${value}" — ` +
+      `only "${BODY_SOURCE_AWARE_ADAPTER}" builds enrichment columns, and the row would name a ` +
+      'selection nothing applied'
   );
 };
 
@@ -875,6 +913,7 @@ export const RUN_FLAGS: FlagSpec = {
     ENRICHMENT_FLAG,
     BODY_SOURCE_FLAG,
     KEYWORD_FILTER_FLAG,
+    ENRICHMENT_COLUMNS_FLAG,
     ...GATE_VALUE_FLAGS,
   ],
   boolean: [
@@ -924,6 +963,10 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
     enrichmentPath: resolveEnrichmentPath(adapter, flagValue(argv, ENRICHMENT_FLAG)),
     bodySource: resolveBodySource(adapter, flagValue(argv, BODY_SOURCE_FLAG)),
     keywordFilter: resolveKeywordFilter(adapter, flagValue(argv, KEYWORD_FILTER_FLAG)),
+    enrichmentColumns: resolveEnrichmentColumns(
+      adapter,
+      flagValue(argv, ENRICHMENT_COLUMNS_FLAG)
+    ),
     prf,
     prfDocs: parsePrfCount(PRF_DOCS_FLAG, flagValue(argv, PRF_DOCS_FLAG), prf),
     prfTerms: parsePrfCount(PRF_TERMS_FLAG, flagValue(argv, PRF_TERMS_FLAG), prf),
@@ -1357,6 +1400,11 @@ export interface PrepareArm {
    * dropped, which is what `sweep.ts` and every recorded run built.
    */
   readonly keywordFilter?: KeywordFilter | undefined;
+  /**
+   * WHICH enrichment columns the fts5 build populated. Absent means all six,
+   * which is what `sweep.ts` and every recorded run built.
+   */
+  readonly enrichmentColumns?: EnrichmentColumnSpec | undefined;
 }
 
 /**
@@ -1419,6 +1467,7 @@ export const prepareOf = (request: PrepareRequest): Promise<PreparedDataset> =>
     enrichmentPath: request.arm.enrichmentPath,
     bodySource: request.arm.bodySource,
     keywordFilter: request.arm.keywordFilter,
+    enrichmentColumns: request.arm.enrichmentColumns,
     ...(request.goldIds === undefined ? {} : { goldIds: request.goldIds }),
   });
 
@@ -1471,6 +1520,7 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
       enrichmentPath: options.enrichmentPath,
       bodySource: options.bodySource,
       keywordFilter: options.keywordFilter,
+      enrichmentColumns: options.enrichmentColumns,
     },
     goldIds: goldIdsOf(entry, qrels),
   });
@@ -1695,6 +1745,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   fieldWeights: canonicalFieldWeights(options.fieldWeights),
   bodySource: options.bodySource,
   keywordFilter: options.keywordFilter,
+  enrichmentColumns: options.enrichmentColumns.label,
   queryAdjacency: options.queryAdjacency,
   provenanceMerge: PROVENANCE_MERGE,
   ...prfProvenance(options),

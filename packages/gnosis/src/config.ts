@@ -706,6 +706,110 @@ export type KeywordFilter = (typeof KEYWORD_FILTERS)[number];
 export const DEFAULT_KEYWORD_FILTER: KeywordFilter = 'none';
 
 /**
+ * The COLUMNS an index build may be told to populate SELECTIVELY —
+ * {@link FTS_COLUMNS} minus `body`. DERIVED from the column vocabulary rather
+ * than re-spelled: a column added there would otherwise be silently
+ * unselectable, populated by every build and named by none.
+ *
+ * `body` is EXCLUDED by construction and REFUSED by name. What that column
+ * holds is {@link BODY_SOURCES}' decision; letting a second flag empty it would
+ * give one column two owners and make "which text did this index hold?"
+ * unanswerable from either flag alone.
+ */
+export type EnrichmentColumn = Exclude<FtsColumn, 'body'>;
+
+const isEnrichmentColumn = (column: FtsColumn): column is EnrichmentColumn => column !== 'body';
+
+/** The six selectable columns, in {@link FTS_COLUMNS} declaration order. */
+export const ENRICHMENT_COLUMNS: readonly EnrichmentColumn[] = FTS_COLUMNS.filter(isEnrichmentColumn);
+
+/** The label naming every enrichment column — today's build, byte for byte. */
+export const ALL_ENRICHMENT_COLUMNS = 'all';
+
+/** The label naming none of them: the columns exist and every one stays empty. */
+export const NO_ENRICHMENT_COLUMNS = 'none';
+
+/**
+ * WHICH enrichment columns one build populated, as a canonical LABEL plus the
+ * set it denotes. The label is what a bench row records, so it is normalised —
+ * declaration order, and a subset naming all six collapses to
+ * {@link ALL_ENRICHMENT_COLUMNS} — because two arms that populated the same
+ * columns built the same index and MUST compare equal.
+ */
+export interface EnrichmentColumnSpec {
+  readonly label: string;
+  readonly columns: readonly EnrichmentColumn[];
+}
+
+/**
+ * EVERY column, deliberately. Every recorded fts5 number was measured on a build
+ * that populated whatever the sidecar offered, so the default is the only value
+ * that keeps those numbers reproducible — and the only one that stamps no row,
+ * leaving the index the same file it has always been.
+ */
+export const DEFAULT_ENRICHMENT_COLUMNS = ALL_ENRICHMENT_COLUMNS;
+
+/** The default selection, for a build given no selection at all. */
+export const DEFAULT_ENRICHMENT_COLUMN_SPEC: EnrichmentColumnSpec = {
+  label: DEFAULT_ENRICHMENT_COLUMNS,
+  columns: ENRICHMENT_COLUMNS,
+};
+
+/** A parse that either yields the selection or states why it names nothing. */
+export type EnrichmentColumnsParse =
+  | { readonly ok: true; readonly spec: EnrichmentColumnSpec }
+  | { readonly ok: false; readonly reason: string };
+
+/** The vocabulary a rejection quotes, so no caller re-spells it. */
+export const enrichmentColumnVocabulary = (): string =>
+  `${ALL_ENRICHMENT_COLUMNS}, ${NO_ENRICHMENT_COLUMNS}, or a comma-separated subset of: ${ENRICHMENT_COLUMNS.join(', ')}`;
+
+/**
+ * `body` is refused by its OWN wording: a caller naming it is not making a typo,
+ * they are asking this flag to decide something `--body-source` owns, and a
+ * generic "unknown name" would send them looking for a spelling that does not
+ * exist.
+ */
+const rejection = (name: string): string =>
+  name === 'body'
+    ? `"body" is not an enrichment column — the body column's text is --body-source's decision`
+    : `names no enrichment column: "${name}" — pass ${enrichmentColumnVocabulary()}`;
+
+/** Declaration order, deduped, and collapsed to `all` when nothing was left out. */
+const selectionOf = (names: readonly string[]): EnrichmentColumnSpec => {
+  const columns = ENRICHMENT_COLUMNS.filter(column => names.includes(column));
+  return columns.length === ENRICHMENT_COLUMNS.length
+    ? DEFAULT_ENRICHMENT_COLUMN_SPEC
+    : { label: columns.join(','), columns };
+};
+
+/**
+ * An EMPTY entry is refused along with every unknown name: `questions,` reads as
+ * a typo for one thing and as `none` for another, and a build that guessed would
+ * report the arm the caller did not ask for.
+ */
+const parseColumnList = (raw: string): EnrichmentColumnsParse => {
+  const names = raw.split(',');
+  const unknown = names.find(name => !ENRICHMENT_COLUMNS.some(column => column === name));
+  return unknown === undefined
+    ? { ok: true, spec: selectionOf(names) }
+    : { ok: false, reason: rejection(unknown) };
+};
+
+/**
+ * WHICH enrichment columns a build populates, parsed from one flag value. An
+ * unrecognised spelling REFUSES rather than falling back: a build that quietly
+ * populated everything under a caller who asked for one column would be reported
+ * as the arm they asked for and measured as an arm nobody ran.
+ */
+export const parseEnrichmentColumns = (raw: string): EnrichmentColumnsParse =>
+  raw === ALL_ENRICHMENT_COLUMNS
+    ? { ok: true, spec: DEFAULT_ENRICHMENT_COLUMN_SPEC }
+    : raw === NO_ENRICHMENT_COLUMNS
+      ? { ok: true, spec: { label: NO_ENRICHMENT_COLUMNS, columns: [] } }
+      : parseColumnList(raw);
+
+/**
  * The model the enrichment pass calls, served on the same llama-swap instance as
  * the reranker and the rewriter. Probed byte-identical across two runs at
  * {@link ENRICH_TEMPERATURE} / {@link ENRICH_SEED}, which is what makes a

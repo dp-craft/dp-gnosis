@@ -19,7 +19,7 @@ import { relative, resolve } from 'node:path';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import { ENRICHMENT_FILE_NAME } from '../src/cli/enrichCommand.js';
 import { DEFAULT_MAX_PER_DOC } from '../src/cli/grouping.js';
-import { DEFAULT_BODY_SOURCE, DEFAULT_BUDGET_MODE, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, ENRICH_MODEL_ID, RERANK_MODEL_ID, RERANK_RRF_WEIGHT, RETRIEVE_TOKEN_BUDGET } from '../src/config.js';
+import { DEFAULT_BODY_SOURCE, DEFAULT_BUDGET_MODE, DEFAULT_ENRICHMENT_COLUMNS, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, ENRICH_MODEL_ID, RERANK_MODEL_ID, RERANK_RRF_WEIGHT, RETRIEVE_TOKEN_BUDGET } from '../src/config.js';
 import { ATOMS_DIR, GOLDEN_SET_PATH, INDEX_DIR, REPO_ROOT } from '../src/paths.js';
 import { DEFAULT_PRF_PARAMS } from '../src/prf.js';
 import { defaultExcludedTypes } from '../src/vocabulary.js';
@@ -76,6 +76,10 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--field-weights': owned('DEFAULT_FIELD_WEIGHTS.body (src/config.ts)', DEFAULT_FIELD_WEIGHTS.body),
   '--body-source': owned('DEFAULT_BODY_SOURCE (src/config.ts)', DEFAULT_BODY_SOURCE),
   '--keyword-filter': owned('DEFAULT_KEYWORD_FILTER (src/config.ts)', DEFAULT_KEYWORD_FILTER),
+  '--enrichment-columns': owned(
+    'DEFAULT_ENRICHMENT_COLUMNS (src/config.ts)',
+    DEFAULT_ENRICHMENT_COLUMNS
+  ),
   '--enrichment': owned('ENRICHMENT_FILE_NAME (src/cli/enrichCommand.ts)', ENRICHMENT_FILE_NAME),
   '--limit': unowned('unset by default — every not-yet-fresh atom is enriched; the flag bounds a pilot batch'),
   '--enrich-model': owned('ENRICH_MODEL_ID (src/config.ts)', ENRICH_MODEL_ID),

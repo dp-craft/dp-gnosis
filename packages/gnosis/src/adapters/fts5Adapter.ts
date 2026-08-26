@@ -70,8 +70,11 @@ import { type Atom, parseAtom } from '../atom.js';
 import {
   type BodySource,
   DEFAULT_BODY_SOURCE,
+  DEFAULT_ENRICHMENT_COLUMN_SPEC,
+  DEFAULT_ENRICHMENT_COLUMNS,
   DEFAULT_FIELD_WEIGHTS,
   DEFAULT_KEYWORD_FILTER,
+  type EnrichmentColumnSpec,
   type FieldWeights,
   FTS_COLUMNS,
   type FtsColumn,
@@ -173,6 +176,16 @@ const KEYWORD_FILTER_KEY = 'keyword_filter';
 const KEYWORDS_KEPT_KEY = 'keywords_kept';
 const KEYWORDS_DROPPED_KEY = 'keywords_dropped';
 /**
+ * The ONE key a build that populated only SOME enrichment columns writes, and a
+ * full build does not write at all — its absence is what keeps today's index the
+ * same file it has always been, for the reason {@link BODY_SOURCE_KEY}'s is.
+ *
+ * The value is the canonical LABEL, not the raw flag text: two builds that
+ * populated the same columns produced the same index and MUST stamp the same
+ * string, or an arm comparison would read a spelling difference as a treatment.
+ */
+const ENRICHMENT_COLUMNS_KEY = 'enrichment_columns';
+/**
  * Columns come from {@link FTS_COLUMNS} rather than a literal: the declaration
  * order, the insert order and the `bm25()` weight order are then the SAME list,
  * and a column cannot be indexed in one position while being weighted in another.
@@ -261,6 +274,14 @@ export interface BuildFts5IndexOptions extends Fts5IndexLocation {
    * today's index byte for byte.
    */
   readonly keywordFilter?: KeywordFilter | undefined;
+  /**
+   * WHICH enrichment columns this build populates. Absent means
+   * {@link DEFAULT_ENRICHMENT_COLUMN_SPEC} — all six, which is today's index
+   * byte for byte. An unselected column is written EMPTY rather than dropped:
+   * the schema is fixed by {@link FTS_COLUMNS}, and an empty column contributes
+   * no token to `bm25()`'s length normalisation.
+   */
+  readonly enrichmentColumns?: EnrichmentColumnSpec | undefined;
 }
 
 /**
@@ -345,6 +366,7 @@ interface TextSpec {
   readonly analyzer: AnalyzerId;
   readonly bodySource: BodySource;
   readonly keywordFilter: KeywordFilter;
+  readonly enrichmentColumns: EnrichmentColumnSpec;
 }
 
 /**
@@ -418,11 +440,22 @@ const BODY_TEXT: Readonly<Record<BodySource, (entry: IndexEntry, spec: TextSpec)
       : joinText([entry.enrichment.long, keptKeywords(entry, spec).join(' ')]),
 };
 
-/** An unenriched atom yields `''` for every enrichment column — no tokens, no effect. */
+/** Whether this build was told to populate an enrichment column at all. */
+const isSelected = (column: FtsColumn, spec: TextSpec): boolean =>
+  spec.enrichmentColumns.columns.some(selected => selected === column);
+
+/**
+ * An unenriched atom yields `''` for every enrichment column — no tokens, no
+ * effect — and so does a column this build was NOT told to populate: an empty
+ * column contributes no token, which is exactly what "this arm did not carry
+ * that column" has to mean for `bm25()`'s length normalisation.
+ */
 const columnText = (column: FtsColumn, entry: IndexEntry, spec: TextSpec): string =>
   column === 'body'
     ? BODY_TEXT[spec.bodySource](entry, spec)
-    : ENRICHMENT_TEXT[column](entry, spec);
+    : isSelected(column, spec)
+      ? ENRICHMENT_TEXT[column](entry, spec)
+      : '';
 
 /** Atoms whose `body` column ends up holding nothing under the chosen source. */
 const emptyBodyAtoms = (entries: readonly IndexEntry[], spec: TextSpec): number =>
@@ -492,12 +525,22 @@ const keywordFilterRows = (spec: StampSpec): readonly StampRow[] =>
         { key: KEYWORDS_DROPPED_KEY, value: String(spec.keywordCensus.dropped) },
       ];
 
+/**
+ * The selected-columns row, written ONLY when a build left a column out. A build
+ * that populated all six stamps nothing, so it stays the index it has always been.
+ */
+const enrichmentColumnsRows = (spec: StampSpec): readonly StampRow[] =>
+  spec.enrichmentColumns.label === DEFAULT_ENRICHMENT_COLUMNS
+    ? []
+    : [{ key: ENRICHMENT_COLUMNS_KEY, value: spec.enrichmentColumns.label }];
+
 const stampRows = (spec: StampSpec): readonly StampRow[] => [
   { key: ANALYZER_KEY, value: spec.analyzer },
   { key: SCHEMA_VERSION_KEY, value: INDEX_SCHEMA_VERSION },
   { key: ENRICHMENT_RECORDS_KEY, value: String(spec.enrichmentRecords) },
   ...bodySourceRows(spec),
   ...keywordFilterRows(spec),
+  ...enrichmentColumnsRows(spec),
   ...(spec.corpusDigest === undefined
     ? []
     : [{ key: CORPUS_DIGEST_KEY, value: spec.corpusDigest }]),
@@ -546,11 +589,19 @@ const writeEntries = (
  * that answers every query with nothing and reports success — so the count is
  * returned rather than discarded, and the caller gates on it.
  */
-/** Every text choice this build makes, each absent one falling back to today's. */
-const textSpecOf = (options: BuildFts5IndexOptions): TextSpec => ({
-  analyzer: options.analyzer ?? DEFAULT_ANALYZER,
+/** WHICH TEXT the columns draw on, each absent choice falling back to today's. */
+const sourceSpecOf = (
+  options: BuildFts5IndexOptions
+): Omit<TextSpec, 'analyzer'> => ({
   bodySource: options.bodySource ?? DEFAULT_BODY_SOURCE,
   keywordFilter: options.keywordFilter ?? DEFAULT_KEYWORD_FILTER,
+  enrichmentColumns: options.enrichmentColumns ?? DEFAULT_ENRICHMENT_COLUMN_SPEC,
+});
+
+/** Every text choice this build makes: the analysis chain, plus the sources. */
+const textSpecOf = (options: BuildFts5IndexOptions): TextSpec => ({
+  analyzer: options.analyzer ?? DEFAULT_ANALYZER,
+  ...sourceSpecOf(options),
 });
 
 export const buildFts5Index = (options: BuildFts5IndexOptions): number => {

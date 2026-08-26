@@ -63,6 +63,7 @@ import {
 } from '../../gnosis/src/cli/adapter.js';
 import type {
   BodySource,
+  EnrichmentColumnSpec,
   FieldWeights,
   KeywordFilter,
   RerankFusion
@@ -175,6 +176,12 @@ export interface PrepareDatasetOptions {
    * recorded run was prepared with.
    */
   readonly keywordFilter?: KeywordFilter | undefined;
+  /**
+   * WHICH enrichment columns the fts5 build populates. Absent means every one of
+   * them — today's index byte for byte, and what every recorded run was prepared
+   * with.
+   */
+  readonly enrichmentColumns?: EnrichmentColumnSpec | undefined;
   /**
    * Document ids the dataset's golden set judges, handed to the engine's
    * exact-body dedupe so a mirrored document keeps the copy the judgments can
@@ -451,6 +458,9 @@ const ingestAndProbe = async (
     ...(options.enrichmentPath === undefined ? {} : { enrichmentPath: options.enrichmentPath }),
     ...(options.bodySource === undefined ? {} : { bodySource: options.bodySource }),
     ...(options.keywordFilter === undefined ? {} : { keywordFilter: options.keywordFilter }),
+    ...(options.enrichmentColumns === undefined
+      ? {}
+      : { enrichmentColumns: options.enrichmentColumns }),
   });
   return { ingestMs: ingestedAt - startedAt, probeMs: Date.now() - ingestedAt };
 };

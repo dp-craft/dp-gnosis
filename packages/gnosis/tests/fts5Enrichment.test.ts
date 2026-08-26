@@ -9,7 +9,13 @@ import {
   createFts5Adapter,
   INDEX_SCHEMA_VERSION
 } from '../src/adapters/fts5Adapter.js';
-import { DEFAULT_FIELD_WEIGHTS, type FieldWeights } from '../src/config.js';
+import {
+  DEFAULT_FIELD_WEIGHTS,
+  ENRICHMENT_COLUMNS,
+  type EnrichmentColumnSpec,
+  type FieldWeights,
+  parseEnrichmentColumns
+} from '../src/config.js';
 import {
   atomKeyOf,
   docKeyOf,
@@ -19,6 +25,13 @@ import {
 } from '../src/enrichment.js';
 import type { KnowledgePort, RetrievedAtom } from '../src/port.js';
 import { analyzeToText } from '../src/query.js';
+
+/** Parse-or-throw: a fixture naming an unknown column is a broken test, not an arm. */
+const parseColumns = (raw: string): EnrichmentColumnSpec => {
+  const parsed = parseEnrichmentColumns(raw);
+  if (!parsed.ok) throw new Error(parsed.reason);
+  return parsed.spec;
+};
 
 const NOW = new Date('2026-08-22T00:00:00.000Z');
 const MODEL = 'qwen35b-a3b-q5km-ctx130k-mtp-frog-coding';
@@ -307,5 +320,141 @@ describe('fts5 schema version gate', () => {
     expect(result.indexState).toBe('mismatched');
     expect(result.indexRefusal).toContain('schema_version is "1"');
     expect(result.indexRefusal).toContain('"2"');
+  });
+});
+
+/**
+ * `--enrichment-columns` — WHICH of the six enrichment columns a build populates.
+ *
+ * The schema is fixed by `FTS_COLUMNS`, so an unselected column is not dropped;
+ * it is written EMPTY. That is the only form the selection can take and still be
+ * measurable: an empty column contributes no token, so `bm25()`'s length
+ * normalisation sees exactly the index an arm that never generated that column
+ * would have produced.
+ */
+const COLUMN_PROBES: readonly (readonly [string, string])[] = [
+  ['short', 'note'],
+  ['long', 'paragraph'],
+  ['doc_desc', 'document'],
+  ['keywords', 'state'],
+  ['entities', 'useShallow'],
+  ['questions', 'stable'],
+];
+
+/** How many rows carry `term` IN `column` — the direct read of what was populated. */
+const rowsMatching = (column: string, term: string): number => {
+  const db = new Database(indexPath, { readonly: true });
+  const row = db
+    .prepare('SELECT count(*) AS n FROM atom_fts WHERE atom_fts MATCH ?')
+    .get(`${column} : ${analyzeToText(term, 'porter-fold')}`) as { readonly n: number };
+  db.close();
+  return row.n;
+};
+
+const populatedColumns = (): readonly string[] =>
+  COLUMN_PROBES.filter(([column, term]) => rowsMatching(column, term) > 0).map(([column]) => column);
+
+describe('fts5 --enrichment-columns', () => {
+  it('populates every enrichment column by default, and stamps NOTHING', () => {
+    writeSidecar();
+
+    buildFts5Index({ atomsDir, indexPath, enrichmentPath: sidecarPath });
+
+    expect(populatedColumns()).toEqual(COLUMN_PROBES.map(([column]) => column));
+    expect(metaValue('enrichment_columns')).toBeUndefined();
+  });
+
+  it('builds the SAME index when `all` is named explicitly — no stamp, same scores', async () => {
+    writeSidecar();
+    buildFts5Index({ atomsDir, indexPath, enrichmentPath: sidecarPath });
+    const byDefault = await scored();
+
+    buildFts5Index({
+      atomsDir,
+      indexPath,
+      enrichmentPath: sidecarPath,
+      enrichmentColumns: parseColumns('all'),
+    });
+
+    expect(await scored()).toEqual(byDefault);
+    expect(metaValue('enrichment_columns')).toBeUndefined();
+  });
+
+  it('leaves ALL SIX empty under `none`, while the body column is untouched', async () => {
+    writeSidecar();
+    buildFts5Index({
+      atomsDir,
+      indexPath,
+      enrichmentPath: sidecarPath,
+      enrichmentColumns: parseColumns('none'),
+    });
+    const withNone = await scored();
+
+    expect(populatedColumns()).toEqual([]);
+    expect(rowsMatching('body', 'selector')).toBe(2);
+    expect(metaValue('enrichment_columns')).toBe('none');
+
+    buildOneColumnIndex();
+    expect(withNone).toEqual(await scored());
+  });
+
+  it('populates EXACTLY the named subset and no other column', () => {
+    writeSidecar();
+
+    buildFts5Index({
+      atomsDir,
+      indexPath,
+      enrichmentPath: sidecarPath,
+      enrichmentColumns: parseColumns('questions,keywords'),
+    });
+
+    expect(populatedColumns()).toEqual(['keywords', 'questions']);
+    expect(rowsMatching('body', 'selector')).toBe(2);
+  });
+
+  it('stamps the subset in DECLARATION order, so two spellings of one arm compare equal', () => {
+    writeSidecar();
+
+    buildFts5Index({
+      atomsDir,
+      indexPath,
+      enrichmentPath: sidecarPath,
+      enrichmentColumns: parseColumns('questions,keywords'),
+    });
+
+    expect(metaValue('enrichment_columns')).toBe('keywords,questions');
+    expect(parseColumns('keywords,questions').label).toBe('keywords,questions');
+  });
+
+  it('REFUSES `body` by its own wording — that column belongs to --body-source', () => {
+    const parsed = parseEnrichmentColumns('body,questions');
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.ok === false && parsed.reason).toMatch(/--body-source/);
+  });
+
+  it('REFUSES an unknown name, listing the vocabulary', () => {
+    const parsed = parseEnrichmentColumns('summaries');
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.ok === false && parsed.reason).toMatch(/summaries/);
+    expect(parsed.ok === false && parsed.reason).toMatch(/doc_desc/);
+  });
+
+  it('REFUSES an EMPTY entry rather than reading `questions,` as one column', () => {
+    expect(parseEnrichmentColumns('questions,').ok).toBe(false);
+  });
+
+  it('collapses a subset naming all six to the default, which stamps nothing', () => {
+    writeSidecar();
+
+    buildFts5Index({
+      atomsDir,
+      indexPath,
+      enrichmentPath: sidecarPath,
+      enrichmentColumns: parseColumns(ENRICHMENT_COLUMNS.join(',')),
+    });
+
+    expect(metaValue('enrichment_columns')).toBeUndefined();
   });
 });

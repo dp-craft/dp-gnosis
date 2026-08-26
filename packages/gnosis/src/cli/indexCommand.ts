@@ -41,9 +41,13 @@ import {
   BODY_SOURCES,
   type BodySource,
   DEFAULT_BODY_SOURCE,
+  DEFAULT_ENRICHMENT_COLUMN_SPEC,
+  DEFAULT_ENRICHMENT_COLUMNS,
   DEFAULT_KEYWORD_FILTER,
+  type EnrichmentColumnSpec,
   KEYWORD_FILTERS,
-  type KeywordFilter
+  type KeywordFilter,
+  parseEnrichmentColumns
 } from '../config.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
@@ -138,6 +142,29 @@ const keywordFilterError = (flags: FlagValues): string | undefined => {
 };
 
 /**
+ * WHICH enrichment columns the build populates. OPT-IN like `--keyword-filter`:
+ * an absent flag populates every column the sidecar offers, which is the index
+ * every recorded number was measured on.
+ */
+export const ENRICHMENT_COLUMNS_FLAG = '--enrichment-columns';
+
+/** The named selection, or the default. An unparseable value never reaches here. */
+const enrichmentColumnsOf = (flags: FlagValues): EnrichmentColumnSpec => {
+  const raw = stringFlag(flags, ENRICHMENT_COLUMNS_FLAG);
+  const parsed = raw === undefined ? undefined : parseEnrichmentColumns(raw);
+  return parsed?.ok === true ? parsed.spec : DEFAULT_ENRICHMENT_COLUMN_SPEC;
+};
+
+/** A value naming no column is a USAGE error, for `--body-source`'s reason. */
+const enrichmentColumnsError = (flags: FlagValues): string | undefined => {
+  const raw = stringFlag(flags, ENRICHMENT_COLUMNS_FLAG);
+  const parsed = raw === undefined ? undefined : parseEnrichmentColumns(raw);
+  return parsed === undefined || parsed.ok
+    ? undefined
+    : `${ENRICHMENT_COLUMNS_FLAG} ${parsed.reason}`;
+};
+
+/**
  * `--enrichment` is OPT-IN at index time, with no default path: an absent flag
  * builds the single-column index this adapter has always built, byte for byte.
  * Defaulting to a conventional location would let a sidecar that happens to
@@ -152,6 +179,7 @@ const buildFts5 = async (context: CommandContext): Promise<string | number> =>
       enrichmentPath: stringFlag(context.flags, ENRICHMENT_FLAG),
       bodySource: bodySourceOf(context.flags),
       keywordFilter: keywordFilterOf(context.flags),
+      enrichmentColumns: enrichmentColumnsOf(context.flags),
     })
   );
 
@@ -418,6 +446,39 @@ const keywordFilterFields = (report: KeywordFilterReport): Readonly<Record<strin
   keywordsDropped: report.census.dropped,
 });
 
+/**
+ * `undefined` unless this run really left a column out on the adapter that has
+ * those columns — a full build reports exactly what it always did.
+ */
+const enrichmentColumnsReport = (context: CommandContext): string | undefined => {
+  const spec = enrichmentColumnsOf(context.flags);
+  return spec.label === DEFAULT_ENRICHMENT_COLUMNS || context.adapter !== ENRICHED_ADAPTER
+    ? undefined
+    : spec.label;
+};
+
+/**
+ * The columns left out are stated as well as the ones kept: "populated
+ * questions" and "populated questions, and nothing else" are the same index and
+ * very different readings of a bench row.
+ */
+const enrichmentColumnsLine = (label: string): string =>
+  `index: ${ENRICHMENT_COLUMNS_FLAG} ${label} — only those enrichment columns were populated; ` +
+  'every other one is EMPTY and contributes no term.';
+
+/** Same selected-columns report in both renderings, exit code untouched. */
+const withEnrichmentColumns = (
+  outcome: CommandOutcome,
+  label: string | undefined
+): CommandOutcome =>
+  label === undefined
+    ? outcome
+    : {
+        ...outcome,
+        data: { ...outcome.data, enrichmentColumns: label },
+        text: [outcome.text, enrichmentColumnsLine(label)].join('\n'),
+      };
+
 /** Same keyword-filter report in both renderings, exit code untouched. */
 const withKeywordFilter = (
   outcome: CommandOutcome,
@@ -548,9 +609,12 @@ const reportedOutcome = (
 ): CommandOutcome => {
   const enrichment = enrichmentReport(context);
   const bodySource = bodySourceReport(context);
-  const reported = withKeywordFilter(
-    withBodySource(withEnrichment(withCensus(okOutcome(context), census), enrichment), bodySource),
-    keywordFilterReport(context)
+  const reported = withEnrichmentColumns(
+    withKeywordFilter(
+      withBodySource(withEnrichment(withCensus(okOutcome(context), census), enrichment), bodySource),
+      keywordFilterReport(context)
+    ),
+    enrichmentColumnsReport(context)
   );
   return escalated(reported, totalFailureReason(enrichment, bodySource, indexed));
 };
@@ -589,8 +653,23 @@ const build = async (context: CommandContext, builder: Builder): Promise<Command
 const builderFor = (context: CommandContext): Builder | undefined =>
   hasPersistentIndex(context.adapter) ? BUILDERS[context.adapter] : undefined;
 
+/**
+ * Every build-treatment gate, in one list: a new treatment is added HERE rather
+ * than by lengthening a `??` chain, so the refusal path cannot quietly outgrow
+ * the complexity cap that keeps it readable.
+ */
+const BUILD_REFUSALS: readonly ((flags: FlagValues) => string | undefined)[] = [
+  bodySourceError,
+  keywordFilterError,
+  enrichmentColumnsError,
+];
+
+/** The FIRST refusal, so a caller who named two bad values fixes one at a time. */
+const buildRefusal = (flags: FlagValues): string | undefined =>
+  BUILD_REFUSALS.map(check => check(flags)).find(reason => reason !== undefined);
+
 export const runIndexCommand = async (context: CommandContext): Promise<CommandOutcome> => {
-  const refusal = bodySourceError(context.flags) ?? keywordFilterError(context.flags);
+  const refusal = buildRefusal(context.flags);
   if (refusal !== undefined) return usageError(refusal);
   const builder = builderFor(context);
   return builder === undefined ? noOp(context) : await build(context, builder);

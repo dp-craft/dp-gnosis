@@ -152,3 +152,86 @@ describe('index reports what the enrichment sidecar merged', () => {
     expect(parseJson(result.stdout)['warning']).toBeUndefined();
   });
 });
+
+/**
+ * `index --enrichment-columns` — what the CLI STATES about a build that carried
+ * only some of the six enrichment columns.
+ *
+ * The default reports NOTHING, deliberately: a full build is the index every
+ * recorded number was measured on, and a field stating the default would make
+ * every rebuilt index look like a named arm.
+ */
+/** No `--json`: a usage refusal is stated on stderr, which is what these assert. */
+const refusalArgv = (): readonly string[] =>
+  indexArgv(sidecarPath).filter(argument => argument !== '--json');
+
+describe('index --enrichment-columns', () => {
+  it('reports nothing at all when the flag is absent — today\'s build', async () => {
+    writeSidecar(FIXTURE);
+
+    const result = await runCli([...indexArgv(sidecarPath)]);
+
+    expect(result.exitCode).toBe(0);
+    expect(parseJson(result.stdout)['enrichmentColumns']).toBeUndefined();
+  });
+
+  it('reports nothing when the DEFAULT is named explicitly', async () => {
+    writeSidecar(FIXTURE);
+
+    const result = await runCli([...indexArgv(sidecarPath), '--enrichment-columns', 'all']);
+
+    expect(result.exitCode).toBe(0);
+    expect(parseJson(result.stdout)['enrichmentColumns']).toBeUndefined();
+  });
+
+  it('states the canonical selection when a subset was named', async () => {
+    writeSidecar(FIXTURE);
+
+    const result = await runCli([
+      ...indexArgv(sidecarPath),
+      '--enrichment-columns',
+      'questions,keywords',
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    expect(parseJson(result.stdout)['enrichmentColumns']).toBe('keywords,questions');
+  });
+
+  it('states the selection in the human rendering too', async () => {
+    writeSidecar(FIXTURE);
+
+    const result = await runCli(['index', '--adapter', 'fts5', '--atoms-dir', atomsDir,
+      '--index-path', indexPath, '--enrichment', sidecarPath, '--enrichment-columns', 'none']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/--enrichment-columns none/);
+  });
+
+  it('REFUSES `body`, pointing at the flag that DOES own that column', async () => {
+    const result = await runCli([...refusalArgv(), '--enrichment-columns', 'body']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/--enrichment-columns/);
+    expect(result.stderr).toMatch(/--body-source/);
+  });
+
+  it('REFUSES a name outside the vocabulary, listing what is valid', async () => {
+    const result = await runCli([...refusalArgv(), '--enrichment-columns', 'summaries']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/summaries/);
+    expect(result.stderr).toMatch(/doc_desc/);
+  });
+
+  it('REFUSES an empty csv entry rather than guessing which column was meant', async () => {
+    const result = await runCli([...refusalArgv(), '--enrichment-columns', 'questions,']);
+
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('REFUSES the flag on retrieve, which builds no index', async () => {
+    const result = await runCli(['retrieve', 'selector', '--enrichment-columns', 'questions']);
+
+    expect(result.exitCode).toBe(2);
+  });
+});

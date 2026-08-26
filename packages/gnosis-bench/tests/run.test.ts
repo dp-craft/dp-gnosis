@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { ATOM_MAX_CHARS, DEFAULT_BODY_SOURCE, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, EMBED_MODEL_ID, RERANK_DOC_MAX_CHARS, RERANK_FUSION_PRESETS, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_K, RERANK_RRF_WEIGHT } from '../../gnosis/src/config.js';
+import { ATOM_MAX_CHARS, DEFAULT_BODY_SOURCE, DEFAULT_ENRICHMENT_COLUMN_SPEC, DEFAULT_ENRICHMENT_COLUMNS, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, EMBED_MODEL_ID, RERANK_DOC_MAX_CHARS, RERANK_FUSION_PRESETS, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_K, RERANK_RRF_WEIGHT } from '../../gnosis/src/config.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -75,6 +75,7 @@ describe('parseArgs', () => {
       enrichmentPath: undefined,
       bodySource: DEFAULT_BODY_SOURCE,
       keywordFilter: DEFAULT_KEYWORD_FILTER,
+      enrichmentColumns: DEFAULT_ENRICHMENT_COLUMN_SPEC,
       prf: false,
       includeHistory: false,
     });
@@ -97,6 +98,7 @@ describe('parseArgs', () => {
         enrichmentPath: undefined,
         bodySource: DEFAULT_BODY_SOURCE,
         keywordFilter: DEFAULT_KEYWORD_FILTER,
+        enrichmentColumns: DEFAULT_ENRICHMENT_COLUMN_SPEC,
         prf: false,
         includeHistory: false,
       });
@@ -554,6 +556,43 @@ describe('the field-weight and enrichment provenance', () => {
     const provenance = provenanceOf(parseArgs([]), 'abc1234');
     expect(provenance.fieldWeights).toBe(DEFAULT_FIELD_WEIGHTS_TEXT);
     expect(parseArgs([]).enrichmentPath).toBeUndefined();
+  });
+});
+
+/**
+ * `--enrichment-columns` is a TREATMENT: two arms that populated different
+ * columns built different indexes, so a row recording one MUST NOT compare as
+ * equal to a row recording the other.
+ */
+describe('--enrichment-columns provenance', () => {
+  it('is a guarded TREATMENT field, not a scale field', () => {
+    expect(TREATMENT_FIELDS).toContain('enrichmentColumns');
+    expect(SCALE_FIELDS).not.toContain('enrichmentColumns');
+  });
+
+  it('records the canonical label a named subset denotes', () => {
+    const options = parseArgs(['--enrichment-columns', 'questions,keywords']);
+
+    expect(provenanceOf(options, 'sha').enrichmentColumns).toBe('keywords,questions');
+  });
+
+  it('records `none` as its own arm, distinct from the default', () => {
+    expect(provenanceOf(parseArgs(['--enrichment-columns', 'none']), 'sha').enrichmentColumns)
+      .toBe('none');
+  });
+
+  it('stamps an UNFLAGGED run as the all-columns arm every recorded row was measured on', () => {
+    expect(provenanceOf(parseArgs([]), 'sha').enrichmentColumns).toBe(DEFAULT_ENRICHMENT_COLUMNS);
+  });
+
+  it('REFUSES a name outside the vocabulary rather than falling back to all', () => {
+    expect(() => parseArgs(['--enrichment-columns', 'summaries'])).toThrow(/summaries/);
+    expect(() => parseArgs(['--enrichment-columns', 'summaries'])).toThrow(/doc_desc/);
+  });
+
+  it('REFUSES the flag on an adapter that has no enrichment columns', () => {
+    expect(() => parseArgs(['--adapter', 'linear', '--enrichment-columns', 'questions']))
+      .toThrow(/does not honour --enrichment-columns/);
   });
 });
 

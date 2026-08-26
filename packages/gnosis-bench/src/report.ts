@@ -150,6 +150,7 @@ export interface RunProvenance {
    * reads an absent one.
    */
   readonly keywordFilter?: string | undefined;
+  readonly enrichmentColumns?: string | undefined;
   /**
    * Whether the QUERY-SIDE adjacency treatment was applied. Required for the
    * reason `analyzer` is: every run either applied it or did not, and a row
@@ -454,6 +455,13 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
    */
   readonly keywordFilter?: string;
   /**
+   * WHICH enrichment columns the index build populated, as the canonical label.
+   * Absent on every row recorded before the selection existed — those populated
+   * all six, which is {@link DEFAULT_ENRICHMENT_COLUMNS}, and that is what
+   * `compare.ts` backfills them to.
+   */
+  readonly enrichmentColumns?: string;
+  /**
    * How many atoms this row's index carried enrichment text for — TREATMENT
    * provenance (`compare.ts`). Absent on every row recorded before the sidecar
    * existed; those merged nothing, which is {@link NO_ENRICHMENT}, and that is
@@ -699,6 +707,9 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   ...(provenance.bodySource === undefined ? {} : { bodySource: provenance.bodySource }),
   // Same rule: a run that built no index names no filter it never applied.
   ...(provenance.keywordFilter === undefined ? {} : { keywordFilter: provenance.keywordFilter }),
+  ...(provenance.enrichmentColumns === undefined
+    ? {}
+    : { enrichmentColumns: provenance.enrichmentColumns }),
   // A run that built no index writes no key at all — never a `0` claiming a
   // sidecar was consulted and found empty.
   ...(result.enrichment === undefined ? {} : { enrichment: result.enrichment }),
