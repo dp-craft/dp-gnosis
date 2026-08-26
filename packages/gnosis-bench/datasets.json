@@ -348,6 +348,38 @@
       "queryShape": "hungarian-keyword-autorephrased",
       "enabled": false,
       "layers": []
+    },
+    {
+      "comment": "F3 ablation, arm ONE of a pair \u2014 the DE-INJECTED half of `vault-hu-rephrased`, built to explain the +0.2407 gap the hand rewrite opens over the shipped `--rephrase` path on `vault-hu`, which no query-only mechanism accounts for. The provenance of the hand rewrite's 237 distinct terms was measured: 36.7% are retained verbatim from the question, 20.3% are de-inflected forms of a question term, and 43.0% are INJECTED \u2014 vocabulary traceable to no term of the question at all (`delivery_date`, `res.groups`, `ir.model.access`, `reverse charge`, `unmapped`, `excluded`). The hand set's own `variantNote` records that the corpus vocabulary was read once, globally, before rewriting, so injection is a capability the query-only `--rephrase` path structurally CANNOT have \u2014 it never sees the corpus. This arm keeps only the tokens that trace back to the base question, so de-inflection and intent-stripping are PRESERVED and injection alone is removed: the delta against `vault-hu-rephrased` prices the injected vocabulary, and the delta against `vault-hu` prices what is left. 99 of 216 surface tokens are dropped, and hu-023 falls back to its base question because every token of its hand rewrite was injected. MUST be read against `vault-hu-lengthcontrol`, never alone \u2014 a drop is otherwise ambiguous between provenance and length. `enabled` FALSE with `layers: []` on the same precedent as the four rephrased arms, so the default suite and every layered run are unchanged; run with `--only vault-hu-deinjected`.",
+      "id": "vault-hu-deinjected",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/vault-hu-deinjected",
+      "derive": {
+        "atoms": "../../benchmark-data/cache/atoms-hu",
+        "golden": "../gnosis/golden/golden-set-hu-deinjected.v1.json"
+      },
+      "domain": "project-vault-hu",
+      "docShape": "atom",
+      "queryShape": "hungarian-keyword-deinjected",
+      "enabled": false,
+      "layers": []
+    },
+    {
+      "comment": "F3 ablation, arm TWO of a pair \u2014 the LENGTH CONTROL for `vault-hu-deinjected`. It drops the same NUMBER of tokens per topic, but chooses them by a frozen FNV-1a hash of the token instead of by provenance. Without it a measured drop on the de-injected arm is ambiguous between two very different readings \u2014 \"the injected corpus vocabulary was what earned the +0.2407\" and \"shorter queries simply score worse\" \u2014 and only the first is a finding about rephrasing. Same 99 of 216 surface tokens dropped in count, same 31 topics, same relevantAtomIds, same corpus; hu-023 falls back to its base question here too, since its whole rewrite is dropped either way. The hash is frozen in the golden file rather than computed per run, so the arm re-runs bit-identical. Read the three-way spread `vault-hu-rephrased` -> this -> `vault-hu-deinjected`: if the two ablated arms land together, length explains the loss and injection buys nothing; if the de-injected arm lands materially higher, the injected vocabulary is the mechanism. `enabled` FALSE with `layers: []` on the same precedent as the four rephrased arms, so the default suite and every layered run are unchanged; run with `--only vault-hu-lengthcontrol`.",
+      "id": "vault-hu-lengthcontrol",
+      "format": "beir-local",
+      "qrels": "test",
+      "source": "data/vault-hu-lengthcontrol",
+      "derive": {
+        "atoms": "../../benchmark-data/cache/atoms-hu",
+        "golden": "../gnosis/golden/golden-set-hu-lengthcontrol.v1.json"
+      },
+      "domain": "project-vault-hu",
+      "docShape": "atom",
+      "queryShape": "hungarian-keyword-lengthcontrol",
+      "enabled": false,
+      "layers": []
     }
   ]
 }

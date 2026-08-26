@@ -169,10 +169,21 @@ describe('the shipped datasets.json', () => {
   // vault, so it counts as external: 10 -> 11 and the total 25 -> 26. It exists because
   // `vault-hu`'s 31 topics cannot decide a Hungarian analyzer or PRF question at an MDE
   // of 0.05-0.07; it is a LANGUAGE probe, never a product proxy.
-  it('carries eleven external, nine BRIGHT, two vault and four vault-arm entries', () => {
+  // AC delta: the F3 ablation adds two vault ABLATION entries (`vault-hu-deinjected`,
+  // `vault-hu-lengthcontrol`) — the same corpus, topics and judgments as
+  // `vault-hu-rephrased` with tokens REMOVED from the hand-written query text: by
+  // provenance in the first arm, by a frozen hash at equal count in the second. They are
+  // not rephrasings, so `isArm` (which matches `-rephrased` / `-autorephrased`) does not
+  // and MUST not match them — bending that regex would fold an ablation into the phrasing
+  // pair it is measured against. They are asserted as their own category instead: the
+  // four rephrased arms stay exactly as they were, plain vault stays `['vault',
+  // 'vault-hu']`, and the total moves 26 → 28. External BEIR (11) and BRIGHT (9) are
+  // untouched.
+  it('carries eleven external, nine BRIGHT, two vault, four vault-arm and two vault-ablation entries', () => {
     const ids = entries.map(e => e.id);
     const isVault = (id: string): boolean => id === 'vault' || id.startsWith('vault-');
     const isArm = (id: string): boolean => /-(auto)?rephrased$/.test(id);
+    const isAblation = (id: string): boolean => /-(deinjected|lengthcontrol)$/.test(id);
     const external = ids.filter(id => !id.startsWith('bright-') && !isVault(id));
 
     expect(entries.filter(e => e.format === 'bright')).toHaveLength(9);
@@ -189,14 +200,18 @@ describe('the shipped datasets.json', () => {
       'webis-touche2020',
       'milqa-hu',
     ]);
-    expect(ids.filter(id => isVault(id) && !isArm(id))).toEqual(['vault', 'vault-hu']);
+    expect(ids.filter(id => isVault(id) && !isArm(id) && !isAblation(id))).toEqual([
+      'vault',
+      'vault-hu',
+    ]);
     expect(ids.filter(isArm)).toEqual([
       'vault-rephrased',
       'vault-autorephrased',
       'vault-hu-rephrased',
       'vault-hu-autorephrased',
     ]);
-    expect(entries).toHaveLength(11 + 9 + 2 + 4);
+    expect(ids.filter(isAblation)).toEqual(['vault-hu-deinjected', 'vault-hu-lengthcontrol']);
+    expect(entries).toHaveLength(11 + 9 + 2 + 4 + 2);
   });
 
   // AC delta: the T-04 projection fix gives a title-only record a non-empty chunk body,
@@ -204,7 +219,11 @@ describe('the shipped datasets.json', () => {
   // 17 → 18 enabled. The only entries still disabled are the four rephrased arms, which
   // are run by `--only` and MUST stay out of a bare `npm run gnosis:bench`.
   // AC delta: `milqa-hu` ships enabled, 18 -> 19. The disabled set is unchanged.
-  it('enables nineteen of the twenty-six entries, each having a fetcher', () => {
+  // AC delta: the two F3 ablation arms ship disabled with empty layers — the rephrased-arm
+  // precedent — so the disabled set grows 7 -> 9 and the total 26 -> 28 while the ENABLED
+  // count stays 19: a bare `npm run gnosis:bench` and every layered run measure exactly
+  // what they measured before.
+  it('enables nineteen of the twenty-eight entries, each having a fetcher', () => {
     const disabled = entries.filter(e => !e.enabled).map(e => e.id);
 
     expect(disabled).toEqual([
@@ -215,12 +234,16 @@ describe('the shipped datasets.json', () => {
       'vault-autorephrased',
       'vault-hu-rephrased',
       'vault-hu-autorephrased',
+      'vault-hu-deinjected',
+      'vault-hu-lengthcontrol',
     ]);
     expect(enabledDatasets(entries)).toHaveLength(19);
   });
 
-  // The six vault-family entries are the only ones that DERIVE their BEIR layout,
+  // The eight vault-family entries are the only ones that DERIVE their BEIR layout,
   // and each must name an atoms dir and a golden set — half a derivation is a typo.
+  // AC delta: the two F3 ablation arms derive like every other vault entry — the shared
+  // `atoms-hu` corpus plus their own golden file — so the derived list moves 6 -> 8.
   it('gives each vault entry a derive block naming atoms and a golden set', () => {
     const derived = entries.filter(e => e.format === 'beir-local' && e.derive !== undefined);
 
@@ -231,6 +254,8 @@ describe('the shipped datasets.json', () => {
       'vault-autorephrased',
       'vault-hu-rephrased',
       'vault-hu-autorephrased',
+      'vault-hu-deinjected',
+      'vault-hu-lengthcontrol',
     ]);
     expect(derived.every(e => e.format === 'beir-local' && e.derive!.atoms.length > 0)).toBe(true);
     expect(derived.every(e => e.format === 'beir-local' && e.derive!.golden.length > 0)).toBe(true);
