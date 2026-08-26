@@ -9,6 +9,11 @@
  */
 import { relative } from 'node:path';
 
+import { readIndexAnalyzer } from '../adapters/fts5Adapter.js';
+import {
+  readVocabularyGap,
+  type VocabularyGap
+} from '../adapters/fts5VocabularyGap.js';
 import type { AtomMeasure, SkippedAtom } from '../budget.js';
 import { fitToTokenBudget } from '../budget.js';
 import type { BudgetMode, FieldWeights, FtsColumn } from '../config.js';
@@ -1081,6 +1086,60 @@ const rerankLines = (request: RetrieveRequest): readonly string[] =>
   request.rerankRefusal === undefined ? [] : [request.rerankRefusal];
 
 /**
+ * C11a. The silent hole this closes is the QUERY-side twin of the one C1 closed
+ * on the index side: a query term the index has never seen contributes an EMPTY
+ * posting list, `MATCH` still succeeds, atoms still come back ranked by whatever
+ * terms DID hit, and the run exits 0 over a plausible answer. The term that
+ * carried the caller's intent reached nothing, and nothing said so.
+ *
+ * Stated as a WARNING only. Like the enrichment, body-source and domain
+ * warnings it MUST NOT move the exit code: the index is sound, the search ran,
+ * and the ranking delivered is the real ranking for the terms that exist.
+ */
+const vocabularyGapWarning = (gap: VocabularyGap): string =>
+  `retrieve: ${gap.gapCount} of ${gap.termCount} analysed query term(s) have ZERO postings in ` +
+  `this index — ${gap.gapTerms.map(term => `"${term}"`).join(', ')} — no atom holds them, so ` +
+  'they add nothing to the ranking and a feedback pass built on it expands from the terms that ' +
+  'did hit; check the spelling, or ask with words this corpus uses.';
+
+/** A gap that was not measured, and a gap of zero, both say NOTHING — today's output. */
+const gapOf = (request: RetrieveRequest): VocabularyGap | undefined => {
+  const gap = request.vocabularyGap;
+  return gap === undefined || gap.gapCount === 0 ? undefined : gap;
+};
+
+const vocabularyGapLines = (request: RetrieveRequest): readonly string[] => {
+  const gap = gapOf(request);
+  return gap === undefined ? [] : [vocabularyGapWarning(gap)];
+};
+
+/**
+ * Its OWN key, deliberately not `note`: the note carries refusals, and a shared
+ * key would let whichever is written last erase the other — a silent drop is the
+ * failure class this diagnostic exists to report. Omitted ENTIRELY when nothing
+ * is missing, so a clean query's payload is byte for byte the one it always was.
+ *
+ * The gap TERMS are stated, not the full per-term posting table: an operator
+ * needs the hole named. The whole table is what `gnosis:vocabgap` emits, over a
+ * whole topic set, offline.
+ */
+const vocabularyGapField = (
+  request: RetrieveRequest
+): Readonly<Record<string, unknown>> => {
+  const gap = gapOf(request);
+  return gap === undefined
+    ? {}
+    : {
+        vocabularyGap: {
+          gapTerms: gap.gapTerms,
+          gapCount: gap.gapCount,
+          termCount: gap.termCount,
+          warning: vocabularyGapWarning(gap),
+        },
+      };
+};
+
+/**
  * How much CALIBRATED evidence stands behind the delivered atoms.
  *
  * Three values, judged against the MEASURED {@link ABSTAIN_FLOOR} unless
@@ -1180,6 +1239,7 @@ const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): strin
     ...prfLines(request),
     ...rephraseLines(request),
     ...rerankLines(request),
+    ...vocabularyGapLines(request),
     ...unsearchedNotes(request, result),
     ...result.atoms.flatMap(atom => atomLines(atom, isGrouped(request))),
     ...skipText(budgeted),
@@ -1436,6 +1496,14 @@ export interface RetrieveRequest {
   readonly rephraseRefusal: string | undefined;
   /** The reranker's refusal, carried the same way. `undefined` when it ranked. */
   readonly rerankRefusal: string | undefined;
+  /**
+   * C11a — which analysed query terms reach ZERO atoms in the index that was
+   * searched. `undefined` when no such measurement was possible: a non-fts5
+   * adapter, or an index that was not `ready`. Absence is "not measured", never
+   * "no gap" — a diagnostic that reports a clean zero for an index it could not
+   * open is the failure class this whole family of warnings exists to end.
+   */
+  readonly vocabularyGap: VocabularyGap | undefined;
 }
 
 /**
@@ -1513,6 +1581,19 @@ export const prfField = (request: RetrieveRequest): { readonly prf?: PrfReport }
 const rewrittenField = (request: RetrieveRequest): Readonly<Record<string, string>> =>
   request.queryRewritten === undefined ? {} : { queryRewritten: request.queryRewritten };
 
+/**
+ * What the run has to SAY, beyond the atoms — one group, because both members
+ * are omitted when there is nothing to say and both must be able to fire on the
+ * same run without either erasing the other.
+ */
+const reportFields = (
+  request: RetrieveRequest,
+  budgeted: BudgetedResult
+): Readonly<Record<string, unknown>> => ({
+  ...vocabularyGapField(request),
+  ...noteField(request, budgeted),
+});
+
 /** The `--json` payload. Its key set is adapter-independent by construction. */
 const payload = (
   request: RetrieveRequest,
@@ -1532,7 +1613,7 @@ const payload = (
   ...prfField(request),
   atoms: explainAtoms(effectiveQuery(request), budgeted.result.atoms),
   skipped: budgeted.skipped,
-  ...noteField(request, budgeted),
+  ...reportFields(request, budgeted),
 });
 
 /**
@@ -1925,6 +2006,39 @@ const budgetSpec = (
   overhead: number
 ): BudgetSpec => ({ maxTokens: request.maxTokens, measure, overhead });
 
+/** The one adapter whose index carries an fts5 vocabulary to be read. */
+const VOCABULARY_ADAPTER: AdapterName = 'fts5';
+
+/**
+ * The measurement, taken only when it can be taken: the fts5 adapter, over an
+ * index the port reported `ready`. Any other state means nothing was searched,
+ * or was searched somewhere this reader cannot open — and a clean zero from an
+ * unmeasured index would be exactly the false green the warning exists to end.
+ *
+ * The raw query is used, and the analyser is the index's OWN stamped chain, so
+ * the terms compared are the terms the search itself matched with.
+ *
+ * A throw is swallowed to `undefined` ON PURPOSE and here alone: this is a
+ * diagnostic, and a diagnostic that can fail a retrieval has traded a warning
+ * for an outage. The run then reports as it did before C11a existed.
+ */
+const vocabularyGapOf = (
+  request: RetrieveRequest,
+  result: RetrievalResult
+): VocabularyGap | undefined => {
+  const { context } = request;
+  if (context.adapter !== VOCABULARY_ADAPTER || result.indexState !== 'ready') return undefined;
+  try {
+    return readVocabularyGap(
+      context.indexPath,
+      effectiveQuery(request),
+      readIndexAnalyzer(context.indexPath)
+    );
+  } catch {
+    return undefined;
+  }
+};
+
 const search = async (
   request: RetrieveRequest,
   counting: CountAtoms,
@@ -1937,7 +2051,11 @@ const search = async (
   const result = await port.retrieve(effectiveQuery(request), retrieveOptions(request));
   port.close?.();
   const ranked = await rankedResult(request, result);
-  const reported: RetrieveRequest = { ...request, rerankRefusal: ranked.refusal };
+  const reported: RetrieveRequest = {
+    ...request,
+    rerankRefusal: ranked.refusal,
+    vocabularyGap: vocabularyGapOf(request, result),
+  };
   const floored = applyFloor(reported, ranked.result);
   const measured = await counting(floored.result.atoms);
   if (!measured.ok) return refused(measured.reason);
@@ -1957,6 +2075,7 @@ const UNRESOLVED = {
   queryRewritten: undefined,
   rephraseRefusal: undefined,
   rerankRefusal: undefined,
+  vocabularyGap: undefined,
 } as const;
 
 /** How the run SCORES: the column weights, and the feedback pass over them. */

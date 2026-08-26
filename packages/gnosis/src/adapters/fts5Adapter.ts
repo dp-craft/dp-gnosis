@@ -190,11 +190,17 @@ const ENRICHMENT_COLUMNS_KEY = 'enrichment_columns';
  * order, the insert order and the `bm25()` weight order are then the SAME list,
  * and a column cannot be indexed in one position while being weighted in another.
  */
-const CREATE_FTS_SQL = `CREATE VIRTUAL TABLE atom_fts USING fts5(${FTS_COLUMNS.join(', ')}, content='', detail=full)`;
+/**
+ * The inverted-index table's NAME, exported because a read-only diagnostic must
+ * name the same table this build creates. A second literal elsewhere is how a
+ * tool ends up reporting on a table nothing writes.
+ */
+export const FTS_TABLE = 'atom_fts';
+const CREATE_FTS_SQL = `CREATE VIRTUAL TABLE ${FTS_TABLE} USING fts5(${FTS_COLUMNS.join(', ')}, content='', detail=full)`;
 const INSERT_META_SQL = 'INSERT INTO atom_meta(rowid, id, path) VALUES (?, ?, ?)';
 const FTS_PLACEHOLDERS = ['rowid', ...FTS_COLUMNS].map(() => '?').join(', ');
 const INSERT_FTS_SQL =
-  `INSERT INTO atom_fts(rowid, ${FTS_COLUMNS.join(', ')}) VALUES (${FTS_PLACEHOLDERS})`;
+  `INSERT INTO ${FTS_TABLE}(rowid, ${FTS_COLUMNS.join(', ')}) VALUES (${FTS_PLACEHOLDERS})`;
 const COUNT_META_SQL = 'SELECT COUNT(*) AS n FROM atom_meta';
 /**
  * A weight is INLINED as a numeric literal rather than bound as a parameter:
@@ -719,6 +725,20 @@ const PRE_STAMP_ANALYZER: AnalyzerId = 'porter-fold';
 const stampedAnalyzer = (db: Database.Database): AnalyzerId => {
   const value = stampValue(db, ANALYZER_KEY);
   return value === undefined ? PRE_STAMP_ANALYZER : asAnalyzer(value);
+};
+
+/**
+ * The stamped chain of an index file, for a caller that must analyse text the
+ * way THAT index was analysed but does not open a port — the zero-posting
+ * diagnostic (`fts5VocabularyGap.ts`) and its offline aggregate. It reads the
+ * same stamp the query side reads, through the same fallback, so a diagnostic
+ * cannot analyse under a chain the searcher would not use.
+ */
+export const readIndexAnalyzer = (indexPath: string): AnalyzerId => {
+  const db = new Database(indexPath, { readonly: true });
+  const analyzer = stampedAnalyzer(db);
+  db.close();
+  return analyzer;
 };
 
 /**
