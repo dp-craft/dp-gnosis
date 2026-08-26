@@ -111,6 +111,8 @@ treatment it never applied. Recorded as the TREATMENT field `analyzer`.
 
 **`--fuse-legs <csv>`** turns the offline three-leg forecast (`npm run gnosis:fuseforecast`) into a REAL route: per topic, every named leg retrieves to the run's own retrieve depth (`--rerank-pool` when reranking, else `--depth`), the per-leg ATOM rankings are fused by UNIFORM-weight RRF and truncated back to that depth, and the fused list then enters the existing path — rerank, budget, rollup — unchanged. The fusion is `fuseForecast.ts`'s own `rrfScored`, imported and never re-derived, so a route that beats its forecast differs from it in its INPUTS and never in its formula. The legs come from a fixed catalog: `fts5` (fts5, no expansion), `linear` (the linear scan), `fts5+prf` (fts5 with RM3 at the engine's `DEFAULT_PRF_PARAMS`, tunable with `--prf-docs` / `--prf-terms` / `--prf-alpha`, which are accepted without `--prf` exactly when a prf leg is named). Each fused id is mapped back to the atom the FIRST leg that returned it produced — the order you listed them is the tie-break — and the atom carries its RRF score, because its per-leg BM25 score no longer describes the order it sits in. An unknown label, fewer than two legs, a repeated leg, `--adapter` on anything but `fts5`, and `--prf` beside the flag all FAIL loudly naming both flags; none is clamped or deduped in silence. An index is prepared per DISTINCT adapter among the legs and a port opened per leg. Recorded as `fuseLegs`, the canonical csv in the given order and a **TREATMENT** field, so `--compare` labels a fusion change `ARM COMPARISON` rather than subtracting it; an absent one reads as `none`, which is what every unfused run measured. Absent, one index is prepared, one port is opened and one retrieval runs — byte-identical to a run recorded before the flag existed.
 
+**MEASURED 2026-08-26, and the movement is REACH, not order.** `vault`, 60 topics, first stage: baseline 0.4858 nDCG@10 / 0.8493 R@100, the route 0.5082 / 0.8796. Paired, nDCG@10 is **+0.0224 at p=0.0940, CI [−0.0007, +0.0503] — NOT significant**, while R@100 **+0.0303 (p=0.0368)** and MAP **+0.0259 (p=0.0238)** are. It costs **112.7 s against 2.7 s per 60 queries — 42×** — for a head metric that did not move significantly, so the route MUST NOT be described as a quality gain. **The zero-GPU offline forecast reproduced it exactly**: `npm run gnosis:fuseforecast` returned 0.5082 / 0.8796, identical to four decimals on BOTH metrics. Forecast the fusion over recorded `.trec` runs first; a route that only reproduces its own forecast has bought 42× compute and no information.
+
 **`--include-history`** is OFF by default, and OFF means the derived vault holds only the types the CLI SERVES: the profile's `defaultExcludedTypes` are subtracted in `fetch/vault.ts` before `corpus.jsonl` is written, because the BEIR projection carries `{id,title,text}` alone and the atom's type exists nowhere downstream of that step. On the real vault those types were 7584 of 14127 atoms and 0 of 283 gold, so every top-10 slot they held could never be correct. On, the full corpus is projected — byte-identical to every run recorded before the alignment. Same name and same meaning as the CLI's flag, and it touches vault-derived datasets ONLY: BEIR and BRIGHT never enter `ensureVaultDataset`. Recorded as `typeFilter` (the excluded types, sorted and comma-joined, or `none`), a **TREATMENT** field, so `--compare` labels an aligned run against a full-corpus one `ARM COMPARISON` rather than subtracting it. It is NOT bit-equivalent to serving: BM25 collection statistics are computed over the servable subset here, where the CLI computes them over the full index and filters during the scan.
 
 **`--rerank-pool <n>`** sets the reranker's candidate pool EXPLICITLY, bypassing the engine's `RERANK_K_INIT` floor — the only way to measure a pool below that constant. Omitted, the pool stays `max(depth, RERANK_K_INIT)`, so every already-recorded arm re-runs bit-identical. A non-integer, zero or negative value FAILS loudly naming the constraint; it is never clamped. Without `--rerank` it REFUSES, naming both flags. The effective pool is stamped on `rerankPool`, a **SCALE** field, so `--compare` refuses to subtract across a pool change. A pool below `--depth` WARNS (`dp-gnosis-bench/rerank-pool-below-depth`) rather than refusing: the arm is legitimate, but every metric whose cut is above the pool is capped by it — R@100 from a pool of 20 is R@20 under another name.
@@ -374,6 +376,27 @@ parameter study — but it means a rerun after a chunk-size change is an
 overnight job, not an interactive one. Narrow with `--only` when only one
 dataset moved. Artefacts are rewritten after EVERY cell, so a crash on the last
 cell costs one cell, not the run.
+
+## `gnosis:detenrich` — an instrument, and NOT a producer
+
+`npm run gnosis:detenrich` writes the W1 and W4 enrichment sidecars, the ones
+`--enrichment` joins into the enrichment columns. It is the Track W producer, and
+**Track W is CLOSED: both arms failed their pre-registered rules.** `nfcorpus`,
+323 topics, first stage, against the `A_questions` LLM sidecar at 0.3369:
+
+| Arm | What it writes | nDCG@10 | Δ | p | 95 % CI |
+|---|---|---|---|---|---|
+| W1 | the atom's top-84 OWN body terms by corpus IDF | 0.3133 | **−0.0235** | 0.0001 | [−0.0318, −0.0158] |
+| W4 | the LLM questions minus the 50 commonest terms | 0.3356 | −0.0013 | 0.2523 | [−0.0036, +0.0008] |
+
+W1 is a significant LOSS; W4 is inert with a CI that includes zero. **Its output
+MUST NOT be indexed as an improvement** — the tool survives as an INSTRUMENT for
+re-measuring the arm, never as a step in a build.
+
+It also carries a defect of its own: it writes terms the index then RE-ANALYSES,
+and **12 100 of 302 959 written terms (3.99 %) change under that second pass** —
+the non-idempotent-chain landmine (`handbook/GNOSIS-GUIDE.md` § Landmines) on the
+write side. A term that changes there is not the term that was scored.
 
 ## What `--rerank` measures, honestly
 

@@ -396,6 +396,34 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 
 A root matching **zero** files THROWS, naming that root — a typo would otherwise index nothing in silence, and the only symptom would be empty queries. Override with `DP_GNOSIS_CORPUS_ROOTS=<comma-separated repo-relative roots>`; unset, empty or all-blank falls back to the default. `SOURCE_ROOT_DOMAINS` maps a source path prefix → `x_domain` (`runner|standards|adr|docs|claude`), longest prefix wins; a source under no declared root is skipped with a reason, never guessed.
 
+### Analyzers — the chain that builds AND queries an index
+
+An **analyzer** is the token chain `index` runs over every body and `retrieve` runs over every query. `DEFAULT_ANALYZER` is **`porter-fold`**, and every recorded baseline in `handbook/GNOSIS-BASELINES.md` was measured on it. Selected per profile with `defaultAnalyzer` (below) and per bench arm with `--analyzer <id>`; `fts5` only, because it is the only adapter that builds its index with the named chain.
+
+| Chain | What it does | Choose it for |
+|---|---|---|
+| `porter-fold` | split · lowercase · English Porter stem · diacritic fold | English — the shipped default |
+| `porter-nofold` · `nostem-fold` · `nostem-nofold` | the same split+lowercase with folding, stemming, or both removed | ablation arms, never a serving choice |
+| `ident-porter-fold` | the identifier chain — whole token OR its parts, parts analysed by `porter-fold` | English material carrying technical identifiers |
+| `hulight-fold` | split · lowercase · diacritic fold · Hungarian light suffix stripper. Porter is **REPLACED**, not chained — an English stemmer after a Hungarian one strips a second time | Hungarian PROSE, with no identifiers to protect |
+| `ident-hulight-fold` | the identifier chain with its parts analysed by `hulight-fold` | a Hungarian corpus that ALSO carries technical identifiers — the `hu-tax` vault |
+
+**The two Hungarian chains landed 2026-08-26 (`9ee408d`), both OPT-IN.** `DEFAULT_ANALYZER` is unchanged, so nothing moved for a caller who names no analyzer. First stage, `fts5`, `vault-hu`, 31 topics:
+
+| Arm | nDCG@10 | Δ | p | 95 % CI | zero-posting query terms |
+|---|---|---|---|---|---|
+| `porter-fold` (shipped) | 0.4868 | — | — | — | 51 / 360 = 14.2 % |
+| `hulight-fold` | 0.5665 | **+0.0798** | 0.0335 | [+0.0109, +0.1497] | 14 / 360 = 3.9 % |
+| `ident-hulight-fold` | 0.6237 | **+0.1369** | 0.0002 | [+0.0731, +0.2000] | see the `gnosis:vocabgap` landmine — the tool is INVALID on an `ident-*` chain |
+
+That is **72.5 % gap closure** against a 74 % ceiling predicted from the prefix probe.
+
+**Which of the two, decided by evidence and not by language.** Out of sample on `milqa-hu` — 16 885 topics of Hungarian Wikipedia prose — the order REVERSES: baseline 0.6826, `hulight-fold` **0.7678** (+0.0852, p=0.0001, CI [+0.0810, +0.0894]), `ident-hulight-fold` **0.7631** (+0.0805, p=0.0001, CI [+0.0763, +0.0848]). On prose with no identifiers to protect, plain `hulight-fold` wins. So: `ident-hulight-fold` for a Hungarian corpus carrying technical identifiers (the `hu-tax` vault), `hulight-fold` for Hungarian prose without them. MUST NOT pick either from the language alone.
+
+**The reranked confirmation is NOT significant, and the claim does not rest on it.** At the served config (`qwen3-reranker-4b`, pool 100, `vault-hu`, 31 topics) `porter-fold` 0.7699 → `ident-hulight-fold` 0.8231, Δ **+0.0533 at p=0.0727 — not significant at n=31**; MAP +0.0635 (p=0.0319). First-stage-to-delivered conversion 39 %. The evidence for the chain is the first-stage result and the out-of-sample `milqa-hu` result; the reranked row is consistent with them and MUST NOT be quoted as a gate that fired.
+
+**Corpus-scoped by measurement, never global.** The chain costs English **−0.0634 (p=0.0005)**. That is why it is a per-profile opt-in and why it MUST NOT be proposed as `DEFAULT_ANALYZER`.
+
 ### Profiles — one named instance, and the two-instance contract
 
 A **profile** is one named, versionable unit: the labelling vocabulary AND the locations it operates on. `profiles/default.profile.json` is the shipped one; `--profile <file>` selects another.
@@ -409,6 +437,9 @@ A **profile** is one named, versionable unit: the labelling vocabulary AND the l
 | `corpusRoots` | repo-relative roots this instance ingests — its corpus SCOPE |
 | `atomsDir` | where this instance's atoms are written and read |
 | `indexPath` | where this instance's index is built (a DIRECTORY for `lancedb`) |
+| `defaultAnalyzer` | the analysis chain this instance's index is BUILT with — a key of `ANALYZERS` (§ Analyzers). ABSENT means `DEFAULT_ANALYZER` |
+
+**`defaultAnalyzer` is an INDEX-BUILD default, unlike `defaultPrf`, which is retrieve-time** (`31c9523`). The chain is STAMPED into the index at build time and the query side reads the stamp back — `Fts5AdapterOptions` deliberately carries no `analyzer` — so query and index cannot disagree, and there is no way to serve a query analysed by a chain the postings were not built with. ABSENT means unchanged, verified byte for byte: an omitted key and an explicit `undefined` produce the SAME index sha256 `4f608207…` over 454 atoms, where `ident-hulight-fold` produces `d91f72ee…`. **It takes effect only on a REBUILD** — an existing index keeps its own stamp, so setting the key and not re-running `index` changes nothing and reports nothing. Set today on `profiles/hu-tax.profile.json` alone.
 
 The four location keys are OPTIONAL, and a relative one resolves against the directory the profile file lives in — a profile is copied and moved as one file, so `process.cwd()` would point somewhere else for every caller.
 
@@ -501,7 +532,7 @@ These rules are also EXECUTABLE: `retrieve --rephrase` hands the question to a l
 
 Grammar and word order are **irrelevant** — it is a bag of words. `zustand selector stability` and `stability selector zustand` score identically.
 
-**Non-English corpora.** Stemming is English Porter (npm `stemmer`), applied uniformly to every adapter. On an agglutinative language it does nothing useful: a Hungarian run missed the correct document in 3 of 5 queries purely on suffix mismatch — query `használata` never matched document `használ` / `használnak` / `használva`; query `kerekítési összege` never matched `kerekítése` / `összegeket`; query `modulok` never matched `modul` / `moduloknak` / `modulban`. Until a language-aware analyzer is wired in, a non-English query MUST be written with the **word stem** the document uses, not the inflected form the asker would speak.
+**Non-English corpora.** Stemming is English Porter (npm `stemmer`), applied uniformly to every adapter. On an agglutinative language it does nothing useful: a Hungarian run missed the correct document in 3 of 5 queries purely on suffix mismatch — query `használata` never matched document `használ` / `használnak` / `használva`; query `kerekítési összege` never matched `kerekítése` / `összegeket`; query `modulok` never matched `modul` / `moduloknak` / `modulban`. **A language-aware analyzer now EXISTS and is OPT-IN per profile** (§ Analyzers — `hulight-fold` / `ident-hulight-fold`, `defaultAnalyzer`), but `DEFAULT_ANALYZER` is still `porter-fold` and the chain is stamped into the index at BUILD time. So the rule still binds, scoped to what was built: on any corpus whose index was built with `porter-fold` — every corpus but `hu-tax` — a non-English query MUST be written with the **word stem** the document uses, not the inflected form the asker would speak.
 
 **No-match warning.** The engine returns up to `k` results ranked by score and **never signals "no good match"**. A caller MUST treat a low absolute score, or a top result far below the run's usual scores, as a probable miss — and MUST NOT read a returned atom as an answer merely because it was returned. `count < k` only means fewer atoms scored above zero.
 
