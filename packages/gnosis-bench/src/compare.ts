@@ -60,6 +60,7 @@ import {
   DEFAULT_FIELD_WEIGHTS_TEXT,
   type HistoryRow,
   NO_ENRICHMENT,
+  NO_FUSE_LEGS,
   NO_TYPE_FILTER
 } from './report.js';
 
@@ -108,6 +109,7 @@ export const TREATMENT_FIELDS = [
   'prfDocs',
   'prfTerms',
   'prfAlpha',
+  'fuseLegs',
   'typeFilter',
 ] as const;
 
@@ -265,6 +267,11 @@ const LEGACY_RERANK_RRF_WEIGHT = 0.5;
  * label. Reading either as unset instead would relabel the whole recorded
  * history as an arm nobody ever ran.
  *
+ * `fuseLegs` follows the same backfill: no row recorded before the flag existed
+ * could have fused anything, so an absent one reads as {@link NO_FUSE_LEGS}
+ * rather than as an unknown arm. Omitting the entry is precisely the gap that
+ * would make an old row refuse to pair with a new unfused one.
+ *
  * `bodySource` follows the same backfill: no row recorded before the source was
  * selectable could have built its `body` column from anything but the atom, so
  * an absent one reads as `DEFAULT_BODY_SOURCE` rather than as a moved treatment.
@@ -296,6 +303,7 @@ const FIELD_DEFAULTS: Partial<Record<ProvenanceField, string | number | boolean>
   prfDocs: DEFAULT_PRF_PARAMS.fbDocs,
   prfTerms: DEFAULT_PRF_PARAMS.fbTerms,
   prfAlpha: DEFAULT_PRF_PARAMS.alpha,
+  fuseLegs: NO_FUSE_LEGS,
   rerankDocMaxChars: LEGACY_RERANK_DOC_MAX_CHARS,
   rerankExtract: LEGACY_RERANK_EXTRACT,
   rerankWeight: LEGACY_RERANK_RRF_WEIGHT,

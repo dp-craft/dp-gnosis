@@ -150,7 +150,13 @@ export const assertReproduces = (label: string, recorded: number, recomputed: nu
   );
 };
 
-interface Scored {
+/**
+ * One fused document and the RRF score that placed it. EXPORTED because a
+ * caller that fuses live retrievals (`run.ts` `--fuse-legs`) has to carry the
+ * fused score onto the atom it hands downstream: the per-leg BM25 score no
+ * longer describes the order it is printed beside.
+ */
+export interface Scored {
   readonly docId: string;
   readonly score: number;
 }
@@ -178,22 +184,34 @@ const fusedScore = (
 
 /**
  * Weighted RRF over the UNION of the given rankings, 1-based ranks, truncated to
- * `depth`. N legs, because the three-way forecast is the same arithmetic with a
- * third share rather than a second rule.
+ * `depth`, WITH the score each fused id was placed by. N legs, because the
+ * three-way forecast is the same arithmetic with a third share rather than a
+ * second rule.
+ *
+ * The scores are exposed rather than dropped so a live fusion can stamp them on
+ * the atoms it returns. This is a WIDENING of `rrfFuse`, never a second
+ * implementation: `rrfFuse` is now its projection, so the offline forecast and
+ * an online route cannot compute two different fusions.
  */
-export const rrfFuse = (
+export const rrfScored = (
   rankings: readonly (readonly string[])[],
   weights: readonly number[],
   depth: number = FUSE_DEPTH
-): readonly string[] => {
+): readonly Scored[] => {
   const ranks = rankings.map(rankMap);
   const union = [...new Set(rankings.flat())];
   return union
     .map(docId => ({ docId, score: fusedScore(ranks, weights, docId) }))
     .sort(byScoreThenId)
-    .slice(0, depth)
-    .map(entry => entry.docId);
+    .slice(0, depth);
 };
+
+/** The fused ORDER alone — `rrfScored` projected onto its ids. */
+export const rrfFuse = (
+  rankings: readonly (readonly string[])[],
+  weights: readonly number[],
+  depth: number = FUSE_DEPTH
+): readonly string[] => rrfScored(rankings, weights, depth).map(entry => entry.docId);
 
 /** Fuse per topic, over the topic set the legs were aligned to. */
 export const fuseRankings = (

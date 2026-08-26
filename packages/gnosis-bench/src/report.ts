@@ -181,6 +181,15 @@ export interface RunProvenance {
   readonly prfTerms?: number | undefined;
   readonly prfAlpha?: number | undefined;
   /**
+   * The legs this run FUSED, canonical csv in the order the flag listed them.
+   * Absent on a run that fused nothing — which is every run recorded before
+   * `--fuse-legs` existed, and every unflagged run since, so absence keeps those
+   * rows byte-identical. `compare.ts` reads an absent one as
+   * {@link NO_FUSE_LEGS}, so an old row and a new unfused row compare EQUAL and
+   * only a real fusion flips the label.
+   */
+  readonly fuseLegs?: string | undefined;
+  /**
    * The types the run's corpus EXCLUDED, sorted and comma-joined, or
    * {@link NO_TYPE_FILTER} when it excluded none. Required for the reason
    * `analyzer` is: every run projected one type set or the other, and the set is
@@ -195,6 +204,13 @@ export interface RunProvenance {
  * measures today. The two therefore compare EQUAL rather than as two arms.
  */
 export const NO_TYPE_FILTER = 'none';
+
+/**
+ * What a run that fused NO legs reads back as — the single-leg retrieval every
+ * row recorded before `--fuse-legs` existed measured, and what an unflagged run
+ * measures today. The two therefore compare EQUAL rather than as two arms.
+ */
+export const NO_FUSE_LEGS = 'none';
 
 /**
  * The provenance-merge semantics this build scores under. A CONSTANT, not a
@@ -502,6 +518,14 @@ export interface HistoryRow extends Omit<Metrics, keyof LateMetrics>, Partial<La
   readonly prfTerms?: number;
   readonly prfAlpha?: number;
   /**
+   * The legs this row FUSED, canonical csv — TREATMENT provenance
+   * (`compare.ts`), so switching a fusion on is labelled an arm comparison
+   * instead of being subtracted. Absent on every row that fused nothing, and on
+   * every row recorded before the flag existed; none of those fused, which is
+   * {@link NO_FUSE_LEGS}, and that is how `compare.ts` reads an absent one.
+   */
+  readonly fuseLegs?: string;
+  /**
    * The types this row's corpus excluded — TREATMENT provenance (`compare.ts`),
    * so aligning the bench with serving is labelled an arm comparison instead of
    * being subtracted. Absent on every row recorded before the filter existed;
@@ -722,6 +746,9 @@ const toHistoryRow = (provenance: RunProvenance, result: DatasetResult): History
   ...(provenance.prfDocs === undefined ? {} : { prfDocs: provenance.prfDocs }),
   ...(provenance.prfTerms === undefined ? {} : { prfTerms: provenance.prfTerms }),
   ...(provenance.prfAlpha === undefined ? {} : { prfAlpha: provenance.prfAlpha }),
+  // Same rule one field over: a run that fused nothing writes no key at all, so
+  // its row stays byte-identical to every one recorded before the flag existed.
+  ...(provenance.fuseLegs === undefined ? {} : { fuseLegs: provenance.fuseLegs }),
   typeFilter: provenance.typeFilter,
   ...descriptorFields(result),
   ...costFields(result),

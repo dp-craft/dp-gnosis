@@ -95,6 +95,7 @@ import {
   UNREACHABLE_GOLD_CAUSE
 } from './fetch/vault.js';
 import { assertKnownFlags, type FlagSpec, GATE_VALUE_FLAGS } from './flags.js';
+import { rrfScored } from './fuseForecast.js';
 import { GATE_EXIT_CODE, type GateOptions, gateReport, parseGateArgs } from './gate.js';
 import {
   type BeirDataset,
@@ -288,6 +289,12 @@ export interface CliOptions {
   readonly prfDocs: number | undefined;
   readonly prfTerms: number | undefined;
   readonly prfAlpha: number | undefined;
+  /**
+   * The legs this run FUSES per topic, in the order `--fuse-legs` listed them.
+   * `undefined` — the flag absent — is the single-leg path every recorded run
+   * took: one prepared index, one port, one retrieval, byte for byte.
+   */
+  readonly fuseLegs: readonly FuseLegSpec[] | undefined;
   /**
    * Whether the run projects the FULL vault — every atom type — instead of the
    * SERVABLE subset the CLI shows. Same name and same meaning as the CLI's flag.
@@ -654,6 +661,117 @@ const parsePrfAlpha = (value: string | undefined, prf: boolean): number | undefi
   );
 };
 
+const FUSE_LEGS_FLAG = '--fuse-legs';
+
+/**
+ * One fusable leg: the label `--fuse-legs` names it by, the adapter whose index
+ * it retrieves through, and whether it expands its own first pass. A FIXED
+ * catalog, because the LABEL is what the row records: an arbitrary per-leg arm
+ * would need a provenance field of its own for every knob it varied, and a
+ * fusion nobody can describe afterwards is not evidence.
+ */
+export interface FuseLegSpec {
+  readonly label: string;
+  readonly adapter: AdapterName;
+  readonly prf: boolean;
+}
+
+/** The three legs `fuseForecast.ts` forecasts, and the only ones this flag fuses. */
+export const FUSE_LEG_CATALOG: readonly FuseLegSpec[] = [
+  { label: 'fts5', adapter: 'fts5', prf: false },
+  { label: 'linear', adapter: 'linear', prf: false },
+  { label: 'fts5+prf', adapter: 'fts5', prf: true },
+];
+
+const FUSE_LEG_LABELS = FUSE_LEG_CATALOG.map(leg => leg.label).join(', ');
+
+/** A "fusion" of one leg IS that leg — the row would name a treatment nothing applied. */
+const FUSE_LEG_MIN = 2;
+
+/** The ONE `--adapter` a fusion may be measured under; the legs name their own. */
+const FUSE_LEGS_ADAPTER: AdapterName = 'fts5';
+
+/** An unknown leg THROWS naming the catalog, exactly as `--adapter` does. */
+const fuseLegOf = (label: string): FuseLegSpec => {
+  const leg = FUSE_LEG_CATALOG.find(entry => entry.label === label);
+  if (leg !== undefined) return leg;
+  throw new Error(
+    `dp-gnosis-bench: unknown ${FUSE_LEGS_FLAG} leg "${label}" — use ${FUSE_LEG_LABELS}`
+  );
+};
+
+/** A leg listed twice only doubles its own share — a usage error, never deduped in silence. */
+const assertDistinctLegs = (legs: readonly FuseLegSpec[], value: string): void => {
+  const labels = legs.map(leg => leg.label);
+  const repeated = labels.find((label, index) => labels.indexOf(label) !== index);
+  if (repeated === undefined) return;
+  throw new Error(
+    `dp-gnosis-bench: ${FUSE_LEGS_FLAG} "${value}" names leg "${repeated}" twice — ` +
+      'a leg fused with itself only doubles its own share, which is not a second measurement'
+  );
+};
+
+const assertFusable = (legs: readonly FuseLegSpec[], value: string): void => {
+  if (legs.length < FUSE_LEG_MIN) {
+    throw new Error(
+      `dp-gnosis-bench: ${FUSE_LEGS_FLAG} "${value}" names ${legs.length} leg(s) — ` +
+        `a fusion needs at least ${FUSE_LEG_MIN} of ${FUSE_LEG_LABELS}`
+    );
+  }
+  assertDistinctLegs(legs, value);
+};
+
+/**
+ * `--adapter` beside `--fuse-legs` REFUSES on anything but the one the legs are
+ * measured under: each leg names its OWN adapter, so a global one would be a
+ * TREATMENT field naming an engine path no leg ever took.
+ */
+const checkFuseAdapter = (adapter: AdapterName): void => {
+  if (adapter === FUSE_LEGS_ADAPTER) return;
+  throw new Error(
+    `dp-gnosis-bench: --adapter "${adapter}" cannot be combined with ${FUSE_LEGS_FLAG} — ` +
+      'each leg names its own adapter, so the global one would record a treatment no leg ' +
+      `applied. Drop --adapter, or drop ${FUSE_LEGS_FLAG}.`
+  );
+};
+
+/**
+ * `--prf` beside `--fuse-legs` REFUSES for the same reason: only the `fts5+prf`
+ * leg expands, so `prf: true` would label the WHOLE run with a treatment one leg
+ * applied. The leg carries it instead, at the engine's `DEFAULT_PRF_PARAMS`.
+ */
+const checkFusePrf = (prf: boolean): void => {
+  if (!prf) return;
+  throw new Error(
+    `dp-gnosis-bench: ${PRF_FLAG} cannot be combined with ${FUSE_LEGS_FLAG} — ` +
+      'only the "fts5+prf" leg expands, so the row would label the whole run with a ' +
+      `treatment one leg applied. Name that leg in ${FUSE_LEGS_FLAG} instead; ` +
+      `${PRF_DOCS_FLAG} / ${PRF_TERMS_FLAG} / ${PRF_ALPHA_FLAG} still tune it.`
+  );
+};
+
+/** The legs to fuse, in the order given; `undefined` is the single-leg path. */
+export const parseFuseLegs = (
+  value: string | undefined,
+  adapter: AdapterName,
+  prf: boolean
+): readonly FuseLegSpec[] | undefined => {
+  if (value === undefined) return undefined;
+  checkFuseAdapter(adapter);
+  checkFusePrf(prf);
+  const legs = csv(value).map(fuseLegOf);
+  assertFusable(legs, value);
+  return legs;
+};
+
+/**
+ * Whether the run builds an RM3 term model at all — `--prf`, or a prf LEG among
+ * the fused ones. The knobs describe that model either way, so both states
+ * accept them and neither accepts them alone.
+ */
+const expandsQuery = (prf: boolean, legs: readonly FuseLegSpec[] | undefined): boolean =>
+  prf || (legs ?? []).some(leg => leg.prf);
+
 /**
  * The adapters that fuse two legs, DERIVED from the engine's own route table and
  * its own `fusesLegs` rule — the bench states no adapter list of its own.
@@ -914,6 +1032,7 @@ export const RUN_FLAGS: FlagSpec = {
     BODY_SOURCE_FLAG,
     KEYWORD_FILTER_FLAG,
     ENRICHMENT_COLUMNS_FLAG,
+    FUSE_LEGS_FLAG,
     ...GATE_VALUE_FLAGS,
   ],
   boolean: [
@@ -934,6 +1053,8 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
   const rerank = argv.includes('--rerank');
   const tokenBudget = parseTokenBudget(flagValue(argv, BUDGET_FLAG));
   const prf = checkPrfAdapter(adapter, argv.includes(PRF_FLAG));
+  const fuseLegs = parseFuseLegs(flagValue(argv, FUSE_LEGS_FLAG), adapter, prf);
+  const knobbed = expandsQuery(prf, fuseLegs);
   return {
     tokenBudget,
     servedK: parseServedK(flagValue(argv, SERVED_K_FLAG), tokenBudget),
@@ -968,9 +1089,10 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
       flagValue(argv, ENRICHMENT_COLUMNS_FLAG)
     ),
     prf,
-    prfDocs: parsePrfCount(PRF_DOCS_FLAG, flagValue(argv, PRF_DOCS_FLAG), prf),
-    prfTerms: parsePrfCount(PRF_TERMS_FLAG, flagValue(argv, PRF_TERMS_FLAG), prf),
-    prfAlpha: parsePrfAlpha(flagValue(argv, PRF_ALPHA_FLAG), prf),
+    prfDocs: parsePrfCount(PRF_DOCS_FLAG, flagValue(argv, PRF_DOCS_FLAG), knobbed),
+    prfTerms: parsePrfCount(PRF_TERMS_FLAG, flagValue(argv, PRF_TERMS_FLAG), knobbed),
+    prfAlpha: parsePrfAlpha(flagValue(argv, PRF_ALPHA_FLAG), knobbed),
+    fuseLegs,
     includeHistory: argv.includes(INCLUDE_HISTORY_FLAG),
   };
 };
@@ -1149,6 +1271,20 @@ export interface RankContext {
   readonly port: KnowledgePort;
   readonly options: CliOptions;
   readonly excluded: ReadonlyMap<string, readonly string[]>;
+  /**
+   * One open port per FUSED leg, in the order `--fuse-legs` listed them. Absent
+   * — the flag unused — leaves `port` the only port the run reads, which is the
+   * path every recorded run took, byte for byte.
+   */
+  readonly legs?: readonly FuseLegPort[];
+}
+
+/** One fused leg at query time: its label, its own port, and its own term model. */
+export interface FuseLegPort {
+  readonly label: string;
+  readonly port: KnowledgePort;
+  /** The RM3 model this leg expands with; `undefined` on a leg that does not. */
+  readonly prf: PrfParams | undefined;
 }
 
 /** The window the budget is charged over: the named one, else the whole presentation. */
@@ -1184,14 +1320,14 @@ export const rerankExtractOf = (options: CliOptions): ExtractStrategy =>
  * query was not rescored by. `undefined` without `--prf`: the port then receives
  * no option at all and the call is what every recorded run made, byte for byte.
  */
+export const resolvedPrfParams = (options: CliOptions): PrfParams => ({
+  fbDocs: options.prfDocs ?? DEFAULT_PRF_PARAMS.fbDocs,
+  fbTerms: options.prfTerms ?? DEFAULT_PRF_PARAMS.fbTerms,
+  alpha: options.prfAlpha ?? DEFAULT_PRF_PARAMS.alpha,
+});
+
 export const prfParamsOf = (options: CliOptions): PrfParams | undefined =>
-  options.prf
-    ? {
-        fbDocs: options.prfDocs ?? DEFAULT_PRF_PARAMS.fbDocs,
-        fbTerms: options.prfTerms ?? DEFAULT_PRF_PARAMS.fbTerms,
-        alpha: options.prfAlpha ?? DEFAULT_PRF_PARAMS.alpha,
-      }
-    : undefined;
+  options.prf ? resolvedPrfParams(options) : undefined;
 
 /**
  * The PRESENTED atoms — what a consumer would actually receive.
@@ -1225,16 +1361,91 @@ interface TopicRanking {
   readonly spread: AtomSpread;
 }
 
+/** Uniform shares: no weight is claimed for the fusion, so none is invented. */
+const uniformShares = (count: number): readonly number[] =>
+  Array.from({ length: count }, () => 1 / count);
+
+/**
+ * Each retrieved id mapped to a `RetrievedAtom` taken from the FIRST leg — in
+ * the order `--fuse-legs` listed them — that returned it. A stated,
+ * deterministic tie-break: the leg order is the only thing the operator declared
+ * about the legs, so it is the only thing that may decide which copy survives.
+ * Built by writing the legs in REVERSE, so the earliest one is left standing.
+ */
+const firstLegAtomById = (
+  legAtoms: readonly (readonly RetrievedAtom[])[]
+): ReadonlyMap<string, RetrievedAtom> =>
+  new Map(
+    [...legAtoms].reverse().flatMap(atoms => atoms.map(atom => [atom.id, atom] as const))
+  );
+
+/**
+ * UNIFORM-weight RRF over the legs' atom rankings, truncated to `depth`.
+ *
+ * `rrfScored` is the OFFLINE FORECAST's own arithmetic (`fuseForecast.ts`),
+ * imported rather than re-derived: that is what makes "the route beats its
+ * forecast" a real test, because any difference between the two can then only
+ * come from the INPUTS and never from two implementations of one formula.
+ *
+ * Each fused atom carries its RRF score. Its per-leg BM25 score no longer
+ * describes the order it sits in, and a score that contradicts the rank beside
+ * it is the kind of artefact a reader records as data.
+ */
+export const fuseLegAtoms = (
+  legAtoms: readonly (readonly RetrievedAtom[])[],
+  depth: number
+): readonly RetrievedAtom[] => {
+  const byId = firstLegAtomById(legAtoms);
+  const rankings = legAtoms.map(atoms => atoms.map(atom => atom.id));
+  return rrfScored(rankings, uniformShares(legAtoms.length), depth).flatMap(entry => {
+    const atom = byId.get(entry.docId);
+    return atom === undefined ? [] : [{ ...atom, score: entry.score }];
+  });
+};
+
+/** Each leg's own retrieval, sequentially: one index, one CPU-bound query at a time. */
+const legAtomsFor = async (
+  legs: readonly FuseLegPort[],
+  request: { readonly text: string; readonly depth: number; readonly adjacency: boolean }
+): Promise<readonly (readonly RetrievedAtom[])[]> =>
+  await legs.reduce<Promise<readonly (readonly RetrievedAtom[])[]>>(
+    async (pending, leg) => [
+      ...(await pending),
+      await retrieveDocs(leg.port, request.text, request.depth, request.adjacency, leg.prf),
+    ],
+    Promise.resolve([])
+  );
+
+/**
+ * The candidates the rest of the path ranks. With no legs it is the single
+ * measured port's own retrieval — the call every recorded run made, byte for
+ * byte. With legs it is their uniform-RRF fusion, truncated to the same depth,
+ * and everything downstream (rerank, budget, rollup) is unchanged.
+ */
+const retrieveCandidates = async (
+  context: RankContext,
+  topic: Topic,
+  depth: number
+): Promise<readonly RetrievedAtom[]> => {
+  const { options } = context;
+  const legs = context.legs ?? [];
+  if (legs.length === 0) {
+    return await retrieveDocs(
+      context.port,
+      topic.text,
+      depth,
+      options.queryAdjacency,
+      prfParamsOf(options)
+    );
+  }
+  const request = { text: topic.text, depth, adjacency: options.queryAdjacency };
+  return fuseLegAtoms(await legAtomsFor(legs, request), depth);
+};
+
 const rankTopic = async (context: RankContext, topic: Topic): Promise<TopicRanking> => {
   const { options } = context;
   const depth = rerankPoolOf(options);
-  const atoms = await retrieveDocs(
-    context.port,
-    topic.text,
-    depth,
-    options.queryAdjacency,
-    prfParamsOf(options)
-  );
+  const atoms = await retrieveCandidates(context, topic, depth);
   const ordered = await rerankIfRequested(topic.text, atoms, options.rerank, {
     fusion: options.rerankFusion,
     model: options.rerankModel,
@@ -1472,6 +1683,89 @@ export const prepareOf = (request: PrepareRequest): Promise<PreparedDataset> =>
   });
 
 /**
+ * One prepared index per DISTINCT adapter the run reads — the measured arm's,
+ * already built, plus one per fused leg whose adapter it is not.
+ *
+ * Every index is built BEFORE any port opens. The fts5 probe build REMOVES and
+ * rewrites the shared stem (`engine.ts`), so a port opened first would be left
+ * holding a handle on a file that no longer exists.
+ *
+ * Absent `--fuse-legs` nothing extra is prepared: the map holds the measured arm
+ * alone, and the corpus is ingested exactly once, as it always was.
+ */
+const withLegIndex = async (
+  built: ReadonlyMap<AdapterName, PreparedDataset>,
+  request: PrepareRequest,
+  adapter: AdapterName
+): Promise<ReadonlyMap<AdapterName, PreparedDataset>> =>
+  built.has(adapter)
+    ? built
+    : new Map(built).set(
+        adapter,
+        await prepareOf({ ...request, arm: { ...request.arm, adapter } })
+      );
+
+export const prepareAllIndexes = async (
+  request: PrepareRequest,
+  options: CliOptions,
+  measured: PreparedDataset
+): Promise<ReadonlyMap<AdapterName, PreparedDataset>> =>
+  await (options.fuseLegs ?? []).reduce<Promise<ReadonlyMap<AdapterName, PreparedDataset>>>(
+    async (pending, leg) => await withLegIndex(await pending, request, leg.adapter),
+    Promise.resolve(new Map([[options.adapter, measured]]))
+  );
+
+/** A leg whose index was never prepared is a wiring bug, never an all-zero row. */
+const legIndexOf = (
+  indexes: ReadonlyMap<AdapterName, PreparedDataset>,
+  adapter: AdapterName
+): PreparedDataset => {
+  const prepared = indexes.get(adapter);
+  if (prepared !== undefined) return prepared;
+  throw new Error(
+    `dp-gnosis-bench: fusion leg adapter "${adapter}" has no prepared index — ` +
+      'a port opened without one would retrieve nothing and record an all-zero leg'
+  );
+};
+
+/**
+ * One open port per leg, in the order the flag listed them. Two legs on the same
+ * adapter share the INDEX and still get their own port: they differ in the term
+ * model handed to `retrieve`, which is a per-call option, not a per-port one.
+ */
+const openFuseLegs = (
+  options: CliOptions,
+  indexes: ReadonlyMap<AdapterName, PreparedDataset>
+): readonly FuseLegPort[] =>
+  (options.fuseLegs ?? []).map(leg => ({
+    label: leg.label,
+    port: openPort(legIndexOf(indexes, leg.adapter), {
+      adapter: leg.adapter,
+      fieldWeights: options.fieldWeights,
+    }),
+    prf: leg.prf ? resolvedPrfParams(options) : undefined,
+  }));
+
+/**
+ * The measured arm's port, plus one per fused leg. The `legs` key is OMITTED
+ * when nothing is fused, so the context handed to `queryDataset` is the object
+ * every recorded run was measured through.
+ */
+export const openAllPorts = (
+  options: CliOptions,
+  indexes: ReadonlyMap<AdapterName, PreparedDataset>,
+  measured: PreparedDataset
+): Pick<RankContext, 'port' | 'legs'> => {
+  const port = openPort(measured, {
+    adapter: options.adapter,
+    hybridWeight: options.hybridWeight,
+    fieldWeights: options.fieldWeights,
+  });
+  const legs = openFuseLegs(options, indexes);
+  return { port, ...(legs.length === 0 ? {} : { legs }) };
+};
+
+/**
  * The post-open gate, then the measured loop, under ONE port lifetime. The probe
  * is inside the `finally` because a refusal must still close the port: the
  * previous form wrapped `queryDataset` alone, so anything failing before it
@@ -1493,6 +1787,8 @@ const probeThenQuery = async (
     return await queryDataset(context, topics);
   } finally {
     port.close?.();
+    // Every leg holds its own handle; a fused run that closed one would leak the rest.
+    (context.legs ?? []).forEach(leg => leg.port.close?.());
   }
 };
 
@@ -1511,7 +1807,7 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
   const dir = await ensureDataset(entry, options.includeHistory);
   const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
   const topics = topicsFor(dir, entry.id, qrels);
-  const prepared = await prepareOf({
+  const request: PrepareRequest = {
     entry,
     dir,
     arm: {
@@ -1523,16 +1819,17 @@ const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<Dat
       enrichmentColumns: options.enrichmentColumns,
     },
     goldIds: goldIdsOf(entry, qrels),
-  });
+  };
+  const prepared = await prepareOf(request);
   // Before the dataset's FIRST rerank call, and before the port exists — a
   // refusal here has nothing to close. It doubles as the cold-load warm-up.
   if (options.rerank) await assertRerankDiscriminates({ model: options.rerankModel });
-  const port = openPort(prepared, {
-    adapter: options.adapter,
-    hybridWeight: options.hybridWeight,
-    fieldWeights: options.fieldWeights,
-  });
-  const context = { port, options, excluded: readExcluded(dir) };
+  const indexes = await prepareAllIndexes(request, options, prepared);
+  const context: RankContext = {
+    ...openAllPorts(options, indexes, prepared),
+    options,
+    excluded: readExcluded(dir),
+  };
   const queried = await probeThenQuery(context, entry.id, topics);
   return {
     ...descriptorOf(entry, dir),
@@ -1725,6 +2022,15 @@ const prfProvenance = (options: CliOptions): PrfProvenance => {
   };
 };
 
+/**
+ * The canonical csv the row records, in the order the flag listed the legs —
+ * `undefined` on a run that fused nothing, which `compare.ts` reads back as
+ * `report.ts`'s `NO_FUSE_LEGS`. The ORDER is provenance too: it decides which leg's atom
+ * survives the fusion, so two orders are two arms.
+ */
+export const fuseLegsLabelOf = (options: CliOptions): string | undefined =>
+  options.fuseLegs?.map(leg => leg.label).join(',');
+
 export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance => ({
   ts: new Date().toISOString(),
   gitSha,
@@ -1749,6 +2055,7 @@ export const provenanceOf = (options: CliOptions, gitSha: string): RunProvenance
   queryAdjacency: options.queryAdjacency,
   provenanceMerge: PROVENANCE_MERGE,
   ...prfProvenance(options),
+  fuseLegs: fuseLegsLabelOf(options),
   typeFilter: typeFilterOf(options.includeHistory),
 });
 
