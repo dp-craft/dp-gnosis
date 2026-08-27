@@ -71,6 +71,7 @@ The always-binding rules — the failure class every decision is read against, w
 | **Run a CLI command — its flags, exit codes, output shape** | `packages/gnosis/README.md` — the WHOLE flag vocabulary, test-locked against `src/cli/args.ts` |
 | **Run the benchmark — its flags, datasets, artefacts** | `packages/gnosis-bench/README.md` § Run it — the sole owner of the bench flag table (`run.ts:RUN_HELP` says so too) |
 | Choose WHAT to measure, or decide if two rows may be subtracted | `handbook/GNOSIS-BENCH.md` — methodology and provenance, NOT flags |
+| **Configure an instance — profiles, domains, `corpusRoots`, `config.json`, the environment** | `packages/gnosis/CONFIGURATION.md` — OWNS the configuration vocabulary, how a domain is assigned, and the worked multi-project / multi-language setups |
 | Author a document so it becomes a retrievable atom | `packages/gnosis/AUTHORING.md` |
 | Serve the vault to an MCP client, Obsidian or another consumer | `packages/gnosis/INTEGRATION.md` |
 | See where quality stands | `handbook/GNOSIS-BASELINES.md` — a snapshot, never a gate |

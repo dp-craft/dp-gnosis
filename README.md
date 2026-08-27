@@ -12,51 +12,111 @@ It exists because a retrieval tool that quietly returns nothing is worse than on
 
 | | Command |
 |---|---|
-| Search your notes for keywords | `npm run gnosis -- retrieve "llama-swap model swap local server"` |
-| Get one paste-ready, citable block for an LLM prompt | `npm run gnosis -- answer "bm25 length normalisation"` |
-| Get a written answer *with* its sources | `npm run gnosis -- answer "…" --synthesize` |
+| Search your notes for keywords | `dp-gnosis retrieve "llama-swap model swap local server"` |
+| Get one paste-ready, citable block for an LLM prompt | `dp-gnosis answer "bm25 length normalisation"` |
+| Get a written answer *with* its sources | `dp-gnosis answer "…" --synthesize` |
+| Check an instance that is misbehaving | `dp-gnosis doctor` |
 | Serve the vault to Claude Desktop, Cursor, Zed or opencode | `npm run gnosis:mcp` |
 | Sharpen the ranking with a cross-encoder | add `--rerank` |
 
+In a checkout rather than an install, every `dp-gnosis <cmd>` reads `npm run gnosis -- <cmd>`.
+
 ## Install
 
-You need **Node 22 or newer**. There is no npm package yet — you clone it.
+You need **Node 22 or newer**. `better-sqlite3` and `stemmer` are the only required dependencies.
+
+**It is not on the npm registry yet**, so there are two honest paths.
+
+*As a tool you use* — build a tarball and install it. You get a `dp-gnosis` command and your data
+lives under `~/.local/share/dp-gnosis`, with nothing written into the checkout:
 
 ```bash
-git clone <this-repo> dp-gnosis
-cd dp-gnosis
-npm install          # one lockfile, npm workspaces
+git clone <this-repo> dp-gnosis && cd dp-gnosis && npm install
+cd packages/gnosis && npm pack        # builds dist/ and writes dp-gnosis-<version>.tgz
+npm install -g ./dp-gnosis-*.tgz
 ```
 
-That is the whole install. `better-sqlite3` and `stemmer` are the only required dependencies.
-
-## Your first search, in three commands
-
-gnosis reads markdown from the roots named in `DP_GNOSIS_CORPUS_ROOTS`. Point it at your own folders:
+*As a checkout you develop in* — skip the pack and call it through npm. Every `dp-gnosis <cmd>`
+below becomes `npm run gnosis -- <cmd>`, and the data stays inside the repository:
 
 ```bash
-# 1. Chunk your documents into atoms.
-DP_GNOSIS_CORPUS_ROOTS=docs \
-  npm run gnosis -- ingest --atoms-dir /tmp/my-atoms
-
-# 2. Build the search index. Do NOT skip this — see below.
-npm run gnosis -- index --adapter fts5 \
-  --atoms-dir /tmp/my-atoms --index-path /tmp/my-atoms.db
-
-# 3. Ask.
-npm run gnosis -- answer "some keywords" --adapter fts5 \
-  --atoms-dir /tmp/my-atoms --index-path /tmp/my-atoms.db
+git clone <this-repo> dp-gnosis && cd dp-gnosis && npm install
 ```
 
-Those exact commands, run against this repository's own `docs/`, produce **3141 atoms** and answer queries over them.
+## Your first search, in four commands
 
-**Step 1 exits 3, and that is correct.** Exit 3 means *partial* — atoms were written AND something was refused, here 118 duplicate or empty sections listed in `skipped[]`. Read them; do not retry blindly.
+```bash
+# 1. Create an instance and point it at your markdown.
+dp-gnosis init ~/notes ~/work/some-project/docs
 
-**A file needs to clear TWO gates, not one.** `DP_GNOSIS_CORPUS_ROOTS` decides what is READ; a separate path→domain rule decides what is LABELLED, and an unlabelled file is dropped whole. Adding `handbook` to the roots above writes **zero** extra atoms for exactly that reason. `packages/gnosis/AUTHORING.md` owns both gates — read it before pointing gnosis at a new tree.
+# 2. Chunk those documents into atoms.
+dp-gnosis ingest
 
-**`ingest` and `index` are one operation in two commands**, and the second is the half that gets forgotten. An `ingest` alone leaves the index carrying the old digest, and the next query refuses with exit 3 rather than answering from a stale index.
+# 3. Build the search index. Do NOT skip this — see below.
+dp-gnosis index --adapter fts5
 
-For a permanent setup, put those paths in a **profile file** instead of repeating the flags — `packages/gnosis/README.md` § Profiles.
+# 4. Ask.
+dp-gnosis retrieve "bm25 length normalisation"
+```
+
+`init` creates the atoms and index directories, writes a profile at
+`~/.config/dp-gnosis/user.profile.json`, and prints the exact commands to run next. It refuses
+rather than overwrite an instance you have already edited.
+
+**Then edit that profile.** It is the one file that decides what is read and how it is labelled, and
+`init` can only guess so much. `packages/gnosis/CONFIGURATION.md` owns the schema and walks through
+multi-project setups.
+
+**`ingest` and `index` are one operation in two commands**, and the second is the half that gets
+forgotten. An `ingest` alone leaves the index carrying the old digest, and the next query refuses
+with exit 3 rather than answering from a stale index.
+
+**A file needs to clear TWO gates, not one.** `corpusRoots` decides what is READ; a separate
+path→domain rule decides what is LABELLED, and an unlabelled source is refused by name rather than
+guessed at. `packages/gnosis/AUTHORING.md` owns both gates.
+
+**Exit 3 is not a crash.** It means *partial* — real output was produced and something was refused.
+An `ingest` that writes atoms and skips 118 duplicate or empty sections exits 3 and lists them.
+Read them; do not retry blindly.
+
+## When something looks wrong, run `doctor`
+
+```bash
+dp-gnosis doctor
+```
+
+It is read-only and changes nothing. It reports where every path came from, whether the index and
+the corpus manifest still describe the same corpus, whether the index was built with the analysis
+chain your profile declares, which domains produced no atoms, and every place one configuration
+surface silently overrode another.
+
+| Symptom | Usually |
+|---|---|
+| A search returns nothing at all | `index` was never run after `ingest`, or the corpus root matched no markdown. `doctor` names which |
+| Exit 3 on a query that used to work | The index and the corpus disagree — re-run `ingest` then `index` |
+| Results from the wrong project | Two trees share one index; narrow with `--domain`, or check the `domainRules` prefixes |
+| A setting in the profile appears to do nothing | Something outranks it — a CLI flag, or a `DP_GNOSIS_*` environment variable. `doctor` reports the loser by name |
+
+## Is `--rerank` worth it?
+
+`--rerank` runs a cross-encoder over the top candidates and re-orders them. It is the largest
+quality lever the tool has, and also the only one that costs seconds.
+
+| Corpus | BM25 only | with `--rerank` |
+|---|---|---|
+| `vault` — 6628 English documents, 60 topics | 0.4894 | **0.5791** |
+| `vault-hu` — 454 Hungarian documents, 31 topics | 0.4868 | **0.7699** |
+
+nDCG@10, `handbook/GNOSIS-BASELINES.md`, at `qwen3-reranker-4b` over a pool of 100. **The two rows
+are not comparable to each other** — the corpora differ in size by more than an order of magnitude,
+so their random-ranking floors differ; compare down a column, never across.
+
+**The cost is about 12 seconds per query**, and it needs a local llama-swap server. The pool floor
+binds even when you ask for `-k 5`, so a small result set does not make it cheaper. If the server is
+absent the query is **refused**, not silently answered from the unreranked order.
+
+Use it for research questions where you will read the top few carefully. Leave it off for
+navigational lookups where you already know roughly what you are looking for.
 
 ## Ask with keywords, not with a question
 
@@ -96,6 +156,7 @@ For readers who want the technical shape before committing to it:
 | I want to… | Read |
 |---|---|
 | Use the CLI — every command, flag, exit code and output format | `packages/gnosis/README.md` |
+| Configure an instance — profiles, domains, `corpusRoots`, multi-project setups | `packages/gnosis/CONFIGURATION.md` |
 | Write documents so they become retrievable atoms | `packages/gnosis/AUTHORING.md` |
 | Wire it into an MCP client, Obsidian, or another consumer | `packages/gnosis/INTEGRATION.md` |
 | Run or read the benchmark | `packages/gnosis-bench/README.md` |
@@ -104,6 +165,12 @@ For readers who want the technical shape before committing to it:
 
 ## Status
 
-**Not yet an installable product.** Turning it into one is the job of `docs/2026-08-24-2111-dp-gnosis-standalone-product-v2.md`, which owns the phase plan and its gates. Phases 0 and 1 are done.
+**Installable, not yet published.** `npm pack` plus `npm install -g` gives a working `dp-gnosis`
+command whose data lives outside the checkout, and `init` / `doctor` cover first-run setup and
+diagnosis. What remains before a registry release — publish, an uninstall path, and a clean-container
+acceptance run — is owned by `docs/2026-08-24-2111-dp-gnosis-standalone-product-v2.md`.
+
+The engine itself is measured and gated; `handbook/GNOSIS-BASELINES.md` is the snapshot and
+`handbook/GNOSIS-GUIDE.md` records what has been settled and what is still open.
 
 Licensed **GPL-3.0-or-later**. Security policy: `SECURITY.md`.

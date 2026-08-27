@@ -64,7 +64,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `ingest` | **none** (passing one is exit 2) | `--atoms-dir`, `--repo-root`, `--json` |
 | `enrich` | none | `--atoms-dir`, `--enrichment`, `--limit`, `--enrich-model`, `--profile`, `--json` |
 | `index` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--enrichment`, `--body-source`, `--keyword-filter`, `--enrichment-columns`, `--json` |
-| `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` |
+| `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` / `--rerank-pool` |
 | `answer <query…>` | query terms, joined with spaces | every `retrieve` flag except `--flat` and `--format xml`, both exit 2 |
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
 
@@ -100,6 +100,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `--rerank-model` | cross-encoder id — **requires `--rerank`** | `RERANK_MODEL_ID` (`qwen3-reranker-4b`) |
 | `--rerank-profile` | `shipped\|beir-ce` — the FUSION RULE. Unknown name fails loudly, listing both. **Requires `--rerank`** | `shipped` |
 | `--rerank-weight` | `0`…`1` — the reranked order's RRF weight; the first pass carries `1 - w`. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** | `0.75` |
+| `--rerank-pool` | whole number ≥ `1` — **`retrieve` and `answer`**, how many first-pass candidates the reranker scores. It is a FLOOR under the pool, never a cap: a `-k` deeper than it keeps its own depth. A fraction, a zero or a non-number FAILS loudly, never rounds. The loaded profile states the same depth as `rerankPoolK` and this flag outranks it. **Requires `--rerank`** | `100` — `RERANK_K_INIT` (`src/config.ts`), unless the profile states `rerankPoolK` |
 | `--min-relevance` | `0`…`1` — **`retrieve` and `answer`**, OPT-IN calibrated relevance floor. Drops every delivered atom whose calibrated probability is below it — strictly SUBTRACTIVE, so it never reorders and never changes `poolSize`; each drop is reported. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** and a reranker carrying a measured scale (`RERANK_CALIBRATION`, `src/config.ts`) | unset — no floor, and every retrieved atom is delivered |
 | `--max-per-doc` | non-negative integer — **`retrieve` and `answer`**, at most this many atoms from any ONE source document. The cap is applied to the POOL before the `-k` slice, so a dropped atom frees a slot a lower-ranked document takes; the pool is deepened to `max(k * cap, GROUPED_POOL_FLOOR)` (100) so a tighter cap reaches the extra documents it needs, and when the cap still leaves fewer than `-k` atoms the run says so in `note` rather than under-delivering silently. `--max-per-doc 0` caps nothing. Non-integer or negative FAILS loudly. Exit 2 alongside `--flat` — flat means ungrouped, so a per-document cap would have nothing to cap | `2` — `DEFAULT_MAX_PER_DOC` (`src/cli/grouping.ts`) |
 | `--flat` | boolean — **`retrieve` only** (`answer` refuses it, exit 2), deliver the ranking ungrouped: no per-document cap, no reading-order arrangement and no `(i/n)` position marker, byte for byte the rendering that preceded grouping | off |
@@ -211,7 +212,7 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 
 | Command | Keys |
 |---|---|
-| `ingest` | `command`, `written`, `skipped[{source,title,reasons[]}]` |
+| `ingest` | `command`, `written`, `pruned` (atoms DELETED because their source file is gone — the one destructive number the run produces; `0` on a run that destroyed nothing), `skipped[{source,title,reasons[]}]`, `duplicates` (sources dropped as a byte-identical body of an atom already kept) |
 | `enrich` | `command`, `model`, `promptVersion`, `atoms`, `enriched`, `skipped`, `sidecar`, `retried` (atoms that decoded only after a seed bump) and `retriedIds` (which ones — a provenance fact, since those records were generated at a bumped seed), plus `note` when a refusal STOPPED the run (exit 3) |
 | `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note`, `reason` (present ONLY on the `index-empty` exit 3 — an index WAS built, so `built` stays `true`, and it holds no atoms), `enrichmentRecords` (**`fts5` with `--enrichment` only** — how many atoms the build MERGED a sidecar record into, read back off the index's own `enrichment_records` stamp rather than recounted from the sidecar, so it reports what LANDED and not what was offered), `enrichmentWarning` (present ONLY when `--enrichment` named a file and `enrichmentRecords` is `0` — the index then ranks exactly as an unenriched one. Like the domain-census `warning` it does NOT move the exit code, and it carries its own key so both warnings can fire on one build) |
 | `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `prf` (`{fbDocs,fbTerms,alpha,source}` — present ONLY when a feedback pass ran; `source` is `flag` or `profile`), `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable`, when a `--rephrase` / `--rerank` refusal degraded the run, or when `count` is `0` |
@@ -263,7 +264,7 @@ A score alone has no unit, no scale and no connection to the words that earned i
 ```bash
 # 1. Build the corpus from the configured roots.
 npm run gnosis -- ingest --json
-# {"command":"ingest","written":1043,"skipped":[],"exitCode":0}
+# {"command":"ingest","written":1043,"pruned":0,"skipped":[],"duplicates":0,"exitCode":0}
 # exit 3 + a populated skipped[] means a partial corpus — read every `reasons`.
 
 # 2. Build an adapter index (no-op, exit 0, for `linear`).
@@ -368,7 +369,7 @@ npm run gnosis -- retrieve "functional programming immutability pure functions" 
 
 ```xml
 <retrieved_context query="…" adapter="fts5" mode="fts5" indexState="unavailable" count="0">
-  <note>retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `gnosis ingest &lt;path...&gt;`; if the corpus is already ingested, build the index with `npm run gnosis -- index --adapter fts5`</note>
+  <note>retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `npm run gnosis -- ingest &lt;path...&gt;`; if the corpus is already ingested, build the index with `npm run gnosis -- index --adapter fts5`</note>
 </retrieved_context>
 ```
 
