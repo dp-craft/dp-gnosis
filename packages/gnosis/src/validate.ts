@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises';
 import { type Atom, parseAtom, serializeAtom } from './atom.js';
 import { ATOM_FENCE_MAX_CHARS, bodyMaxChars } from './config.js';
 import type { IngestProfile } from './ingestProfile.js';
-import { ATOMS_DIR } from './paths.js';
+import { atomsDir } from './paths.js';
 import { activeProfile } from './vocabulary.js';
 
 /**
@@ -128,7 +128,7 @@ const toId = (filename: string): string => filename.slice(0, -MD_SUFFIX.length);
  * so no file needs to be opened. An absent directory is an empty tree (a fresh
  * vault), not an error.
  */
-export const readExistingIds = async (dir: string = ATOMS_DIR): Promise<ReadonlySet<string>> => {
+export const readExistingIds = async (dir: string = atomsDir()): Promise<ReadonlySet<string>> => {
   const names = await readdir(dir).catch((): readonly string[] => []);
   return new Set(names.filter(name => name.endsWith(MD_SUFFIX)).map(toId));
 };

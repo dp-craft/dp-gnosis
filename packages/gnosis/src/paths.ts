@@ -1,5 +1,9 @@
-import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { configHome, dataHome, dataHomeOverride } from './env.js';
+import { loadUserConfig } from './userConfig.js';
 
 /**
  * Sole owner of every dp-gnosis filesystem path (COMMON.md §III constant
@@ -42,38 +46,77 @@ export const repoRoot = (): string => resolve(srcDir(), '..', '..', '..');
 const packageDir = (): string => resolve(srcDir(), '..');
 
 /**
+ * Whether this package is running from an INSTALL rather than a checkout —
+ * decided by its own location, which is the only evidence that survives being
+ * copied anywhere. `node_modules` is matched as a whole PATH SEGMENT, never as a
+ * substring: a checkout under `~/my_node_modules_backup/` is not an install, and
+ * a substring test would say it is and silently relocate that developer's vault.
+ *
+ * It matters because an installed tree is WIPED on upgrade and is often not
+ * user-writable, so `<prefix>/lib/node_modules/benchmark-data/vault` — what the
+ * repo-relative default resolves to once installed — is a vault that disappears.
+ */
+export const isInstalled = (dir: string = srcDir()): boolean =>
+  dir.split(sep).includes('node_modules');
+
+/**
+ * The root the VAULT and the CACHE hang off, resolved per call. Precedence, most
+ * specific statement of intent first:
+ *
+ *   1. `DP_GNOSIS_DATA_HOME` / `XDG_DATA_HOME` — the user named a data location for
+ *      this run, via `env.ts:dataHomeOverride()`;
+ *   2. `dataRoot` in `config.json` under `env.ts:configHome()` — the user named
+ *      one persistently. A malformed file REFUSES rather than falling back;
+ *   3. the data home when INSTALLED, else `repoRoot()` — so a checkout resolves
+ *      byte-identically to what it always did, and every recorded number stands.
+ *
+ * Authored assets (`profiles/`, `golden/`) are NOT resolved through here: they
+ * follow the CODE, via `packageDir()`. Only derived, user-owned state moves.
+ */
+export const dataRoot = (
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): string =>
+  dataHomeOverride(env, platform) ??
+  loadUserConfig(configHome(env, platform)).dataRoot ??
+  defaultDataRoot(env, platform);
+
+const defaultDataRoot = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string =>
+  isInstalled() ? dataHome(env, platform) : repoRoot();
+
+/**
  * The single top-level directory dp-gnosis owns (`<root>/benchmark-data`). Both the
  * tracked vault and the disposable cache hang off it, so the package occupies
  * ONE entry at the repo root instead of two siblings whose names implied no
  * relationship.
  */
-const gnosisRoot = (root: string = repoRoot()): string => resolve(root, 'benchmark-data');
+const gnosisRoot = (root: string = dataRoot()): string => resolve(root, 'benchmark-data');
 
 /** The markdown atom vault, the liftable knowledge unit (`<root>/benchmark-data/vault`). */
-export const vaultRoot = (root: string = repoRoot()): string => resolve(gnosisRoot(root), 'vault');
+export const vaultRoot = (root: string = dataRoot()): string => resolve(gnosisRoot(root), 'vault');
 
 /** Tracked, curated atoms — the ONLY root the indexer is allowed to read. */
-export const atomsDir = (root: string = repoRoot()): string => resolve(vaultRoot(root), 'atoms');
+export const atomsDir = (root: string = dataRoot()): string => resolve(vaultRoot(root), 'atoms');
 
 /** Gitignored draft atoms awaiting review. MUST never be retrievable. */
-export const proposalsDir = (root: string = repoRoot()): string =>
+export const proposalsDir = (root: string = dataRoot()): string =>
   resolve(vaultRoot(root), 'proposals');
 
 /**
  * Derived, disposable runtime state (`<root>/benchmark-data/cache`). Gitignored as a
  * whole; everything under it is rebuildable from `atomsDir()`.
  */
-export const runtimeRoot = (root: string = repoRoot()): string => resolve(gnosisRoot(root), 'cache');
+export const runtimeRoot = (root: string = dataRoot()): string => resolve(gnosisRoot(root), 'cache');
 
 /** Built search indexes; rebuildable from `atomsDir()` alone. */
-export const indexDir = (root: string = repoRoot()): string => resolve(runtimeRoot(root), 'index');
+export const indexDir = (root: string = dataRoot()): string => resolve(runtimeRoot(root), 'index');
 
 /** Default destination of the FTS5 index the CLI builds and reads. */
-export const fts5IndexPath = (root: string = repoRoot()): string =>
+export const fts5IndexPath = (root: string = dataRoot()): string =>
   resolve(indexDir(root), 'atoms-fts5.db');
 
 /** Default destination of the MiniSearch index the CLI builds and reads. */
-export const minisearchIndexPath = (root: string = repoRoot()): string =>
+export const minisearchIndexPath = (root: string = dataRoot()): string =>
   resolve(indexDir(root), 'atoms-minisearch.json');
 
 /**
@@ -82,7 +125,7 @@ export const minisearchIndexPath = (root: string = repoRoot()): string =>
  * distinct default location: sharing one would let a LanceDB rebuild delete
  * another adapter's index.
  */
-export const lancedbIndexDir = (root: string = repoRoot()): string =>
+export const lancedbIndexDir = (root: string = dataRoot()): string =>
   resolve(indexDir(root), 'atoms-lancedb');
 
 /**
@@ -92,11 +135,11 @@ export const lancedbIndexDir = (root: string = repoRoot()): string =>
  * REMOVES its directory first — so a shared path would delete another route's
  * index and silently serve a third route's schema.
  */
-export const lancedbVecIndexDir = (root: string = repoRoot()): string =>
+export const lancedbVecIndexDir = (root: string = dataRoot()): string =>
   resolve(indexDir(root), 'atoms-lancedb-vec');
 
 /** See {@link lancedbVecIndexDir} — one directory per route, never shared. */
-export const lancedbHybridIndexDir = (root: string = repoRoot()): string =>
+export const lancedbHybridIndexDir = (root: string = dataRoot()): string =>
   resolve(indexDir(root), 'atoms-lancedb-hybrid');
 
 /**
@@ -104,14 +147,14 @@ export const lancedbHybridIndexDir = (root: string = repoRoot()): string =>
  * nor read; it exists so every adapter has its OWN location and the scan adapter
  * cannot silently inherit another adapter's index file.
  */
-export const noIndexPath = (root: string = repoRoot()): string => resolve(indexDir(root), 'none');
+export const noIndexPath = (root: string = dataRoot()): string => resolve(indexDir(root), 'none');
 
 /**
  * Scratch root for the benchmark: corpus working copies and their indexes.
  * Under `runtimeRoot()` because it is derived and disposable — the bench never
  * measures `atomsDir()` in place, so a run cannot mutate the curated vault.
  */
-export const benchWorkDir = (root: string = repoRoot()): string =>
+export const benchWorkDir = (root: string = dataRoot()): string =>
   resolve(runtimeRoot(root), 'bench');
 
 /**
@@ -135,123 +178,169 @@ export const goldenSetPath = (): string =>
 export const profilesDir = (): string =>
   resolve(packageDir(), 'profiles');
 
+/** The name of the instance `init` creates, and what it stamps the atoms with. */
+export const USER_PROFILE_NAME = 'user';
+
 /**
- * The SHIPPED ingest profile: the vocabularies and the path→label tables ingest
- * labels a corpus with. Tracked next to the code because it is authored policy,
- * not derived state — a missing or malformed file is a hard error, never a
- * silent fallback to values built into the code.
+ * The file `init` writes into the config home. It lives here because this
+ * module is the sole owner of every dp-gnosis path, and because BOTH `init`
+ * (which writes it) and {@link ingestProfilePath} (which prefers it) need it —
+ * spelling it twice is how the writer and the reader drift apart.
  */
-export const ingestProfilePath = (): string =>
+export const USER_PROFILE_FILE = `${USER_PROFILE_NAME}.profile.json`;
+
+/** Where `init` writes the user's own profile; `--profile` also selects it by path. */
+export const userProfilePath = (): string =>
+  resolve(configHome(), USER_PROFILE_FILE);
+
+/** The SHIPPED ingest profile, authored for the vault this repository carries. */
+const shippedProfilePath = (): string =>
   resolve(profilesDir(), 'default.profile.json');
+
+/**
+ * The ingest profile an invocation runs under when `--profile` names none: the
+ * user's own if `init` wrote one, else the shipped one. Tracked next to the
+ * code because it is authored policy, not derived state — a missing or
+ * malformed file is a hard error, never a silent fallback to values built into
+ * the code.
+ *
+ * The preference is the fix for a SILENT defect: `init` wrote a profile the
+ * user then edited, and every later command ignored it, serving the user's own
+ * index under the shipped profile's `defaultPrf`, `defaultExcludedTypes`,
+ * `defaultAnalyzer` and `domainRules` at exit 0. A CHECKOUT has no such file,
+ * so its resolution is unchanged.
+ */
+export const ingestProfilePath = (): string => {
+  const own = userProfilePath();
+  return existsSync(own) ? own : shippedProfilePath();
+};
 
 /** Where reproducible, comparable reports are persisted (repo convention). */
 export const docsTestDir = (root: string = repoRoot()): string =>
   resolve(root, 'docs', 'test');
 
 /**
- * @deprecated Use `repoRoot()`. The constant form freezes the layout at import
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `repoRoot()`. The constant form freezes the layout at import
  * time and dies when topic resolution lands.
  */
 export const REPO_ROOT: string = repoRoot();
 
 /**
- * @deprecated Use `vaultRoot()`. The constant form freezes the layout at import
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `vaultRoot()`. The constant form freezes the layout at import
  * time and dies when topic resolution lands.
  */
-export const VAULT_ROOT: string = vaultRoot();
+export const VAULT_ROOT: string = vaultRoot(repoRoot());
 
 /**
- * @deprecated Use `atomsDir()`. The constant form freezes the layout at import
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `atomsDir()`. The constant form freezes the layout at import
  * time and dies when topic resolution lands.
  */
-export const ATOMS_DIR: string = atomsDir();
+export const ATOMS_DIR: string = atomsDir(repoRoot());
 
 /**
- * @deprecated Use `proposalsDir()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `proposalsDir()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
-export const PROPOSALS_DIR: string = proposalsDir();
+export const PROPOSALS_DIR: string = proposalsDir(repoRoot());
 
 /**
- * @deprecated Use `runtimeRoot()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `runtimeRoot()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
-export const RUNTIME_ROOT: string = runtimeRoot();
+export const RUNTIME_ROOT: string = runtimeRoot(repoRoot());
 
 /**
- * @deprecated Use `indexDir()`. The constant form freezes the layout at import
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `indexDir()`. The constant form freezes the layout at import
  * time and dies when topic resolution lands.
  */
-export const INDEX_DIR: string = indexDir();
+export const INDEX_DIR: string = indexDir(repoRoot());
 
 /**
- * @deprecated Use `fts5IndexPath()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `fts5IndexPath()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
-export const FTS5_INDEX_PATH: string = fts5IndexPath();
+export const FTS5_INDEX_PATH: string = fts5IndexPath(repoRoot());
 
 /**
- * @deprecated Use `minisearchIndexPath()`. The constant form freezes the layout
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `minisearchIndexPath()`. The constant form freezes the layout
  * at import time and dies when topic resolution lands.
  */
-export const MINISEARCH_INDEX_PATH: string = minisearchIndexPath();
+export const MINISEARCH_INDEX_PATH: string = minisearchIndexPath(repoRoot());
 
 /**
- * @deprecated Use `lancedbIndexDir()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `lancedbIndexDir()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
-export const LANCEDB_INDEX_DIR: string = lancedbIndexDir();
+export const LANCEDB_INDEX_DIR: string = lancedbIndexDir(repoRoot());
 
 /**
- * @deprecated Use `lancedbVecIndexDir()`. The constant form freezes the layout
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `lancedbVecIndexDir()`. The constant form freezes the layout
  * at import time and dies when topic resolution lands.
  */
-export const LANCEDB_VEC_INDEX_DIR: string = lancedbVecIndexDir();
+export const LANCEDB_VEC_INDEX_DIR: string = lancedbVecIndexDir(repoRoot());
 
 /**
- * @deprecated Use `lancedbHybridIndexDir()`. The constant form freezes the
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `lancedbHybridIndexDir()`. The constant form freezes the
  * layout at import time and dies when topic resolution lands.
  */
-export const LANCEDB_HYBRID_INDEX_DIR: string = lancedbHybridIndexDir();
+export const LANCEDB_HYBRID_INDEX_DIR: string = lancedbHybridIndexDir(repoRoot());
 
 /**
- * @deprecated Use `noIndexPath()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `noIndexPath()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
-export const NO_INDEX_PATH: string = noIndexPath();
+export const NO_INDEX_PATH: string = noIndexPath(repoRoot());
 
 /**
- * @deprecated Use `benchWorkDir()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `benchWorkDir()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
-export const BENCH_WORK_DIR: string = benchWorkDir();
+export const BENCH_WORK_DIR: string = benchWorkDir(repoRoot());
 
 /**
- * @deprecated Use `goldenDir()`. The constant form freezes the layout at import
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `goldenDir()`. The constant form freezes the layout at import
  * time and dies when topic resolution lands.
  */
 export const GOLDEN_DIR: string = goldenDir();
 
 /**
- * @deprecated Use `goldenSetPath()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `goldenSetPath()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
 export const GOLDEN_SET_PATH: string = goldenSetPath();
 
 /**
- * @deprecated Use `profilesDir()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `profilesDir()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
 export const PROFILES_DIR: string = profilesDir();
 
 /**
- * @deprecated Use `ingestProfilePath()`. The constant form freezes the layout
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `ingestProfilePath()`. The constant form freezes the layout
  * at import time and dies when topic resolution lands.
  */
 export const INGEST_PROFILE_PATH: string = ingestProfilePath();
 
 /**
- * @deprecated Use `docsTestDir()`. The constant form freezes the layout at
+ * @deprecated (resolved against `repoRoot()`, so it is NOT config- or
+ * install-aware — one more reason not to use it). Use `docsTestDir()`. The constant form freezes the layout at
  * import time and dies when topic resolution lands.
  */
-export const DOCS_TEST_DIR: string = docsTestDir();
+export const DOCS_TEST_DIR: string = docsTestDir(repoRoot());

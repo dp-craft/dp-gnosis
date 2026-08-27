@@ -24,7 +24,7 @@ import { readGoldenSetSource } from '../bench/goldenSetSource.js';
 import { writeBenchReport } from '../bench/report.js';
 import { mapSequential } from '../bench/sequential.js';
 import type { GoldenSet } from '../goldenSet.js';
-import { BENCH_WORK_DIR, DOCS_TEST_DIR, GOLDEN_SET_PATH } from '../paths.js';
+import { benchWorkDir, DOCS_TEST_DIR, GOLDEN_SET_PATH } from '../paths.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
 import type { CommandOutcome } from './outcome.js';
@@ -34,9 +34,9 @@ const REAL_CORPUS_LABEL = 'seed';
 
 /** The seed vault plus the synthetic ceiling rungs, all as working copies. */
 const prepareCorpora = async (atomsDir: string): Promise<readonly BenchCorpus[]> => [
-  await materializeRealCorpus(atomsDir, BENCH_WORK_DIR, REAL_CORPUS_LABEL),
+  await materializeRealCorpus(atomsDir, benchWorkDir(), REAL_CORPUS_LABEL),
   ...(await mapSequential(SYNTHETIC_RUNGS, rung =>
-    materializeSyntheticCorpus(BENCH_WORK_DIR, rung, SYNTHETIC_SEED)
+    materializeSyntheticCorpus(benchWorkDir(), rung, SYNTHETIC_SEED)
   )),
 ];
 
@@ -55,7 +55,7 @@ const optionsFor = async (
   goldenSetHash: golden.hash,
   candidates: await defaultCandidates(),
   corpora: await prepareCorpora(context.atomsDir),
-  workDir: BENCH_WORK_DIR,
+  workDir: benchWorkDir(),
   k: DEFAULT_BENCH_K,
   timing: DEFAULT_TIMING,
   now: new Date(),

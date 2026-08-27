@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -9,11 +9,18 @@ import { runCli } from '../src/cli/cli.js';
 import { CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
-import { INGEST_PROFILE_PATH } from '../src/paths.js';
+import { profilesDir } from '../src/paths.js';
 import { atomTypes } from '../src/vocabulary.js';
 
-/** The shipped profiles directory — enumerated, so a future profile is covered too. */
-const PROFILES_DIR = dirname(INGEST_PROFILE_PATH);
+/**
+ * The shipped profiles directory — enumerated, so a future profile is covered
+ * too. Taken from `profilesDir()`, which names the SHIPPED directory and takes
+ * no root. `dirname(ingestProfilePath())` would follow the user's own profile
+ * into `configHome()` on any machine that has run `dp-gnosis init`, and judge
+ * that directory instead — collecting nothing here, so the suite would pass
+ * vacuously.
+ */
+const PROFILES_DIR = profilesDir();
 
 const profilePaths: readonly string[] = readdirSync(PROFILES_DIR)
   .filter(name => name.endsWith('.json'))
@@ -38,6 +45,12 @@ const duplicatesOf = (values: readonly string[]): readonly string[] =>
   values.filter((value, index) => values.indexOf(value) !== index);
 
 describe('shipped profiles', () => {
+  it('collects a non-empty shipped set containing default.profile.json, so no run passes vacuously', () => {
+    const names = loaded.map(([file]) => file);
+    expect(names.length).toBeGreaterThan(0);
+    expect(names).toContain('default.profile.json');
+  });
+
   it('ships the two worked-proof profiles beside the default', () => {
     const names = loaded.map(([file]) => file);
     expect(names).toContain('web-research.profile.json');

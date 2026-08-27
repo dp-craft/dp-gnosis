@@ -16,7 +16,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseAtom } from './atom.js';
-import { ATOMS_DIR, GOLDEN_SET_PATH } from './paths.js';
+import { atomsDir as defaultAtomsDir, GOLDEN_SET_PATH } from './paths.js';
 
 /**
  * The closed axis vocabulary. Each axis isolates one retrieval regime, so a
@@ -205,7 +205,7 @@ export const parseGoldenSet = (text: string): GoldenSet => {
  * frontmatter field rather than from its filename: the filename is a rendering
  * convention, the frontmatter is the contract every adapter indexes by.
  */
-export const readCorpusAtomIds = (atomsDir: string = ATOMS_DIR): ReadonlySet<string> =>
+export const readCorpusAtomIds = (atomsDir: string = defaultAtomsDir()): ReadonlySet<string> =>
   new Set(
     readdirSync(atomsDir)
       .filter(name => name.endsWith(ATOM_EXTENSION))
@@ -233,7 +233,7 @@ export const loadGoldenSet = (path: string = GOLDEN_SET_PATH): GoldenSet =>
 /** The only entry point a benchmark may use: structurally valid AND corpus-resolvable. */
 export const loadVerifiedGoldenSet = (
   path: string = GOLDEN_SET_PATH,
-  atomsDir: string = ATOMS_DIR
+  atomsDir: string = defaultAtomsDir()
 ): GoldenSet => {
   const set = loadGoldenSet(path);
   validateGoldenSetAgainstCorpus(set, readCorpusAtomIds(atomsDir));
