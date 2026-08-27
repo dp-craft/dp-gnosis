@@ -15,6 +15,8 @@
  */
 import type { IngestProfile } from '../ingestProfile.js';
 import { loadIngestProfile } from '../ingestProfile.js';
+import { isVocabularyError } from '../config.js';
+import { isUserConfigError } from '../userConfig.js';
 import { activeProfile } from '../vocabulary.js';
 import type { AdapterName } from './adapter.js';
 import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
@@ -23,6 +25,7 @@ import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
 import type { CommandContext, CommandHandler } from './context.js';
+import { runDoctorCommand } from './doctorCommand.js';
 import {
   ENRICH_MODEL_FLAG,
   ENRICHMENT_FLAG,
@@ -32,6 +35,7 @@ import {
 import type { OutputFormat } from './format.js';
 import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { helpText } from './help.js';
+import { runInitCommand } from './initCommand.js';
 import {
   BODY_SOURCE_FLAG,
   ENRICHMENT_COLUMNS_FLAG,
@@ -73,6 +77,8 @@ export interface CliResult {
 }
 
 const COMMANDS: Readonly<Record<string, CommandHandler>> = {
+  init: runInitCommand,
+  doctor: runDoctorCommand,
   ingest: runIngestCommand,
   enrich: runEnrichCommand,
   index: runIndexCommand,
@@ -123,6 +129,26 @@ const loadProfile = (args: ParsedArgs): ProfileResult => {
   }
 };
 
+/**
+ * Resolving the locations reads the user's `config.json`, which REFUSES when it
+ * is malformed. That refusal is a usage failure — the file names the correction
+ * — so it exits 2 through the same path a bad `--profile` takes. Letting it
+ * escape printed a raw stack trace and a `dist/` path at the user instead. Any
+ * OTHER error is a real defect and still propagates.
+ */
+const contextResult = (
+  args: ParsedArgs,
+  adapter: AdapterName,
+  profile: IngestProfile
+): ContextResult => {
+  try {
+    return { ok: true, context: contextFor(args, adapter, profile) };
+  } catch (error) {
+    if (isUserConfigError(error)) return { ok: false, error: error.message };
+    throw error;
+  }
+};
+
 const buildContext = (args: ParsedArgs): ContextResult => {
   const profile = loadProfile(args);
   if (!profile.ok) return { ok: false, error: profile.error };
@@ -130,7 +156,7 @@ const buildContext = (args: ParsedArgs): ContextResult => {
   const adapter = resolveAdapter(requested);
   return adapter === undefined
     ? { ok: false, error: adapterError(requested) }
-    : { ok: true, context: contextFor(args, adapter, profile.profile) };
+    : contextResult(args, adapter, profile.profile);
 };
 
 const helpOutcome = (): CommandOutcome => {
@@ -277,12 +303,27 @@ const misplacedFlag = (args: ParsedArgs): string | undefined =>
 const handlerFor = (command: string | undefined): CommandHandler | undefined =>
   command === undefined ? undefined : COMMANDS[command];
 
+/**
+ * The vocabulary a profile declares is narrowed LAZILY — the first reader to
+ * ask for it is wherever the refusal surfaces, which is inside the handler and
+ * not at context construction. So the boundary is drawn around BOTH: a profile
+ * naming a type this build does not define is bad input, exit 2, one line
+ * naming the file and the correction. Letting it escape printed a Node stack
+ * trace at exit 1, a code the contract does not define at all. Any OTHER error
+ * is a real defect and still propagates.
+ */
 const withContext = async (
   args: ParsedArgs,
   handler: CommandHandler
 ): Promise<CommandOutcome> => {
   const context = buildContext(args);
-  return context.ok ? await handler(context.context) : usageError(context.error);
+  if (!context.ok) return usageError(context.error);
+  try {
+    return await handler(context.context);
+  } catch (error) {
+    if (isVocabularyError(error)) return usageError(error.message);
+    throw error;
+  }
 };
 
 const outcomeFor = async (args: ParsedArgs): Promise<CommandOutcome> => {
