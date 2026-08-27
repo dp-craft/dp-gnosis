@@ -33,9 +33,11 @@ import { DECLARED_TYPES } from '../config.js';
 import { expandUserPath } from '../env.js';
 import { ATOMS_OWNER_FILE } from '../ingest.js';
 import { cliInvocation } from '../invocation.js';
-import { atomsDir, dataRoot, fts5IndexPath, USER_PROFILE_NAME, userProfilePath } from '../paths.js';
+import { dataRoot, USER_PROFILE_NAME, userProfilePath } from '../paths.js';
 import { DEFAULT_ADAPTER } from './adapter.js';
+import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
+import { REPO_ROOT_FLAG } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
 
@@ -63,7 +65,11 @@ const domainOf = (root: string): string => {
 };
 
 /** What `init` serialises. Plain data — the loader is what validates it. */
-const profileFor = (roots: readonly string[]): Readonly<Record<string, unknown>> => ({
+const profileFor = (
+  roots: readonly string[],
+  paths: InstancePaths,
+  repoRoot: string
+): Readonly<Record<string, unknown>> => ({
   'comment:editing': 'Edit this file to shape your instance: add a domain to `domains` before any rule may name it, and claim a directory with a `domainRules` prefix. A source under no prefix is REFUSED, never guessed.',
   name: USER_PROFILE_NAME,
   domains: [...new Set(roots.map(domainOf))],
@@ -72,10 +78,10 @@ const profileFor = (roots: readonly string[]): Readonly<Record<string, unknown>>
   domainRules: roots.map(root => ({ prefix: root, domain: domainOf(root) })),
   typeRules: [],
   segmentRules: [],
-  repoRoot: dataRoot(),
+  repoRoot,
   corpusRoots: roots,
-  atomsDir: atomsDir(),
-  indexPath: fts5IndexPath(),
+  atomsDir: paths.atomsPath,
+  indexPath: paths.indexPath,
 });
 
 /** The corpus roots this run was given, each expanded exactly as ingest expands one. */
@@ -111,12 +117,21 @@ interface InstancePaths {
   readonly ownerPath: string;
 }
 
-const instancePaths = (): InstancePaths => ({
+const instancePaths = (context: CommandContext): InstancePaths => ({
   profilePath: userProfilePath(),
-  atomsPath: atomsDir(),
-  indexPath: fts5IndexPath(),
-  ownerPath: join(atomsDir(), ATOMS_OWNER_FILE),
+  atomsPath: context.atomsDir,
+  indexPath: context.indexPath,
+  ownerPath: join(context.atomsDir, ATOMS_OWNER_FILE),
 });
+
+/**
+ * The base a RELATIVE corpus root and `summarySidecar` resolve against. Read
+ * off the FLAG rather than the resolved context: with no flag the context still
+ * falls back to the frozen `REPO_ROOT`, which an installed package resolves
+ * inside `node_modules`, while an instance's own base is its data root.
+ */
+const initRepoRoot = (context: CommandContext): string =>
+  stringFlag(context.flags, REPO_ROOT_FLAG) ?? dataRoot();
 
 const existingInstance = (paths: InstancePaths): string | undefined => {
   if (existsSync(paths.profilePath)) return paths.profilePath;
@@ -150,11 +165,19 @@ const refuseOccupied = (atomsPath: string, atoms: number): CommandOutcome => {
   return { exitCode: EXIT_PARTIAL, data: { command: 'init', error: message }, text: message };
 };
 
-const writeInstance = (paths: InstancePaths, roots: readonly string[]): void => {
+const writeInstance = (
+  paths: InstancePaths,
+  roots: readonly string[],
+  repoRoot: string
+): void => {
   mkdirSync(dirname(paths.profilePath), { recursive: true });
   mkdirSync(paths.atomsPath, { recursive: true });
   mkdirSync(dirname(paths.indexPath), { recursive: true });
-  writeFileSync(paths.profilePath, `${JSON.stringify(profileFor(roots), null, 2)}\n`, 'utf8');
+  writeFileSync(
+    paths.profilePath,
+    `${JSON.stringify(profileFor(roots, paths, repoRoot), null, 2)}\n`,
+    'utf8'
+  );
 };
 
 const nextSteps = (profilePath: string): readonly string[] => [
@@ -188,17 +211,17 @@ const created = (paths: InstancePaths, roots: readonly string[]): CommandOutcome
   text: initText(paths, roots),
 });
 
-const initialise = (roots: readonly string[]): CommandOutcome => {
-  const paths = instancePaths();
+const initialise = (context: CommandContext, roots: readonly string[]): CommandOutcome => {
+  const paths = instancePaths(context);
   const found = existingInstance(paths);
   if (found !== undefined) return refuseExisting(found);
   const atoms = atomFileCount(paths.atomsPath);
   if (atoms > 0) return refuseOccupied(paths.atomsPath, atoms);
-  writeInstance(paths, roots);
+  writeInstance(paths, roots, initRepoRoot(context));
   return created(paths, roots);
 };
 
 export const runInitCommand = async (context: CommandContext): Promise<CommandOutcome> => {
   const roots = resolveRoots(context.positionals);
-  return roots.ok ? initialise(roots.roots) : usageError(roots.error);
+  return roots.ok ? initialise(context, roots.roots) : usageError(roots.error);
 };

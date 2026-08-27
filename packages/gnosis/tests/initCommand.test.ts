@@ -9,7 +9,7 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import type { CommandContext } from '../src/cli/context.js';
 import { runInitCommand } from '../src/cli/initCommand.js';
@@ -18,7 +18,7 @@ import { configHome } from '../src/env.js';
 import { ATOMS_OWNER_FILE } from '../src/ingest.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { cliInvocation } from '../src/invocation.js';
-import { atomsDir, fts5IndexPath, USER_PROFILE_FILE } from '../src/paths.js';
+import { atomsDir, dataRoot, fts5IndexPath, USER_PROFILE_FILE } from '../src/paths.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 import { activeProfile } from '../src/vocabulary.js';
 
@@ -129,5 +129,61 @@ describe('init — refusals', () => {
     expect(outcome.exitCode).toBe(2);
     expect(outcome.text).toContain('notes');
     expect(existsSync(profilePath())).toBe(false);
+  });
+});
+
+/**
+ * The four location knobs are resolved ONCE, before dispatch, and handed to
+ * every command as `CommandContext`. `init` writing to `paths.ts` afresh made
+ * the flags inert — and, worse, pointed its own refusals at a directory the
+ * caller had not asked about, so a run naming a free directory was refused for
+ * the state of the default one.
+ */
+describe('init — the resolved locations, not the defaults', () => {
+  const initWith = async (overrides: Partial<CommandContext>): Promise<CommandOutcome> =>
+    await runInitCommand({ ...contextWith([corpusDir]), ...overrides });
+
+  it('writes the instance where the location knobs name, and says so in the profile', async () => {
+    const atoms = join(home, 'custom-atoms');
+    const index = join(home, 'custom-index', 'atoms-fts5.db');
+    const root = join(home, 'custom-root');
+
+    const outcome = await initWith({
+      atomsDir: atoms,
+      indexPath: index,
+      repoRoot: root,
+      flags: { '--repo-root': root },
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(existsSync(atoms)).toBe(true);
+    expect(existsSync(dirname(index))).toBe(true);
+    expect(existsSync(atomsDir())).toBe(false);
+
+    const written = JSON.parse(readFileSync(profilePath(), 'utf8')) as Record<string, unknown>;
+    expect(written['atomsDir']).toBe(atoms);
+    expect(written['indexPath']).toBe(index);
+    expect(written['repoRoot']).toBe(root);
+  });
+
+  it('judges the atoms directory it was GIVEN, so a free one is not refused for the default one', async () => {
+    const occupied = atomsDir();
+    mkdirSync(occupied, { recursive: true });
+    writeFileSync(join(occupied, 'stray.md'), '---\nid: stray\n---\nbody\n', 'utf8');
+    const fresh = join(home, 'fresh-atoms');
+
+    const outcome = await initWith({ atomsDir: fresh });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(existsSync(fresh)).toBe(true);
+    expect(readdirSync(occupied)).toEqual(['stray.md']);
+  });
+
+  it('keeps the data root as the profile repoRoot when no flag states one', async () => {
+    const outcome = await initWith({ repoRoot: join(home, 'frozen-checkout') });
+
+    expect(outcome.exitCode).toBe(0);
+    const written = JSON.parse(readFileSync(profilePath(), 'utf8')) as Record<string, unknown>;
+    expect(written['repoRoot']).toBe(dataRoot());
   });
 });
