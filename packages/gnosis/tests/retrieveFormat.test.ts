@@ -208,14 +208,14 @@ describe('retrieve --format', () => {
       // T3.2: an empty search now carries its OWN note. The distinction the
       // test names is sharper for it — the notes state different facts.
       expect(empty.stdout).toContain('nothing in the vault matched these terms');
-      expect(empty.stdout).not.toContain('gnosis ingest');
+      expect(empty.stdout).not.toContain('npm run gnosis -- ingest');
 
       expect(unavailable.exitCode).toBe(3);
       expectWellFormedXml(unavailable.stdout);
       expect(unavailable.stdout).toContain('indexState="unavailable"');
       expect(unavailable.stdout).toContain('count="0"');
       expect(unavailable.stdout).not.toContain('<document ');
-      expect(unavailable.stdout).toContain('gnosis ingest');
+      expect(unavailable.stdout).toContain('npm run gnosis -- ingest');
       expect(unavailable.stdout).not.toContain('nothing in the vault matched these terms');
     });
   });

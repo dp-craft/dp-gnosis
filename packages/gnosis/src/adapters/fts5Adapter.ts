@@ -80,8 +80,9 @@ import {
   type FtsColumn,
   type KeywordFilter
 } from '../config.js';
-import { CORPUS_MANIFEST_FILE, readManifestDigest } from '../corpusManifest.js';
+import { CORPUS_MANIFEST_FILE, manifestPathFor, readManifestDigest } from '../corpusManifest.js';
 import { type EnrichmentRecord, loadEnrichmentSidecar } from '../enrichment.js';
+import { indexRebuildCommand } from '../invocation.js';
 import type {
   IndexState,
   KnowledgePort,
@@ -307,6 +308,14 @@ export interface Fts5AdapterOptions extends Fts5IndexLocation {
    * so it cannot desynchronise the query side from the index side.
    */
   readonly fieldWeights?: FieldWeights | undefined;
+  /**
+   * The chain the CALLER declares this index is built with, asserted against the
+   * stamp before anything is searched. This is NOT the `analyzer` the docblock
+   * above rules out: it never SELECTS a chain — the query side still reads the
+   * stamp — it only refuses to answer when the index disagrees with what the
+   * caller said it holds. Absent means no declaration and no assertion.
+   */
+  readonly expectedAnalyzer?: AnalyzerId | undefined;
 }
 
 interface IndexEntry {
@@ -747,17 +756,39 @@ export const readIndexAnalyzer = (indexPath: string): AnalyzerId => {
  * `undefined` on a pre-stamp index, and that absence is itself the finding —
  * never defaulted to a value the build never wrote.
  */
-interface IndexStamp {
+export interface IndexStamp {
   readonly schemaVersion: string | undefined;
   readonly corpusDigest: string | undefined;
+  /**
+   * The chain this index was BUILT with. Judged only against a caller that
+   * DECLARED one ({@link Fts5AdapterOptions.expectedAnalyzer}); absent there,
+   * this value still drives the query side exactly as it always has.
+   */
+  readonly analyzer: string | undefined;
 }
 
 const readStamp = (db: Database.Database): IndexStamp => ({
   schemaVersion: stampValue(db, SCHEMA_VERSION_KEY),
   corpusDigest: stampValue(db, CORPUS_DIGEST_KEY),
+  analyzer: stampValue(db, ANALYZER_KEY),
 });
 
-const REBUILD_REMEDY = `rebuild it with \`npm run gnosis -- index --adapter ${FTS5_MODE}\``;
+/**
+ * The identity stamp of an index file, for a READ-ONLY caller that must report
+ * what the file claims without opening a port — the `doctor` pass. It reads the
+ * SAME three keys the refusal chain reads, so a diagnostic cannot describe an
+ * index by facts the searcher does not use, and it changes nothing about how
+ * that chain then serves the file.
+ */
+export const readIndexStamp = (indexPath: string): IndexStamp => {
+  const db = new Database(indexPath, { readonly: true });
+  const stamp = readStamp(db);
+  db.close();
+  return stamp;
+};
+
+const rebuildRemedy = (): string =>
+  `rebuild it with \`${indexRebuildCommand(FTS5_MODE)}\``;
 
 const REFUSED = 'fts5 index: REFUSED, nothing was searched —';
 
@@ -770,31 +801,83 @@ const REFUSED = 'fts5 index: REFUSED, nothing was searched —';
 const versionRefusal = (version: string | undefined): string | undefined =>
   version === undefined || version === INDEX_SCHEMA_VERSION
     ? undefined
-    : `${REFUSED} its stamp schema_version is "${version}" and this build reads only "${INDEX_SCHEMA_VERSION}"; ${REBUILD_REMEDY}`;
+    : `${REFUSED} its stamp schema_version is "${version}" and this build reads only "${INDEX_SCHEMA_VERSION}"; ${rebuildRemedy()}`;
 
 const unstampedRefusal = (manifest: string): string =>
-  `${REFUSED} the index carries NO ${CORPUS_DIGEST_KEY} stamp (it was built before the stamp existed), while ${CORPUS_MANIFEST_FILE} beside the atoms dir carries ${manifest}, so which corpus the index describes cannot be proved; ${REBUILD_REMEDY}`;
+  `${REFUSED} the index carries NO ${CORPUS_DIGEST_KEY} stamp (it was built before the stamp existed), while ${CORPUS_MANIFEST_FILE} beside the atoms dir carries ${manifest}, so which corpus the index describes cannot be proved; ${rebuildRemedy()}`;
 
 const driftRefusal = (stamped: string, manifest: string): string =>
-  `${REFUSED} the stamped ${CORPUS_DIGEST_KEY} ${stamped} disagrees with ${manifest}, the digest ${CORPUS_MANIFEST_FILE} beside the atoms dir carries now — the index describes a different corpus; ${REBUILD_REMEDY}`;
+  `${REFUSED} the stamped ${CORPUS_DIGEST_KEY} ${stamped} disagrees with ${manifest}, the digest ${CORPUS_MANIFEST_FILE} beside the atoms dir carries now — the index describes a different corpus; ${rebuildRemedy()}`;
+
+const removedManifestRefusal = (stamped: string, atomsDir: string): string =>
+  `${REFUSED} the index carries the ${CORPUS_DIGEST_KEY} stamp ${stamped}, but no ${CORPUS_MANIFEST_FILE} sits at ${manifestPathFor(atomsDir)} — that stamp is written ONLY from a manifest read while the index was built, so the manifest EXISTED then and has since been removed; nothing is left to prove which corpus the index describes; ${rebuildRemedy()}`;
 
 /**
- * NO manifest beside the atoms dir means there is nothing to compare against,
- * which is not evidence of drift: a corpus ingested before the manifest existed,
- * or an atoms dir assembled by hand, MUST NOT be refused for a fact nobody
- * recorded. Every other combination is stated.
+ * The four states of the pair, each stated rather than assumed:
+ *
+ * - stamp and manifest agree — served.
+ * - stamp and manifest disagree — {@link driftRefusal}.
+ * - manifest present, NO stamp — {@link unstampedRefusal}.
+ * - stamp present, manifest ABSENT — {@link removedManifestRefusal}. A
+ *   `corpus_digest` row exists only when `readManifestDigest` returned a value
+ *   at build time (the row is omitted otherwise), so a stamp PROVES a manifest
+ *   was there; its absence now is a REMOVAL, not a fact nobody recorded.
+ *   Reading it as "nothing to compare with" disabled drift detection outright —
+ *   deleting one file made a stale or foreign index answer as `ready` at exit 0.
+ *
+ * Only the NEITHER case stays silent: a corpus ingested before the manifest
+ * existed, or an atoms dir assembled by hand, records no stamp and no manifest
+ * and MUST NOT be refused for a fact nobody ever wrote.
  */
 const digestRefusal = (
   stamped: string | undefined,
-  manifest: string | undefined
+  manifest: string | undefined,
+  atomsDir: string
 ): string | undefined => {
-  if (manifest === undefined) return undefined;
-  if (stamped === undefined) return unstampedRefusal(manifest);
+  if (stamped === undefined) {
+    return manifest === undefined ? undefined : unstampedRefusal(manifest);
+  }
+  if (manifest === undefined) return removedManifestRefusal(stamped, atomsDir);
   return stamped === manifest ? undefined : driftRefusal(stamped, manifest);
 };
 
-const stampRefusal = (stamp: IndexStamp, manifest: string | undefined): string | undefined =>
-  versionRefusal(stamp.schemaVersion) ?? digestRefusal(stamp.corpusDigest, manifest);
+/**
+ * A caller that DECLARED the chain its index is built with — a profile's
+ * `defaultAnalyzer` — against the chain the index actually carries.
+ *
+ * Silent disagreement here is the failure class this project is named against:
+ * the query side reads the STAMP, so a profile could state `ident-hulight-fold`
+ * and be served a `porter-fold` index forever, returning a plausible ranking
+ * under exit 0 with nothing anywhere saying the declaration was ignored. It was
+ * measured in exactly that state on 2026-08-27.
+ *
+ * A caller that declares nothing is NOT refused: the stamp is then the only
+ * statement of intent there is, which is the behaviour every recorded run and
+ * the whole benchmark were measured under.
+ */
+const analyzerRefusal = (
+  stamped: string | undefined,
+  expected: string | undefined
+): string | undefined => {
+  if (expected === undefined) return undefined;
+  const carried = stamped ?? PRE_STAMP_ANALYZER;
+  return carried === expected
+    ? undefined
+    : `${REFUSED} it was built with the "${carried}" analysis chain while the active profile declares "${expected}" — the query side reads the chain off the INDEX, so every term would be analysed the way the index was built and not the way the profile states; ${rebuildRemedy()} under that profile`;
+};
+
+/** What one stamp is judged against: the corpus beside it and the declared chain. */
+interface StampJudgement {
+  readonly stamp: IndexStamp;
+  readonly manifest: string | undefined;
+  readonly atomsDir: string;
+  readonly expectedAnalyzer: string | undefined;
+}
+
+const stampRefusal = (judged: StampJudgement): string | undefined =>
+  versionRefusal(judged.stamp.schemaVersion) ??
+  digestRefusal(judged.stamp.corpusDigest, judged.manifest, judged.atomsDir) ??
+  analyzerRefusal(judged.stamp.analyzer, judged.expectedAnalyzer);
 
 /**
  * Every term is wrapped in an FTS5 string literal (inner `"` doubled). Without
@@ -1349,10 +1432,12 @@ const search = (self: Fts5Instance, query: string, opts: RetrieveOptions): Retri
 
 /** The stamp on the open index, judged against the manifest sitting there NOW. */
 const refusalOf = (self: Fts5Instance): string | undefined =>
-  stampRefusal(
-    self.handle.stamp(self.options.indexPath),
-    readManifestDigest(self.options.atomsDir)
-  );
+  stampRefusal({
+    stamp: self.handle.stamp(self.options.indexPath),
+    manifest: readManifestDigest(self.options.atomsDir),
+    atomsDir: self.options.atomsDir,
+    expectedAnalyzer: self.options.expectedAnalyzer,
+  });
 
 /**
  * A missing index file reports `unavailable` with NO atoms — never `empty`.

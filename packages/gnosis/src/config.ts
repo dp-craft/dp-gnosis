@@ -10,7 +10,7 @@
  * tuple that gives `AtomType` its union — plus the narrowing rule that holds a
  * profile to it.
  */
-import { ingestProfilePath } from './paths.js';
+import { ingestProfilePath, userProfilePath } from './paths.js';
 
 /**
  * Hard write-time cap on a single atom's body.
@@ -523,6 +523,11 @@ const ROOT_SEPARATOR = ',';
  * An unset, empty or all-blank override falls back to `fallback`, which is the
  * profile's own scope when it declared one and `CORPUS_ROOTS` when it did not —
  * the env override therefore outranks a profile exactly as a flag does.
+ *
+ * A root is returned VERBATIM; where it points is decided once, by ingest. A
+ * relative entry is walked under `repoRoot`, an absolute one where it stands,
+ * and a `~/` one under the user's home — so an entry of this list and an entry
+ * of a profile's `corpusRoots` mean exactly the same thing.
  */
 const declaredRoots = (
   env: Readonly<Record<string, string | undefined>>
@@ -567,6 +572,78 @@ export const DECLARED_TYPES = [
 ] as const;
 
 /**
+ * Every refusal raised here is TAGGED, exactly as `userConfig.ts` tags its own,
+ * so the CLI renders it as the usage failure it is — one line at exit 2 naming
+ * the correction — instead of letting a stack trace and a `dist/` path reach a
+ * user who has neither.
+ */
+const VOCABULARY_ERROR = 'GnosisVocabularyError';
+
+/** Explicitly typed so a bare `refuseVocabulary(...)` narrows the code after it. */
+const refuseVocabulary: (message: string) => never = message => {
+  throw Object.assign(new Error(message), { name: VOCABULARY_ERROR });
+};
+
+/** True for a refusal raised by {@link expectVocabulary} — the CLI renders those as exit 2. */
+export const isVocabularyError = (error: unknown): error is Error =>
+  error instanceof Error && error.name === VOCABULARY_ERROR;
+
+/**
+ * The declared value the mirrored tuple does not carry, or `undefined` when the
+ * profile is a subset. Exported so `doctor` can REPORT the same disagreement
+ * the query path REFUSES — a diagnostic that had to provoke the throw to find
+ * it would be a second, divergent copy of this rule.
+ */
+export const foreignVocabularyValue = (
+  actual: readonly string[],
+  declared: readonly string[]
+): string | undefined => actual.find(value => !declared.includes(value));
+
+/**
+ * The wording for someone editing the profile `init` wrote for them. They have
+ * no `src/config.ts` — an installed instance ships no TypeScript — so naming
+ * one is not a remedy but a dead end. What IS actionable is the fact that the
+ * vocabulary is fixed in this build, the value that broke it, and the file to
+ * edit, so all three are stated.
+ */
+const authorRefusal = (
+  path: string,
+  field: string,
+  foreign: string,
+  declared: readonly string[]
+): string =>
+  `ingest profile "${path}" declares ${field} "${foreign}", but this build's ${field} vocabulary is FIXED and cannot be extended from a profile — the permitted values are ${declared.join(' | ')}; edit the "${field}" list in ${path} to drop "${foreign}" or replace it with one of those`;
+
+/**
+ * The wording for a CHECKOUT, where the profile is tracked beside the tuple and
+ * the two genuinely disagree. Here naming `src/config.ts` IS the remedy: the
+ * reader can add the value to `DECLARED_TYPES` or drop it from the profile.
+ */
+const mirrorRefusal = (
+  path: string,
+  field: string,
+  foreign: string,
+  declared: readonly string[]
+): string =>
+  `ingest profile "${path}" declares ${field} "${foreign}", which DECLARED_TYPES in src/config.ts does not mirror — the mirrored values are ${declared.join(' | ')}; add "${foreign}" there or drop it from the profile, or the TypeScript union lies about what a valid label is`;
+
+/**
+ * One message, two audiences, chosen by WHICH profile is in force: the user's
+ * own (what `init` writes, and what it invites them to edit) or the one tracked
+ * in the checkout.
+ */
+export const foreignVocabularyMessage = (
+  field: string,
+  foreign: string,
+  declared: readonly string[]
+): string => {
+  const path = ingestProfilePath();
+  return path === userProfilePath()
+    ? authorRefusal(path, field, foreign, declared)
+    : mirrorRefusal(path, field, foreign, declared);
+};
+
+/**
  * Narrow a profile's declared vocabulary against the mirrored tuple: any
  * SUBSET, in any order, is accepted — a profile declaring three types is a
  * NARROWER corpus, and the twelve it omits simply return no results. A member
@@ -586,16 +663,12 @@ export const expectVocabulary = <T extends readonly string[]>(
   field: string
 ): T => {
   if (actual.length === 0) {
-    throw new Error(
+    refuseVocabulary(
       `ingest profile "${ingestProfilePath()}" declares no ${field} at all — declare at least one of ${declared.join(' | ')}`
     );
   }
-  const foreign = actual.find(value => !declared.includes(value));
-  if (foreign !== undefined) {
-    throw new Error(
-      `ingest profile "${ingestProfilePath()}" declares ${field} "${foreign}", which src/config.ts does not mirror — a ${field} value MUST be one of ${declared.join(' | ')}, or the TypeScript union lies about what a valid label is`
-    );
-  }
+  const foreign = foreignVocabularyValue(actual, declared);
+  if (foreign !== undefined) refuseVocabulary(foreignVocabularyMessage(field, foreign, declared));
   return declared;
 };
 

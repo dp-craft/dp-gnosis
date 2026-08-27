@@ -19,7 +19,7 @@ import { relative, resolve } from 'node:path';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import { ENRICHMENT_FILE_NAME } from '../src/cli/enrichCommand.js';
 import { DEFAULT_MAX_PER_DOC } from '../src/cli/grouping.js';
-import { DEFAULT_BODY_SOURCE, DEFAULT_BUDGET_MODE, DEFAULT_ENRICHMENT_COLUMNS, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, ENRICH_MODEL_ID, RERANK_MODEL_ID, RERANK_RRF_WEIGHT, RETRIEVE_TOKEN_BUDGET } from '../src/config.js';
+import { DEFAULT_BODY_SOURCE, DEFAULT_BUDGET_MODE, DEFAULT_ENRICHMENT_COLUMNS, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, ENRICH_MODEL_ID, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_WEIGHT, RETRIEVE_TOKEN_BUDGET } from '../src/config.js';
 import { ATOMS_DIR, GOLDEN_SET_PATH, INDEX_DIR, REPO_ROOT } from '../src/paths.js';
 import { DEFAULT_PRF_PARAMS } from '../src/prf.js';
 import { defaultExcludedTypes } from '../src/vocabulary.js';
@@ -65,6 +65,7 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--rerank-model': owned('RERANK_MODEL_ID (src/config.ts)', RERANK_MODEL_ID),
   '--rerank-profile': owned('DEFAULT_RERANK_PRESET (src/config.ts)', DEFAULT_RERANK_PRESET),
   '--rerank-weight': owned('RERANK_RRF_WEIGHT (src/config.ts)', RERANK_RRF_WEIGHT),
+  '--rerank-pool': owned('RERANK_K_INIT (src/config.ts)', RERANK_K_INIT),
   '--rephrase': unowned('boolean, off by default'),
   '--prf': unowned('boolean — ON through the shipped profiles\' defaultPrf, OFF for a profile that states none; the cell it turns on is owned by SERVED_PRF_PARAMS (src/prf.ts), not by this flag'),
   '--no-prf': unowned('boolean, off by default — it turns a profile\'s defaultPrf off'),

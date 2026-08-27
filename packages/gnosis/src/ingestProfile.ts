@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
+
+import { expandUserPath } from './env.js';
 
 import type { PrfParams } from './prf.js';
 import type { AnalyzerId } from './query.js';
@@ -19,13 +21,13 @@ import { ANALYZERS } from './query.js';
  * silence, and the only symptom would be queries that quietly stop matching.
  */
 
-/** One mechanical assignment rule: repo-relative path prefix → domain. */
+/** One mechanical assignment rule: source-path prefix → domain. */
 export interface ProfileDomainRule {
   readonly prefix: string;
   readonly domain: string;
 }
 
-/** One mechanical assignment rule: repo-relative path prefix → type. */
+/** One mechanical assignment rule: source-path prefix → type. */
 export interface ProfileTypeRule {
   readonly prefix: string;
   readonly type: string;
@@ -60,7 +62,11 @@ export interface IngestProfile {
   readonly segmentRules: readonly ProfileSegmentRule[];
   /** Root the corpus roots are walked under and `sources` is made relative to. */
   readonly repoRoot?: string | undefined;
-  /** Repo-relative roots this instance ingests — its corpus SCOPE. */
+  /**
+   * Roots this instance ingests — its corpus SCOPE. A relative root is walked
+   * under `repoRoot`; an ABSOLUTE one, or one starting `~/`, is walked where it
+   * points, so one index can span trees that share no parent.
+   */
   readonly corpusRoots?: readonly string[] | undefined;
   /** Where this instance's atoms are written and read. */
   readonly atomsDir?: string | undefined;
@@ -87,8 +93,12 @@ export interface IngestProfile {
   readonly atomMaxChars?: number | undefined;
   /**
    * Repo-relative path prefixes this instance MUST NOT ingest, matched exactly
-   * as a domain rule's prefix is. Absent means nothing is excluded, so an
-   * existing profile walks the same corpus it always did.
+   * as a domain rule's prefix is. It stays REPO-RELATIVE-ONLY even though a
+   * corpus root may now be absolute: an absolute prefix is still refused by
+   * name, so a tree reached through an absolute root cannot be partially
+   * excluded — declare a narrower root instead.
+   * Absent means nothing is excluded, so an existing profile walks the same
+   * corpus it always did.
    */
   readonly excludePaths?: readonly string[] | undefined;
   /**
@@ -128,6 +138,17 @@ export interface IngestProfile {
    * rather than promoted to the shipped default.
    */
   readonly defaultAnalyzer?: AnalyzerId | undefined;
+  /**
+   * How many first-pass candidates the CLI's rerank leg scores. Like
+   * `defaultPrf` it is a RETRIEVE-TIME default and never a corpus one: ingest,
+   * the port and the bench ignore it. ABSENT means `RERANK_K_INIT`, so an
+   * existing profile reranks exactly the pool it always did.
+   *
+   * It is per-instance because the pool's cost is per-CORPUS: a small vault is
+   * fully covered far below the shipped depth, and paying for 100 candidates it
+   * does not have buys nothing.
+   */
+  readonly rerankPoolK?: number | undefined;
 }
 
 /**
@@ -137,7 +158,12 @@ export interface IngestProfile {
  */
 type ProfileDefaults = Pick<
   IngestProfile,
-  'excludePaths' | 'defaultExcludedTypes' | 'defaultPrf' | 'summarySidecar' | 'defaultAnalyzer'
+  | 'excludePaths'
+  | 'defaultExcludedTypes'
+  | 'defaultPrf'
+  | 'summarySidecar'
+  | 'defaultAnalyzer'
+  | 'rerankPoolK'
 >;
 
 /** The location half of a profile — what T-3 added to the vocabulary half. */
@@ -168,6 +194,7 @@ const KNOWN_KEYS: readonly string[] = [
   'defaultPrf',
   'summarySidecar',
   'defaultAnalyzer',
+  'rerankPoolK',
 ];
 
 const fail = (source: string, detail: string): never => {
@@ -287,7 +314,9 @@ const domainRule = (
   index: number,
   ctx: RuleContext
 ): ProfileDomainRule => ({
-  prefix: stringField(raw, 'prefix', { source: ctx.source, where: `domainRules[${index}].prefix` }),
+  prefix: expandPrefix(
+    stringField(raw, 'prefix', { source: ctx.source, where: `domainRules[${index}].prefix` })
+  ),
   domain: member(raw['domain'], ctx.vocabulary, {
     source: ctx.source,
     where: `domainRules[${index}].domain`,
@@ -299,7 +328,9 @@ const typeRule = (
   index: number,
   ctx: RuleContext
 ): ProfileTypeRule => ({
-  prefix: stringField(raw, 'prefix', { source: ctx.source, where: `typeRules[${index}].prefix` }),
+  prefix: expandPrefix(
+    stringField(raw, 'prefix', { source: ctx.source, where: `typeRules[${index}].prefix` })
+  ),
   type: member(raw['type'], ctx.vocabulary, {
     source: ctx.source,
     where: `typeRules[${index}].type`,
@@ -327,6 +358,15 @@ const segmentRule = (
  * exclude a directory nobody named, and the symptom is only missing atoms.
  */
 const unsafePrefix = (value: string): boolean => value.startsWith('/') || value.includes('..');
+
+/**
+ * The ONE normalisation every path prefix passes through: `~/` expands to the
+ * home directory and separators become forward slashes, so a prefix is compared
+ * against a source path in exactly the form ingest names one. A relative prefix
+ * is returned untouched, which is why every shipped profile matches as before.
+ */
+const expandPrefix = (value: string): string => expandUserPath(value).split(sep).join('/');
+
 
 /** An empty member would prefix-match EVERY path, so it is refused, not dropped. */
 const withoutEmptyMember = (
@@ -478,6 +518,22 @@ const defaultAnalyzerOf = (
       );
 };
 
+/**
+ * The optional rerank depth. A zero, a fraction or a string is REFUSED rather
+ * than rounded or ignored: a silently corrected pool would rerank a depth
+ * nobody asked for while the run reports the one the profile states.
+ */
+const rerankPoolKOf = (
+  raw: Readonly<Record<string, unknown>>,
+  source: string
+): number | undefined => {
+  const value = raw['rerankPoolK'];
+  if (value === undefined) return undefined;
+  return isPositiveInteger(value)
+    ? value
+    : fail(source, `field "rerankPoolK" is "${String(value)}", not a whole number of candidates of at least 1`);
+};
+
 const defaultsOf = (
   raw: Readonly<Record<string, unknown>>,
   source: string,
@@ -488,6 +544,7 @@ const defaultsOf = (
   defaultPrf: defaultPrfOf(raw, source),
   summarySidecar: summarySidecarOf(raw, source),
   defaultAnalyzer: defaultAnalyzerOf(raw, source),
+  rerankPoolK: rerankPoolKOf(raw, source),
 });
 
 const locationsOf = (
@@ -568,8 +625,9 @@ const longestFirst = <T extends { readonly prefix: string }>(rules: readonly T[]
   [...rules].sort((left, right) => right.prefix.length - left.prefix.length);
 
 /**
- * The domain for a repo-relative source path, or `undefined` when no declared
- * root claims it (such a source is out of scope for ingest).
+ * The domain for a source path — repo-relative for an in-repo source, absolute
+ * for one reached through an absolute or `~` corpus root — or `undefined` when
+ * no declared root claims it (such a source is out of scope for ingest).
  */
 export const domainForPath = (profile: IngestProfile, repoRelativePath: string): string | undefined =>
   longestFirst(profile.domainRules).find(rule => repoRelativePath.startsWith(rule.prefix))?.domain;

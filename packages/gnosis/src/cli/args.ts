@@ -65,12 +65,13 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--min-relevance': { kind: 'value', placeholder: '<p>' },
   // `retrieve` only, OPT-IN: RRF-fuse a reranker pass over the first pass.
   '--rerank': { kind: 'boolean' },
-  // The three below tune that pass and are meaningless without it, so each one
+  // The four below tune that pass and are meaningless without it, so each one
   // REFUSES on its own: a run labelled with a model or a fusion that never ran
   // is the failure naming them exists to prevent.
   '--rerank-model': { kind: 'value', placeholder: '<id>' },
   '--rerank-profile': { kind: 'value', placeholder: `<${RERANK_PRESET_NAMES.join('|')}>` },
   '--rerank-weight': { kind: 'value', placeholder: '<w>' },
+  '--rerank-pool': { kind: 'value', placeholder: '<n>' },
   // `retrieve` only, OPT-IN: rewrite the query into keywords before the first pass.
   '--rephrase': { kind: 'boolean' },
   // `retrieve` and `answer`, OPT-IN: RM3 pseudo-relevance feedback over the first

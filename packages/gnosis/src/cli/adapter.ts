@@ -17,13 +17,14 @@ import { createLinearScanAdapter } from '../adapters/linearScanAdapter.js';
 import { createMiniSearchAdapter } from '../adapters/miniSearchAdapter.js';
 import type { FieldWeights } from '../config.js';
 import {
-  FTS5_INDEX_PATH,
-  LANCEDB_HYBRID_INDEX_DIR,
-  LANCEDB_INDEX_DIR,
-  LANCEDB_VEC_INDEX_DIR,
-  MINISEARCH_INDEX_PATH,
-  NO_INDEX_PATH
+  fts5IndexPath,
+  lancedbHybridIndexDir,
+  lancedbIndexDir,
+  lancedbVecIndexDir,
+  minisearchIndexPath,
+  noIndexPath
 } from '../paths.js';
+import type { AnalyzerId } from '../query.js';
 import type { KnowledgePort } from '../port.js';
 
 /**
@@ -102,17 +103,22 @@ export const hasPersistentIndex = (adapter: AdapterName): boolean => adapter !==
  * over one tree is therefore safe here, and it is what keeps the expensive
  * embedding sidecar (`<indexDir>.embed-cache`) warm across the pair.
  */
-const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, string>> = {
-  linear: NO_INDEX_PATH,
-  fts5: FTS5_INDEX_PATH,
-  minisearch: MINISEARCH_INDEX_PATH,
-  lancedb: LANCEDB_INDEX_DIR,
-  'lancedb-vec': LANCEDB_VEC_INDEX_DIR,
-  'lancedb-hybrid': LANCEDB_HYBRID_INDEX_DIR,
-  'lancedb-hybrid-full': LANCEDB_HYBRID_INDEX_DIR,
+const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, () => string>> = {
+  linear: noIndexPath,
+  fts5: fts5IndexPath,
+  minisearch: minisearchIndexPath,
+  lancedb: lancedbIndexDir,
+  'lancedb-vec': lancedbVecIndexDir,
+  'lancedb-hybrid': lancedbHybridIndexDir,
+  'lancedb-hybrid-full': lancedbHybridIndexDir,
 };
 
-export const defaultIndexPath = (adapter: AdapterName): string => DEFAULT_INDEX_PATHS[adapter];
+/**
+ * Resolved per call, not at import time: the data root the index hangs off is
+ * itself resolved per call (`paths.ts:dataRoot()`), so a frozen map would pin
+ * every adapter to whatever root the FIRST importer happened to see.
+ */
+export const defaultIndexPath = (adapter: AdapterName): string => DEFAULT_INDEX_PATHS[adapter]();
 
 /** The corpus root and the index location one port is opened against. */
 interface PortLocation {
@@ -125,6 +131,13 @@ interface PortLocation {
    * must have, and refusing here would make `--field-weights` an adapter switch.
    */
   readonly fieldWeights?: FieldWeights | undefined;
+  /**
+   * The analysis chain the active profile DECLARES its index is built with,
+   * honoured by the one adapter that stamps a chain (`fts5`) and ignored by the
+   * rest for the same reason `fieldWeights` is — a stamp is a detail of one
+   * route, not a capability every route must have.
+   */
+  readonly expectedAnalyzer?: AnalyzerId | undefined;
 }
 
 /**
@@ -149,6 +162,7 @@ const PORT_FACTORIES: Readonly<Record<AdapterName, (location: PortLocation) => K
       atomsDir: location.atomsDir,
       indexPath: location.indexPath,
       fieldWeights: location.fieldWeights,
+      expectedAnalyzer: location.expectedAnalyzer,
       now: new Date(),
     }),
   minisearch: location =>
@@ -171,6 +185,8 @@ const PORT_FACTORIES: Readonly<Record<AdapterName, (location: PortLocation) => K
 /** Per-route tuning a caller MAY attach; absent leaves every route at its default. */
 export interface PortOptions {
   readonly fieldWeights?: FieldWeights | undefined;
+  /** The chain the caller declares the index is built with; see `PortLocation`. */
+  readonly expectedAnalyzer?: AnalyzerId | undefined;
 }
 
 export const createPort = (
@@ -179,4 +195,9 @@ export const createPort = (
   indexPath: string,
   options?: PortOptions
 ): KnowledgePort =>
-  PORT_FACTORIES[adapter]({ atomsDir, indexPath, fieldWeights: options?.fieldWeights });
+  PORT_FACTORIES[adapter]({
+    atomsDir,
+    indexPath,
+    fieldWeights: options?.fieldWeights,
+    expectedAnalyzer: options?.expectedAnalyzer,
+  });

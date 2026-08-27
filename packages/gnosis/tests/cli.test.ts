@@ -451,7 +451,7 @@ describe('runCli', () => {
 
       expect(result.exitCode).toBe(3);
       expect(result.stdout).toContain('unavailable');
-      expect(result.stdout).toContain('gnosis ingest');
+      expect(result.stdout).toContain('npm run gnosis -- ingest');
     });
 
     it('keeps indexState machine-readable in --json when the corpus is missing', async () => {

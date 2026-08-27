@@ -28,6 +28,7 @@ import {
   RERANK_MODEL_ID,
   RETRIEVE_TOKEN_BUDGET
 } from '../config.js';
+import { indexRebuildCommand, ingestCommand } from '../invocation.js';
 import type { RetrievalResult, RetrievedAtom, RetrieveOptions } from '../port.js';
 import type { PrfParams } from '../prf.js';
 import { DEFAULT_PRF_PARAMS } from '../prf.js';
@@ -250,7 +251,7 @@ const resolveMaxPerDoc = (flags: FlagValues): MaxPerDocResult => {
 };
 
 /**
- * The three tuning flags for that pass. Each one is inert without
+ * The tuning flags for that pass. Each one is inert without
  * {@link RERANK_FLAG} — nothing would rerank, yet the run would carry the label
  * — so each REFUSES on its own rather than being ignored, the same rule the
  * bench's `--rerank-model` follows.
@@ -261,11 +262,46 @@ export const RERANK_PROFILE_FLAG = '--rerank-profile';
 
 export const RERANK_WEIGHT_FLAG = '--rerank-weight';
 
+/** Spelled as the bench spells it (`run.ts:RERANK_POOL_FLAG`), deliberately. */
+export const RERANK_POOL_FLAG = '--rerank-pool';
+
 const RERANK_TUNING_FLAGS: readonly string[] = [
   RERANK_MODEL_FLAG,
   RERANK_PROFILE_FLAG,
   RERANK_WEIGHT_FLAG,
+  RERANK_POOL_FLAG,
 ];
+
+/** A pool of nothing reranks nothing, so one candidate is the smallest pool. */
+const RERANK_POOL_MIN = 1;
+
+/**
+ * A non-integer or sub-minimal pool is a usage error, NOT something to round:
+ * a corrected run reports the depth it was ASKED for while scoring another one.
+ */
+const rerankPoolError = (raw: string): string =>
+  `${RERANK_POOL_FLAG} expects a whole number of candidates of at least ${RERANK_POOL_MIN} — got "${raw}"; it is never rounded`;
+
+const parseRerankPoolK = (raw: string): number | undefined => {
+  const pool = Number(raw);
+  return Number.isInteger(pool) && pool >= RERANK_POOL_MIN ? pool : undefined;
+};
+
+type PoolResult =
+  | { readonly ok: true; readonly poolK: number }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * How deep the first pass goes before the reranker sees it: the flag when there
+ * is one, else the profile's `rerankPoolK`, else {@link RERANK_K_INIT} — which
+ * is what keeps a run stating neither byte for byte what it always was.
+ */
+const resolveRerankPoolK = (flags: FlagValues, profileDefault: number | undefined): PoolResult => {
+  const raw = stringFlag(flags, RERANK_POOL_FLAG);
+  if (raw === undefined) return { ok: true, poolK: profileDefault ?? RERANK_K_INIT };
+  const poolK = parseRerankPoolK(raw);
+  return poolK === undefined ? { ok: false, error: rerankPoolError(raw) } : { ok: true, poolK };
+};
 
 /** The RRF weight the RERANKED order carries; the first pass carries `1 - w`. */
 const RERANK_WEIGHT_MIN = 0;
@@ -783,8 +819,8 @@ export const resolveTypeFilter = (flags: FlagValues): TypesResult => {
  * correction, never as success and never as a usage fault — the call was
  * well-formed, the corpus simply has not been built yet.
  */
-const NO_CORPUS =
-  'retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `gnosis ingest <path...>`';
+const noCorpus = (): string =>
+  `retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with \`${ingestCommand()} <path...>\``;
 
 /**
  * An index-backed adapter has a SECOND way to reach `unavailable`: the corpus is
@@ -793,10 +829,10 @@ const NO_CORPUS =
  * ingest-only remedy would send it to rebuild a corpus that is already there.
  */
 const indexRemedy = (adapter: AdapterName): string =>
-  `; if the corpus is already ingested, build the index with \`npm run gnosis -- index --adapter ${adapter}\``;
+  `; if the corpus is already ingested, build the index with \`${indexRebuildCommand(adapter)}\``;
 
 const noCorpusNote = (adapter: AdapterName): string =>
-  hasPersistentIndex(adapter) ? `${NO_CORPUS}${indexRemedy(adapter)}` : NO_CORPUS;
+  hasPersistentIndex(adapter) ? `${noCorpus()}${indexRemedy(adapter)}` : noCorpus();
 
 const isUnavailable = (result: RetrievalResult): boolean => result.indexState === 'unavailable';
 
@@ -1263,6 +1299,8 @@ type ArgsResult =
     readonly fieldWeights: FieldWeights;
     readonly rerank: boolean;
     readonly rerankOptions: RerankOptions;
+    /** The resolved rerank depth. See {@link resolveRerankPoolK}. */
+    readonly rerankPoolK: number;
     readonly minRelevance: number | undefined;
     readonly rephrase: boolean;
     /** `undefined` = no feedback pass; the first pass IS the ranking. */
@@ -1293,9 +1331,14 @@ interface ResolvedValues {
   readonly prfNote: string | undefined;
 }
 
-/** The rerank leg as argv resolved it: how to score, and the floor to serve at. */
-interface RerankResolved {
+/** How the rerank leg scores: the options, and how deep a pool it is handed. */
+interface RerankLeg {
   readonly options: RerankOptions;
+  readonly poolK: number;
+}
+
+/** That leg as argv resolved it, plus the floor the result is served at. */
+interface RerankResolved extends RerankLeg {
   readonly minRelevance: number | undefined;
 }
 
@@ -1308,18 +1351,32 @@ const okArgs = (
   ...values,
   rerank: flags[RERANK_FLAG] === true,
   rerankOptions: rerank.options,
+  rerankPoolK: rerank.poolK,
   minRelevance: rerank.minRelevance,
   rephrase: flags[REPHRASE_FLAG] === true,
 });
 
-const withRerankArgs = (flags: FlagValues, values: ResolvedValues): ArgsResult => {
+/** The last rerank decision: the floor, over a leg that has already resolved. */
+const withFloor = (flags: FlagValues, values: ResolvedValues, leg: RerankLeg): ArgsResult => {
+  const rerank = flags[RERANK_FLAG] === true;
+  const floor = resolveMinRelevance(flags, rerank, rerankModelOf(leg.options));
+  return floor.ok
+    ? okArgs(flags, values, { ...leg, minRelevance: floor.minRelevance })
+    : { ok: false, error: floor.error };
+};
+
+const withRerankArgs = (
+  flags: FlagValues,
+  values: ResolvedValues,
+  profilePoolK: number | undefined
+): ArgsResult => {
   const rerank = flags[RERANK_FLAG] === true;
   const options = resolveRerankOptions(flags, rerank);
   if (!options.ok) return { ok: false, error: options.error };
-  const floor = resolveMinRelevance(flags, rerank, rerankModelOf(options.options));
-  return floor.ok
-    ? okArgs(flags, values, { options: options.options, minRelevance: floor.minRelevance })
-    : { ok: false, error: floor.error };
+  const pool = resolveRerankPoolK(flags, profilePoolK);
+  return pool.ok
+    ? withFloor(flags, values, { options: options.options, poolK: pool.poolK })
+    : { ok: false, error: pool.error };
 };
 
 type CountsResult =
@@ -1437,7 +1494,7 @@ const resolveArgs = (context: CommandContext): ArgsResult => {
   if (!presentation.ok) return { ok: false, error: presentation.error };
   const prf = resolvePrf(flags, context.adapter, profile.defaultPrf);
   return prf.ok
-    ? withRerankArgs(flags, resolvedValues(counts, presentation, prf))
+    ? withRerankArgs(flags, resolvedValues(counts, presentation, prf), profile.rerankPoolK)
     : { ok: false, error: prf.error };
 };
 
@@ -1470,6 +1527,12 @@ export interface RetrieveRequest {
   readonly rerank: boolean;
   /** The reranker's model and fusion rule as the tuning flags resolved them. */
   readonly rerankOptions: RerankOptions;
+  /**
+   * How many first-pass candidates the reranker is handed — the flag, else the
+   * profile's `rerankPoolK`, else `RERANK_K_INIT`. It is a FLOOR under the
+   * pool, never a cap: a `-k` deeper than it keeps its own depth.
+   */
+  readonly rerankPoolK: number;
   /** The calibrated relevance floor; `undefined` when no floor was asked for. */
   readonly minRelevance: number | undefined;
   readonly rephrase: boolean;
@@ -1734,7 +1797,7 @@ const cappedPoolK = (request: RetrieveRequest): number => {
 };
 
 const firstPassK = (request: RetrieveRequest): number =>
-  request.rerank ? Math.max(cappedPoolK(request), RERANK_K_INIT) : cappedPoolK(request);
+  request.rerank ? Math.max(cappedPoolK(request), request.rerankPoolK) : cappedPoolK(request);
 
 /**
  * Each filter is OMITTED rather than sent as `undefined`, so an adapter cannot
@@ -2047,6 +2110,7 @@ const search = async (
   const { context } = request;
   const port = createPort(context.adapter, context.atomsDir, context.indexPath, {
     fieldWeights: request.fieldWeights,
+    expectedAnalyzer: context.profile.defaultAnalyzer,
   });
   const result = await port.retrieve(effectiveQuery(request), retrieveOptions(request));
   port.close?.();
@@ -2107,6 +2171,7 @@ const initialRequest = (
   maxPerDoc: args.maxPerDoc,
   rerank: args.rerank,
   rerankOptions: args.rerankOptions,
+  rerankPoolK: args.rerankPoolK,
   minRelevance: args.minRelevance,
   rephrase: args.rephrase,
   ...scoringFields(args),
