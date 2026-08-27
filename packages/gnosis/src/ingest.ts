@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { globSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, relative, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
@@ -10,9 +10,10 @@ import { chunkMarkdown, frontMatterTitle, headingLine, headingPath } from './chu
 import { bodyMaxChars, CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from './config.js';
 import type { CorpusManifestInput, ManifestAtom } from './corpusManifest.js';
 import { buildCorpusManifest, CORPUS_MANIFEST_FILE, serializeCorpusManifest } from './corpusManifest.js';
+import { expandUserPath } from './env.js';
 import type { IngestProfile } from './ingestProfile.js';
 import { domainForPath, typeForPath } from './ingestProfile.js';
-import { ATOMS_DIR, REPO_ROOT } from './paths.js';
+import { atomsDir, REPO_ROOT } from './paths.js';
 import { loadSummarySidecar } from './summarySidecar.js';
 import { readExistingIds, validateAtom } from './validate.js';
 import { activeProfile } from './vocabulary.js';
@@ -61,9 +62,10 @@ const KEY_SEPARATOR = '\u0000';
 /** Where the ingest run reads from and writes to; every path is injectable for tests. */
 export interface IngestOptions {
   /**
-   * Repo-relative roots to walk. Defaults to the configured corpus scope, which
-   * is the ONLY thing that decides what ingest reads — a caller cannot reach a
-   * document outside it by naming a path.
+   * Roots to walk — relative to `repoRoot`, or absolute / `~`-rooted to reach a
+   * tree outside it. Defaults to the configured corpus scope, which is the ONLY
+   * thing that decides what ingest reads — a caller cannot reach a document
+   * outside it by naming a path.
    */
   readonly corpusRoots?: readonly string[] | undefined;
   /** Atom output directory. Defaults to the real vault. */
@@ -175,14 +177,26 @@ const GLOB_MARKER = '*';
 const listGlob = (repoRoot: string, pattern: string): readonly string[] =>
   globSync(pattern, { cwd: repoRoot })
     .filter(name => name.endsWith(MD_SUFFIX))
-    .map(name => join(repoRoot, name))
+    .map(name => resolve(repoRoot, name))
     .sort();
+
+/**
+ * WHERE A CORPUS ROOT LIVES. A root is expanded (`~/x` → the home directory)
+ * and then read one of two ways: an ABSOLUTE root is used as it stands, and a
+ * RELATIVE one is joined to `repoRoot` exactly as it always was. That is what
+ * lets ONE index span project doc trees that share no parent, without moving a
+ * single shipped profile — every shipped root is relative.
+ */
+const rootLocation = (repoRoot: string, root: string): string => {
+  const expanded = expandUserPath(root);
+  return isAbsolute(expanded) ? expanded : join(repoRoot, expanded);
+};
 
 /** A missing root is not distinguished from an empty one — both are zero matches. */
 const listRoot = async (repoRoot: string, root: string): Promise<readonly string[]> =>
   root.includes(GLOB_MARKER)
-    ? listGlob(repoRoot, root)
-    : await listMarkdown(join(repoRoot, root)).catch(() => []);
+    ? listGlob(repoRoot, expandUserPath(root))
+    : await listMarkdown(rootLocation(repoRoot, root)).catch(() => []);
 
 /**
  * A configured root that matches nothing is a CONFIGURATION ERROR, not an empty
@@ -193,7 +207,7 @@ const resolveRoot = async (repoRoot: string, root: string): Promise<readonly str
   const files = await listRoot(repoRoot, root);
   if (files.length > 0) return files;
   throw new Error(
-    `corpus root "${root}" matched no markdown files under ${repoRoot} — fix or remove it in CORPUS_ROOTS (src/config.ts), in the profile's corpusRoots, or in ${CORPUS_ROOTS_ENV_VAR}`
+    `corpus root "${root}" matched no markdown files under ${rootLocation(repoRoot, root)} — fix or remove it in CORPUS_ROOTS (src/config.ts), in the profile's corpusRoots, or in ${CORPUS_ROOTS_ENV_VAR}`
   );
 };
 
@@ -211,18 +225,39 @@ const expandCorpus = async (
  * That placement is the rule, not an optimisation: a generated tree is not a
  * document that failed a check, so surfacing it in `skipped[]` would drown the
  * refusals a reader has to act on under 22 597 entries nothing can be done
- * about. Same prefix semantics as `domainRules` — a repo-relative,
- * forward-slash `startsWith` match.
+ * about. A forward-slash `startsWith` match against the source IDENTITY (see
+ * {@link sourceIdentity}), like `domainRules` — but the profile still refuses an
+ * ABSOLUTE `excludePaths` prefix, so only an in-repo source can be excluded.
  */
 const isExcluded = (profile: IngestProfile, sourcePath: string): boolean =>
   (profile.excludePaths ?? []).some(prefix => sourcePath.startsWith(prefix));
+
+/**
+ * HOW A SOURCE IS NAMED, and therefore how every prefix rule matches it.
+ *
+ * A source UNDER `repoRoot` keeps its repo-relative path, byte for byte as
+ * before — that is what leaves every shipped profile, every recorded atom and
+ * every `domainRules` prefix untouched. A source reached through an ABSOLUTE or
+ * `~` corpus root lies outside `repoRoot`, has no meaningful repo-relative name
+ * (`relative()` would walk out through `..`), and is named by its own absolute
+ * path instead. `domainRules[].prefix`, `typeRules[].prefix` and `excludePaths`
+ * match THIS string, so an out-of-repo tree is claimed by declaring its
+ * absolute (or `~`-rooted) prefix — and a tree nobody declared stays refused by
+ * `unmappedSkip`, loudly, because ingest MUST NOT guess a domain.
+ */
+const sourceIdentity = (repoRoot: string, absolutePath: string): string => {
+  const relativePath = toPosix(relative(repoRoot, absolutePath));
+  return relativePath.startsWith('..') || isAbsolute(relativePath)
+    ? toPosix(absolutePath)
+    : relativePath;
+};
 
 const loadSource = async (
   absolutePath: string,
   repoRoot: string,
   profile: IngestProfile
 ): Promise<LoadedSource> => {
-  const sourcePath = toPosix(relative(repoRoot, absolutePath));
+  const sourcePath = sourceIdentity(repoRoot, absolutePath);
   return {
     sourcePath,
     text: await readFile(absolutePath, 'utf8'),
@@ -241,7 +276,7 @@ export const loadCorpus = async (
   profile: IngestProfile
 ): Promise<readonly LoadedSource[]> => {
   const files = await expandCorpus(repoRoot, corpusRoots);
-  const kept = [...files].sort().filter(file => !isExcluded(profile, toPosix(relative(repoRoot, file))));
+  const kept = [...files].sort().filter(file => !isExcluded(profile, sourceIdentity(repoRoot, file)));
   return await Promise.all(kept.map(file => loadSource(file, repoRoot, profile)));
 };
 
@@ -954,6 +989,8 @@ interface WritePhase {
   readonly outputDir: string;
   readonly profile: IngestProfile;
   readonly writable: readonly CheckedAtom[];
+  /** Every source this run READ — the manifest's corpus→atoms half, already in hand. */
+  readonly sources: readonly LoadedSource[];
   readonly skipped: number;
   readonly duplicates: number;
 }
@@ -966,6 +1003,7 @@ const persist = async (phase: WritePhase): Promise<number> => {
   await writeManifest(phase.outputDir, {
     profile: phase.profile.name,
     atoms: phase.writable.map(manifestAtom),
+    sources: phase.sources,
     skipped: phase.skipped,
     duplicates: phase.duplicates,
   });
@@ -982,7 +1020,7 @@ const profileSummaries = (
     : loadSummarySidecar(join(repoRoot, profile.summarySidecar));
 
 export const ingest = async (options: IngestOptions): Promise<IngestSummary> => {
-  const outputDir = options.outputDir ?? ATOMS_DIR;
+  const outputDir = options.outputDir ?? atomsDir();
   const repoRoot = options.repoRoot ?? REPO_ROOT;
   const profile = profileOf(options);
   const loaded = await loadCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots(), profile);
@@ -996,6 +1034,13 @@ export const ingest = async (options: IngestOptions): Promise<IngestSummary> => 
   const refused = checked.filter(entry => entry.reasons.length > 0);
   const skipped = [...unmapped, ...refused.map(toSkip)];
   const duplicates = countDuplicates(refused);
-  const pruned = await persist({ outputDir, profile, writable, skipped: skipped.length, duplicates });
+  const pruned = await persist({
+    outputDir,
+    profile,
+    writable,
+    sources: loaded,
+    skipped: skipped.length,
+    duplicates,
+  });
   return { written: writable.length, skipped, pruned, duplicates };
 };

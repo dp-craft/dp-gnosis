@@ -120,3 +120,108 @@ describe('retrieve origin paths', () => {
     expect(result.stdout).toContain('<source>atoms/');
   });
 });
+
+/**
+ * MERGED PROVENANCE THROUGH THE OUTPUT SURFACES. Exact-body dedupe keeps ONE
+ * atom for two byte-identical documents and merges BOTH paths into `sources`;
+ * `ingestProvenanceMerge.test.ts` proves that array's contents. What follows
+ * proves the second half — that every merged path survives RENDERING, so a
+ * regression printing only `originPaths[0]` cannot pass green.
+ */
+const MERGED_BODY_TEXT =
+  'the provenance rules describe how a duplicated document is credited, which path a reader may open ' +
+  'to verify a quoted atom, and why dropping a mirrored copy silently makes it uncreditable, and this ' +
+  'paragraph is long enough on its own to clear both the chunker fold threshold and the exact-body ' +
+  'dedupe floor so the two mirrored copies form one byte-identical duplicate group of the corpus';
+
+const MERGED_DOC = `# Provenance Rules\n\n${MERGED_BODY_TEXT}\n`;
+
+const PRIMARY_ORIGIN = 'claude-artifacts/standards/primary-rules.md';
+const MIRROR_ORIGIN = 'docs/mirrored-rules.md';
+const MERGED_ORIGINS = [PRIMARY_ORIGIN, MIRROR_ORIGIN] as const;
+
+/** The same document under two DECLARED corpus roots — one duplicate group, two sources. */
+const makeMergedFixture = async (): Promise<Fixture> => {
+  const repoRoot = await mkdtemp(join(tmpdir(), 'gnosis-origin-merged-'));
+  const standards = join(repoRoot, 'claude-artifacts', 'standards');
+  const docsDir = join(repoRoot, 'docs');
+  await mkdir(standards, { recursive: true });
+  await mkdir(docsDir, { recursive: true });
+  await writeFile(join(standards, 'primary-rules.md'), MERGED_DOC, 'utf8');
+  await writeFile(join(docsDir, 'mirrored-rules.md'), MERGED_DOC, 'utf8');
+  return { repoRoot, atomsDir: join(repoRoot, 'atoms') };
+};
+
+const mergedRetrieveArgv = (
+  fixture: Fixture,
+  adapter: string,
+  format: readonly string[]
+): readonly string[] => [
+  'retrieve',
+  'provenance',
+  '-k',
+  '2',
+  '--adapter',
+  adapter,
+  '--atoms-dir',
+  fixture.atomsDir,
+  '--index-path',
+  indexPathFor(fixture, adapter),
+  '--repo-root',
+  fixture.repoRoot,
+  ...format,
+];
+
+const ingestedMerged = async (adapter: string): Promise<Fixture> => {
+  const fixture = await makeMergedFixture();
+  await runCli(['ingest', '--atoms-dir', fixture.atomsDir, '--repo-root', fixture.repoRoot]);
+  await runCli([
+    'index',
+    '--adapter',
+    adapter,
+    '--atoms-dir',
+    fixture.atomsDir,
+    '--index-path',
+    indexPathFor(fixture, adapter),
+  ]);
+  return fixture;
+};
+
+const sortedOrigins = (atom: Record<string, unknown>): readonly string[] =>
+  [...(atom['originPaths'] as readonly string[])].sort();
+
+describe('retrieve merged origin paths', () => {
+  beforeEach(() => {
+    vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'claude-artifacts/standards,docs');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('lists BOTH merged origins in the json rendering, not only the survivor path', async () => {
+    const fixture = await ingestedMerged('linear');
+
+    const result = await runCli(mergedRetrieveArgv(fixture, 'linear', ['--json']));
+
+    expect(sortedOrigins(firstAtom(result.stdout))).toEqual([...MERGED_ORIGINS].sort());
+  });
+
+  it('prints one origin line per merged origin in the text rendering', async () => {
+    const fixture = await ingestedMerged('linear');
+
+    const result = await runCli(mergedRetrieveArgv(fixture, 'linear', []));
+
+    expect(result.stdout).toContain(`origin  ${PRIMARY_ORIGIN}`);
+    expect(result.stdout).toContain(`origin  ${MIRROR_ORIGIN}`);
+  });
+
+  it('emits one <origin> element per merged origin in the xml rendering', async () => {
+    const fixture = await ingestedMerged('linear');
+
+    const result = await runCli(mergedRetrieveArgv(fixture, 'linear', ['--format', 'xml']));
+
+    expect(result.stdout).toContain(`<origin>${PRIMARY_ORIGIN}</origin>`);
+    expect(result.stdout).toContain(`<origin>${MIRROR_ORIGIN}</origin>`);
+  });
+});

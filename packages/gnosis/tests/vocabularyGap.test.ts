@@ -68,6 +68,7 @@ const writeManifest = (): void => {
       domain: 'runner',
       content: atomText(spec),
     })),
+    sources: [],
     skipped: 0,
     duplicates: 0,
   });

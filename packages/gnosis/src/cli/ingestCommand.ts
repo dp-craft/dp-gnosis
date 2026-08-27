@@ -25,7 +25,7 @@ const skipLine = (skip: IngestSkip): string =>
 
 const ingestText = (summary: IngestSummary): string =>
   [
-    `ingest: written ${summary.written}, skipped ${summary.skipped.length} (${summary.duplicates} duplicate-body)`,
+    `ingest: written ${summary.written}, pruned ${summary.pruned}, skipped ${summary.skipped.length} (${summary.duplicates} duplicate-body)`,
     ...summary.skipped.map(skipLine),
   ].join('\n');
 
@@ -34,6 +34,7 @@ const summarize = (summary: IngestSummary): CommandOutcome => ({
   data: {
     command: 'ingest',
     written: summary.written,
+    pruned: summary.pruned,
     skipped: summary.skipped,
     duplicates: summary.duplicates,
   },
@@ -81,7 +82,7 @@ const resolveGoldIds = (context: CommandContext): GoldIdsResult => {
  */
 const goldRefusal = (message: string): CommandOutcome => ({
   exitCode: EXIT_PARTIAL,
-  data: { command: 'ingest', written: 0, skipped: [], duplicates: 0, error: message },
+  data: { command: 'ingest', written: 0, pruned: 0, skipped: [], duplicates: 0, error: message },
   text: message,
 });
 

@@ -672,6 +672,8 @@ describe('ingest — corpus manifest', () => {
       profile: 'default',
       atomCount: 2,
       digest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      sourceCount: 2,
+      sourceDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       byType: { 'feature-log': 1, standard: 1 },
       byDomain: { docs: 1, standards: 1 },
       skipped: 0,
