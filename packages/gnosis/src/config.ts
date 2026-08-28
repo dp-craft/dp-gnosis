@@ -10,7 +10,7 @@
  * tuple that gives `AtomType` its union — plus the narrowing rule that holds a
  * profile to it.
  */
-import { ingestProfilePath, userProfilePath } from './paths.js';
+import { ingestProfilePath, shippedProfilePath } from './paths.js';
 
 /**
  * Hard write-time cap on a single atom's body.
@@ -628,20 +628,22 @@ const mirrorRefusal = (
   `ingest profile "${path}" declares ${field} "${foreign}", which DECLARED_TYPES in src/config.ts does not mirror — the mirrored values are ${declared.join(' | ')}; add "${foreign}" there or drop it from the profile, or the TypeScript union lies about what a valid label is`;
 
 /**
- * One message, two audiences, chosen by WHICH profile is in force: the user's
- * own (what `init` writes, and what it invites them to edit) or the one tracked
- * in the checkout.
+ * One message, two audiences, chosen by WHICH profile is in force. The SHIPPED
+ * one is the exception and everything else the rule, not the other way round:
+ * `authorRefusal` is actionable for every reader — dropping the value from the
+ * profile always works — while `mirrorRefusal` names a file only a checkout
+ * has. Keying on the user profile alone sent every `--profile <path>` reader to
+ * `src/config.ts`, which an installed instance does not ship.
  */
 export const foreignVocabularyMessage = (
   field: string,
   foreign: string,
   declared: readonly string[],
   path: string
-): string => {
-  return path === userProfilePath()
-    ? authorRefusal(path, field, foreign, declared)
-    : mirrorRefusal(path, field, foreign, declared);
-};
+): string =>
+  path === shippedProfilePath()
+    ? mirrorRefusal(path, field, foreign, declared)
+    : authorRefusal(path, field, foreign, declared);
 
 /**
  * Narrow a profile's declared vocabulary against the mirrored tuple: any

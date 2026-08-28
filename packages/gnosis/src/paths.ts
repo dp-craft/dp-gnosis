@@ -239,8 +239,13 @@ export const USER_PROFILE_FILE = `${USER_PROFILE_NAME}.profile.json`;
 export const userProfilePath = (): string =>
   resolve(configHome(), USER_PROFILE_FILE);
 
-/** The SHIPPED ingest profile, authored for the vault this repository carries. */
-const shippedProfilePath = (): string =>
+/**
+ * The SHIPPED ingest profile, authored for the vault this repository carries.
+ * Exported so a refusal can tell this ONE file apart from every profile a user
+ * authored: it is the only one tracked beside `config.ts`, and so the only one
+ * for which "edit the TypeScript tuple" is a remedy rather than a dead end.
+ */
+export const shippedProfilePath = (): string =>
   resolve(profilesDir(), 'default.profile.json');
 
 /**

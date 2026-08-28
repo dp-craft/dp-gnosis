@@ -213,6 +213,20 @@ describe('doctor — a profile declaring a type this build does not define', () 
     expect(outcome.exitCode).toBe(3);
     expect(report(outcome)).toContain(elsewhere);
     expect(report(outcome)).not.toContain(ingestProfilePath());
+
+    /**
+     * A reader who ran --profile against their OWN file is on an installed
+     * instance, which ships no TypeScript, so pointing them at src/config.ts
+     * is a dead end rather than a remedy. That wording belongs to the SHIPPED
+     * profile tracked beside the tuple in a checkout; every other profile is
+     * told to edit the profile file itself.
+     */
+    expect(
+      report(outcome)
+        .split('\n')
+        .filter(line => line.includes('type-vocabulary'))
+        .join('\n')
+    ).not.toContain('src/config.ts');
   });
 });
 
