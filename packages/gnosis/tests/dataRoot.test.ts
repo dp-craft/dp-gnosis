@@ -176,6 +176,12 @@ describe('dataRootFact — the tier that won, agreeing with dataRoot', () => {
     expect(fact.origin).toBe('env');
     expect(fact.value).toBe(dataRoot(env, 'linux'));
     expect(fact.configured).toBe('/srv/from-config');
+    /**
+     * doctorCommand.ts:dataRootChecks quotes this field back to the reader as the environment
+     * variable's value, so it MUST be the raw string the user wrote and not the resolved data
+     * root. A resolved path there quotes a value nothing had set.
+     */
+    expect(fact.stated).toBe('/srv/from-env');
   });
 
   it('names config.json when nothing is stated, and agrees on the value', () => {

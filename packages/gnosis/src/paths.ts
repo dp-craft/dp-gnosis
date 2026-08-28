@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { configHome, dataHome, dataHomeOverride } from './env.js';
+import { configHome, dataHome, dataHomeOverride, DATA_HOME_VAR, statedVar } from './env.js';
 import { loadUserConfig } from './userConfig.js';
 
 /**
@@ -95,7 +95,12 @@ export type DataRootOrigin = 'env' | 'config' | 'default';
 export interface DataRootFact {
   readonly value: string;
   readonly origin: DataRootOrigin;
-  /** What the environment stated, whether or not it won. */
+  /**
+   * What the environment VARIABLE holds, whether or not it won -- the string the
+   * user wrote, not the directory it resolves to. A diagnostic quotes this back
+   * as the variable's value, and `dataHomeOverride` already appended the
+   * application directory, so reporting that quoted a value nothing had set.
+   */
   readonly stated: string | undefined;
   /** What `config.json` declared, whether or not it won. */
   readonly configured: string | undefined;
@@ -116,9 +121,10 @@ export const dataRootFact = (
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform
 ): DataRootFact => {
-  const stated = dataHomeOverride(env, platform);
+  const override = dataHomeOverride(env, platform);
+  const stated = statedVar(env, DATA_HOME_VAR);
   const configured = loadUserConfig(configHome(env, platform)).dataRoot;
-  if (stated !== undefined) return { value: stated, origin: 'env', stated, configured };
+  if (override !== undefined) return { value: override, origin: 'env', stated, configured };
   return configured !== undefined
     ? { value: configured, origin: 'config', stated, configured }
     : { value: defaultDataRoot(env, platform), origin: 'default', stated, configured };
