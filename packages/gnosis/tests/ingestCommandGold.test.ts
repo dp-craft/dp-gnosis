@@ -6,7 +6,7 @@ import { runIngestCommand } from '../src/cli/ingestCommand.js';
 import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import type { IngestOptions, IngestSummary } from '../src/ingest.js';
 import { ingest } from '../src/ingest.js';
-import { goldenDir } from '../src/paths.js';
+import { goldenDir, ingestProfilePath } from '../src/paths.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /**
@@ -27,6 +27,7 @@ const context: CommandContext = {
   atomsDir: '/tmp/gnosis-gold-wiring/atoms',
   indexPath: '/tmp/gnosis-gold-wiring/index',
   repoRoot: '/tmp/gnosis-gold-wiring',
+  profilePath: ingestProfilePath(),
   corpusRoots: ['docs'],
   profile: activeProfile(),
 };

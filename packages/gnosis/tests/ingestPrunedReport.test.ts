@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 
+import { ingestProfilePath } from '../src/paths.js';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import type { CommandContext } from '../src/cli/context.js';
 import { runIngestCommand } from '../src/cli/ingestCommand.js';
@@ -25,6 +26,7 @@ const context: CommandContext = {
   atomsDir: '/tmp/gnosis-pruned-report/atoms',
   indexPath: '/tmp/gnosis-pruned-report/index',
   repoRoot: '/tmp/gnosis-pruned-report',
+  profilePath: ingestProfilePath(),
   corpusRoots: ['docs'],
   profile: activeProfile(),
 };

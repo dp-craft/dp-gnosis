@@ -635,9 +635,9 @@ const mirrorRefusal = (
 export const foreignVocabularyMessage = (
   field: string,
   foreign: string,
-  declared: readonly string[]
+  declared: readonly string[],
+  path: string
 ): string => {
-  const path = ingestProfilePath();
   return path === userProfilePath()
     ? authorRefusal(path, field, foreign, declared)
     : mirrorRefusal(path, field, foreign, declared);
@@ -668,7 +668,9 @@ export const expectVocabulary = <T extends readonly string[]>(
     );
   }
   const foreign = foreignVocabularyValue(actual, declared);
-  if (foreign !== undefined) refuseVocabulary(foreignVocabularyMessage(field, foreign, declared));
+  if (foreign !== undefined) {
+    refuseVocabulary(foreignVocabularyMessage(field, foreign, declared, ingestProfilePath()));
+  }
   return declared;
 };
 

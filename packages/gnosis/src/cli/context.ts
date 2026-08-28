@@ -20,6 +20,14 @@ export interface CommandContext {
   readonly corpusRoots: readonly string[];
   /** The named instance this invocation runs as; the shipped one unless `--profile`. */
   readonly profile: IngestProfile;
+  /**
+   * WHERE {@link profile} was read from, resolved once beside it. A diagnostic
+   * that names a profile file has to name the one it actually judged: deriving
+   * it a second time from `ingestProfilePath()` names the shipped or user
+   * profile under any `--profile`, and points the reader at a file whose
+   * contents are not what was reported.
+   */
+  readonly profilePath: string;
 }
 
 /** Every subcommand has this signature, so adding one is a single dispatch entry. */

@@ -9,7 +9,7 @@ import { GOLD_IDS_FLAG, runIngestCommand } from '../src/cli/ingestCommand.js';
 import { EXIT_PARTIAL } from '../src/cli/outcome.js';
 import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import { ATOMS_OWNER_FILE } from '../src/ingest.js';
-import { goldenDir } from '../src/paths.js';
+import { goldenDir, ingestProfilePath } from '../src/paths.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /**
@@ -62,6 +62,7 @@ const contextFor = (fixture: Fixture, flags: Record<string, string>): CommandCon
   atomsDir: fixture.out,
   indexPath: join(fixture.root, 'index'),
   repoRoot: fixture.root,
+  profilePath: ingestProfilePath(),
   corpusRoots: [...ROOTS],
   profile: activeProfile(),
 });

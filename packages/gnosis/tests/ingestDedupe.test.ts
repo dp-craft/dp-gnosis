@@ -7,7 +7,7 @@ import type { CommandContext } from '../src/cli/context.js';
 import { runIngestCommand } from '../src/cli/ingestCommand.js';
 import { loadJudgedAtomIds } from '../src/goldenIds.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
-import { goldenDir } from '../src/paths.js';
+import { goldenDir, ingestProfilePath } from '../src/paths.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /**
@@ -156,6 +156,7 @@ const contextFor = (fixture: Fixture): CommandContext => ({
   atomsDir: fixture.out,
   indexPath: join(fixture.root, 'index'),
   repoRoot: fixture.root,
+  profilePath: ingestProfilePath(),
   corpusRoots: [...ROOTS],
   profile: activeProfile(),
 });

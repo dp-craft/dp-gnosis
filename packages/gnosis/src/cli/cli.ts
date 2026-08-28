@@ -16,6 +16,7 @@
 import type { IngestProfile } from '../ingestProfile.js';
 import { loadIngestProfile } from '../ingestProfile.js';
 import { isVocabularyError } from '../config.js';
+import { ingestProfilePath } from '../paths.js';
 import { isUserConfigError } from '../userConfig.js';
 import { activeProfile } from '../vocabulary.js';
 import type { AdapterName } from './adapter.js';
@@ -97,12 +98,14 @@ const commandError = (command: string | undefined): string =>
 const contextFor = (
   args: ParsedArgs,
   adapter: AdapterName,
-  profile: IngestProfile
+  profile: IngestProfile,
+  profilePath: string
 ): CommandContext => ({
   positionals: args.positionals,
   flags: args.flags,
   adapter,
   profile,
+  profilePath,
   ...resolveLocations(args.flags, adapter, profile),
 });
 
@@ -110,7 +113,7 @@ const contextFor = (
 export const PROFILE_FLAG = '--profile';
 
 type ProfileResult =
-  | { readonly ok: true; readonly profile: IngestProfile }
+  | { readonly ok: true; readonly profile: IngestProfile; readonly path: string }
   | { readonly ok: false; readonly error: string };
 
 /**
@@ -121,9 +124,11 @@ type ProfileResult =
  */
 const loadProfile = (args: ParsedArgs): ProfileResult => {
   const path = stringFlag(args.flags, PROFILE_FLAG);
-  if (path === undefined) return { ok: true, profile: activeProfile() };
+  if (path === undefined) {
+    return { ok: true, profile: activeProfile(), path: ingestProfilePath() };
+  }
   try {
-    return { ok: true, profile: loadIngestProfile(path) };
+    return { ok: true, profile: loadIngestProfile(path), path };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -139,10 +144,11 @@ const loadProfile = (args: ParsedArgs): ProfileResult => {
 const contextResult = (
   args: ParsedArgs,
   adapter: AdapterName,
-  profile: IngestProfile
+  profile: IngestProfile,
+  profilePath: string
 ): ContextResult => {
   try {
-    return { ok: true, context: contextFor(args, adapter, profile) };
+    return { ok: true, context: contextFor(args, adapter, profile, profilePath) };
   } catch (error) {
     if (isUserConfigError(error)) return { ok: false, error: error.message };
     throw error;
@@ -156,7 +162,7 @@ const buildContext = (args: ParsedArgs): ContextResult => {
   const adapter = resolveAdapter(requested);
   return adapter === undefined
     ? { ok: false, error: adapterError(requested) }
-    : contextResult(args, adapter, profile.profile);
+    : contextResult(args, adapter, profile.profile, profile.path);
 };
 
 const helpOutcome = (): CommandOutcome => {

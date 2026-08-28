@@ -18,6 +18,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
+import { ingestProfilePath } from '../src/paths.js';
 import { buildFts5Index, readIndexAnalyzer } from '../src/adapters/fts5Adapter.js';
 import { readVocabularyGap } from '../src/adapters/fts5VocabularyGap.js';
 import { runRetrieveCommand } from '../src/cli/retrieveCommand.js';
@@ -84,6 +85,7 @@ const retrieveCommand = async (query: string): ReturnType<typeof runRetrieveComm
     atomsDir,
     indexPath,
     repoRoot: root,
+    profilePath: ingestProfilePath(),
     flags: {},
     positionals: [query],
     corpusRoots: ['docs'],

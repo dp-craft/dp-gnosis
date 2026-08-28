@@ -30,7 +30,7 @@ import type { CommandOutcome } from '../src/cli/outcome.js';
 import { CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
-import { dataRoot } from '../src/paths.js';
+import { dataRoot, ingestProfilePath } from '../src/paths.js';
 import { indexRebuildCommand, ingestCommand } from '../src/invocation.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import type { FlagValues } from '../src/cli/args.js';
@@ -98,6 +98,7 @@ const contextWith = (
   atomsDir,
   indexPath,
   repoRoot: root,
+  profilePath: ingestProfilePath(),
   flags,
   positionals: [],
   corpusRoots: ['docs'],
@@ -189,6 +190,26 @@ describe('doctor — a profile declaring a type this build does not define', () 
 
   it('stays silent when every declared type is mirrored', async () => {
     expect(report(await doctor())).not.toContain('type-vocabulary');
+  });
+
+  /**
+   * The message names a file for the reader to go and edit. It derived that
+   * name from `ingestProfilePath()`, which is the shipped-or-user profile
+   * whatever `--profile` said -- so under one it reported a foreign value that
+   * the named file does not contain, and sent the reader to correct a file that
+   * was never judged.
+   */
+  it('names the profile it JUDGED, not the one ingestProfilePath resolves', async () => {
+    const elsewhere = '/srv/instances/other.profile.json';
+
+    const outcome = await runDoctorCommand({
+      ...contextWith(profileWith({ types: ['knowledge', 'recipe'] })),
+      profilePath: elsewhere,
+    });
+
+    expect(outcome.exitCode).toBe(3);
+    expect(report(outcome)).toContain(elsewhere);
+    expect(report(outcome)).not.toContain(ingestProfilePath());
   });
 });
 
@@ -389,6 +410,7 @@ describe('doctor — the corpus AHEAD of its atoms', () => {
     atomsDir: liveAtoms,
     indexPath: liveIndex,
     repoRoot: liveRoot,
+    profilePath: ingestProfilePath(),
     flags: {},
     positionals: [],
     corpusRoots: ['docs'],

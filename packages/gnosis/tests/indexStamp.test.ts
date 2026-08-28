@@ -18,6 +18,7 @@ import {
   createFts5Adapter,
   INDEX_SCHEMA_VERSION
 } from '../src/adapters/fts5Adapter.js';
+import { ingestProfilePath } from '../src/paths.js';
 import { runRetrieveCommand } from '../src/cli/retrieveCommand.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import type { KnowledgePort, RetrievalResult } from '../src/port.js';
@@ -102,6 +103,7 @@ const retrieveCommand = async (query: string): ReturnType<typeof runRetrieveComm
     atomsDir,
     indexPath,
     repoRoot: root,
+    profilePath: ingestProfilePath(),
     flags: {},
     positionals: [query],
     corpusRoots: ['docs'],
@@ -348,6 +350,7 @@ describe('index stamp — the analyzer the profile DECLARES', () => {
       atomsDir,
       indexPath,
       repoRoot: root,
+      profilePath: ingestProfilePath(),
       flags: {},
       positionals: ['zustand selector'],
       corpusRoots: ['docs'],

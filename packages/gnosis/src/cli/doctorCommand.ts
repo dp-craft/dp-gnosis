@@ -303,7 +303,13 @@ const TYPE_VOCABULARY = 'type-vocabulary';
 const typeVocabularyChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
   const foreign = foreignVocabularyValue(facts.context.profile.types, DECLARED_TYPES);
   if (foreign === undefined) return [];
-  return [check(TYPE_VOCABULARY, 'fault', foreignVocabularyMessage('types', foreign, DECLARED_TYPES))];
+  return [
+    check(
+      TYPE_VOCABULARY,
+      'fault',
+      foreignVocabularyMessage('types', foreign, DECLARED_TYPES, facts.context.profilePath)
+    ),
+  ];
 };
 
 const ownerChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
