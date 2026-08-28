@@ -239,6 +239,27 @@ describe('prepareDataset — per-analyzer index', () => {
     expect(porterHits).toBeGreaterThan(0);
     expect(await hitsFor(nostem)).toBeLessThan(porterHits);
   });
+
+  /**
+   * The refusal the CLI has and the measurement path did not. Nothing in the
+   * suite can currently produce a stamp disagreeing with the arm -- the build is
+   * wholesale and immediately precedes the open -- so this REACHES for the state
+   * by rewriting the stamp, which is exactly what a future index reuse would do
+   * by accident. Without the declaration the run scores a chain it does not
+   * claim and records the number under the arm's label.
+   */
+  it('REFUSES a port whose index stamp disagrees with the chain the arm prepared', async () => {
+    const prepared = await prepareWith('porter-fold');
+    const db = new Database(prepared.indexPath);
+    db.prepare("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('analyzer', 'nostem-fold')").run();
+    db.close();
+
+    const scopedPort = openPort(prepared);
+    const atoms = await retrieveDocs(scopedPort, STEMMED_QUERY, DEPTH);
+    scopedPort.close?.();
+
+    expect(atoms).toEqual([]);
+  });
 });
 
 /**
@@ -393,6 +414,7 @@ describe('probePortSoundness', () => {
       atomsDir,
       indexPath,
       adapter: 'lancedb',
+      analyzer: undefined,
       atomCount: 0,
       enrichmentRecords: 0,
       docCount: 0,

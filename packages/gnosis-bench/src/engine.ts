@@ -201,6 +201,15 @@ export interface PreparedDataset {
   readonly indexPath: string;
   /** The adapter `indexPath` was built for; `openPort` refuses any other. */
   readonly adapter: AdapterName;
+  /**
+   * The analysis chain the fts5 index was BUILT with, carried so `openPort` can
+   * declare it. Without the declaration the adapter reads the chain off the
+   * stamp and answers under it, so an index from another chain would score the
+   * run silently and the row would carry the arm's label anyway. `undefined`
+   * when the arm named none, which leaves the stamp the only statement there is
+   * — the state every recorded run was measured in.
+   */
+  readonly analyzer: AnalyzerId | undefined;
   /** Atoms actually present in the index — not atoms written to disk. */
   readonly atomCount: number;
   /**
@@ -626,6 +635,7 @@ export const prepareDataset = async (
     atomsDir: paths.atomsDir,
     indexPath: built.indexPath,
     adapter,
+    analyzer: options.analyzer,
     atomCount: indexed.length,
     enrichmentRecords: indexedEnrichmentRecords(paths.indexPath),
     docCount: corpus.docCount,
@@ -844,6 +854,7 @@ export const openPort = (
     openTunedPort(prepared, options) ??
     createPort(options.adapter, prepared.atomsDir, prepared.indexPath, {
       ...(options.fieldWeights === undefined ? {} : { fieldWeights: options.fieldWeights }),
+      ...(prepared.analyzer === undefined ? {} : { expectedAnalyzer: prepared.analyzer }),
     })
   );
 };
