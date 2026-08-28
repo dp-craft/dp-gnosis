@@ -738,6 +738,17 @@ const stampedAnalyzer = (db: Database.Database): AnalyzerId => {
 };
 
 /**
+ * The chain an index CARRIES, which is not the chain it STATES: a file written
+ * before `index_meta` held an analyzer states nothing and carries
+ * {@link PRE_STAMP_ANALYZER}, because that is the only chain that ever produced
+ * one. Exported so a read-only diagnostic judges the same value the refusal
+ * chain judges -- `doctor` read the raw stamp, found `undefined` on such a
+ * file, and stayed SILENT on the exact state every retrieve then refused.
+ */
+export const carriedAnalyzer = (stamped: string | undefined): string =>
+  stamped ?? PRE_STAMP_ANALYZER;
+
+/**
  * The stamped chain of an index file, for a caller that must analyse text the
  * way THAT index was analysed but does not open a port — the zero-posting
  * diagnostic (`fts5VocabularyGap.ts`) and its offline aggregate. It reads the
@@ -862,7 +873,7 @@ const analyzerRefusal = (
   expected: string | undefined
 ): string | undefined => {
   if (expected === undefined) return undefined;
-  const carried = stamped ?? PRE_STAMP_ANALYZER;
+  const carried = carriedAnalyzer(stamped);
   return carried === expected
     ? undefined
     : `${REFUSED} it was built with the "${carried}" analysis chain while the active profile declares "${expected}" — the query side reads the chain off the INDEX, so every term would be analysed the way the index was built and not the way the profile states; ${rebuildRemedy()} under that profile`;

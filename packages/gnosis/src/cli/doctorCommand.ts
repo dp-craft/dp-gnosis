@@ -22,7 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { IndexStamp } from '../adapters/fts5Adapter.js';
-import { INDEX_SCHEMA_VERSION, readIndexStamp } from '../adapters/fts5Adapter.js';
+import { carriedAnalyzer, INDEX_SCHEMA_VERSION, readIndexStamp } from '../adapters/fts5Adapter.js';
 import { lanceDbAvailability } from '../adapters/lanceDbAdapter.js';
 import { miniSearchAvailability } from '../adapters/miniSearchAdapter.js';
 import type { SourceIdentity } from '../corpusManifest.js';
@@ -268,15 +268,26 @@ const schemaChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
   ];
 };
 
+/**
+ * Judged through `carriedAnalyzer`, the adapter's own rule, and never off the
+ * raw stamp: an UNSTAMPED index states no chain but CARRIES one, and reading
+ * the absence as "nothing to compare" reported a clean bill of health over an
+ * instance whose every retrieve refused.
+ */
 const analyzerChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
   const declared = facts.context.profile.defaultAnalyzer;
-  const built = facts.stamp?.analyzer;
-  if (declared === undefined || built === undefined || declared === built) return [];
+  if (declared === undefined || facts.stamp === undefined) return [];
+  const built = carriedAnalyzer(facts.stamp.analyzer);
+  if (built === declared) return [];
+  const unstamped =
+    facts.stamp.analyzer === undefined
+      ? ' (it carries no analyzer stamp, and only that chain ever produced an unstamped index)'
+      : '';
   return [
     check(
       'analyzer',
       'fault',
-      `the index was built with analyzer "${built}" while the profile declares defaultAnalyzer "${declared}" — the query side would analyse terms the index does not hold; ${rebuild(facts)}`
+      `the index was built with analyzer "${built}"${unstamped} while the profile declares defaultAnalyzer "${declared}" — every retrieve REFUSES, because the query side reads the chain off the INDEX; ${rebuild(facts)}`
     ),
   ];
 };

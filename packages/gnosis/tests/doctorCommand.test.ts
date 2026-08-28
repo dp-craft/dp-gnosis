@@ -116,6 +116,13 @@ const setMeta = (key: string, value: string): void => {
   db.close();
 };
 
+/** Removes a stamp key outright, reproducing an index written before it existed. */
+const clearMeta = (key: string): void => {
+  const db = new Database(indexPath);
+  db.prepare('DELETE FROM index_meta WHERE key = ?').run(key);
+  db.close();
+};
+
 /** A snapshot of every entry under a directory tree: name plus mtime plus size. */
 const snapshot = (dir: string): readonly string[] =>
   readdirSync(dir, { recursive: true, encoding: 'utf8' })
@@ -225,6 +232,40 @@ describe('doctor — the quiet states', () => {
     const outcome = await doctor(profileWith({ defaultAnalyzer: declared }));
     expect(outcome.exitCode).toBe(3);
     expect(report(outcome)).toContain(declared);
+  });
+
+  /**
+   * The state doctor was SILENT on. An index written before the analyzer stamp
+   * existed states nothing, and the served path reads that absence as the one
+   * chain that ever produced such a file — so a profile declaring any other
+   * chain makes every retrieve REFUSE, while doctor read the raw stamp, found
+   * `undefined`, and reported a clean bill of health over it.
+   */
+  it('reports an UNSTAMPED index under a profile declaring another chain, which the served path REFUSES', async () => {
+    clearMeta('analyzer');
+    const declared: AnalyzerId = 'ident-porter-fold';
+
+    const outcome = await doctor(profileWith({ defaultAnalyzer: declared }));
+
+    expect(outcome.exitCode).toBe(3);
+    expect(report(outcome)).toContain(declared);
+    expect(report(outcome)).toContain('porter-fold');
+
+    const port = createFts5Adapter({
+      atomsDir,
+      indexPath,
+      now: new Date(),
+      expectedAnalyzer: declared,
+    });
+    const served = await port.retrieve('zustand selector', { k: 5 });
+    port.close?.();
+    expect(served.atoms).toEqual([]);
+  });
+
+  it('stays silent on an UNSTAMPED index whose profile declares the chain it carries', async () => {
+    clearMeta('analyzer');
+    const outcome = await doctor(profileWith({ defaultAnalyzer: 'porter-fold' }));
+    expect(outcome.exitCode).toBe(0);
   });
 
   it('reports a domain whose files all failed to become atoms', async () => {
