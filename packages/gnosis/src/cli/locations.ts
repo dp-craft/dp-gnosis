@@ -44,6 +44,13 @@ const pick = (
 export type LocationOrigin = 'flag' | 'env' | 'profile' | 'default';
 
 /**
+ * The PROFILE field each knob is stated as. A union rather than four loose
+ * strings: a diagnostic filters on these names, and a typo in that filter reads
+ * as "this knob never qualifies" — a check that silently stops checking.
+ */
+export type LocationProfileKey = 'atomsDir' | 'indexPath' | 'repoRoot' | 'corpusRoots';
+
+/**
  * One resolved knob, WITH the statement it came from and the profile statement
  * it beat. The second field is what makes a silent precedence loss reportable:
  * a value alone cannot say that a profile declared something else.
@@ -51,7 +58,7 @@ export type LocationOrigin = 'flag' | 'env' | 'profile' | 'default';
 export interface LocationFact {
   readonly knob: string;
   /** The PROFILE field name for the same knob — what a profile actually states. */
-  readonly profileKey: string;
+  readonly profileKey: LocationProfileKey;
   readonly value: string;
   readonly origin: LocationOrigin;
   /** What the profile declared for this knob, whether or not it won. */
@@ -64,7 +71,7 @@ const originOf = (flag: string | undefined, declared: string | undefined): Locat
 /** Every statement about one path knob, before precedence is read off them. */
 interface PathKnob {
   readonly knob: string;
-  readonly profileKey: string;
+  readonly profileKey: LocationProfileKey;
   readonly flag: string | undefined;
   readonly declared: string | undefined;
   readonly value: string;

@@ -43,7 +43,7 @@ import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
 import type { CommandContext } from './context.js';
 import { atomsCensus, droppedDomains } from './domainCensus.js';
-import type { LocationFact } from './locations.js';
+import type { LocationFact, LocationProfileKey } from './locations.js';
 import { locationOrigins } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL } from './outcome.js';
@@ -439,7 +439,7 @@ const escapesDataRoot = (facts: DoctorFacts, declared: string | undefined): bool
  * corpusRoots outside the data root — so a path there says nothing about
  * precedence. Only the knobs the data root is supposed to lay out qualify.
  */
-const LAID_OUT_BY_DATA_ROOT: readonly string[] = ['atomsDir', 'indexPath', 'repoRoot'];
+const LAID_OUT_BY_DATA_ROOT: readonly LocationProfileKey[] = ['atomsDir', 'indexPath', 'repoRoot'];
 
 const escapeChecks = (facts: DoctorFacts): readonly DoctorCheck[] =>
   facts.locations

@@ -28,7 +28,12 @@ export const CORPUS_MANIFEST_FILE = 'corpus-manifest.json';
 /** Marks the hash function in the digest, so a later change of it is visible. */
 const DIGEST_PREFIX = 'sha256:';
 
-/** A NUL cannot occur in an id or a hex digest, so a digest line never splits wrongly. */
+/**
+ * A NUL cannot occur in an id, a source path or a hex digest, so no digest line
+ * on either construction below can split wrongly. ONE constant: two names for
+ * the same byte invited one of them to move alone, which would have changed a
+ * digest without changing what it describes.
+ */
 const FIELD_SEPARATOR = '\u0000';
 
 /** One written atom, reduced to exactly what the manifest summarises. */
@@ -113,9 +118,6 @@ const digestLines = (atoms: readonly ManifestAtom[]): readonly string[] =>
 const aggregateDigest = (atoms: readonly ManifestAtom[]): string =>
   `${DIGEST_PREFIX}${sha256(digestLines(atoms).join('\n'))}`;
 
-/** A NUL cannot occur in a path or a hex digest, so a source line never splits wrongly. */
-const SOURCE_FIELD_SEPARATOR = '\0';
-
 /**
  * The same construction as {@link digestLines}, one hop upstream: path and body
  * hash, sorted by the line, so the digest is independent of the order the
@@ -123,7 +125,7 @@ const SOURCE_FIELD_SEPARATOR = '\0';
  */
 const sourceDigestLines = (sources: readonly ManifestSource[]): readonly string[] =>
   [...sources]
-    .map(source => `${source.sourcePath}${SOURCE_FIELD_SEPARATOR}${sha256(source.text)}`)
+    .map(source => `${source.sourcePath}${FIELD_SEPARATOR}${sha256(source.text)}`)
     .sort((left, right) => (left < right ? -1 : 1));
 
 /**
