@@ -30,6 +30,7 @@ import type { CommandOutcome } from '../src/cli/outcome.js';
 import { CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
+import { dataRoot } from '../src/paths.js';
 import { indexRebuildCommand, ingestCommand } from '../src/invocation.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import type { FlagValues } from '../src/cli/args.js';
@@ -318,6 +319,30 @@ describe('doctor — the SILENT precedence losers', () => {
   it('stays SILENT when the only path outside the data root is where the corpus lives', async () => {
     const outcome = await doctor(profileWith({ corpusRoots: ['/home/me/mydocs'] }));
     expect(report(outcome)).not.toContain('[warn]');
+  });
+
+  /**
+   * Containment is a PATH question, not a string question. A prefix test called
+   * a sibling directory "inside" and called every relative location "an
+   * absolute path OUTSIDE" -- wrong in both directions, on the check whose
+   * whole subject is where a path lands.
+   */
+  it('names an absolute path that merely SHARES A PREFIX with the data root', async () => {
+    process.env['DP_GNOSIS_DATA_HOME'] = resolve(root, 'data');
+    const sibling = `${dataRoot()}-elsewhere`;
+
+    const outcome = await doctor(profileWith({ atomsDir: sibling }));
+
+    expect(report(outcome)).toContain(sibling);
+    expect(report(outcome)).toContain('OUTSIDE');
+  });
+
+  it('does NOT call a RELATIVE profile location an absolute path outside the data root', async () => {
+    process.env['DP_GNOSIS_DATA_HOME'] = resolve(root, 'data');
+
+    const outcome = await doctor(profileWith({ atomsDir: '../sibling/atoms' }));
+
+    expect(report(outcome)).not.toContain('OUTSIDE');
   });
 
   it('names a DP_GNOSIS_*_HOME that is SET BUT BLANK, which reads as unset', async () => {

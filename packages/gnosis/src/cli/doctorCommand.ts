@@ -19,7 +19,7 @@
  * no access to.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 
 import type { IndexStamp } from '../adapters/fts5Adapter.js';
 import { carriedAnalyzer, INDEX_SCHEMA_VERSION, readIndexStamp } from '../adapters/fts5Adapter.js';
@@ -379,9 +379,21 @@ const blankVarChecks = (facts: DoctorFacts): readonly DoctorCheck[] =>
     )
   );
 
-/** A profile path that leaves the data root is what makes `dataRoot()` moot. */
-const escapesDataRoot = (facts: DoctorFacts, declared: string | undefined): boolean =>
-  declared !== undefined && !declared.startsWith(dataRoot(facts.env));
+/**
+ * A profile path that leaves the data root is what makes `dataRoot()` moot.
+ *
+ * Containment is a PATH question, judged with `relative()` exactly as
+ * `ingest.ts:sourceIdentity` judges one. A prefix test got it wrong in both
+ * directions: it read a SIBLING of the data root as inside it (`/x/data-old`
+ * starts with `/x/data`), and it read every RELATIVE location as an absolute
+ * path outside. A relative one is not judged here at all -- it resolves
+ * against the profile file's own directory, which this pass does not know.
+ */
+const escapesDataRoot = (facts: DoctorFacts, declared: string | undefined): boolean => {
+  if (declared === undefined || !isAbsolute(declared)) return false;
+  const within = relative(dataRoot(facts.env), declared);
+  return within.startsWith('..') || isAbsolute(within);
+};
 
 /**
  * Where the CORPUS lives is the user's own choice — `init` itself writes a
