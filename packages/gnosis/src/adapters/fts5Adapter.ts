@@ -782,9 +782,11 @@ const readStamp = (db: Database.Database): IndexStamp => ({
  */
 export const readIndexStamp = (indexPath: string): IndexStamp => {
   const db = new Database(indexPath, { readonly: true });
-  const stamp = readStamp(db);
-  db.close();
-  return stamp;
+  try {
+    return readStamp(db);
+  } finally {
+    db.close();
+  }
 };
 
 const rebuildRemedy = (): string =>
