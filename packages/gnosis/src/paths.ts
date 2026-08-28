@@ -84,6 +84,46 @@ export const dataRoot = (
 const defaultDataRoot = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string =>
   isInstalled() ? dataHome(env, platform) : repoRoot();
 
+/** Which tier supplied the resolved data root — the precedence, made readable. */
+export type DataRootOrigin = 'env' | 'config' | 'default';
+
+/**
+ * The resolved data root WITH the tier that supplied it and the statements it
+ * beat. A value alone cannot say that a `config.json` declared something else
+ * and lost, which is the whole subject of the diagnostic that reads this.
+ */
+export interface DataRootFact {
+  readonly value: string;
+  readonly origin: DataRootOrigin;
+  /** What the environment stated, whether or not it won. */
+  readonly stated: string | undefined;
+  /** What `config.json` declared, whether or not it won. */
+  readonly configured: string | undefined;
+}
+
+/**
+ * The same chain {@link dataRoot} applies, reported rather than reduced — so a
+ * diagnostic names the order this module actually uses instead of re-deriving
+ * one of its own. `tests/dataRoot.test.ts` pins the two to the same value on
+ * every tier; that pin is what makes two spellings safe.
+ *
+ * It reads BOTH tiers where `dataRoot` short-circuits, which is deliberate:
+ * `dataRoot` must keep resolving from the environment over a `config.json` it
+ * would refuse, so the file is never touched on that path. A caller of this one
+ * is asking about the file, and gets its refusal.
+ */
+export const dataRootFact = (
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): DataRootFact => {
+  const stated = dataHomeOverride(env, platform);
+  const configured = loadUserConfig(configHome(env, platform)).dataRoot;
+  if (stated !== undefined) return { value: stated, origin: 'env', stated, configured };
+  return configured !== undefined
+    ? { value: configured, origin: 'config', stated, configured }
+    : { value: defaultDataRoot(env, platform), origin: 'default', stated, configured };
+};
+
 /**
  * The single top-level directory dp-gnosis owns (`<root>/benchmark-data`). Both the
  * tracked vault and the disposable cache hang off it, so the package occupies

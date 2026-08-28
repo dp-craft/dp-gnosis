@@ -30,6 +30,7 @@ import type { CommandOutcome } from '../src/cli/outcome.js';
 import { CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
+import { clearUserConfigCache } from '../src/userConfig.js';
 import { dataRoot, ingestProfilePath } from '../src/paths.js';
 import { indexRebuildCommand, ingestCommand } from '../src/invocation.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
@@ -152,6 +153,8 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
   delete process.env[CORPUS_ROOTS_ENV_VAR];
   delete process.env['DP_GNOSIS_DATA_HOME'];
+  delete process.env['DP_GNOSIS_CONFIG_HOME'];
+  clearUserConfigCache();
 });
 
 describe('doctor — a healthy instance', () => {
@@ -369,6 +372,27 @@ describe('doctor — the SILENT precedence losers', () => {
   it('names a DP_GNOSIS_*_HOME that is SET BUT BLANK, which reads as unset', async () => {
     process.env['DP_GNOSIS_DATA_HOME'] = '   ';
     expect(report(await doctor())).toContain('DP_GNOSIS_DATA_HOME');
+  });
+
+  /**
+   * doctor is the command a user reaches for when the instance is ALREADY in a
+   * state it cannot read, so it must report a malformed config.json rather than
+   * die on it. dataRoot() never touched the file here -- DP_GNOSIS_DATA_HOME
+   * short-circuits ahead of it -- so the only reader was this pass, and it read
+   * it unguarded.
+   */
+  it('REPORTS a malformed config.json instead of dying on it', async () => {
+    const configDir = resolve(root, 'config', 'dp-gnosis');
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(resolve(configDir, 'config.json'), '{ not json', 'utf8');
+    process.env['DP_GNOSIS_CONFIG_HOME'] = resolve(root, 'config');
+    process.env['DP_GNOSIS_DATA_HOME'] = resolve(root, 'data');
+    clearUserConfigCache();
+
+    const outcome = await doctor();
+
+    expect(outcome.exitCode).toBe(3);
+    expect(report(outcome)).toContain('config.json');
   });
 });
 

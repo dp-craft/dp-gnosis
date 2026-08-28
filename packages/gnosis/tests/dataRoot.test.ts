@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { atomsDir, dataRoot, isInstalled, repoRoot, runtimeRoot, vaultRoot } from '../src/paths.js';
+import { atomsDir, dataRoot, dataRootFact, isInstalled, repoRoot, runtimeRoot, vaultRoot } from '../src/paths.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 
 beforeEach(() => clearUserConfigCache());
@@ -157,5 +157,43 @@ describe('the config file is read at most once per process', () => {
     rmSync(configFile(home));
     clearUserConfigCache();
     expect(dataRoot(env, 'linux')).toBe(repoRoot());
+  });
+});
+
+/**
+ * `dataRootFact` states the same chain `dataRoot` reduces, so that a diagnostic
+ * can report WHICH tier won. Two spellings of one rule are only safe while
+ * something pins them together: these are that pin, one case per tier.
+ */
+describe('dataRootFact — the tier that won, agreeing with dataRoot', () => {
+  it('names the environment, and agrees on the value', () => {
+    const env = envWith(configDirWith(JSON.stringify({ dataRoot: '/srv/from-config' })), {
+      DP_GNOSIS_DATA_HOME: '/srv/from-env',
+    });
+
+    const fact = dataRootFact(env, 'linux');
+
+    expect(fact.origin).toBe('env');
+    expect(fact.value).toBe(dataRoot(env, 'linux'));
+    expect(fact.configured).toBe('/srv/from-config');
+  });
+
+  it('names config.json when nothing is stated, and agrees on the value', () => {
+    const env = envWith(configDirWith(JSON.stringify({ dataRoot: '/srv/from-config' })));
+
+    const fact = dataRootFact(env, 'linux');
+
+    expect(fact.origin).toBe('config');
+    expect(fact.value).toBe(dataRoot(env, 'linux'));
+    expect(fact.stated).toBeUndefined();
+  });
+
+  it('names the default when neither tier states one, and agrees on the value', () => {
+    const env = envWith(emptyConfigDir());
+
+    const fact = dataRootFact(env, 'linux');
+
+    expect(fact.origin).toBe('default');
+    expect(fact.value).toBe(dataRoot(env, 'linux'));
   });
 });

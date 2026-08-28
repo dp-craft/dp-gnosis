@@ -52,6 +52,9 @@ const DP_GNOSIS_VARS: Readonly<Record<DirKind, string>> = {
  */
 export const DP_GNOSIS_HOME_VARS: readonly string[] = Object.values(DP_GNOSIS_VARS);
 
+/** The data-root override, by name — for a diagnostic that must QUOTE the variable. */
+export const DATA_HOME_VAR: string = DP_GNOSIS_VARS.data;
+
 const XDG_VARS: Readonly<Record<DirKind, string>> = {
   config: 'XDG_CONFIG_HOME',
   data: 'XDG_DATA_HOME',

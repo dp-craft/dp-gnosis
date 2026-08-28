@@ -33,11 +33,12 @@ import {
   sourceIdentityOf,
 } from '../corpusManifest.js';
 import { DECLARED_TYPES, foreignVocabularyMessage, foreignVocabularyValue } from '../config.js';
-import { DP_GNOSIS_HOME_VARS, configHome, statedVar } from '../env.js';
+import { DATA_HOME_VAR, DP_GNOSIS_HOME_VARS, statedVar } from '../env.js';
 import { ATOMS_OWNER_FILE, loadCorpus } from '../ingest.js';
 import { ingestCommand, indexRebuildCommand } from '../invocation.js';
-import { dataRoot } from '../paths.js';
-import { loadUserConfig } from '../userConfig.js';
+import type { DataRootFact } from '../paths.js';
+import { dataRoot, dataRootFact } from '../paths.js';
+import { isUserConfigError } from '../userConfig.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
 import type { CommandContext } from './context.js';
@@ -73,6 +74,17 @@ type SourceScan =
   | { readonly ok: true; readonly identity: SourceIdentity }
   | { readonly ok: false; readonly reason: string };
 
+/**
+ * The data root as resolved RIGHT NOW, or the reason it could not be. doctor is
+ * what a user runs when the instance is already unreadable, so a malformed
+ * `config.json` is a finding to report, never an exception to die on -- and
+ * this pass is its only reader when `DP_GNOSIS_DATA_HOME` short-circuits ahead
+ * of the file.
+ */
+type DataRootScan =
+  | { readonly ok: true; readonly fact: DataRootFact }
+  | { readonly ok: false; readonly reason: string };
+
 /** Whether the selected adapter's optional dependency actually loaded. */
 interface AdapterAvailability {
   readonly available: boolean;
@@ -95,8 +107,18 @@ interface DoctorFacts {
   readonly owner: string | undefined;
   readonly dropped: readonly string[];
   readonly availability: AdapterAvailability;
+  readonly dataRoot: DataRootScan;
   readonly env: NodeJS.ProcessEnv;
 }
+
+const scanDataRoot = (env: NodeJS.ProcessEnv): DataRootScan => {
+  try {
+    return { ok: true, fact: dataRootFact(env) };
+  } catch (error) {
+    if (!isUserConfigError(error)) throw error;
+    return { ok: false, reason: error.message };
+  }
+};
 
 const ALWAYS_AVAILABLE = async (): Promise<AdapterAvailability> => ({ available: true });
 
@@ -161,6 +183,7 @@ const gather = async (context: CommandContext): Promise<DoctorFacts> => ({
   owner: ownerOf(context.atomsDir),
   dropped: droppedDomains(atomsCensus(context.atomsDir, context.profile.domains)),
   availability: await AVAILABILITY_PROBES[context.adapter](),
+  dataRoot: scanDataRoot(process.env),
   env: process.env,
 });
 
@@ -358,17 +381,27 @@ const overrideChecks = (facts: DoctorFacts): readonly DoctorCheck[] =>
       )
     );
 
-const DATA_HOME_VAR = 'DP_GNOSIS_DATA_HOME';
+const unreadableConfig = (reason: string): DoctorCheck =>
+  check(
+    'data-root',
+    'fault',
+    `the user config could not be read, so every location resolves from ${DATA_HOME_VAR} alone and the file you wrote decides nothing: ${reason}`
+  );
 
+/**
+ * The tier is ASKED of `paths.ts:dataRootFact`, never re-derived here. This
+ * check used to spell the precedence a second time, so a reordering there would
+ * have left the diagnostic confidently naming the wrong winner.
+ */
 const dataRootChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
-  const stated = statedVar(facts.env, DATA_HOME_VAR);
-  const configured = loadUserConfig(configHome(facts.env)).dataRoot;
-  if (stated === undefined || configured === undefined) return [];
+  if (!facts.dataRoot.ok) return [unreadableConfig(facts.dataRoot.reason)];
+  const fact = facts.dataRoot.fact;
+  if (fact.origin !== 'env' || fact.configured === undefined) return [];
   return [
     check(
       `precedence:${DATA_HOME_VAR}`,
       'warn',
-      `${DATA_HOME_VAR}="${stated}" SILENTLY beats dataRoot "${configured}" in config.json; the resolved data root is ${dataRoot(facts.env)}`
+      `${DATA_HOME_VAR}="${String(fact.stated)}" SILENTLY beats dataRoot "${fact.configured}" in config.json; the resolved data root is ${fact.value}`
     ),
   ];
 };
