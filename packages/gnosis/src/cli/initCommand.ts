@@ -189,7 +189,7 @@ const nextSteps = (profilePath: string): readonly string[] => [
 
 const initText = (paths: InstancePaths, roots: readonly string[]): string =>
   [
-    `init: created an instance named "${USER_PROFILE_NAME}" under ${dataRoot()}`,
+    `init: created an instance named "${USER_PROFILE_NAME}"`,
     `  profile   ${paths.profilePath}  (edit it — it decides what is ingested and how it is labelled)`,
     `  atoms     ${paths.atomsPath}`,
     `  index     ${paths.indexPath}`,

@@ -165,6 +165,15 @@ describe('init — the resolved locations, not the defaults', () => {
     expect(written['atomsDir']).toBe(atoms);
     expect(written['indexPath']).toBe(index);
     expect(written['repoRoot']).toBe(root);
+
+    /**
+     * The header used to name the resolved data root, which holds none of the
+     * three artefacts once a location flag relocates them -- the profile lives
+     * under the config home in any case. The three labelled lines below it are
+     * the only place a path belongs, so every path the reader sees is one this
+     * run actually wrote.
+     */
+    expect(outcome.text.split('\n')[0]).not.toContain('/');
   });
 
   it('judges the atoms directory it was GIVEN, so a free one is not refused for the default one', async () => {
