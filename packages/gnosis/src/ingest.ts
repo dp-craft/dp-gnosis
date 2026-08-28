@@ -7,7 +7,7 @@ import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
 import { chunkMarkdown, frontMatterTitle, headingLine, headingPath } from './chunker.js';
-import { bodyMaxChars, CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from './config.js';
+import { bodyMaxChars, corpusRootStatements, resolveCorpusRoots } from './config.js';
 import type { CorpusManifestInput, ManifestAtom } from './corpusManifest.js';
 import { buildCorpusManifest, CORPUS_MANIFEST_FILE, serializeCorpusManifest } from './corpusManifest.js';
 import { expandUserPath } from './env.js';
@@ -207,7 +207,7 @@ const resolveRoot = async (repoRoot: string, root: string): Promise<readonly str
   const files = await listRoot(repoRoot, root);
   if (files.length > 0) return files;
   throw new Error(
-    `corpus root "${root}" matched no markdown files under ${rootLocation(repoRoot, root)} — fix or remove it in CORPUS_ROOTS (src/config.ts), in the profile's corpusRoots, or in ${CORPUS_ROOTS_ENV_VAR}`
+    `corpus root "${root}" matched no markdown files under ${rootLocation(repoRoot, root)} — fix or remove it ${corpusRootStatements()}`
   );
 };
 

@@ -10,7 +10,7 @@
  * tuple that gives `AtomType` its union — plus the narrowing rule that holds a
  * profile to it.
  */
-import { ingestProfilePath, shippedProfilePath } from './paths.js';
+import { ingestProfilePath, isInstalled, shippedProfilePath } from './paths.js';
 
 /**
  * Hard write-time cap on a single atom's body.
@@ -544,6 +544,26 @@ export const resolveCorpusRoots = (
   const declared = declaredRoots(env);
   return declared.length > 0 ? declared : fallback;
 };
+
+/** The two tiers every reader can edit, whether they installed gnosis or cloned it. */
+const EDITABLE_STATEMENTS = `in the profile's corpusRoots, or in ${CORPUS_ROOTS_ENV_VAR}`;
+
+/**
+ * WHERE a corpus root may be stated, phrased for the reader who has to go and
+ * edit one -- and the list is not the same for everyone. `CORPUS_ROOTS` lives
+ * in TypeScript source, which an INSTALLED instance does not ship, so naming it
+ * there is a dead end rather than a remedy: the defect `invocation.ts` exists to
+ * prevent for commands, stated here for the tiers this file owns.
+ *
+ * A CHECKOUT keeps all three, and must -- the shipped profile declares no
+ * `corpusRoots`, so `CORPUS_ROOTS` is genuinely where its scope comes from.
+ *
+ * `installed` is a parameter for the same reason `cliInvocation`'s is: both
+ * branches have to be pinned against the package's own evidence rather than a
+ * real `node_modules` tree.
+ */
+export const corpusRootStatements = (installed: boolean = isInstalled()): string =>
+  installed ? EDITABLE_STATEMENTS : `in CORPUS_ROOTS (src/config.ts), ${EDITABLE_STATEMENTS}`;
 
 /**
  * The shipped TYPE vocabulary as a literal tuple, and for ONE reason: it is

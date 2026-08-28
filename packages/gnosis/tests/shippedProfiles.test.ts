@@ -6,7 +6,7 @@ import { basename, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { runCli } from '../src/cli/cli.js';
-import { CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
+import { CORPUS_ROOTS_ENV_VAR, corpusRootStatements } from '../src/config.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { profilesDir } from '../src/paths.js';
@@ -129,6 +129,22 @@ describe('shipped profiles', () => {
     expect(result.stderr).toContain('the profile\'s corpusRoots');
     expect(result.stderr).toContain(CORPUS_ROOTS_ENV_VAR);
     expect(result.stdout).toBe('');
+  });
+
+  /**
+   * The refusal above names three places a corpus root can be stated, but
+   * CORPUS_ROOTS lives in TypeScript source that an install does not ship, so
+   * naming it there is a dead end rather than a remedy. The two branches are
+   * pinned side by side deliberately, because they are one rule and they change
+   * together: the test above proves the checkout wording end to end through the
+   * CLI, this one proves what is dropped for an install.
+   */
+  it('drops src/config.ts from the remedies, so an installed reader is not sent to a source file their instance does not ship', () => {
+    const statements = corpusRootStatements(true);
+
+    expect(statements).not.toContain('src/config.ts');
+    expect(statements).toContain('the profile\'s corpusRoots');
+    expect(statements).toContain(CORPUS_ROOTS_ENV_VAR);
   });
 
   it('lets web-research declare a domain the default profile does not know', () => {
