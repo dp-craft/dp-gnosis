@@ -155,19 +155,20 @@ const contextResult = (
   }
 };
 
-/**
- * The ONE command that may run with no declared `repoRoot`: it WRITES the
- * declaration, and it never reads the resolved one (`initCommand.ts` takes the
- * flag or the data root, and writes that into the profile it creates). Every
- * other command refuses, so the message arrives on the first thing the user
- * types rather than partway through an ingest.
- */
-const WRITES_ITS_OWN_REPO_ROOT = 'init';
+/** The first-run command, named here because it is the one exempt from the check below. */
+const INIT_COMMAND = 'init';
 
+/**
+ * `init` is the ONE command that may run with no declared `repoRoot`: it WRITES
+ * the declaration, and it never reads the resolved one (`initCommand.ts` takes
+ * the flag or the data root, and writes that into the profile it creates).
+ * Every other command refuses, so the message arrives on the first thing the
+ * user types rather than partway through an ingest.
+ */
 const buildContext = (args: ParsedArgs): ContextResult => {
   const profile = loadProfile(args);
   if (!profile.ok) return { ok: false, error: profile.error };
-  if (args.command !== WRITES_ITS_OWN_REPO_ROOT && undeclaredRepoRoot(args.flags, profile.profile)) {
+  if (args.command !== INIT_COMMAND && undeclaredRepoRoot(args.flags, profile.profile)) {
     return { ok: false, error: repoRootRefusal() };
   }
   const requested = stringFlag(args.flags, '--adapter') ?? DEFAULT_ADAPTER;
