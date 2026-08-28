@@ -15,7 +15,8 @@
  */
 import { CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from '../config.js';
 import type { IngestProfile } from '../ingestProfile.js';
-import { atomsDir, REPO_ROOT } from '../paths.js';
+import { cliInvocation } from '../invocation.js';
+import { atomsDir, isInstalled, REPO_ROOT } from '../paths.js';
 import type { AdapterName } from './adapter.js';
 import { defaultIndexPath } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -152,3 +153,36 @@ export const resolveLocations = (
   repoRoot: pick(stringFlag(flags, REPO_ROOT_FLAG), profile.repoRoot, REPO_ROOT),
   corpusRoots: resolveCorpusRoots(process.env, profile.corpusRoots),
 });
+
+/**
+ * An INSTALLED package has no repository, so there is nothing for the DEFAULT
+ * tier of `repoRoot` to be. It fell back to `REPO_ROOT`, frozen at module load
+ * and resolved inside `node_modules` — a base nobody stated, against which
+ * every relative `corpusRoot` and `summarySidecar` then resolved.
+ *
+ * A checkout is a different fact: the repository is there, `repoRoot()` names
+ * it, and every recorded run and the whole benchmark resolved through it. So
+ * this is FALSE in a checkout and the fallback stands untouched.
+ *
+ * `installed` is a parameter for the same reason `cliInvocation`'s is: both
+ * branches have to be pinned against the package's own evidence rather than a
+ * real `node_modules` tree.
+ */
+export const undeclaredRepoRoot = (
+  flags: FlagValues,
+  profile: IngestProfile,
+  installed: boolean = isInstalled()
+): boolean =>
+  installed &&
+  stringFlag(flags, REPO_ROOT_FLAG) === undefined &&
+  profile.repoRoot === undefined;
+
+/**
+ * Named ways out, both of them, and the command that writes one. dp-gnosis MUST
+ * NOT guess the base: a guessed one resolves a relative corpus root inside the
+ * installed package, which either refuses with a path the reader cannot place
+ * or — where every root is absolute — succeeds under a base the profile never
+ * claimed.
+ */
+export const repoRootRefusal = (): string =>
+  `repoRoot is not declared and dp-gnosis is running as an INSTALLED package, so there is no repository to resolve a relative path against — state it with \`${REPO_ROOT_FLAG} <dir>\`, or as "repoRoot" in your profile; \`${cliInvocation()} init <dir>\` writes one for you. It is not guessed: a guessed base would resolve every relative corpusRoot and summarySidecar inside the installed package.`;

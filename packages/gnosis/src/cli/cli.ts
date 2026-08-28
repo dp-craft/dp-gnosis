@@ -44,7 +44,7 @@ import {
   runIndexCommand
 } from './indexCommand.js';
 import { GOLD_IDS_FLAG, runIngestCommand } from './ingestCommand.js';
-import { resolveLocations } from './locations.js';
+import { repoRootRefusal, resolveLocations, undeclaredRepoRoot } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import {
@@ -155,9 +155,21 @@ const contextResult = (
   }
 };
 
+/**
+ * The ONE command that may run with no declared `repoRoot`: it WRITES the
+ * declaration, and it never reads the resolved one (`initCommand.ts` takes the
+ * flag or the data root, and writes that into the profile it creates). Every
+ * other command refuses, so the message arrives on the first thing the user
+ * types rather than partway through an ingest.
+ */
+const WRITES_ITS_OWN_REPO_ROOT = 'init';
+
 const buildContext = (args: ParsedArgs): ContextResult => {
   const profile = loadProfile(args);
   if (!profile.ok) return { ok: false, error: profile.error };
+  if (args.command !== WRITES_ITS_OWN_REPO_ROOT && undeclaredRepoRoot(args.flags, profile.profile)) {
+    return { ok: false, error: repoRootRefusal() };
+  }
   const requested = stringFlag(args.flags, '--adapter') ?? DEFAULT_ADAPTER;
   const adapter = resolveAdapter(requested);
   return adapter === undefined
