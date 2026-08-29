@@ -17,7 +17,7 @@ A constant named below is cited BY NAME, never by value — read the value from
 | Layer | Lives in | Decides |
 |---|---|---|
 | **Profile** | a `*.profile.json` file | WHAT is ingested and how it is labelled — the corpus scope, the domain and type vocabularies, the analysis chain, where the atoms and index are written |
-| **User config** | `config.json` in the config home | WHERE this machine keeps its data, when that differs from the default |
+| **User config** | `config.json` in the config home | WHAT THIS MACHINE has — where it keeps its data, and which server serves the reranker. Machine facts, not vault facts: a vault synced to a second machine keeps its profile and picks up that machine's own `config.json` |
 | **Environment** | `DP_GNOSIS_*` variables | per-invocation overrides, and the model/service endpoints |
 
 **Precedence is narrow-beats-broad**: a CLI flag beats a profile, a profile beats
@@ -60,13 +60,38 @@ vault per terminal.
 ### 1.3 `config.json`
 
 Optional. Absent → built-in defaults, which is the common case. Present but
-unreadable, not an object, or carrying a bad `dataRoot` → **exit 2**, one line
+unreadable, not an object, or carrying a bad value → **exit 2**, one line
 naming the file and the correction. It is never ignored silently: resolving a
 plausible path the user never asked for is the failure this project polices.
 
 ```json
-{ "dataRoot": "/home/dev/vaults/work" }
+{
+  "dataRoot": "/home/dev/vaults/work",
+  "rerank": { "url": "http://127.0.0.1:9292", "model": "qwen3-reranker-4b" }
+}
 ```
+
+| Key | Meaning | Refused when |
+|---|---|---|
+| `dataRoot` | absolute root the vault and cache trees hang off | relative — a root that moves with the caller's terminal is a different vault per terminal |
+| `rerank.url` | base URL of the server that answers `/v1/rerank` | not a string, blank, or missing an `http://` / `https://` scheme. A scheme-less address is refused rather than repaired: guessing the protocol would send every call somewhere the user never wrote, and the connection error would then name the guess instead of the file |
+| `rerank.model` | the id THAT server serves the reranker under | not a string, or blank |
+
+**`rerank` is what makes the reranker configurable once instead of per-invocation.**
+Before it existed the URL was environment-only and the model was `--rerank-model`
+on every single call. Both now resolve **flag → environment → `config.json` →
+built-in constant**:
+
+| Setting | Flag | Environment | `config.json` | Constant |
+|---|---|---|---|---|
+| endpoint | — | `DP_GNOSIS_RERANK_URL` | `rerank.url` | `RERANK_DEFAULT_URL` |
+| model id | `--rerank-model` | `DP_GNOSIS_RERANK_MODEL` | `rerank.model` | `RERANK_MODEL_ID` |
+
+`dp-gnosis setup` writes this block for you — it finds the server, probes the
+models it serves for a working rank head, and merges the winner in without
+disturbing `dataRoot`. `dp-gnosis doctor` reports which tier won and names the
+one it beat, so a `config.json` silently outranked by an exported variable is a
+finding rather than a mystery.
 
 ---
 

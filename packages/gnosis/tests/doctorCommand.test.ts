@@ -28,7 +28,13 @@ import type { FlagValues } from '../src/cli/args.js';
 import type { CommandContext } from '../src/cli/context.js';
 import { runDoctorCommand } from '../src/cli/doctorCommand.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
-import { CORPUS_ROOTS_ENV_VAR, RERANK_MODEL_ID } from '../src/config.js';
+import {
+  CORPUS_ROOTS_ENV_VAR,
+  RERANK_DEFAULT_URL,
+  RERANK_MODEL_ENV_VAR,
+  RERANK_MODEL_ID,
+  RERANK_URL_ENV_VAR
+} from '../src/config.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
@@ -612,5 +618,68 @@ describe('doctor — the opt-in reranker', () => {
     expect(rerankLine(outcome)).toContain('[ok]');
     expect(rerankLine(outcome)).toContain('0.99');
     expect(rerankLine(outcome)).toContain('0.001');
+  });
+});
+
+/**
+ * WHICH reranker endpoint is in effect, and which statement lost. The URL and
+ * the model are persistable (`config.json`), so an instance can now hold three
+ * statements about the same knob — and a user who edited the file while an
+ * exported variable outranks it sees nothing change without this line.
+ */
+describe('doctor — where the reranker endpoint came from', () => {
+  const SETTINGS_CHECK = 'rerank-settings';
+
+  const settingsLine = (outcome: CommandOutcome): string =>
+    report(outcome).split('\n').find(line => line.includes(`] ${SETTINGS_CHECK}:`)) ?? '';
+
+  const isolatedConfig = (text?: string): void => {
+    const configDir = resolve(root, 'rerank-config', 'dp-gnosis');
+    mkdirSync(configDir, { recursive: true });
+    if (text !== undefined) writeFileSync(resolve(configDir, 'config.json'), text, 'utf8');
+    process.env['DP_GNOSIS_CONFIG_HOME'] = resolve(root, 'rerank-config');
+    clearUserConfigCache();
+  };
+
+  afterEach(() => {
+    delete process.env[RERANK_URL_ENV_VAR];
+    delete process.env[RERANK_MODEL_ENV_VAR];
+  });
+
+  it('names the shipped default when nothing states an endpoint', async () => {
+    isolatedConfig();
+
+    expect(settingsLine(await doctor())).toContain(`rerankUrl = ${RERANK_DEFAULT_URL} (from the default)`);
+    expect(settingsLine(await doctor())).toContain(`rerankModel = ${RERANK_MODEL_ID} (from the default)`);
+  });
+
+  it('names config.json as the winning tier when it states one', async () => {
+    isolatedConfig(JSON.stringify({ rerank: { url: 'http://box.lan:9292', model: 'box-model' } }));
+
+    const line = settingsLine(await doctor());
+
+    expect(line).toContain('rerankUrl = http://box.lan:9292 (from the config)');
+    expect(line).toContain('rerankModel = box-model (from the config)');
+  });
+
+  it('names the environment as the winner AND the config statement it beat', async () => {
+    isolatedConfig(JSON.stringify({ rerank: { url: 'http://box.lan:9292', model: 'box-model' } }));
+    process.env[RERANK_URL_ENV_VAR] = 'http://env.lan:9292';
+    process.env[RERANK_MODEL_ENV_VAR] = 'env-model';
+
+    const line = settingsLine(await doctor());
+
+    expect(line).toContain('rerankUrl = http://env.lan:9292 (from the env)');
+    expect(line).toContain('beats the "http://box.lan:9292" in config.json');
+    expect(line).toContain('beats the "box-model" in config.json');
+  });
+
+  it('REPORTS a malformed rerank section instead of dying on it', async () => {
+    isolatedConfig(JSON.stringify({ rerank: { url: '127.0.0.1:9292' } }));
+
+    const outcome = await doctor();
+
+    expect(settingsLine(outcome)).toContain('[unknown]');
+    expect(settingsLine(outcome)).toContain('rerank.url');
   });
 });

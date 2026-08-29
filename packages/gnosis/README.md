@@ -65,6 +65,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | Command | Positionals | Honoured flags |
 |---|---|---|
 | `init` | **one or more corpus directories**, each ABSOLUTE or `~/`-prefixed. None is exit 2; a relative one is exit 2 naming it, because a scope that moves with the shell is a different vault per terminal | `--repo-root` (the base a relative corpus root resolves against; defaults to the data root, NOT the frozen repo root), `--atoms-dir`, `--index-path`, `--json` |
+| `setup` | **none** (passing one is exit 2) | `--rerank-model` (probe exactly that id instead of the ones it would select), `--json`. It needs no declared instance — it configures the BACKEND, not a vault |
 | `demo` | **none** (passing one is exit 2) | `--adapter`, `--json`, `-k`. `--atoms-dir`, `--index-path`, `--repo-root` and `--profile` are **REFUSED at exit 2** through the standard unknown-flag wording — `demo` owns its paths by construction and cannot honour them; see below |
 | `doctor` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `--profile`, `--json`. Its checks include `rerank` — see `packages/gnosis/OPTIONAL.md` § Setting up the reranker |
 | `ingest` | **none** (passing one is exit 2) | `--atoms-dir`, `--repo-root`, `--json` |
@@ -76,6 +77,16 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
 
 `update` runs `ingest` then `index` as ONE command — the pair that MUST NOT be split, because an `ingest` alone restamps the corpus digest while the index beside it still carries the old one and the next query refuses. Its exit code is the **more severe of the two hops**: an `ingest` that exits 3 (files skipped, each with a reason) followed by an `index` that exits 0 makes `update` exit **3**, never 0 — `exit 3` already means "real output was produced AND something was refused", and a caller reading 0 would never learn files were skipped. An `ingest` that exits **2** stops the command before `index` runs at all. Both hops are reported: with `--json`, `data` carries `ingest` and `index` under their own keys (`index` is `null` when it never ran), and the text shows both renderings in order.
+
+`setup` configures the reranker in one non-interactive command: it finds the server, finds a model on it that actually discriminates, and writes that pair into `config.json`. There is no prompt and nothing to answer — the selection rule is printed in the output rather than asked.
+
+It looks for a server at the resolved rerank URL first, then at Ollama's `http://127.0.0.1:11434`, taking the first that answers `GET /v1/models`. From that catalogue it probes a **bounded** set: only ids whose name says reranker, at most three of them, and the shipped `RERANK_MODEL_ID` FIRST whenever the server serves it. That order is not cosmetic — every recorded baseline was measured at that model, so a run that reached a superseded one first would quietly configure a non-champion and report success; and it makes the common case ONE probe, where each probe can pay a cold model load of over a minute. Probing stops at the first id that passes. Ids left out are always reported: an over-cap reranker is ITEMISED, because you can act on it with `--rerank-model`, while the chat models the name filter dropped are COUNTED in one line.
+
+Each candidate is scored on the same two-document discrimination probe `doctor` uses, and a `DEGENERATE` / `CONSTANT` / `INVERTED` verdict is a **rejection, not a failure of the command** — that is the whole point of probing. Such a model answers HTTP 200 with well-formed numbers and would rerank nothing, silently, forever. The verdict is reported with the raw scores it was read off; the background on which GGUF conversions produce it, and which to serve instead, is `packages/gnosis/OPTIONAL.md` § Setting up the reranker.
+
+The write MERGES: the file is read, the `rerank` block is replaced, and every other key — `dataRoot` above all — is written back untouched. A previously configured block is quoted in the output, so a change is never silent. What that file may declare, and the four-tier precedence a resolved value follows, are owned by `packages/gnosis/CONFIGURATION.md`; this command only writes into it.
+
+Exit codes: **0** the pair was written · **3** a server answered but no candidate passed, or none answered at all — a real diagnosis was produced and nothing was configured · **2** usage, e.g. a positional argument (name a model with `--rerank-model <id>`).
 
 `demo` needs no corpus, no profile and no declared instance: it ingests, indexes and searches **this package's own documentation** (every `.md` named by `paths.ts:DEMO_CORPUS_ROOTS`, resolved from the package directory) and prints the ranked result. Its data lives in a FIXED `demo/` subtree under the resolved runtime root — `<dataRoot>/benchmark-data/cache/demo/atoms` and `<dataRoot>/benchmark-data/cache/demo/index/`, derived and disposable like the bench work directory beside it — and it **cannot** use the default atoms or index paths, so it can never touch, prune or claim a real vault. That is also why `--atoms-dir`, `--index-path`, `--repo-root` and `--profile` are refused on it at exit 2 rather than ignored: a flag no command can honour MUST NOT look accepted. Re-running it is safe and idempotent. It exits 0 when it produced hits; producing none is reported as a FAULT at exit 3, never as a quiet 0.
 
@@ -136,7 +147,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 
 #### `--rephrase` — the rules below, executed
 
-`--rephrase` sends the query to a local chat model (`qwen38-27b-q4kxl-ctx130k-mtp-coding`, override with `DP_GNOSIS_LLM_MODEL`) served by the same llama-swap instance as the reranker (`http://127.0.0.1:9292`, override with `DP_GNOSIS_RERANK_URL`), and searches what comes back. The system prompt is `packages/gnosis/QUERYING.md` § Query rephrasing's five rules plus its example table — the flag EXECUTES the documented rules rather than owning a second set.
+`--rephrase` sends the query to a local chat model (`qwen38-27b-q4kxl-ctx130k-mtp-coding`, override with `DP_GNOSIS_LLM_MODEL`) served by the same instance as the reranker, at whatever address the reranker resolved to (`CONFIGURATION.md` § `config.json` owns that chain), and searches what comes back. The system prompt is `packages/gnosis/QUERYING.md` § Query rephrasing's five rules plus its example table — the flag EXECUTES the documented rules rather than owning a second set.
 
 | Property | Behaviour |
 |---|---|
@@ -202,7 +213,7 @@ confidence: ok   documents: 2   atoms: 4   tokens: 5120 of 64000 (bytes)
 
 | | |
 |---|---|
-| Model | `SYNTHESIZE_MODEL_ID` (`qwen38-27b-q4kxl-ctx130k-mtp-sharp-coding`), overridable with `DP_GNOSIS_SYNTHESIZE_MODEL`. Same llama-swap instance as the reranker and the rewriter, so `DP_GNOSIS_RERANK_URL` selects the address |
+| Model | `SYNTHESIZE_MODEL_ID` (`qwen38-27b-q4kxl-ctx130k-mtp-sharp-coding`), overridable with `DP_GNOSIS_SYNTHESIZE_MODEL`. Same instance as the reranker and the rewriter, so whatever selects the reranker's address selects this one — `CONFIGURATION.md` § `config.json` owns that chain |
 | Thinking mode | the request sends `chat_template_kwargs.enable_thinking: false`, and it is LOAD-BEARING: this is a REASONING model, and with thinking on `content` comes back EMPTY with the whole answer in `reasoning_content` — every synthesis would then refuse |
 | No cache | a synthesis depends on the WHOLE pack, so an honest key is a digest of it and would essentially never hit. `--rephrase` caches because a query repeats verbatim; this does not |
 
@@ -396,7 +407,7 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 | `minisearch` | `cache/index/atoms-minisearch.json` | **optional** | measured for its load-vs-query cost profile |
 | `lancedb` | `cache/index/atoms-lancedb/` (a tree) | **optional** | LanceDB's BM25 FTS path only — no vectors. A v2-readiness probe |
 
-`minisearch` and `lancedb` are `optionalDependencies` loaded by lazy dynamic import. An absent one is **reported, never hidden**: `index` exits 3 with the loader's own reason, and `search` reports `indexState: "unavailable"` (exit 3). Enable with `npm install` in `packages/gnosis`.
+`minisearch` is a plain dependency; `lancedb` is a `devDependency`, so a consumer or global install never receives it. Both are loaded by lazy dynamic import. An absent one is **reported, never hidden**: `index` exits 3 with the loader's own reason, and `search` reports `indexState: "unavailable"` (exit 3). Enable with `npm install` in `packages/gnosis`.
 
 ### Configuration
 

@@ -12,6 +12,7 @@ import {
   REPHRASE_MODEL_ID,
   RERANK_DEFAULT_URL,
   RERANK_K_INIT,
+  RERANK_MODEL_ENV_VAR,
   RERANK_MODEL_ID,
   RERANK_PRESET_NAMES,
   RERANK_URL_ENV_VAR,
@@ -20,11 +21,13 @@ import {
   SYNTHESIZE_MODEL_ID
 } from '../config.js';
 import { DEFAULT_PRF_PARAMS, SERVED_PRF_PARAMS } from '../prf.js';
+import { USER_CONFIG_FILE } from '../userConfig.js';
 import { atomDomains, atomTypes, defaultExcludedTypes } from '../vocabulary.js';
 import { ADAPTER_NAMES, DEFAULT_ADAPTER } from './adapter.js';
 import { flagList } from './args.js';
 import { OUTPUT_FORMATS } from './format.js';
 import { DEFAULT_MAX_PER_DOC } from './grouping.js';
+import { SETUP_COMMAND } from './setupCommand.js';
 
 /**
  * A FUNCTION, not a constant: three of the lines below print the ACTIVE
@@ -38,6 +41,7 @@ export const helpText = (): string => [
   '',
   'Commands:',
   '  init <dir> [dir…] create this machine\'s instance: the data directories, an editable profile and the owner marker',
+  '  setup              probe this machine for a WORKING reranker and write the one that passes into config.json — no server, no vault and no instance needed',
   '  demo               ingest and search this tool\'s OWN documentation in a fixed demo/ subtree — no corpus needed, your vault untouched',
   '  doctor             report the resolved locations, the index stamps and every silent precedence loss — READ-ONLY, repairs nothing',
   '  ingest             chunk the configured corpus roots into atom files',
@@ -65,7 +69,8 @@ export const helpText = (): string => [
   '  an atom over the remaining budget is SKIPPED and the walk continues; every skip is reported with its id, source path and estimated size',
   `Rerank: --rerank on \`search\` and \`ask\`, OFF by default — reranks a pool of at least ${RERANK_K_INIT} with ${RERANK_MODEL_ID} and RRF-fuses that order with the first pass, then applies the budget`,
   `  the pool is a FLOOR, not a cap: a larger -k reranks its own depth. It is the measured champion depth and costs roughly 12s per query`,
-  `  the endpoint is a llama-swap OpenAI-compatible server at ${RERANK_DEFAULT_URL}, overridable with ${RERANK_URL_ENV_VAR}`,
+  `  the endpoint is a llama-swap OpenAI-compatible server at ${RERANK_DEFAULT_URL} serving ${RERANK_MODEL_ID}; both are overridable, resolved flag > environment (${RERANK_URL_ENV_VAR} / ${RERANK_MODEL_ENV_VAR}) > ${USER_CONFIG_FILE} ("rerank": {"url", "model"}) > the shipped constant`,
+  `  \`${SETUP_COMMAND}\` writes that ${USER_CONFIG_FILE} block for you — it finds the server, probes only the ids whose name says reranker, and writes the first that PASSES the discrimination probe`,
   '  a refused rerank still returns the FIRST-PASS ranking, but exits 3 with the refusal in note and mode keeping no +rerank suffix',
   '  it is refused by an unreachable server, one not serving that model, or one failing the two-document discrimination probe — never silently unreranked',
   `  --rerank-model <id> scores with another cross-encoder; --rerank-profile ${RERANK_PRESET_NAMES.join('|')} selects the fusion rule (default ${DEFAULT_RERANK_PRESET}); --rerank-weight <w> overrides the reranked order's RRF weight, 0 to 1, never clamped`,
@@ -115,6 +120,7 @@ export const helpText = (): string => [
   '',
   'JSON keys with --json (plus exitCode on every object):',
   '  init      command, profilePath, atomsDir, indexPath, corpusRoots[], next[]',
+  '  setup     command, url, model, configPath, replaced, probed[{model,kind,detail|relevantScore,irrelevantScore}], skipped[{id,why}] (over-cap rerankers, itemised), skippedSummary (the counted rest)',
   '  doctor    command, faults, warnings, checks[{name,status,detail}]',
   '  ingest    command, written, skipped[{source,title,reasons}]',
   '  enrich    command, model, promptVersion, atoms, enriched, skipped, sidecar, note (only on a refusal)',

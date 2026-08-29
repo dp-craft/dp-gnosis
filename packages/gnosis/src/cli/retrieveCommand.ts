@@ -25,7 +25,6 @@ import {
   FTS_COLUMNS,
   RERANK_CALIBRATION,
   RERANK_K_INIT,
-  RERANK_MODEL_ID,
   RETRIEVE_TOKEN_BUDGET
 } from '../config.js';
 import { indexRebuildCommand, ingestCommand } from '../invocation.js';
@@ -34,7 +33,15 @@ import type { PrfParams } from '../prf.js';
 import { DEFAULT_PRF_PARAMS } from '../prf.js';
 import { rephraseQuery } from '../rephrase.js';
 import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
-import { calibrate, rerankAtoms, rerankProbeRefusal, resolveRerankFusion } from '../rerank.js';
+import { localRerankRefusal } from '../localReranker.js';
+import {
+  calibrate,
+  rerankAtoms,
+  rerankModelFact,
+  rerankProbeRefusal,
+  resolveRerankBackend,
+  resolveRerankFusion
+} from '../rerank.js';
 import type { TokenCountResult } from '../tokenize.js';
 import { createTokenCounter } from '../tokenize.js';
 import type { AtomDomain, AtomType } from '../vocabulary.js';
@@ -432,8 +439,8 @@ const calibratedFloor = (floor: number, model: string): MinRelevanceResult =>
     ? { ok: false, error: uncalibratedModelError(model) }
     : { ok: true, minRelevance: floor };
 
-/** The model the run will actually score with, flag or shipped default. */
-const rerankModelOf = (options: RerankOptions): string => options.model ?? RERANK_MODEL_ID;
+/** The model the run will actually score with — the SAME four tiers `rerank.ts` resolves. */
+const rerankModelOf = (options: RerankOptions): string => rerankModelFact(options.model).value;
 
 /** Absent flag = no floor. Every other outcome is a value or a refusal. */
 const resolveMinRelevance = (
@@ -1842,6 +1849,22 @@ const trimmed = (result: RetrievalResult, request: RetrieveRequest): RetrievalRe
 };
 
 /**
+ * The SELECTED backend's own gate: the local engine's loadability, or the
+ * served endpoint's discrimination probe.
+ *
+ * A `local` selection MUST NOT fall through to the HTTP endpoint. The two are
+ * different scorers on different score scales, so a caller who asked for the
+ * local one and silently received the remote one has been handed a ranking it
+ * cannot tell apart from the one it asked for — the wrong answer, delivered
+ * confidently. It degrades to the first pass and says so, like every other
+ * rerank refusal.
+ */
+const backendRefusal = async (request: RetrieveRequest): Promise<string | undefined> =>
+  resolveRerankBackend() === 'local'
+    ? await localRerankRefusal()
+    : await rerankProbeRefusal(request.rerankOptions);
+
+/**
  * The reranked-and-fused ranking, or the first pass plus the refusal that
  * explains why there is no second one.
  *
@@ -1861,7 +1884,7 @@ const rankedResult = async (
   result: RetrievalResult
 ): Promise<RankedOutcome> => {
   if (!request.rerank) return { result: trimmed(result, request), refusal: undefined };
-  const unusable = await rerankProbeRefusal(request.rerankOptions);
+  const unusable = await backendRefusal(request);
   if (unusable !== undefined) return { result: trimmed(result, request), refusal: unusable };
   const reranked = await rerankAtoms(effectiveQuery(request), result.atoms, request.rerankOptions);
   if (!reranked.ok) return { result: trimmed(result, request), refusal: reranked.error };

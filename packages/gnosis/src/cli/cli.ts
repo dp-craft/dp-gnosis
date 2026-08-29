@@ -77,6 +77,7 @@ import {
   runRetrieveCommand,
   TYPE_FLAG
 } from './retrieveCommand.js';
+import { runSetupCommand, SETUP_COMMAND } from './setupCommand.js';
 import { runUpdateCommand } from './updateCommand.js';
 
 /** What one invocation produced. The caller owns writing it to a real process. */
@@ -88,6 +89,7 @@ export interface CliResult {
 
 const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   init: runInitCommand,
+  setup: runSetupCommand,
   demo: runDemoCommand,
   doctor: runDoctorCommand,
   ingest: runIngestCommand,
@@ -177,10 +179,14 @@ const DEMO_COMMAND = 'demo';
  * root, and writes that into the profile it creates). `demo` may for the
  * opposite reason — it brings its OWN corpus, its own profile and its own fixed
  * paths, so requiring a declared instance would defeat the one command a reader
- * with no vault can run. Every other command refuses, so the message arrives on
- * the first thing the user types rather than partway through an ingest.
+ * with no vault can run. `setup` may for a third: it configures the RERANKER
+ * BACKEND, which is a property of the machine and not of any instance — it must
+ * run before an instance exists, or a first-run user cannot configure the one
+ * optional hop the product ships. Every other command refuses, so the message
+ * arrives on the first thing the user types rather than partway through an
+ * ingest.
  */
-const ROOTLESS_COMMANDS: readonly string[] = [INIT_COMMAND, DEMO_COMMAND];
+const ROOTLESS_COMMANDS: readonly string[] = [INIT_COMMAND, DEMO_COMMAND, SETUP_COMMAND];
 const buildContext = (args: ParsedArgs): ContextResult => {
   const profile = loadProfile(args);
   if (!profile.ok) return { ok: false, error: profile.error };
@@ -328,10 +334,20 @@ const DEMO_REFUSED_FLAGS: readonly string[] = [
   PROFILE_FLAG,
 ];
 
+/**
+ * `setup` honours `--rerank-model` — it names the ONE id to probe, instead of
+ * the ids it would select off the catalogue. Every other retrieval flag stays
+ * refused there: `setup` runs no query, so nothing else has a reading.
+ */
+const scopedRetrievalFlags = (command: string): readonly string[] =>
+  command === SETUP_COMMAND
+    ? RETRIEVAL_FLAGS.filter(flag => flag !== RERANK_MODEL_FLAG)
+    : RETRIEVAL_FLAGS;
+
 const misplacedRetrievalFlag = (args: ParsedArgs): string | undefined =>
   RETRIEVAL_COMMANDS.includes(args.command ?? '')
     ? undefined
-    : RETRIEVAL_FLAGS.find(flag => args.flags[flag] !== undefined);
+    : scopedRetrievalFlags(args.command ?? '').find(flag => args.flags[flag] !== undefined);
 
 const misplacedAnswerFlag = (args: ParsedArgs): string | undefined =>
   args.command === ASK_COMMAND

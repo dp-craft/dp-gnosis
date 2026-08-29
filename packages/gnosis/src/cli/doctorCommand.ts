@@ -38,8 +38,10 @@ import { ATOMS_OWNER_FILE, loadCorpus } from '../ingest.js';
 import { indexRebuildCommand, ingestCommand } from '../invocation.js';
 import type { DataRootFact } from '../paths.js';
 import { dataRoot, dataRootFact } from '../paths.js';
-import type { RerankHealth } from '../rerank.js';
-import { rerankHealth } from '../rerank.js';
+import type { RerankFact, RerankHealth } from '../rerank.js';
+import type { LocalRerankerAvailability } from '../localReranker.js';
+import { localRerankerAvailability } from '../localReranker.js';
+import { rerankBackendFact, rerankHealth, rerankModelFact, rerankUrlFact } from '../rerank.js';
 import { isUserConfigError } from '../userConfig.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
@@ -112,8 +114,54 @@ interface DoctorFacts {
   readonly dataRoot: DataRootScan;
   /** The opt-in reranker's verdict: absent, broken, or discriminating. */
   readonly rerank: RerankHealth;
+  /** WHERE that endpoint came from, or why it could not be resolved at all. */
+  readonly rerankSettings: RerankScan;
+  /**
+   * The local engine's loadability, probed ONLY when that backend is selected —
+   * a machine serving over HTTP has no local engine to have an opinion about.
+   */
+  readonly localReranker: LocalRerankerAvailability | undefined;
   readonly env: NodeJS.ProcessEnv;
 }
+
+/**
+ * The reranker endpoint as resolved RIGHT NOW, or the reason it could not be.
+ * Same rule as {@link DataRootScan} and for the same reason: `doctor` is run
+ * when the instance is already unreadable, so a malformed `config.json` is a
+ * finding to report, never an exception to die on.
+ */
+type RerankScan =
+  | {
+      readonly ok: true;
+      readonly url: RerankFact;
+      readonly model: RerankFact;
+      readonly backend: RerankFact;
+    }
+  | { readonly ok: false; readonly reason: string };
+
+const scanRerank = (env: NodeJS.ProcessEnv): RerankScan => {
+  try {
+    return {
+      ok: true,
+      url: rerankUrlFact(undefined, env),
+      model: rerankModelFact(undefined, env),
+      backend: rerankBackendFact(undefined, env),
+    };
+  } catch (error) {
+    if (!isUserConfigError(error)) throw error;
+    return { ok: false, reason: error.message };
+  }
+};
+
+/**
+ * An endpoint that could not be RESOLVED is not probed: the alternative is to
+ * probe the shipped default and report a verdict about a server the user never
+ * asked about, while the address they wrote decides nothing.
+ */
+const probeRerank = async (scan: RerankScan): Promise<RerankHealth> =>
+  scan.ok
+    ? await rerankHealth({ baseUrl: scan.url.value, model: scan.model.value })
+    : { kind: 'unavailable', detail: scan.reason };
 
 const scanDataRoot = (env: NodeJS.ProcessEnv): DataRootScan => {
   try {
@@ -175,6 +223,14 @@ const scanSources = async (context: CommandContext): Promise<SourceScan> => {
   }
 };
 
+/**
+ * Probed only under the local backend, for the same reason `probeRerank` skips
+ * an unresolved endpoint: a verdict about an engine the instance never selected
+ * is a finding about nothing.
+ */
+const scanLocalReranker = async (scan: RerankScan): Promise<LocalRerankerAvailability | undefined> =>
+  scan.ok && scan.backend.value === 'local' ? await localRerankerAvailability() : undefined;
+
 const gather = async (context: CommandContext): Promise<DoctorFacts> => ({
   context,
   locations: locationOrigins(context.flags, context.profile, context),
@@ -188,7 +244,9 @@ const gather = async (context: CommandContext): Promise<DoctorFacts> => ({
   dropped: droppedDomains(atomsCensus(context.atomsDir, context.profile.domains)),
   availability: await AVAILABILITY_PROBES[context.adapter](),
   dataRoot: scanDataRoot(process.env),
-  rerank: await rerankHealth(),
+  rerank: await probeRerank(scanRerank(process.env)),
+  rerankSettings: scanRerank(process.env),
+  localReranker: await scanLocalReranker(scanRerank(process.env)),
   env: process.env,
 });
 
@@ -482,6 +540,57 @@ const rerankDetail = (health: RerankHealth): string =>
     ? `the served reranker discriminates — it scored the RELEVANT probe passage ${String(health.relevantScore)} and the IRRELEVANT one ${String(health.irrelevantScore)}`
     : health.detail;
 
+const RERANK_SETTINGS = 'rerank-settings';
+
+/**
+ * The tier that LOST, named. A value alone cannot say that a `config.json`
+ * declared another server and was silently outranked by the environment —
+ * which is the state a user who edited the file and saw nothing change is in.
+ */
+const beaten = (fact: RerankFact): string =>
+  fact.origin === 'env' && fact.configured !== undefined
+    ? ` and beats the "${fact.configured}" in config.json`
+    : '';
+
+const rerankSettingLine = (knob: string, fact: RerankFact): string =>
+  `${knob} = ${fact.value} (from the ${fact.origin})${beaten(fact)}`;
+
+/**
+ * The endpoint the reranker check above just probed, with its precedence. It is
+ * ASKED of `rerank.ts`, never re-derived here, so a reordering there cannot
+ * leave this confidently naming the wrong winner.
+ */
+/**
+ * The selected backend's own state, appended to the SAME check rather than
+ * reported beside it: which backend is in effect and whether it can run are one
+ * question, and a second check would let a reader see the name without the
+ * verdict on it.
+ */
+const localEngineLines = (availability: LocalRerankerAvailability | undefined): readonly string[] =>
+  availability === undefined || availability.available ? [] : [availability.reason];
+
+const rerankSettingChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
+  const scan = facts.rerankSettings;
+  if (!scan.ok) return [check(RERANK_SETTINGS, 'unknown', unresolvedEndpoint(scan.reason))];
+  const faults = localEngineLines(facts.localReranker);
+  return [
+    check(
+      RERANK_SETTINGS,
+      faults.length > 0 ? 'fault' : 'ok',
+      [
+        rerankSettingLine('rerankUrl', scan.url),
+        rerankSettingLine('rerankModel', scan.model),
+        rerankSettingLine('rerankBackend', scan.backend),
+        ...faults,
+      ].join('; ')
+    ),
+  ];
+};
+
+/** The config is already reported as a fault by `dataRootChecks`; this states the CONSEQUENCE. */
+const unresolvedEndpoint = (reason: string): string =>
+  `the reranker endpoint cannot be resolved, so neither an address nor a model id you wrote is in effect: ${reason}`;
+
 const rerankChecks = (facts: DoctorFacts): readonly DoctorCheck[] => [
   check(RERANK, RERANK_VERDICTS[facts.rerank.kind], rerankDetail(facts.rerank)),
 ];
@@ -498,6 +607,7 @@ const CHECKS: readonly ((facts: DoctorFacts) => readonly DoctorCheck[])[] = [
   domainChecks,
   adapterChecks,
   rerankChecks,
+  rerankSettingChecks,
   overrideChecks,
   dataRootChecks,
   blankVarChecks,

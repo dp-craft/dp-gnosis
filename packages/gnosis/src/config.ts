@@ -11,6 +11,7 @@
  * profile to it.
  */
 import { ingestProfilePath, isInstalled, shippedProfilePath } from './paths.js';
+import type { RerankBackend } from './userConfig.js';
 
 /**
  * Hard write-time cap on a single atom's body.
@@ -193,6 +194,29 @@ export const RERANK_DEFAULT_URL = 'http://127.0.0.1:9292';
 
 /** Environment override for {@link RERANK_DEFAULT_URL}, read in `resolveRerankUrl` alone. */
 export const RERANK_URL_ENV_VAR = 'DP_GNOSIS_RERANK_URL';
+
+/**
+ * Environment override for {@link RERANK_MODEL_ID}, read in `resolveRerankModel`
+ * alone.
+ *
+ * It closes a gap every other model-backed feature already had closed:
+ * `DP_GNOSIS_LLM_MODEL`, `DP_GNOSIS_SYNTHESIZE_MODEL` and `DP_GNOSIS_ENRICH_MODEL`
+ * each let an instance name the id ITS llama-swap serves, while the reranker
+ * could only be told on the command line — so a machine serving the model under
+ * another id had to retype `--rerank-model` on every single call, and a run that
+ * forgot it asked for an id the server does not have.
+ */
+export const RERANK_MODEL_ENV_VAR = 'DP_GNOSIS_RERANK_MODEL';
+
+/**
+ * WHICH implementation scores: the served HTTP endpoint above. The vocabulary
+ * and its validator are `userConfig.ts:RERANK_BACKENDS` — the file that reads
+ * the key — so a `config.json` and this constant cannot disagree about it.
+ */
+export const RERANK_DEFAULT_BACKEND: RerankBackend = 'http';
+
+/** Environment override for {@link RERANK_DEFAULT_BACKEND}, read in `rerankBackendFact` alone. */
+export const RERANK_BACKEND_ENV_VAR = 'DP_GNOSIS_RERANK_BACKEND';
 
 /**
  * First-pass depth: how many candidates the reranker reorders. A FLOOR, not a

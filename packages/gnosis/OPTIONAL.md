@@ -17,11 +17,34 @@ sides of it are recorded with their corpus, serving config and sha in
 gnosis talks OpenAI-compatible `/v1/rerank` over HTTP. Anything that serves that endpoint works;
 `llama-server` (llama.cpp) and llama-swap are what this project measures against.
 
-| Setting | Default | Override |
+### The short path — `dp-gnosis setup`
+
+```bash
+dp-gnosis setup
+```
+
+It finds the server, probes the reranker-named models it serves for one whose rank head actually
+discriminates, and writes that pair into `config.json` — so the rest of this section is the manual
+path, needed only when `setup` finds nothing or you want a model it did not pick.
+
+The probe is why it is worth running rather than hand-editing: it is the same discrimination check
+`doctor` performs, so it **rejects a silently-broken GGUF by name** instead of configuring one. See
+§ Which GGUF below — that failure answers 200 with numbers that parse.
+
+It is non-interactive, it probes the shipped `RERANK_MODEL_ID` first whenever the server serves it
+(every recorded baseline is at that model), and its merge-write leaves every other `config.json` key
+alone. Exit 0 written · 3 server reachable but nothing passed · 2 usage.
+
+| Setting | Default | Stated in |
 |---|---|---|
-| Base URL | `http://127.0.0.1:9292` — `RERANK_DEFAULT_URL` (`src/config.ts`) | `DP_GNOSIS_RERANK_URL` |
-| Model id | `qwen3-reranker-4b` — `RERANK_MODEL_ID` | `--rerank-model <id>` |
+| Base URL | `http://127.0.0.1:9292` — `RERANK_DEFAULT_URL` (`src/config.ts`) | `config.json`, `DP_GNOSIS_RERANK_URL` |
+| Model id | `qwen3-reranker-4b` — `RERANK_MODEL_ID` | `config.json`, `DP_GNOSIS_RERANK_MODEL`, `--rerank-model <id>` |
+| Backend | `http` — `RERANK_DEFAULT_BACKEND` | `config.json`, `DP_GNOSIS_RERANK_BACKEND` |
 | Pool depth | `100` — `RERANK_K_INIT` | `--rerank-pool <n>`, or the profile's `rerankPoolK` |
+
+**`packages/gnosis/CONFIGURATION.md` owns the precedence between those tiers** and the `config.json`
+schema; this file does not restate it. `dp-gnosis doctor` reports which tier won and names the one it
+beat.
 
 ### Which GGUF — this matters more than the quantisation
 

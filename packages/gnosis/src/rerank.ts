@@ -26,10 +26,13 @@ import {
 } from './bench/reranker.js';
 import {
   DEFAULT_RERANK_PRESET,
+  RERANK_BACKEND_ENV_VAR,
   RERANK_CALIBRATION,
+  RERANK_DEFAULT_BACKEND,
   RERANK_DEFAULT_URL,
   RERANK_DOC_MAX_CHARS,
   RERANK_FUSION_PRESETS,
+  RERANK_MODEL_ENV_VAR,
   RERANK_MODEL_ID,
   RERANK_PRESET_NAMES,
   RERANK_PROBE_MIN_SCORE,
@@ -37,7 +40,9 @@ import {
   type RerankFusion,
   type RerankPresetName
 } from './config.js';
+import { configHome, statedVar } from './env.js';
 import type { RetrievedAtom } from './port.js';
+import { asRerankBackend, loadUserConfig, type RerankBackend } from './userConfig.js';
 
 /**
  * The measured extraction, and the DEFAULT a caller that names none gets: the
@@ -72,13 +77,118 @@ const PROBE_TIMEOUT_MS = 300000;
 /** The llama-swap model catalogue, per the OpenAI-compatible API. */
 const MODELS_PATH = '/v1/models';
 
-/** The base URL to query. The env override outranks the default, as a flag would. */
-export const resolveRerankUrl = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): string => {
-  const declared = (env[RERANK_URL_ENV_VAR] ?? '').trim();
-  return declared.length > 0 ? declared : RERANK_DEFAULT_URL;
+/** Which tier supplied a resolved reranker setting — the precedence, made readable. */
+export type RerankOrigin = 'flag' | 'env' | 'config' | 'default';
+
+/**
+ * A resolved reranker setting WITH the tier that supplied it and the statements
+ * it beat, mirroring `paths.ts:DataRootFact`. A value alone cannot say that a
+ * `config.json` named another server and lost, which is the whole subject of the
+ * diagnostic that reads this.
+ */
+export interface RerankFact {
+  readonly value: string;
+  readonly origin: RerankOrigin;
+  /** What the environment VARIABLE holds, whether or not it won. */
+  readonly stated: string | undefined;
+  /** What `config.json` declared, whether or not it won. */
+  readonly configured: string | undefined;
+}
+
+/**
+ * Every statement about one setting, before the precedence is read off them.
+ * Generic in the setting's own type so a fact over a CLOSED vocabulary — the
+ * backend — keeps that vocabulary instead of widening to `string`.
+ */
+interface RerankTiers<T extends string> {
+  readonly explicit: T | undefined;
+  readonly stated: T | undefined;
+  readonly configured: T | undefined;
+  readonly fallback: T;
+}
+
+const factOf = <T extends string>(tiers: RerankTiers<T>): RerankFact & { readonly value: T } => {
+  const { stated, configured } = tiers;
+  if (tiers.explicit !== undefined) {
+    return { value: tiers.explicit, origin: 'flag', stated, configured };
+  }
+  if (stated !== undefined) return { value: stated, origin: 'env', stated, configured };
+  if (configured !== undefined) return { value: configured, origin: 'config', stated, configured };
+  return { value: tiers.fallback, origin: 'default', stated, configured };
 };
+
+/** The `rerank` section of `config.json`; a malformed one REFUSES from here. */
+const rerankConfig = (
+  env: NodeJS.ProcessEnv
+): Readonly<{ url?: string | undefined; model?: string | undefined; backend?: RerankBackend | undefined }> =>
+  loadUserConfig(configHome(env)).rerank ?? {};
+
+/**
+ * The base URL to query, resolved `flag > env > config.json > constant`. The
+ * `explicit` argument is the option a caller (ultimately a flag) passed; passing
+ * `undefined` asks the same question every uninstructed call site asks.
+ */
+export const rerankUrlFact = (
+  explicit: string | undefined = undefined,
+  env: NodeJS.ProcessEnv = process.env
+): RerankFact =>
+  factOf({
+    explicit,
+    stated: statedVar(env, RERANK_URL_ENV_VAR),
+    configured: rerankConfig(env).url,
+    fallback: RERANK_DEFAULT_URL,
+  });
+
+/** The model id to score under, resolved through the same four tiers. */
+export const rerankModelFact = (
+  explicit: string | undefined = undefined,
+  env: NodeJS.ProcessEnv = process.env
+): RerankFact =>
+  factOf({
+    explicit,
+    stated: statedVar(env, RERANK_MODEL_ENV_VAR),
+    configured: rerankConfig(env).model,
+    fallback: RERANK_MODEL_ID,
+  });
+
+/** A resolved backend fact, narrowed to the two names the vocabulary accepts. */
+export interface RerankBackendFact extends RerankFact {
+  readonly value: RerankBackend;
+}
+
+/**
+ * The environment's backend, VALIDATED as it is read. An unknown name refuses
+ * naming the variable rather than resolving to the shipped default: a user who
+ * exported a typo would otherwise be served by a backend they did not select.
+ */
+const statedBackend = (env: NodeJS.ProcessEnv): RerankBackend | undefined => {
+  const stated = statedVar(env, RERANK_BACKEND_ENV_VAR);
+  return stated === undefined ? undefined : asRerankBackend(RERANK_BACKEND_ENV_VAR, stated);
+};
+
+/** WHICH implementation scores, resolved through the same four tiers. */
+export const rerankBackendFact = (
+  explicit: RerankBackend | undefined = undefined,
+  env: NodeJS.ProcessEnv = process.env
+): RerankBackendFact =>
+  factOf({
+    explicit,
+    stated: statedBackend(env),
+    configured: rerankConfig(env).backend,
+    fallback: RERANK_DEFAULT_BACKEND,
+  });
+
+/** The resolved backend alone, so no caller re-spells the precedence. */
+export const resolveRerankBackend = (env: NodeJS.ProcessEnv = process.env): RerankBackend =>
+  rerankBackendFact(undefined, env).value;
+
+/** The resolved base URL alone — the fact reduced, for every caller that only serves. */
+export const resolveRerankUrl = (env: NodeJS.ProcessEnv = process.env): string =>
+  rerankUrlFact(undefined, env).value;
+
+/** The resolved model id alone, so no caller re-spells the precedence. */
+export const resolveRerankModel = (env: NodeJS.ProcessEnv = process.env): string =>
+  rerankModelFact(undefined, env).value;
 
 /** One fused entry: the first-pass item and the score that reordered it. */
 export interface FusedItem<T> {
@@ -288,9 +398,16 @@ const modelIds = (payload: unknown): readonly string[] => {
   );
 };
 
-type Catalogue =
+/**
+ * What `GET /v1/models` answered: the served ids, or why the call did not
+ * complete. Exported because `setup` has to READ the catalogue rather than ask
+ * about one id — it selects which ids are worth probing at all.
+ */
+export type RerankCatalogue =
   | { readonly ok: true; readonly models: readonly string[] }
   | { readonly ok: false; readonly cause: string };
+
+type Catalogue = RerankCatalogue;
 
 /**
  * A ceiling for a caller that MUST come back: `doctor` is an offline pass, and
@@ -314,6 +431,14 @@ const fetchCatalogue = async (baseUrl: string, timeoutMs?: number): Promise<Cata
     return { ok: false, cause: causeOf(error) };
   }
 };
+
+/**
+ * The catalogue at `baseUrl`, under the bounded timeout every diagnostic uses:
+ * `setup` walks candidate ADDRESSES, and an unreachable host MUST NOT hang the
+ * walk before the next address is tried.
+ */
+export const rerankCatalogue = async (baseUrl: string): Promise<RerankCatalogue> =>
+  await fetchCatalogue(baseUrl, CATALOGUE_TIMEOUT_MS);
 
 /** `undefined` when the model is served; otherwise the message to refuse with. */
 const catalogueRefusal = async (
@@ -404,7 +529,7 @@ export interface RerankOptions {
   readonly rerankExtract?: ExtractStrategy | undefined;
 }
 
-/** The env-resolved URL, the shipped preset, model id and doc window. */
+/** The tier-resolved URL and model id, the shipped preset and doc window. */
 interface Resolved {
   readonly baseUrl: string;
   readonly fusion: RerankFusion;
@@ -413,9 +538,9 @@ interface Resolved {
 }
 
 const resolved = (options: RerankOptions): Resolved => ({
-  baseUrl: options.baseUrl ?? resolveRerankUrl(),
+  baseUrl: rerankUrlFact(options.baseUrl).value,
   fusion: options.fusion ?? RERANK_FUSION_PRESETS[DEFAULT_RERANK_PRESET],
-  model: options.model ?? RERANK_MODEL_ID,
+  model: rerankModelFact(options.model).value,
   window: {
     maxChars: options.rerankDocMaxChars ?? RERANK_DOC_MAX_CHARS,
     extract: options.rerankExtract ?? EXTRACT_STRATEGY,
