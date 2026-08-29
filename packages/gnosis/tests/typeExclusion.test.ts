@@ -120,8 +120,8 @@ describe('--help', () => {
 
 /**
  * Flag scope: `RETRIEVAL_FLAGS` in `cli.ts` accepts these six on BOTH retrieval
- * commands, and `answer` honours each of them through `performRetrieval` — so
- * help MUST NOT scope any of them to `retrieve` alone. `--synthesize` is the
+ * commands, and `ask` honours each of them through `performRetrieval` — so
+ * help MUST NOT scope any of them to `search` alone. `--synthesize` is the
  * only genuinely single-command flag (`ANSWER_ONLY_FLAGS`).
  */
 describe('--help flag scoping', () => {
@@ -134,8 +134,8 @@ describe('--help flag scoping', () => {
     '--max-per-doc',
   ];
 
-  it('scopes no flag to `retrieve` only', () => {
-    expect(helpText()).not.toContain('on `retrieve` only');
+  it('scopes no flag to `search` only', () => {
+    expect(helpText()).not.toContain('on `search` only');
   });
 
   it('states both retrieval commands for every flag both accept', () => {
@@ -143,11 +143,11 @@ describe('--help flag scoping', () => {
     RETRIEVAL_SCOPED_FLAGS.forEach(flag => {
       const line = lines.find(entry => entry.includes(flag));
       expect(line, `no help line introduces ${flag}`).toBeDefined();
-      expect(line).toContain('`retrieve` and `answer`');
+      expect(line).toContain('`search` and `ask`');
     });
   });
 
-  it('keeps --synthesize scoped to answer alone', () => {
-    expect(helpText()).toContain('--synthesize on `answer` only');
+  it('keeps --synthesize scoped to ask alone', () => {
+    expect(helpText()).toContain('--synthesize on `ask` only');
   });
 });

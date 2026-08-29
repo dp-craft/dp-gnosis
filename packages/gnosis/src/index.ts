@@ -3,7 +3,7 @@
  * in-process.
  *
  * `search` is NOT a second retrieval path. It renders the request as the argv
- * of `answer --json` and hands it to {@link runCli}, then reads the payload
+ * of `ask --json` and hands it to {@link runCli}, then reads the payload
  * that command already produced — exactly as `src/mcp/protocol.ts` reads the
  * pack out of `runCli`'s own stdout rather than re-rendering it. A parallel
  * implementation would drift the first time either side changed, and the drift
@@ -42,7 +42,7 @@ const booleanFlag = (name: string, on: boolean | undefined): readonly string[] =
  * see the exact command that will execute rather than infer it.
  */
 export const searchArgv = (request: GnosisRequest): readonly string[] => [
-  'answer',
+  'ask',
   request.query,
   '--json',
   ...numberFlag('-k', request.k),
@@ -92,7 +92,7 @@ const asAnswer = (
 
 /**
  * Retrieve one citable knowledge pack, byte-identical to what
- * `gnosis answer --json` writes for the same request. A PARTIAL run (exit 3 —
+ * `gnosis ask --json` writes for the same request. A PARTIAL run (exit 3 —
  * a refused rerank, an over-budget atom) still delivers its pack, and states
  * what was refused on `note`.
  */

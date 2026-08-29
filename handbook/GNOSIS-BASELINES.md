@@ -2,6 +2,8 @@
 
 # Gnosis Baselines — the measured snapshot
 
+> **`docs/` paths below are provenance, not links** — that tree is gitignored and does not ship with the repository. `GNOSIS-GUIDE.md` owns the statement of that boundary.
+
 **This file orients; it MUST NOT block or decide anything.** Re-measure before acting on any number here. Every figure is `fts5`, depth 100, BM25-only unless the row says otherwise.
 
 Rules, architecture and landmines live in `GNOSIS-GUIDE.md`. The campaign deliverable `docs/analysis/2026-08-15-0857-dp-gnosis-pre-rerank-full-picture.md` **supersedes this file if the two ever disagree**.
@@ -1033,7 +1035,7 @@ What the table shows at a glance:
 | English `vault` | −0.0459 **n.s.** — recall-only lever | +0.0848 (p=0.0009) |
 | Hungarian `vault-hu` | **+0.1162 (p=0.0080)** — a RANKING lever too | +0.1016 (p=0.0034) |
 
-Consistent with the non-English rule in `packages/gnosis/README.md` (write the STEM the document uses, not the inflected form): on an agglutinative language de-inflection is a genuine lexical-match win, not merely keyword extraction.
+Consistent with the non-English rule in `packages/gnosis/QUERYING.md` (write the STEM the document uses, not the inflected form): on an agglutinative language de-inflection is a genuine lexical-match win, not merely keyword extraction.
 
 **Hungarian recall is effectively solved by rephrasing alone: R@100 0.8903 → 0.9919.** Reranking cannot move R@100 (0.0000, `p=1.0000`, zero-width CI — the mechanical identity, not a defect).
 

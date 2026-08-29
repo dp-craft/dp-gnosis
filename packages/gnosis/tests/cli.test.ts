@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { lanceDbAvailability } from '../src/adapters/lanceDbAdapter.js';
 import { miniSearchAvailability } from '../src/adapters/miniSearchAdapter.js';
@@ -53,7 +55,7 @@ const indexPathFor = (fixture: Fixture, adapter: string): string =>
   join(fixture.repoRoot, 'index', `atoms-${adapter}`);
 
 const retrieveArgv = (fixture: Fixture, adapter: string): readonly string[] => [
-  'retrieve',
+  'search',
   'retrieval',
   '-k',
   '3',
@@ -120,7 +122,7 @@ const domainsOf = (data: Record<string, unknown>): readonly string[] =>
   (data['atoms'] as readonly Record<string, unknown>[]).map(atom => String(atom['domain']));
 
 const retrieveWide = (fixture: Fixture, extra: readonly string[]): readonly string[] => [
-  'retrieve',
+  'search',
   'retrieval',
   '-k',
   '6',
@@ -260,7 +262,7 @@ describe('runCli', () => {
     });
   });
 
-  describe('retrieve', () => {
+  describe('search', () => {
     it('ranks atoms and reports mode plus indexState', async () => {
       const fixture = await makeFixture();
       await runCli(ingestArgv(fixture));
@@ -269,7 +271,7 @@ describe('runCli', () => {
 
       expect(result.exitCode).toBe(0);
       const data = parseJson(result.stdout);
-      expect(data['command']).toBe('retrieve');
+      expect(data['command']).toBe('search');
       expect(data['query']).toBe('retrieval');
       expect(data['k']).toBe(3);
       expect(data['indexState']).toBe('ready');
@@ -282,7 +284,7 @@ describe('runCli', () => {
       await runCli(ingestArgv(fixture));
 
       const result = await runCli([
-        'retrieve',
+        'search',
         'retrieval',
         '--adapter',
         'linear',
@@ -298,7 +300,7 @@ describe('runCli', () => {
       const fixture = await makeFixture();
 
       const result = await runCli([
-        'retrieve',
+        'search',
         'retrieval',
         '-k',
         'many',
@@ -385,7 +387,7 @@ describe('runCli', () => {
       const budgeted = ['--max-tokens', '1', '--repo-root', fixture.repoRoot];
 
       const text = await runCli([
-        'retrieve',
+        'search',
         'retrieval',
         '--adapter',
         'linear',
@@ -394,7 +396,7 @@ describe('runCli', () => {
         ...budgeted,
       ]);
       const xml = await runCli([
-        'retrieve',
+        'search',
         'retrieval',
         '--adapter',
         'linear',
@@ -415,7 +417,7 @@ describe('runCli', () => {
       const fixture = await makeFixture();
 
       const result = await runCli([
-        'retrieve',
+        'search',
         'retrieval',
         '--max-tokens',
         'lots',
@@ -441,7 +443,7 @@ describe('runCli', () => {
       const fixture = await makeFixture();
 
       const result = await runCli([
-        'retrieve',
+        'search',
         'retrieval',
         '--adapter',
         'linear',
@@ -469,7 +471,7 @@ describe('runCli', () => {
 
   describe('usage errors', () => {
     it('rejects a --type value outside the closed vocabulary, naming it and the vocabulary', async () => {
-      const result = await runCli(['retrieve', 'x', '--type', 'adr,nonsense']);
+      const result = await runCli(['search', 'x', '--type', 'adr,nonsense']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('nonsense');
@@ -478,7 +480,7 @@ describe('runCli', () => {
     });
 
     it('rejects an empty --type value rather than searching nothing', async () => {
-      const result = await runCli(['retrieve', 'x', '--type', '']);
+      const result = await runCli(['search', 'x', '--type', '']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('--type');
@@ -492,7 +494,7 @@ describe('runCli', () => {
     });
 
     it('rejects a --domain value outside the vocabulary, naming it and the vocabulary', async () => {
-      const result = await runCli(['retrieve', 'x', '--domain', 'docs,nonsense']);
+      const result = await runCli(['search', 'x', '--domain', 'docs,nonsense']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('nonsense');
@@ -518,7 +520,7 @@ describe('runCli', () => {
     });
 
     it('rejects an unknown flag with exit 2 and names the valid flags', async () => {
-      const result = await runCli(['retrieve', 'x', '--jsn']);
+      const result = await runCli(['search', 'x', '--jsn']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('--jsn');
@@ -531,7 +533,7 @@ describe('runCli', () => {
     // unknown-adapter probe uses a name outside the vocabulary and the message
     // must name all four members of it.
     it('rejects an unknown adapter with exit 2 and names the valid adapters', async () => {
-      const result = await runCli(['retrieve', 'x', '--adapter', 'elasticsearch']);
+      const result = await runCli(['search', 'x', '--adapter', 'elasticsearch']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('elasticsearch');
@@ -546,11 +548,11 @@ describe('runCli', () => {
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('serach');
-      expect(result.stderr).toContain('retrieve');
+      expect(result.stderr).toContain('search');
     });
 
     it('rejects a value flag given no value', async () => {
-      const result = await runCli(['retrieve', 'x', '--adapter']);
+      const result = await runCli(['search', 'x', '--adapter']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('--adapter');
@@ -566,7 +568,7 @@ describe('runCli', () => {
       expect(result.stdout).toContain('exit 3');
       expect(result.stdout).toContain('ingest');
       expect(result.stdout).toContain('index');
-      expect(result.stdout).toContain('retrieve');
+      expect(result.stdout).toContain('search');
     });
 
     it('names every valid adapter in --help so the set is discoverable', async () => {
@@ -576,6 +578,49 @@ describe('runCli', () => {
       expect(result.stdout).toContain('fts5');
       expect(result.stdout).toContain('minisearch');
       expect(result.stdout).toContain('lancedb');
+    });
+  });
+
+  /**
+   * `--version` prints ONE thing — the version this build really is — and exits
+   * 0. The value is read from the package manifest at BOTH ends: hardcoding it
+   * here would make the test agree with a stale constant on the first release
+   * that bumps the manifest without touching the CLI.
+   */
+  describe('--version', () => {
+    const MANIFEST_PATH = fileURLToPath(new URL('../package.json', import.meta.url));
+
+    const manifestVersion = (): string => {
+      const parsed: unknown = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
+      return parsed !== null &&
+        typeof parsed === 'object' &&
+        'version' in parsed &&
+        typeof parsed.version === 'string'
+        ? parsed.version
+        : '';
+    };
+
+    it('reads a real version off the manifest, so no assertion below passes vacuously', () => {
+      expect(manifestVersion()).toMatch(/^\d+\.\d+\.\d+/);
+    });
+
+    it('prints the manifest version alone and exits 0', async () => {
+      const result = await runCli(['--version']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe(`${manifestVersion()}\n`);
+      expect(result.stderr).toBe('');
+    });
+
+    it('treats -v identically', async () => {
+      expect(await runCli(['-v'])).toEqual(await runCli(['--version']));
+    });
+
+    it('prints the version, not the help text, when both flags are passed', async () => {
+      const result = await runCli(['--version', '--help']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe(`${manifestVersion()}\n`);
     });
   });
 

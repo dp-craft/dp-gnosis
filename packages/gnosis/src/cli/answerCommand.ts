@@ -1,5 +1,5 @@
 /**
- * `answer` — the same retrieval as `retrieve`, delivered as a knowledge pack.
+ * `ask` — the same retrieval as `search`, delivered as a knowledge pack.
  *
  * It reuses {@link performRetrieval} whole: the ranking, the rerank, the
  * relevance floor, the budget and the exit-code contract are the retrieve
@@ -31,7 +31,7 @@ import {
 } from './retrieveCommand.js';
 
 /** This command's name, on its payload and on a refusal that renders no pack. */
-const ANSWER_COMMAND = 'answer';
+const ASK_COMMAND = 'ask';
 
 /**
  * `--flat` says "deliver the ranking ungrouped", and the pack is grouped by
@@ -40,7 +40,7 @@ const ANSWER_COMMAND = 'answer';
  * would let a run carry a flag that did nothing under a success code.
  */
 const flatRefusal = (): string =>
-  `${FLAT_FLAG} is not accepted by ${ANSWER_COMMAND} — the knowledge pack is grouped by source document by construction, so an ungrouped pack does not exist and the flag would do nothing under a success code; drop it, or run \`retrieve ${FLAT_FLAG}\` for the ungrouped ranking`;
+  `${FLAT_FLAG} is not accepted by ${ASK_COMMAND} — the knowledge pack is grouped by source document by construction, so an ungrouped pack does not exist and the flag would do nothing under a success code; drop it, or run \`search ${FLAT_FLAG}\` for the ungrouped ranking`;
 
 /**
  * The containment block IS the pack's delimited rendering. A second delimited
@@ -48,7 +48,7 @@ const flatRefusal = (): string =>
  * disagree the first time one of them changed.
  */
 const xmlRefusal = (): string =>
-  `${FORMAT_FLAG} xml is not accepted by ${ANSWER_COMMAND} — the knowledge pack is already a delimited block carrying every atom body, so a second one would be a third rendering to keep in step; pass ${FORMAT_FLAG} text or ${FORMAT_FLAG} json`;
+  `${FORMAT_FLAG} xml is not accepted by ${ASK_COMMAND} — the knowledge pack is already a delimited block carrying every atom body, so a second one would be a third rendering to keep in step; pass ${FORMAT_FLAG} text or ${FORMAT_FLAG} json`;
 
 const flagRefusal = (context: CommandContext): string | undefined => {
   if (context.flags[FLAT_FLAG] === true) return flatRefusal();
@@ -92,14 +92,14 @@ const packOf = (run: RetrievalRun, extra: readonly string[]): Pack =>
     notes: notesOf(run.request, run.budgeted, extra),
   });
 
-/** Omitted entirely when no rewrite happened, mirroring `retrieve`'s payload. */
+/** Omitted entirely when no rewrite happened, mirroring `search`'s payload. */
 const rewrittenField = (request: RetrieveRequest): Pick<GnosisAnswer, 'queryRewritten'> =>
   request.queryRewritten === undefined ? {} : { queryRewritten: request.queryRewritten };
 
 /**
- * `answer` only, OPT-IN: synthesise an answer over the pack with a local chat
+ * `ask` only, OPT-IN: synthesise an answer over the pack with a local chat
  * model. Refused on every other command through the unknown-flag path — a
- * `retrieve` has no pack to synthesise over, and a flag that did nothing under
+ * `search` has no pack to synthesise over, and a flag that did nothing under
  * a success code is the failure that path exists to prevent.
  */
 export const SYNTHESIZE_FLAG = '--synthesize';
@@ -126,7 +126,7 @@ const extraNotes = (synthesis: Synthesis): readonly string[] =>
 /**
  * Reported only when the flag was PASSED, mirroring `queryRewritten`: a payload
  * for a run that never asked for a synthesis stays byte-identical, so the
- * documented key set of a plain `answer` is unchanged.
+ * documented key set of a plain `ask` is unchanged.
  */
 const synthesisFields = (synthesis: Synthesis): Pick<GnosisAnswer, 'synthesized' | 'answer'> =>
   synthesis.requested
@@ -188,7 +188,7 @@ const runFields = (
   | 'documents'
   | 'poolSize'
 > => ({
-  command: ANSWER_COMMAND,
+  command: ASK_COMMAND,
   adapter: run.request.context.adapter,
   query: run.request.query,
   ...rewrittenField(run.request),

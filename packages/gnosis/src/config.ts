@@ -112,7 +112,7 @@ export const bodyMaxChars = (body: string, maxChars: number = ATOM_MAX_CHARS): n
 export const ATOM_MIN_CHARS = 200;
 
 /**
- * Default injection budget for one `retrieve` call, expressed in the unit
+ * Default injection budget for one `search` call, expressed in the unit
  * `estimateTokens` returns: a CONSERVATIVE UPPER BOUND on the token count,
  * estimated as UTF-8 BYTE LENGTH. It is NOT an exact token count, and it cannot
  * become one without a real tokenizer as a dependency here. Why the byte length
@@ -161,7 +161,7 @@ export type BudgetMode = (typeof BUDGET_MODES)[number];
 export const DEFAULT_BUDGET_MODE: BudgetMode = 'bytes';
 
 /**
- * The reranker `retrieve --rerank` calls, served by llama-swap under this id.
+ * The reranker `search --rerank` calls, served by llama-swap under this id.
  * One id, one model: a run that does not carry the id cannot be told from one
  * that used another model, so `--rerank-model` records what it selects.
  *
@@ -210,6 +210,23 @@ export const RERANK_URL_ENV_VAR = 'DP_GNOSIS_RERANK_URL';
  * shallower pool.
  */
 export const RERANK_K_INIT = 100;
+
+/**
+ * The MAGNITUDE floor the two-document discrimination probe judges the RELEVANT
+ * score against. Owner-approved 2026-08-29.
+ *
+ * It needs no calibration because nothing lands near it. A working reranker
+ * scores the probe's relevant passage close to 1.0; a GGUF converted WITHOUT the
+ * `cls.output.weight` rank head scores every pair at ~4.5e-23 (the
+ * `mradermacher/Qwen3-Reranker-*-GGUF` and `DevQuasar/*` family, upstream
+ * ggml-org/llama.cpp#16407). This floor sits roughly seventeen orders of
+ * magnitude clear of both, so no plausible model is decided by its exact value.
+ *
+ * It exists because the probe was DIRECTIONAL ONLY: a rank-head-less GGUF whose
+ * relevant score landed a hair above its irrelevant one passed as healthy, and
+ * every number downstream was recorded off a reranker that had produced nothing.
+ */
+export const RERANK_PROBE_MIN_SCORE = 1e-6;
 
 /**
  * Characters of an atom body sent to the reranker, taken from the HEAD.
@@ -343,7 +360,7 @@ export const RERANK_CALIBRATION: Readonly<Record<string, RerankCalibration>> = {
 export const ABSTAIN_FLOOR = 0.4;
 
 /**
- * The rewriter behind `retrieve --rephrase`, overridden by
+ * The rewriter behind `search --rephrase`, overridden by
  * {@link REPHRASE_MODEL_ENV_VAR}. A CHAT model, not a reranker — but it is
  * served by the SAME llama-swap instance, so it reuses
  * {@link RERANK_DEFAULT_URL} / {@link RERANK_URL_ENV_VAR} rather than owning a
@@ -381,7 +398,7 @@ export const REPHRASE_MAX_TOKENS = 120;
 export const REPHRASE_PROMPT_VERSION = 'v2';
 
 /**
- * The synthesiser behind `answer --synthesize`, overridden by
+ * The synthesiser behind `ask --synthesize`, overridden by
  * {@link SYNTHESIZE_MODEL_ENV_VAR}. Served by the SAME llama-swap instance as
  * the reranker and the rewriter, so it reuses {@link RERANK_DEFAULT_URL} /
  * {@link RERANK_URL_ENV_VAR} rather than owning a second address that could

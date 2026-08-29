@@ -50,7 +50,7 @@ const tinyCorpus = async (): Promise<string> => {
 describe('searchArgv — the request IS an answer --json invocation', () => {
   it('renders only the flags the request states, and always --json', () => {
     expect(searchArgv({ query: 'apiknowledge handbook' })).toEqual([
-      'answer',
+      'ask',
       'apiknowledge handbook',
       '--json',
     ]);
@@ -73,7 +73,7 @@ describe('searchArgv — the request IS an answer --json invocation', () => {
         synthesize: true,
       })
     ).toEqual([
-      'answer',
+      'ask',
       'q',
       '--json',
       '-k',
@@ -100,7 +100,7 @@ describe('searchArgv — the request IS an answer --json invocation', () => {
 
   it('leaves a false boolean off entirely rather than passing a negated flag', () => {
     expect(searchArgv({ query: 'q', rerank: false, synthesize: false })).toEqual([
-      'answer',
+      'ask',
       'q',
       '--json',
     ]);
@@ -117,7 +117,7 @@ describe('ONE code path — search() IS answer --json', () => {
     setActiveProfile(loadIngestProfile(profilePath));
 
     const answer = await search({ query: 'apiknowledge handbook', k: 3 });
-    const direct = await runCli(['answer', 'apiknowledge handbook', '-k', '3', '--json']);
+    const direct = await runCli(['ask', 'apiknowledge handbook', '-k', '3', '--json']);
     const payload = JSON.parse(direct.stdout) as Json;
 
     expect(direct.exitCode).toBe(0);

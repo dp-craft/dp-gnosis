@@ -88,6 +88,8 @@ export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--json': unowned('boolean, off by default'),
   '--help': unowned('boolean, off by default'),
   '-h': unowned('boolean, off by default'),
+  '--version': unowned('boolean, off by default — the value it PRINTS is the package manifest\'s, read by packageVersion() (src/paths.ts), and no default turns the flag on'),
+  '-v': unowned('boolean, off by default'),
 };
 
 /** Inline code spans of a markdown fragment. */

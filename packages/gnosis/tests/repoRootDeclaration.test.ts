@@ -10,9 +10,9 @@
  * It refuses and names both ways to state one — early, on the command itself,
  * so the message IS the diagnosis rather than something to reach by ingesting.
  */
-import type { IngestProfile } from '../src/ingestProfile.js';
-import { repoRootRefusal, undeclaredRepoRoot } from '../src/cli/locations.js';
 import { runCli } from '../src/cli/cli.js';
+import { repoRootRefusal, undeclaredRepoRoot } from '../src/cli/locations.js';
+import type { IngestProfile } from '../src/ingestProfile.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 const CHECKOUT = false;
@@ -77,7 +77,7 @@ describe('repoRootRefusal', () => {
  */
 describe('the CLI in a checkout', () => {
   it('does NOT refuse a command for an undeclared repoRoot', async () => {
-    const result = await runCli(['retrieve']);
+    const result = await runCli(['search']);
     expect(result.stderr).not.toContain('--repo-root');
   });
 });

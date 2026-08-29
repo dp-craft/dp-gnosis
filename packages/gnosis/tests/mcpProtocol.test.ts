@@ -155,9 +155,9 @@ describe('the exit code is the contract, mirrored not flattened', () => {
   // vault-hu 0.4868 vs 0.7699) while the runner nav path reranked — two
   // consumer surfaces answering the same question at different quality.
   it('omits -k entirely when the caller states no k, leaving the default to the CLI', () => {
-    expect(answerArgv({ question: 'why' })).toEqual(['answer', 'why', '--json', '--rerank']);
+    expect(answerArgv({ question: 'why' })).toEqual(['ask', 'why', '--json', '--rerank']);
     expect(answerArgv({ question: 'why', k: 3, domain: 'runner' })).toEqual([
-      'answer',
+      'ask',
       'why',
       '-k',
       '3',
@@ -265,7 +265,7 @@ describe('ONE code path — the tool text IS the CLI pack', () => {
 
     const response = await reply(call({ question: 'mcpknowledge handbook', k: 3 }), scoped);
     const direct = await runCli([
-      'answer',
+      'ask',
       'mcpknowledge handbook',
       '-k',
       '3',
@@ -345,14 +345,19 @@ describe('zero dependency — the guard', () => {
 
     expect(Object.keys(manifest['dependencies'] as Json)).toEqual([
       'better-sqlite3',
+      'minisearch',
       'stemmer',
     ]);
-    expect(Object.keys(manifest['devDependencies'] as Json)).toEqual(['@types/better-sqlite3']);
-    expect(Object.keys(manifest['optionalDependencies'] as Json)).toEqual([
+    expect(Object.keys(manifest['devDependencies'] as Json)).toEqual([
       '@lancedb/lancedb',
+      '@types/better-sqlite3',
       'apache-arrow',
-      'minisearch',
     ]);
+    // optionalDependencies was removed entirely: npm installs optionalDependencies by
+    // default, so @lancedb/lancedb (313 MB) was being downloaded by every consumer of a
+    // tool that advertises no embeddings. The dense/hybrid research routes now sit in
+    // devDependencies, which npm never installs for a consumer or a global install.
+    expect(manifest['optionalDependencies']).toBeUndefined();
   });
 });
 
@@ -390,7 +395,7 @@ describe('the MCP text grounds every atom the run delivered', () => {
 
     const response = await reply(call({ question: 'mcpknowledge handbook', k: 3 }), scoped);
     const direct = await runCli([
-      'answer',
+      'ask',
       'mcpknowledge handbook',
       '-k',
       '3',

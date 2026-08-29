@@ -148,7 +148,7 @@ const retrieve = async (
   extra: readonly string[]
 ): Promise<{ readonly exitCode: number; readonly stdout: string; readonly stderr: string }> =>
   await runCli([
-    'retrieve',
+    'search',
     'budget probe tokenizer',
     '--adapter',
     'linear',

@@ -112,7 +112,7 @@ const countingServer = (): number[] => {
 
 const retrieve = async (profilePath: string, extra: readonly string[] = []): Promise<string> => {
   const out = await runCli([
-    'retrieve',
+    'search',
     'zestful retrieval',
     // `linear` scans the atoms directly, so no index build stands between the
     // pool this asserts and the documents the reranker is handed.
@@ -135,7 +135,7 @@ const pooledOf = async (profilePath: string, extra: readonly string[] = []): Pro
 };
 
 const usageErrorFor = async (extra: readonly string[]) =>
-  await runCli(['retrieve', 'zestful retrieval', '--adapter', 'linear', ...extra]);
+  await runCli(['search', 'zestful retrieval', '--adapter', 'linear', ...extra]);
 
 const RAW_PROFILE = {
   name: 'probe',

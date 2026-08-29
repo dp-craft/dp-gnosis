@@ -175,7 +175,7 @@ const retrieved = async (
   adapter: string
 ): Promise<readonly Record<string, unknown>[]> => {
   const result = await runCli([
-    'retrieve',
+    'search',
     'retrieval unit tier',
     '-k',
     '2',

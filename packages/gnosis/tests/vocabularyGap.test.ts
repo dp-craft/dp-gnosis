@@ -18,11 +18,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
-import { ingestProfilePath } from '../src/paths.js';
 import { buildFts5Index, readIndexAnalyzer } from '../src/adapters/fts5Adapter.js';
 import { readVocabularyGap } from '../src/adapters/fts5VocabularyGap.js';
 import { runRetrieveCommand } from '../src/cli/retrieveCommand.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
+import { ingestProfilePath } from '../src/paths.js';
 import { analyze } from '../src/query.js';
 import { activeProfile } from '../src/vocabulary.js';
 
@@ -179,7 +179,7 @@ describe('retrieve — a query carrying an invented term', () => {
 
   it('states it on its own line of the text rendering', async () => {
     const outcome = await retrieveCommand('selector borogove');
-    expect(outcome.text).toMatch(/^retrieve: 1 of 2 analysed query term\(s\) have ZERO postings/m);
+    expect(outcome.text).toMatch(/^search: 1 of 2 analysed query term\(s\) have ZERO postings/m);
     expect(outcome.text).toContain('"borogov"');
   });
 });

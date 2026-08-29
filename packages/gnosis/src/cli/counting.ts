@@ -5,7 +5,7 @@
  * The text charged is INJECTED rather than fixed to `atom.body`, because a
  * command that renders something else — a summary, a window, a joined group —
  * would otherwise budget against text it never emits, admitting atoms whose
- * real cost it never counted. `retrieve` charges the body, so its numbers are
+ * real cost it never counted. `search` charges the body, so its numbers are
  * unchanged; a second command states its own {@link ChargedText}.
  */
 import type { AtomMeasure } from '../budget.js';
@@ -36,7 +36,7 @@ export type CountAtoms = (atoms: readonly RetrievedAtom[]) => Promise<MeasureRes
 /** What one atom costs the budget, as the TEXT the caller will actually emit. */
 export type ChargedText = (atom: RetrievedAtom) => string;
 
-/** The atom as `retrieve` delivers it, which is what `retrieve` is charged for. */
+/** The atom as `search` delivers it, which is what `search` is charged for. */
 export const bodyText: ChargedText = (atom: RetrievedAtom): string => atom.body;
 
 /** `--budget-mode bytes`: the historical measure, resolved without a round trip. */
@@ -101,14 +101,14 @@ const tokenCounting = (counter: TokenCounter, charged: ChargedText): CountAtoms 
  * honoured". It names the CONDITION and the correction; the run exits PARTIAL
  * rather than quietly enforcing the byte bound under a token label.
  *
- * The command NAMES itself rather than the prefix being fixed to `retrieve`: a
+ * The command NAMES itself rather than the prefix being fixed to `search`: a
  * second command's refusal that opened with another command's name would send
  * the reader to a run that never happened.
  */
 export const budgetRefusal = (command: string, reason: string): string =>
   `${command}: ${BUDGET_MODE_FLAG} tokens could not count with the served tokenizer — ${reason}; re-run with \`${BUDGET_MODE_FLAG} bytes\` to budget by the conservative UTF-8 bound instead`;
 
-/** The command NAMES itself, so a second command's payload is not labelled `retrieve`. */
+/** The command NAMES itself, so a second command's payload is not labelled `search`. */
 export const budgetRefusalOutcome = (command: string, reason: string): CommandOutcome => {
   const message = budgetRefusal(command, reason);
   return {

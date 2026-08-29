@@ -11,8 +11,10 @@
  * wrong experiment; what this leg measures is the COST of carrying a vector
  * engine that is currently only doing lexical work.
  *
- * LAZY DYNAMIC IMPORT — `@lancedb/lancedb` is an `optionalDependency`, so it may
- * be absent. It is imported inside the call path, and EVERY import error is
+ * LAZY DYNAMIC IMPORT — `@lancedb/lancedb` is a `devDependency`, so a consumer
+ * install does NOT carry it and this leg is expected to be absent there. (It was
+ * an `optionalDependency`, which npm installs BY DEFAULT — 313 MB of vector
+ * database in every install of a tool that promises no embeddings.) It is imported inside the call path, and EVERY import error is
  * caught, not just `MODULE_NOT_FOUND`: on a platform whose prebuilt binary lags
  * the root package version this package fails at IMPORT time with a native
  * BINDING error, which is a different error class entirely, and a narrow catch
@@ -158,7 +160,7 @@ export interface LanceDbAdapterOptions extends BuildLanceDbIndexOptions {
   readonly now: Date;
 }
 
-/** Whether the optional dependency loaded, and why it did not. */
+/** Whether the dev-only dependency loaded, and why it did not. */
 export interface LanceDbAvailability {
   readonly available: boolean;
   readonly reason?: string;
@@ -200,7 +202,7 @@ const loadLance = (): Promise<LoadResult> =>
     (error: unknown): LoadResult => ({ ok: false, reason: describeError(error) })
   );
 
-/** Probe the optional dependency so a harness can report WHY a leg was skipped. */
+/** Probe the dev-only dependency so a harness can report WHY a leg was skipped. */
 export const lanceDbAvailability = async (): Promise<LanceDbAvailability> => {
   const loaded = await loadLance();
   return loaded.ok ? { available: true } : { available: false, reason: loaded.reason };
@@ -283,7 +285,7 @@ const writeIndex = async (
  * dataset from a populated one — a bare success flag reports the empty one as a
  * working index and every query then answers nothing with no error anywhere.
  *
- * `undefined` — never a throw — when the optional dependency is unavailable, so
+ * `undefined` — never a throw — when the dev-only dependency is unavailable, so
  * a caller skips this leg instead of failing. The two outcomes are different
  * facts: nothing COULD be built, versus nothing WAS.
  */

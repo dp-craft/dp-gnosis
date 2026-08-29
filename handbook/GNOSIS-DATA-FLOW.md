@@ -193,7 +193,7 @@ flowchart TB
 | Weight a non-`body` field differently | 8 + 12 | `FTS_COLUMNS` / `DEFAULT_FIELD_WEIGHTS` (`config.ts`) | **Corrected 2026-08-25** — this row read *"impossible without a schema change, the table is single-column"*. That schema change has landed: seven columns exist and `--field-weights` merges over the body-only default, so column weighting is a flag, not a rebuild. What is still NOT a column is the atom TITLE — `linear` tokenizes `frontmatter.title` and `fts5` does not, which is one reason the two disagree |
 | Change the IDF | 12 | `linearScanAdapter.ts` | The copy in `query.ts` is dead for retrieval; changing it alone changes NOTHING |
 | Change phrase behaviour | 11 | `toMatchExpression` | It analyses PER whitespace chunk so `adr-018` stays an adjacency phrase. Flattening to one term list silently degrades phrases to bag-of-words |
-| Change query construction / rephrasing | **9 only** | `buildQuery`, and `packages/gnosis/README.md` § Query rephrasing | `buildQuery` has no production caller — the rule lives with the CALLER, not the engine |
+| Change query construction / rephrasing | **9 only** | `buildQuery`, and `packages/gnosis/QUERYING.md` § Query rephrasing | `buildQuery` has no production caller — the rule lives with the CALLER, not the engine |
 | Change the rerank protocol | 14-15 | `RERANK_FUSION_PRESETS` (`config.ts`) | `K_INIT` and the URL are NOT caller-settable |
 | Add an adapter | 10 | implement `KnowledgePort` | It MUST re-analyze identically, and nothing checks that it does |
 | Debug "no results" | 13 | `indexState` first | `unavailable` means nothing was searched — never "no matches" |

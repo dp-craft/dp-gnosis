@@ -6,7 +6,7 @@
  *
  * It takes the corpus directories as POSITIONALS and refuses when given none.
  * Writing a profile with no corpus scope would produce an instance whose first
- * `ingest` walks nothing and whose first `retrieve` answers nothing — a
+ * `ingest` walks nothing and whose first `search` answers nothing — a
  * component that produced nothing, recorded as data, on the very first run.
  *
  * It REFUSES a second run rather than overwriting. The profile is the file the

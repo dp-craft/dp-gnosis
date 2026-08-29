@@ -2,7 +2,7 @@
  * `index` — build the selected adapter's index.
  *
  * An adapter with no persistent index (linear) SUCCEEDS here as an explicit,
- * stated no-op rather than erroring. A caller scripting `index` then `retrieve`
+ * stated no-op rather than erroring. A caller scripting `index` then `search`
  * must not have to know which adapters own an index; making the no-op an error
  * would push that knowledge back out to every caller.
  *

@@ -13,10 +13,10 @@
  * file — the parser, the context, the renderer and the exit-code contract are
  * already command-agnostic.
  */
+import { isVocabularyError } from '../config.js';
 import type { IngestProfile } from '../ingestProfile.js';
 import { loadIngestProfile } from '../ingestProfile.js';
-import { isVocabularyError } from '../config.js';
-import { ingestProfilePath } from '../paths.js';
+import { ingestProfilePath, packageVersion } from '../paths.js';
 import { isUserConfigError } from '../userConfig.js';
 import { activeProfile } from '../vocabulary.js';
 import type { AdapterName } from './adapter.js';
@@ -26,6 +26,7 @@ import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
 import type { CommandContext, CommandHandler } from './context.js';
+import { runDemoCommand } from './demoCommand.js';
 import { runDoctorCommand } from './doctorCommand.js';
 import {
   ENRICH_MODEL_FLAG,
@@ -36,7 +37,6 @@ import {
 import type { OutputFormat } from './format.js';
 import { FORMAT_FLAG, resolveFormat } from './format.js';
 import { helpText } from './help.js';
-import { runInitCommand } from './initCommand.js';
 import {
   BODY_SOURCE_FLAG,
   ENRICHMENT_COLUMNS_FLAG,
@@ -44,7 +44,15 @@ import {
   runIndexCommand
 } from './indexCommand.js';
 import { GOLD_IDS_FLAG, runIngestCommand } from './ingestCommand.js';
-import { repoRootRefusal, resolveLocations, undeclaredRepoRoot } from './locations.js';
+import { runInitCommand } from './initCommand.js';
+import {
+  ATOMS_DIR_FLAG,
+  INDEX_PATH_FLAG,
+  REPO_ROOT_FLAG,
+  repoRootRefusal,
+  resolveLocations,
+  undeclaredRepoRoot
+} from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import {
@@ -69,6 +77,7 @@ import {
   runRetrieveCommand,
   TYPE_FLAG
 } from './retrieveCommand.js';
+import { runUpdateCommand } from './updateCommand.js';
 
 /** What one invocation produced. The caller owns writing it to a real process. */
 export interface CliResult {
@@ -79,12 +88,14 @@ export interface CliResult {
 
 const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   init: runInitCommand,
+  demo: runDemoCommand,
   doctor: runDoctorCommand,
   ingest: runIngestCommand,
   enrich: runEnrichCommand,
   index: runIndexCommand,
-  retrieve: runRetrieveCommand,
-  answer: runAnswerCommand,
+  update: runUpdateCommand,
+  search: runRetrieveCommand,
+  ask: runAnswerCommand,
   bench: runBenchCommand,
 };
 
@@ -155,20 +166,25 @@ const contextResult = (
   }
 };
 
-/** The first-run command, named here because it is the one exempt from the check below. */
+/** The first-run commands, named here because they are the ones exempt from the check below. */
 const INIT_COMMAND = 'init';
 
+const DEMO_COMMAND = 'demo';
+
 /**
- * `init` is the ONE command that may run with no declared `repoRoot`: it WRITES
- * the declaration, and it never reads the resolved one (`initCommand.ts` takes
- * the flag or the data root, and writes that into the profile it creates).
- * Every other command refuses, so the message arrives on the first thing the
- * user types rather than partway through an ingest.
+ * `init` may run with no declared `repoRoot`: it WRITES the declaration, and it
+ * never reads the resolved one (`initCommand.ts` takes the flag or the data
+ * root, and writes that into the profile it creates). `demo` may for the
+ * opposite reason — it brings its OWN corpus, its own profile and its own fixed
+ * paths, so requiring a declared instance would defeat the one command a reader
+ * with no vault can run. Every other command refuses, so the message arrives on
+ * the first thing the user types rather than partway through an ingest.
  */
+const ROOTLESS_COMMANDS: readonly string[] = [INIT_COMMAND, DEMO_COMMAND];
 const buildContext = (args: ParsedArgs): ContextResult => {
   const profile = loadProfile(args);
   if (!profile.ok) return { ok: false, error: profile.error };
-  if (args.command !== INIT_COMMAND && undeclaredRepoRoot(args.flags, profile.profile)) {
+  if (!ROOTLESS_COMMANDS.includes(args.command ?? '') && undeclaredRepoRoot(args.flags, profile.profile)) {
     return { ok: false, error: repoRootRefusal() };
   }
   const requested = stringFlag(args.flags, '--adapter') ?? DEFAULT_ADAPTER;
@@ -187,23 +203,32 @@ const helpOutcome = (): CommandOutcome => {
 const wantsHelp = (args: ParsedArgs): boolean =>
   args.command === undefined || args.flags['--help'] === true || args.flags['-h'] === true;
 
+const versionOutcome = (): CommandOutcome => {
+  const version = packageVersion();
+  return { exitCode: EXIT_OK, data: { command: 'version', version }, text: version };
+};
+
+/** Asked BEFORE `--help`, so `--version --help` answers the narrower question. */
+const wantsVersion = (args: ParsedArgs): boolean =>
+  args.flags['--version'] === true || args.flags['-v'] === true;
+
 /**
  * `--format`, `--type` with `--exclude-type` / `--include-history`, `--max-tokens` with `--budget-mode`, `--rerank` with its three tuning flags,
  * `--rephrase`, and the two grouping flags belong to the RETRIEVAL commands —
- * `retrieve` and `answer`, which run the same pipeline. On any other command
+ * `search` and `ask`, which run the same pipeline. On any other command
  * they are refused through the SAME message an unknown flag gets: a flag no
  * command can honour MUST NOT look accepted, and one wording keeps the
  * correction identical either way.
  *
- * `--flat` is the exception that stays inside the list: it reaches `answer` so
+ * `--flat` is the exception that stays inside the list: it reaches `ask` so
  * the command can refuse it by NAME — a pack is grouped by construction — at
  * the same exit 2 the generic wording would have given, but saying why.
  */
-const RETRIEVE_COMMAND = 'retrieve';
+const SEARCH_COMMAND = 'search';
 
-const ANSWER_COMMAND = 'answer';
+const ASK_COMMAND = 'ask';
 
-const RETRIEVAL_COMMANDS: readonly string[] = [RETRIEVE_COMMAND, ANSWER_COMMAND];
+const RETRIEVAL_COMMANDS: readonly string[] = [SEARCH_COMMAND, ASK_COMMAND];
 
 const RETRIEVAL_FLAGS: readonly string[] = [
   FORMAT_FLAG,
@@ -229,7 +254,7 @@ const RETRIEVAL_FLAGS: readonly string[] = [
 ];
 
 /**
- * `--synthesize` is narrower still: `answer` ALONE. `retrieve` produces a
+ * `--synthesize` is narrower still: `ask` ALONE. `search` produces a
  * ranking, not a pack, so there is nothing for it to synthesise over — and it
  * is refused through the SAME wording every misplaced flag gets, so the
  * correction reads identically wherever the flag lands.
@@ -247,9 +272,16 @@ const ENRICH_COMMAND = 'enrich';
 const INDEX_COMMAND = 'index';
 
 /**
+ * `update` runs BOTH hops, so it honours the union of what each honours: an
+ * ingest-only or index-only flag refused there would make the composed command
+ * unable to express what its two halves already do.
+ */
+const UPDATE_COMMAND = 'update';
+
+/**
  * `--body-source`, `--keyword-filter` and `--enrichment-columns` each decide what
  * an index BUILD writes, so only the build honours them. Accepting one on
- * `retrieve` would let a caller believe a ranking came from text the index it
+ * `search` would let a caller believe a ranking came from text the index it
  * read never held.
  */
 const INDEX_ONLY_FLAGS: readonly string[] = [
@@ -260,18 +292,41 @@ const INDEX_ONLY_FLAGS: readonly string[] = [
 
 const ENRICH_ONLY_FLAGS: readonly string[] = [LIMIT_FLAG, ENRICH_MODEL_FLAG];
 
-const SIDECAR_COMMANDS: readonly string[] = [ENRICH_COMMAND, INDEX_COMMAND];
+const INDEX_COMMANDS: readonly string[] = [INDEX_COMMAND, UPDATE_COMMAND];
+
+const SIDECAR_COMMANDS: readonly string[] = [ENRICH_COMMAND, INDEX_COMMAND, UPDATE_COMMAND];
 
 const SIDECAR_FLAGS: readonly string[] = [ENRICHMENT_FLAG];
 
 /**
  * `--gold-ids` names the dedupe tie-break source, which only `ingest` reads.
- * Accepting it on `retrieve` would let a caller believe a gold source shaped a
+ * Accepting it on `search` would let a caller believe a gold source shaped a
  * ranking it never touched, so it is refused through the same wording.
  */
 const INGEST_COMMAND = 'ingest';
 
 const INGEST_ONLY_FLAGS: readonly string[] = [GOLD_IDS_FLAG];
+
+const INGEST_COMMANDS: readonly string[] = [INGEST_COMMAND, UPDATE_COMMAND];
+
+/**
+ * `demo` brings its OWN corpus, its own profile and a FIXED `demo/` subtree
+ * (`paths.ts:demoAtomsDir` / `demoProfilePath`, `adapter.ts:demoIndexPath`),
+ * which `demoCommand.ts` substitutes for whatever the caller's instance
+ * resolved to. So there is no reading of these four it could honour — and a
+ * `demo --atoms-dir /tmp/x` that ranked hits at exit 0 while writing nothing to
+ * `/tmp/x` is the silently-dropped token this parser exists to refuse. Scoped
+ * to `demo` alone: every other command resolves all four normally.
+ *
+ * `--adapter` is deliberately absent — the demo index filename comes from the
+ * adapter table, so that one IS honoured, as are `--json` and `-k`.
+ */
+const DEMO_REFUSED_FLAGS: readonly string[] = [
+  ATOMS_DIR_FLAG,
+  INDEX_PATH_FLAG,
+  REPO_ROOT_FLAG,
+  PROFILE_FLAG,
+];
 
 const misplacedRetrievalFlag = (args: ParsedArgs): string | undefined =>
   RETRIEVAL_COMMANDS.includes(args.command ?? '')
@@ -279,7 +334,7 @@ const misplacedRetrievalFlag = (args: ParsedArgs): string | undefined =>
     : RETRIEVAL_FLAGS.find(flag => args.flags[flag] !== undefined);
 
 const misplacedAnswerFlag = (args: ParsedArgs): string | undefined =>
-  args.command === ANSWER_COMMAND
+  args.command === ASK_COMMAND
     ? undefined
     : ANSWER_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
@@ -289,14 +344,19 @@ const misplacedEnrichFlag = (args: ParsedArgs): string | undefined =>
     : ENRICH_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
 const misplacedIngestFlag = (args: ParsedArgs): string | undefined =>
-  args.command === INGEST_COMMAND
+  INGEST_COMMANDS.includes(args.command ?? '')
     ? undefined
     : INGEST_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
 const misplacedIndexFlag = (args: ParsedArgs): string | undefined =>
-  args.command === INDEX_COMMAND
+  INDEX_COMMANDS.includes(args.command ?? '')
     ? undefined
     : INDEX_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
+
+const misplacedDemoFlag = (args: ParsedArgs): string | undefined =>
+  args.command === DEMO_COMMAND
+    ? DEMO_REFUSED_FLAGS.find(flag => args.flags[flag] !== undefined)
+    : undefined;
 
 const misplacedSidecarFlag = (args: ParsedArgs): string | undefined =>
   SIDECAR_COMMANDS.includes(args.command ?? '')
@@ -314,6 +374,7 @@ const SCOPE_CHECKS: readonly ((args: ParsedArgs) => string | undefined)[] = [
   misplacedIngestFlag,
   misplacedIndexFlag,
   misplacedSidecarFlag,
+  misplacedDemoFlag,
 ];
 
 const misplacedFlag = (args: ParsedArgs): string | undefined =>
@@ -346,6 +407,7 @@ const withContext = async (
 };
 
 const outcomeFor = async (args: ParsedArgs): Promise<CommandOutcome> => {
+  if (wantsVersion(args)) return versionOutcome();
   if (wantsHelp(args)) return helpOutcome();
   const misplaced = misplacedFlag(args);
   if (misplaced !== undefined) return usageError(unknownFlagMessage(misplaced));

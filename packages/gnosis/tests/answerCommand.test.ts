@@ -43,7 +43,7 @@ const fixture = async (): Promise<string> => {
 
 const answer = async (atomsDir: string, extra: readonly string[]): Promise<CliResult> =>
   await runCli([
-    'answer',
+    'ask',
     'layered test model tier',
     '-k',
     '4',
@@ -126,7 +126,7 @@ describe('answer --json', () => {
 
     expect(REQUIRED_KEYS.filter(key => !keys.includes(key))).toEqual([]);
     expect(keys.filter(key => ![...REQUIRED_KEYS, ...OPTIONAL_KEYS].includes(key))).toEqual([]);
-    expect(payload['command']).toBe('answer');
+    expect(payload['command']).toBe('ask');
     expect(payload['query']).toBe('layered test model tier');
   });
 
@@ -232,7 +232,7 @@ describe('answer — the two flags a pack cannot honour', () => {
     const json = await answer(atomsDir, ['--format', 'json']);
 
     expect(text.stdout.startsWith(PACK_OPEN)).toBe(true);
-    expect(parsed(json)['command']).toBe('answer');
+    expect(parsed(json)['command']).toBe('ask');
   });
 });
 

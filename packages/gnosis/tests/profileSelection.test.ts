@@ -137,10 +137,10 @@ describe('two instances, two corpora', () => {
     expect(betaIndex['indexPath']).toBe(join(corpus.repoRoot, 'beta', 'index.db'));
 
     const fromAlpha = jsonOf(
-      (await runCli(['retrieve', 'betaknowledge', '--adapter', 'fts5', '--profile', alpha, '--json'])).stdout
+      (await runCli(['search', 'betaknowledge', '--adapter', 'fts5', '--profile', alpha, '--json'])).stdout
     );
     const fromBeta = jsonOf(
-      (await runCli(['retrieve', 'alphaknowledge', '--adapter', 'fts5', '--profile', beta, '--json'])).stdout
+      (await runCli(['search', 'alphaknowledge', '--adapter', 'fts5', '--profile', beta, '--json'])).stdout
     );
 
     expect(sourcePaths(fromAlpha).some(path => path.includes('beta'))).toBe(false);
@@ -148,7 +148,7 @@ describe('two instances, two corpora', () => {
 
     // The absence above is only evidence if each index answers its OWN corpus.
     const ownAlpha = jsonOf(
-      (await runCli(['retrieve', 'alphaknowledge', '--adapter', 'fts5', '--profile', alpha, '--json'])).stdout
+      (await runCli(['search', 'alphaknowledge', '--adapter', 'fts5', '--profile', alpha, '--json'])).stdout
     );
     expect(sourcePaths(ownAlpha).every(path => path.includes('alpha'))).toBe(true);
     expect(ownAlpha['count']).toBeGreaterThan(0);

@@ -18,7 +18,7 @@ import {
   buildCorpusManifest,
   readManifestDigest,
   readManifestSourceIdentity,
-  serializeCorpusManifest,
+  serializeCorpusManifest
 } from '../src/corpusManifest.js';
 
 const ALPHA: ManifestSource = {

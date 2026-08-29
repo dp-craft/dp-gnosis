@@ -31,8 +31,8 @@ const envWith = (configDir: string, extra: NodeJS.ProcessEnv = {}): NodeJS.Proce
 
 describe('isInstalled', () => {
   it('is true only when a node_modules PATH SEGMENT contains the package', () => {
-    expect(isInstalled('/usr/local/lib/node_modules/@dp/gnosis/dist')).toBe(true);
-    expect(isInstalled('/home/u/proj/node_modules/@dp/gnosis/dist')).toBe(true);
+    expect(isInstalled('/usr/local/lib/node_modules/dp-gnosis/dist')).toBe(true);
+    expect(isInstalled('/home/u/proj/node_modules/dp-gnosis/dist')).toBe(true);
   });
 
   it('is false in a checkout, and false for a mere substring match', () => {

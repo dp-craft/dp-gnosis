@@ -67,7 +67,7 @@ const retrieveFrom = (
   instance: Instance,
   extra: readonly string[]
 ): readonly string[] => [
-  'retrieve',
+  'search',
   'vatszabaly',
   '--adapter',
   'fts5',
@@ -90,7 +90,7 @@ describe('a domain the shipped profile never declares', () => {
     const found = jsonOf(
       (
         await runCli([
-          'retrieve',
+          'search',
           'vatszabaly',
           '--adapter',
           'fts5',

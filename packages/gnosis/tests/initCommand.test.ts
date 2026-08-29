@@ -18,7 +18,7 @@ import { configHome } from '../src/env.js';
 import { ATOMS_OWNER_FILE } from '../src/ingest.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
 import { cliInvocation } from '../src/invocation.js';
-import { USER_PROFILE_FILE, atomsDir, dataRoot, fts5IndexPath, ingestProfilePath } from '../src/paths.js';
+import { atomsDir, dataRoot, fts5IndexPath, ingestProfilePath, USER_PROFILE_FILE } from '../src/paths.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 import { activeProfile } from '../src/vocabulary.js';
 

@@ -1,9 +1,9 @@
 /**
- * The SERVING-path answer synthesiser: `answer --synthesize`, opt-in.
+ * The SERVING-path answer synthesiser: `ask --synthesize`, opt-in.
  *
  * OPT-IN, not always-on — with the flag absent nothing here is imported into a
  * decision, so the pack a caller gets is byte-identical to the one every
- * recorded `answer` output was produced with. A synthesis is a network hop and
+ * recorded `ask` output was produced with. A synthesis is a network hop and
  * a second failure surface, and it MUST NOT be paid by a caller who did not
  * ask for it.
  *
@@ -130,7 +130,7 @@ interface Endpoint {
 }
 
 const request = (model: string): string =>
-  `answer --synthesize: synthesiser model "${model}" was requested`;
+  `ask --synthesize: synthesiser model "${model}" was requested`;
 
 const requirement = (model: string): string =>
   ` — llama-swap MUST serve a chat model under the id "${model}"; `;

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Development workspace for @dp/gnosis — the engine and its benchmark, extracted from AiChatney so the quality gate lives in the same repository as the change it gates.",
+  "description": "Development workspace for dp-gnosis — the engine and its benchmark, extracted from AiChatney so the quality gate lives in the same repository as the change it gates.",
   "license": "GPL-3.0-or-later",
   "engines": {
     "node": ">=22"

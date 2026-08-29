@@ -1,13 +1,16 @@
-<!-- LLM-PRIMARY: The gnosis engine and its CLI contract — data layout, exit codes, the whole flag vocabulary, output formats, `answer` and `--synthesize`, the `--json` key shape, adapters, configuration and profiles, plus the MANDATORY query-rephrasing rules and the LLM integration prompt. Authoring rules are in AUTHORING.md; consumer integration in INTEGRATION.md. -->
+<!-- LLM-PRIMARY: The gnosis engine and its CLI contract — data layout, exit codes, the whole flag vocabulary, output formats, `ask` and `--synthesize`, the `--json` key shape, adapters, configuration and profiles. Query phrasing and the LLM tool prompt are in QUERYING.md; the reranker and the dense/hybrid routes in OPTIONAL.md; authoring rules in AUTHORING.md; consumer integration in INTEGRATION.md. -->
 
 # dp-gnosis — the engine and its CLI
 
 Retrieval over a curated vault of markdown **atoms** — one document chunked into ~3.2k-char, frontmatter-tagged units, ranked by BM25. No embeddings, no server, no network.
 
-This file is the **CLI reference**. Three neighbours own the rest:
+This file answers **what do I type, and what comes back**. Each neighbour owns one other question:
 
 | I want to… | Read |
 |---|---|
+| Phrase a query so a lexical engine finds it, or wire gnosis into an agent | `packages/gnosis/QUERYING.md` |
+| Set up the reranker, or use a dense / hybrid research adapter | `packages/gnosis/OPTIONAL.md` |
+| Configure an instance — profiles, domains, `corpusRoots`, the environment | `packages/gnosis/CONFIGURATION.md` |
 | Write documents so they become retrievable atoms | `packages/gnosis/AUTHORING.md` |
 | Serve this vault to an MCP client, Obsidian or another consumer | `packages/gnosis/INTEGRATION.md` |
 | Change retrieval quality, or read the measured state | `handbook/GNOSIS-GUIDE.md` |
@@ -32,7 +35,7 @@ Every path is owned by `src/paths.ts` and anchored on that file's own location �
 
 `npm run gnosis -- <command> [args] [flags]` (script: `tsx packages/gnosis/src/cli/main.ts`).
 
-A bare invocation, `--help` or `-h` prints help and exits 0. An **unknown flag is a hard error, never ignored** — a silently dropped `--jsn` would hand an agent a wrong answer under a success code.
+A bare invocation, `--help` or `-h` prints help and exits 0; `--version` or `-v` prints the version and exits 0. An **unknown flag is a hard error, never ignored** — a silently dropped `--jsn` would hand an agent a wrong answer under a success code.
 
 ### Exit codes
 
@@ -61,12 +64,20 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 
 | Command | Positionals | Honoured flags |
 |---|---|---|
+| `init` | **one or more corpus directories**, each ABSOLUTE or `~/`-prefixed. None is exit 2; a relative one is exit 2 naming it, because a scope that moves with the shell is a different vault per terminal | `--repo-root` (the base a relative corpus root resolves against; defaults to the data root, NOT the frozen repo root), `--atoms-dir`, `--index-path`, `--json` |
+| `demo` | **none** (passing one is exit 2) | `--adapter`, `--json`, `-k`. `--atoms-dir`, `--index-path`, `--repo-root` and `--profile` are **REFUSED at exit 2** through the standard unknown-flag wording — `demo` owns its paths by construction and cannot honour them; see below |
+| `doctor` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `--profile`, `--json`. Its checks include `rerank` — see `packages/gnosis/OPTIONAL.md` § Setting up the reranker |
 | `ingest` | **none** (passing one is exit 2) | `--atoms-dir`, `--repo-root`, `--json` |
 | `enrich` | none | `--atoms-dir`, `--enrichment`, `--limit`, `--enrich-model`, `--profile`, `--json` |
 | `index` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--enrichment`, `--body-source`, `--keyword-filter`, `--enrichment-columns`, `--json` |
-| `retrieve <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` / `--rerank-pool` |
-| `answer <query…>` | query terms, joined with spaces | every `retrieve` flag except `--flat` and `--format xml`, both exit 2 |
+| `update` | **none** (passing one is exit 2 — it is `ingest`'s refusal, and `index` never runs) | the union of `ingest` and `index`: `--atoms-dir`, `--repo-root`, `--gold-ids`, `--adapter`, `--index-path`, `--enrichment`, `--body-source`, `--keyword-filter`, `--enrichment-columns`, `--profile`, `--json` |
+| `search <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` / `--rerank-pool` |
+| `ask <query…>` | query terms, joined with spaces | every `search` flag except `--flat` and `--format xml`, both exit 2 |
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
+
+`update` runs `ingest` then `index` as ONE command — the pair that MUST NOT be split, because an `ingest` alone restamps the corpus digest while the index beside it still carries the old one and the next query refuses. Its exit code is the **more severe of the two hops**: an `ingest` that exits 3 (files skipped, each with a reason) followed by an `index` that exits 0 makes `update` exit **3**, never 0 — `exit 3` already means "real output was produced AND something was refused", and a caller reading 0 would never learn files were skipped. An `ingest` that exits **2** stops the command before `index` runs at all. Both hops are reported: with `--json`, `data` carries `ingest` and `index` under their own keys (`index` is `null` when it never ran), and the text shows both renderings in order.
+
+`demo` needs no corpus, no profile and no declared instance: it ingests, indexes and searches **this package's own documentation** (every `.md` named by `paths.ts:DEMO_CORPUS_ROOTS`, resolved from the package directory) and prints the ranked result. Its data lives in a FIXED `demo/` subtree under the resolved runtime root — `<dataRoot>/benchmark-data/cache/demo/atoms` and `<dataRoot>/benchmark-data/cache/demo/index/`, derived and disposable like the bench work directory beside it — and it **cannot** use the default atoms or index paths, so it can never touch, prune or claim a real vault. That is also why `--atoms-dir`, `--index-path`, `--repo-root` and `--profile` are refused on it at exit 2 rather than ignored: a flag no command can honour MUST NOT look accepted. Re-running it is safe and idempotent. It exits 0 when it produced hits; producing none is reported as a FAULT at exit 3, never as a quiet 0.
 
 ### Flags
 
@@ -82,30 +93,30 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `--golden-set` | file | `packages/gnosis/golden/golden-set.v1.json` |
 | `--gold-ids` | dir or file — **`ingest` only**, the golden set(s) the EXACT-BODY dedupe breaks ties against: when two source documents produce a byte-identical body, the judged copy survives. A path that cannot be read exits **3** naming it — ingest MUST NOT dedupe against a gold set it could not read | the loaded profile's `goldIdsPath`, which the shipped profiles declare as `packages/gnosis/golden`; a profile that declares none ingests with NO gold tie-break |
 | `-k` | positive integer | `5` |
-| `--format` | `text\|json\|xml` — **`retrieve` and `answer`**; `xml` is **`retrieve` only**, since the answer pack is already a delimited block | `text` |
-| `--json` | boolean — alias for `--format json`, on `retrieve` and `answer` | off |
-| `--type` | comma-separated atom types — **`retrieve` and `answer`**; an atom passes when its type is in the list. The vocabulary is profile-derived, so it is printed by `--help` rather than restated here. `--types` (plural) is an unknown flag, exit 2 | unset — every type except the profile's `defaultExcludedTypes`; `--include-history` restores those |
+| `--format` | `text\|json\|xml` — **`search` and `ask`**; `xml` is **`search` only**, since the answer pack is already a delimited block | `text` |
+| `--json` | boolean — alias for `--format json`, on `search` and `ask` | off |
+| `--type` | comma-separated atom types — **`search` and `ask`**; an atom passes when its type is in the list. The vocabulary is profile-derived, so it is printed by `--help` rather than restated here. `--types` (plural) is an unknown flag, exit 2 | unset — every type except the profile's `defaultExcludedTypes`; `--include-history` restores those |
 | `--domain` | comma-separated knowledge domains — the vocabulary is profile-derived, so `--help` prints it rather than this table restating it. An unknown value exits 2 | unset — every domain the loaded profile declares |
-| `--exclude-type` | comma-separated atom types — **`retrieve` and `answer`**; REPLACES the default exclusion with the types named. Each value MUST be in the profile's type vocabulary or the CLI exits 2. Exit 2 alongside `--type` or `--include-history` — one filter source only | the profile's `defaultExcludedTypes`, today `feature-log, benchmark, review, brainstorm` |
-| `--include-history` | boolean — **`retrieve` and `answer`**, search the WHOLE type vocabulary, restoring the four types an unfiltered retrieve leaves out. Exit 2 alongside `--type` or `--exclude-type` | off |
+| `--exclude-type` | comma-separated atom types — **`search` and `ask`**; REPLACES the default exclusion with the types named. Each value MUST be in the profile's type vocabulary or the CLI exits 2. Exit 2 alongside `--type` or `--include-history` — one filter source only | the profile's `defaultExcludedTypes`, today `feature-log, benchmark, review, brainstorm` |
+| `--include-history` | boolean — **`search` and `ask`**, search the WHOLE type vocabulary, restoring the four types an unfiltered retrieve leaves out. Exit 2 alongside `--type` or `--exclude-type` | off |
 | `--budget-mode` | `bytes\|tokens` — how `--max-tokens` is counted: `bytes` keeps the conservative UTF-8 upper bound, `tokens` counts with the served model's tokenizer via `POST /upstream/<model>/tokenize`. A failed startup probe exits non-zero — silent fallback to `bytes` is FORBIDDEN | `bytes` |
-| `--max-tokens` | non-negative integer — **`retrieve` and `answer`**, the injection budget. On `answer` the pack chrome is reserved from it before the fit, so the ceiling bounds the block and not only the atoms inside it. HOW it is counted is selected by `--budget-mode`: the default `bytes` charges a **conservative UPPER BOUND estimated as UTF-8 byte length**, `tokens` charges the served model's real token count | `64000` |
-| `--rephrase` | boolean — **`retrieve` and `answer`**, rewrite the query into BM25 keywords first. **Measured net-negative — see below** | off |
-| `--prf` | boolean — **`retrieve` and `answer`**, RM3 pseudo-relevance feedback: the top `--prf-docs` atoms of the first pass build a weighted term model and the ranking is rescored as `Σ_t w_t · (−bm25_t(d))` over fts5's own scorer. **`fts5` only** — an EXPLICIT `--prf` on any other adapter exits 2 rather than being ignored | **ON** through the shipped profiles' `defaultPrf`, at the measured cell `SERVED_PRF_PARAMS` (`src/prf.ts`); OFF for a profile that states none, and off wherever `--no-prf` is passed |
-| `--no-prf` | boolean — **`retrieve` and `answer`**, turn a profile's `defaultPrf` OFF and run the plain first pass. It is what keeps the unexpanded arm reachable, so a losing leg stays cheap to re-test. Exit 2 alongside `--prf` — a contradiction is refused, never resolved | off |
+| `--max-tokens` | non-negative integer — **`search` and `ask`**, the injection budget. On `ask` the pack chrome is reserved from it before the fit, so the ceiling bounds the block and not only the atoms inside it. HOW it is counted is selected by `--budget-mode`: the default `bytes` charges a **conservative UPPER BOUND estimated as UTF-8 byte length**, `tokens` charges the served model's real token count | `64000` |
+| `--rephrase` | boolean — **`search` and `ask`**, rewrite the query into BM25 keywords first. **Measured net-negative — see below** | off |
+| `--prf` | boolean — **`search` and `ask`**, RM3 pseudo-relevance feedback: the top `--prf-docs` atoms of the first pass build a weighted term model and the ranking is rescored as `Σ_t w_t · (−bm25_t(d))` over fts5's own scorer. **`fts5` only** — an EXPLICIT `--prf` on any other adapter exits 2 rather than being ignored | **ON** through the shipped profiles' `defaultPrf`, at the measured cell `SERVED_PRF_PARAMS` (`src/prf.ts`); OFF for a profile that states none, and off wherever `--no-prf` is passed |
+| `--no-prf` | boolean — **`search` and `ask`**, turn a profile's `defaultPrf` OFF and run the plain first pass. It is what keeps the unexpanded arm reachable, so a losing leg stays cheap to re-test. Exit 2 alongside `--prf` — a contradiction is refused, never resolved | off |
 | `--prf-docs` | positive integer — how many first-pass atoms feed the model. Overrides that ONE member of the resolved cell; requires a feedback pass (`--prf`, or a profile default not turned off by `--no-prf`) | `10` — the profile's `defaultPrf.fbDocs`, and `DEFAULT_PRF_PARAMS.fbDocs` (`src/prf.ts`) when the profile states none |
 | `--prf-terms` | positive integer — how many expansion terms survive the mass cut. Overrides that ONE member of the resolved cell; requires a feedback pass | `40` — the profile's `defaultPrf.fbTerms` (`SERVED_PRF_PARAMS`); `20` — `DEFAULT_PRF_PARAMS.fbTerms` (`src/prf.ts`) — when the profile states none |
 | `--prf-alpha` | `0`…`1` — the expansion model's share of the mass; the original query carries `1 - a`. Out-of-range or non-numeric FAILS loudly, never clamps. Overrides that ONE member of the resolved cell; requires a feedback pass | `0.5` — the profile's `defaultPrf.alpha`, and `DEFAULT_PRF_PARAMS.alpha` (`src/prf.ts`) when the profile states none |
-| `--rerank` | boolean — **`retrieve` and `answer`**, rerank a pool of at least `RERANK_K_INIT` and RRF-fuse that order with the first pass | off |
+| `--rerank` | boolean — **`search` and `ask`**, rerank a pool of at least `RERANK_K_INIT` and RRF-fuse that order with the first pass | off |
 | `--rerank-model` | cross-encoder id — **requires `--rerank`** | `RERANK_MODEL_ID` (`qwen3-reranker-4b`) |
 | `--rerank-profile` | `shipped\|beir-ce` — the FUSION RULE. Unknown name fails loudly, listing both. **Requires `--rerank`** | `shipped` |
 | `--rerank-weight` | `0`…`1` — the reranked order's RRF weight; the first pass carries `1 - w`. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** | `0.75` |
-| `--rerank-pool` | whole number ≥ `1` — **`retrieve` and `answer`**, how many first-pass candidates the reranker scores. It is a FLOOR under the pool, never a cap: a `-k` deeper than it keeps its own depth. A fraction, a zero or a non-number FAILS loudly, never rounds. The loaded profile states the same depth as `rerankPoolK` and this flag outranks it. **Requires `--rerank`** | `100` — `RERANK_K_INIT` (`src/config.ts`), unless the profile states `rerankPoolK` |
-| `--min-relevance` | `0`…`1` — **`retrieve` and `answer`**, OPT-IN calibrated relevance floor. Drops every delivered atom whose calibrated probability is below it — strictly SUBTRACTIVE, so it never reorders and never changes `poolSize`; each drop is reported. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** and a reranker carrying a measured scale (`RERANK_CALIBRATION`, `src/config.ts`) | unset — no floor, and every retrieved atom is delivered |
-| `--max-per-doc` | non-negative integer — **`retrieve` and `answer`**, at most this many atoms from any ONE source document. The cap is applied to the POOL before the `-k` slice, so a dropped atom frees a slot a lower-ranked document takes; the pool is deepened to `max(k * cap, GROUPED_POOL_FLOOR)` (100) so a tighter cap reaches the extra documents it needs, and when the cap still leaves fewer than `-k` atoms the run says so in `note` rather than under-delivering silently. `--max-per-doc 0` caps nothing. Non-integer or negative FAILS loudly. Exit 2 alongside `--flat` — flat means ungrouped, so a per-document cap would have nothing to cap | `2` — `DEFAULT_MAX_PER_DOC` (`src/cli/grouping.ts`) |
-| `--flat` | boolean — **`retrieve` only** (`answer` refuses it, exit 2), deliver the ranking ungrouped: no per-document cap, no reading-order arrangement and no `(i/n)` position marker, byte for byte the rendering that preceded grouping | off |
-| `--synthesize` | boolean — **`answer` only**, synthesize an answer over the pack with the 27B. Every `[^atom-id]` MUST resolve or the command hard-fails; `INSUFFICIENT` is an allowed answer | off |
-| `--field-weights` | `col=w[,col=w]` over the fts5 columns `body`, `short`, `long`, `doc_desc`, `keywords`, `entities`, `questions` — **`retrieve` and `answer`**, BM25F column weights stated as OVERRIDES over the shipped vector, so an unnamed column keeps its default and `--field-weights questions=2` leaves `body` where it was. An unknown column name exits 2 listing the vocabulary | `body=1` with every enrichment column at `0` — `DEFAULT_FIELD_WEIGHTS` (`src/config.ts`); an absent sidecar therefore reproduces today's ranking byte for byte |
+| `--rerank-pool` | whole number ≥ `1` — **`search` and `ask`**, how many first-pass candidates the reranker scores. It is a FLOOR under the pool, never a cap: a `-k` deeper than it keeps its own depth. A fraction, a zero or a non-number FAILS loudly, never rounds. The loaded profile states the same depth as `rerankPoolK` and this flag outranks it. **Requires `--rerank`** | `100` — `RERANK_K_INIT` (`src/config.ts`), unless the profile states `rerankPoolK` |
+| `--min-relevance` | `0`…`1` — **`search` and `ask`**, OPT-IN calibrated relevance floor. Drops every delivered atom whose calibrated probability is below it — strictly SUBTRACTIVE, so it never reorders and never changes `poolSize`; each drop is reported. Out-of-range or non-numeric FAILS loudly, never clamps. **Requires `--rerank`** and a reranker carrying a measured scale (`RERANK_CALIBRATION`, `src/config.ts`) | unset — no floor, and every retrieved atom is delivered |
+| `--max-per-doc` | non-negative integer — **`search` and `ask`**, at most this many atoms from any ONE source document. The cap is applied to the POOL before the `-k` slice, so a dropped atom frees a slot a lower-ranked document takes; the pool is deepened to `max(k * cap, GROUPED_POOL_FLOOR)` (100) so a tighter cap reaches the extra documents it needs, and when the cap still leaves fewer than `-k` atoms the run says so in `note` rather than under-delivering silently. `--max-per-doc 0` caps nothing. Non-integer or negative FAILS loudly. Exit 2 alongside `--flat` — flat means ungrouped, so a per-document cap would have nothing to cap | `2` — `DEFAULT_MAX_PER_DOC` (`src/cli/grouping.ts`) |
+| `--flat` | boolean — **`search` only** (`ask` refuses it, exit 2), deliver the ranking ungrouped: no per-document cap, no reading-order arrangement and no `(i/n)` position marker, byte for byte the rendering that preceded grouping | off |
+| `--synthesize` | boolean — **`ask` only**, synthesize an answer over the pack with the 27B. Every `[^atom-id]` MUST resolve or the command hard-fails; `INSUFFICIENT` is an allowed answer | off |
+| `--field-weights` | `col=w[,col=w]` over the fts5 columns `body`, `short`, `long`, `doc_desc`, `keywords`, `entities`, `questions` — **`search` and `ask`**, BM25F column weights stated as OVERRIDES over the shipped vector, so an unnamed column keeps its default and `--field-weights questions=2` leaves `body` where it was. An unknown column name exits 2 listing the vocabulary | `body=1` with every enrichment column at `0` — `DEFAULT_FIELD_WEIGHTS` (`src/config.ts`); an absent sidecar therefore reproduces today's ranking byte for byte |
 | `--enrichment` | file — **`enrich` and `index`**; the JSONL sidecar `enrich` appends to and `index` merges into the enrichment columns. On `index` it is strictly OPT-IN: with the flag absent every enrichment column is empty and the build is what it has always been | `enrichment.jsonl` beside the atoms directory on `enrich` (`ENRICHMENT_FILE_NAME`, `src/cli/enrichCommand.ts`); **no default on `index`**, which builds unenriched unless the flag names a file |
 | `--keyword-filter` | `none` or `novel` — **`index` only**, WHETHER a generated keyword that merely RE-EMITS body vocabulary reaches the index. Under `novel` a keyword is dropped when EVERY term it analyses to is already a term of the atom's analysed body: it adds no posting, and `bm25()` normalises by the row's TOTAL token count, so it can only dilute. The build stamps what it kept and dropped, and `index` prints both with the ECHO RATE. **That rate is corpus- and language-dependent and MUST be read off the run's own report, never assumed** — measured **71.3 %** of 300 keywords on the `vault` corpus and **78.7 %** of 1018 on `nfcorpus`, and neither number predicts a third corpus, a different generator, or another language. A name outside the vocabulary exits 2 | `none` — every generated keyword, `DEFAULT_KEYWORD_FILTER` (`src/config.ts`); the index every recorded number was measured on |
 | `--body-source` | `atom`, `long` or `long+keywords` — **`index` only**, WHERE the fts5 `body` column takes its text from. A generated source REPLACES the atom body with the sidecar's text; `--field-weights body=0` cannot express that, because `bm25()` normalises by the row's TOTAL token count and a populated body still lengthens every row. An atom with no sidecar record gets an EMPTY body under a generated source — the build reports `emptyBodyAtoms` and warns, without moving the exit code. A name outside the vocabulary exits 2 | `atom` — the atom's own body, `DEFAULT_BODY_SOURCE` (`src/config.ts`); the index every recorded number was measured on |
@@ -113,10 +124,11 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `--limit` | positive integer — **`enrich` only**, enrich at most this many atoms that are not already fresh. A pilot bound, so a bad prompt costs minutes instead of hours. Non-integer or non-positive exits 2 | unset — every not-yet-fresh atom is enriched |
 | `--enrich-model` | generator id — **`enrich` only**, the chat model the records are generated by and STAMPED with. A model change makes every record written under the previous one stale, so the next run regenerates them | `qwen35b-a3b-q5km-ctx130k-mtp-frog-coding` — `ENRICH_MODEL_ID` (`src/config.ts`), overridable by `DP_GNOSIS_ENRICH_MODEL` |
 | `--help` / `-h` | boolean | off |
+| `--version` / `-v` | boolean — prints this build's version **alone** and exits 0, resolved before any profile or `config.json` is read, so it answers even when that file is malformed. It outranks `--help` when both are passed | off; the value is READ from the package manifest (`packageVersion()`, `src/paths.ts`), never restated in TypeScript |
 
-**RM3 feedback is a SERVED default on both shipped profiles**, at the MEASURED frozen cell `fbDocs 10 · fbTerms 40 · alpha 0.5` — owned by `SERVED_PRF_PARAMS` (`src/prf.ts`) and stated as data by `profiles/default.profile.json` and `profiles/hu-tax.profile.json`. It is a **retrieve-time** default exactly as `defaultExcludedTypes` is: nothing in ingest, the port or an adapter reads it, so the bench measures the unexpanded first pass and every recorded number stands. Every run that expands REPORTS the cell it expanded under: `prf` `{fbDocs, fbTerms, alpha, source}` in `--json` and one `retrieve: prf …` line in the text rendering, on `retrieve` and `answer` alike. Both are **absent when no pass ran**, so presence is the signal — exactly as `rerankScore` says a reranker scored an atom; `source` names which switch turned it on, the one fact the cell cannot carry. Resolution is **explicit flag > profile default > OFF**; `--no-prf` turns the profile default off, `--prf` and `--no-prf` together exit 2, and a `--prf-*` flag overrides one member of whichever cell won. A profile default on a non-`fts5` adapter does NOT refuse the run — it retrieves **unexpanded** and says so in `note`, because refusing would make `--adapter linear` unusable and ignoring it silently would be a wrong answer reported as a clean one. Only an EXPLICIT `--prf` there exits 2.
+**RM3 feedback is a SERVED default on both shipped profiles**, at the MEASURED frozen cell `fbDocs 10 · fbTerms 40 · alpha 0.5` — owned by `SERVED_PRF_PARAMS` (`src/prf.ts`) and stated as data by `profiles/default.profile.json` and `profiles/hu-tax.profile.json`. It is a **retrieve-time** default exactly as `defaultExcludedTypes` is: nothing in ingest, the port or an adapter reads it, so the bench measures the unexpanded first pass and every recorded number stands. Every run that expands REPORTS the cell it expanded under: `prf` `{fbDocs, fbTerms, alpha, source}` in `--json` and one `search: prf …` line in the text rendering, on `search` and `ask` alike. Both are **absent when no pass ran**, so presence is the signal — exactly as `rerankScore` says a reranker scored an atom; `source` names which switch turned it on, the one fact the cell cannot carry. Resolution is **explicit flag > profile default > OFF**; `--no-prf` turns the profile default off, `--prf` and `--no-prf` together exit 2, and a `--prf-*` flag overrides one member of whichever cell won. A profile default on a non-`fts5` adapter does NOT refuse the run — it retrieves **unexpanded** and says so in `note`, because refusing would make `--adapter linear` unusable and ignoring it silently would be a wrong answer reported as a clean one. Only an EXPLICIT `--prf` there exits 2.
 
-**An unfiltered `retrieve` excludes `defaultExcludedTypes`** — never on ingest, so those types stay ingested and indexed, and `--include-history` searches them. **Corrected 2026-08-22 (`16` § 5 C7/C9): "never in the bench" was false.** The bench subtracts the SAME list when it derives `vault` / `vault-hu` (`fetch/vault.ts`, off `--include-history`); it is untouched only on a non-derived dataset. Recorded numbers still stand — every one was measured under the same filter — but a CLI result is still not a bench result: the CLI drops these types while scanning one index over the whole vault, the bench indexes only the survivors, so the two compute different collection statistics.
+**An unfiltered `search` excludes `defaultExcludedTypes`** — never on ingest, so those types stay ingested and indexed, and `--include-history` searches them. **Corrected 2026-08-22 (`16` § 5 C7/C9): "never in the bench" was false.** The bench subtracts the SAME list when it derives `vault` / `vault-hu` (`fetch/vault.ts`, off `--include-history`); it is untouched only on a non-derived dataset. Recorded numbers still stand — every one was measured under the same filter — but a CLI result is still not a bench result: the CLI drops these types while scanning one index over the whole vault, the bench indexes only the survivors, so the two compute different collection statistics.
 
 **The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `handbook/GNOSIS-BASELINES.md` § Phase D.
 
@@ -124,12 +136,12 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 
 #### `--rephrase` — the rules below, executed
 
-`--rephrase` sends the query to a local chat model (`qwen38-27b-q4kxl-ctx130k-mtp-coding`, override with `DP_GNOSIS_LLM_MODEL`) served by the same llama-swap instance as the reranker (`http://127.0.0.1:9292`, override with `DP_GNOSIS_RERANK_URL`), and searches what comes back. The system prompt is § Query rephrasing's six rules plus its example table — the flag EXECUTES the documented rules rather than owning a second set.
+`--rephrase` sends the query to a local chat model (`qwen38-27b-q4kxl-ctx130k-mtp-coding`, override with `DP_GNOSIS_LLM_MODEL`) served by the same llama-swap instance as the reranker (`http://127.0.0.1:9292`, override with `DP_GNOSIS_RERANK_URL`), and searches what comes back. The system prompt is `packages/gnosis/QUERYING.md` § Query rephrasing's five rules plus its example table — the flag EXECUTES the documented rules rather than owning a second set.
 
 | Property | Behaviour |
 |---|---|
 | Opt-in | Without the flag the retrieval path is byte-identical to what it always was — no second network hop, no second failure surface |
-| Reported | `query` stays what you typed; the rewrite is reported beside it as `queryRewritten` (JSON + xml attribute), and as one `retrieve: rephrased "…" -> "…"` line in text |
+| Reported | `query` stays what you typed; the rewrite is reported beside it as `queryRewritten` (JSON + xml attribute), and as one `search: rephrased "…" -> "…"` line in text |
 | Cached | Keyed by `(model, prompt version, query)` under `<indexPath>.rephrase-cache`; a hit costs no network, so a warm cache works with llama-swap stopped. A cache read or write failure degrades silently |
 | Refusal | A server that is down, does not serve the model, or answers with no usable line still retrieves — with the query **as typed** — but exits **3** with the refusal in `note`. A skipped rewrite never reports as a rephrased run |
 | Cost | 0.6–1.4 s warm. A COLD llama-swap load of that model measured 69 s, paid once per eviction |
@@ -155,9 +167,9 @@ Rewriting by hand and passing the result is still the cheapest path; the flag ex
 
 Exit codes are identical across formats; `xml` is a rendering, never a different search.
 
-### `answer` — the same ranking as one citable knowledge pack
+### `ask` — the same ranking as one citable knowledge pack
 
-`answer` runs **the same pipeline as `retrieve`** — same flags, same ranking, same rerank, same relevance floor, same exit codes — and renders it as ONE delimited block, ready to paste into a prompt:
+`ask` runs **the same pipeline as `search`** — same flags, same ranking, same rerank, same relevance floor, same exit codes — and renders it as ONE delimited block, ready to paste into a prompt:
 
 ```
 <<<GNOSIS-KNOWLEDGE-PACK>>>
@@ -182,11 +194,11 @@ confidence: ok   documents: 2   atoms: 4   tokens: 5120 of 64000 (bytes)
 | Citable | every atom carries `[^<atom-id>]`, and `citations[]` lists those ids in pack order. Every `[^id]` in the block resolves to an entry of `atoms[]` |
 | Contained | every corpus-derived string — body, summary, document title, origin path, query — has each chat-template marker (`<\|im_start\|>`, `[INST]`, `<<SYS>>`, a pack delimiter, a leading `System:` …) wrapped as `[[neutralised:<marker>]]` and counted in `neutralised`. Lossy but VISIBLE: deleting it silently would be an edit of the corpus |
 | Budgeted as what it EMITS | the budget charges each atom the chunk the pack renders — header, citation and body — and the fixed chrome is reserved from `--max-tokens` before the fit, so the ceiling bounds the block. The skip and note report is outside that reserve: it exists because the budget ran out, and hiding it would hide the one thing to act on |
-| Reported | `--json` adds `documents`, `maxTokens`, `packTokens`, `pack` (the whole block), `citations[]` and `neutralised` to the retrieve key set, and keeps `command`, `adapter`, `query`, `queryRewritten`, `k`, `mode`, `indexState`, `count`, `poolSize`, `budgetMode`, `confidence`, `atoms[]`, `skipped[]`, `note` |
+| Reported | `--json` adds `documents`, `maxTokens`, `packTokens`, `pack` (the whole block), `citations[]` and `neutralised` to the search key set, and keeps `command`, `adapter`, `query`, `queryRewritten`, `k`, `mode`, `indexState`, `count`, `poolSize`, `budgetMode`, `confidence`, `atoms[]`, `skipped[]`, `note` |
 
 #### `--synthesize` — an answer over the pack, or nothing
 
-`answer --synthesize` sends the rendered pack and the question AS TYPED to a local chat model and prints its answer ABOVE the pack; the pack follows unchanged, as the evidence for it. Off by default — without the flag the `answer` path is byte-identical, including its `--json` key set.
+`ask --synthesize` sends the rendered pack and the question AS TYPED to a local chat model and prints its answer ABOVE the pack; the pack follows unchanged, as the evidence for it. Off by default — without the flag the `ask` path is byte-identical, including its `--json` key set.
 
 | | |
 |---|---|
@@ -215,8 +227,8 @@ Every object carries `exitCode`. In `--json` mode one object goes to stdout even
 | `ingest` | `command`, `written`, `pruned` (atoms DELETED because their source file is gone — the one destructive number the run produces; `0` on a run that destroyed nothing), `skipped[{source,title,reasons[]}]`, `duplicates` (sources dropped as a byte-identical body of an atom already kept) |
 | `enrich` | `command`, `model`, `promptVersion`, `atoms`, `enriched`, `skipped`, `sidecar`, `retried` (atoms that decoded only after a seed bump) and `retriedIds` (which ones — a provenance fact, since those records were generated at a bumped seed), plus `note` when a refusal STOPPED the run (exit 3) |
 | `index` | `command`, `adapter`, `built`, `indexPath` (`null` when nothing was built), `note`, `reason` (present ONLY on the `index-empty` exit 3 — an index WAS built, so `built` stays `true`, and it holds no atoms), `enrichmentRecords` (**`fts5` with `--enrichment` only** — how many atoms the build MERGED a sidecar record into, read back off the index's own `enrichment_records` stamp rather than recounted from the sidecar, so it reports what LANDED and not what was offered), `enrichmentWarning` (present ONLY when `--enrichment` named a file and `enrichmentRecords` is `0` — the index then ranks exactly as an unenriched one. Like the domain-census `warning` it does NOT move the exit code, and it carries its own key so both warnings can fire on one build) |
-| `retrieve` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `prf` (`{fbDocs,fbTerms,alpha,source}` — present ONLY when a feedback pass ran; `source` is `flag` or `profile`), `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable`, when a `--rephrase` / `--rerank` refusal degraded the run, or when `count` is `0` |
-| `answer` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `documents`, `poolSize`, `prf` (as under `retrieve`), `budgetMode`, `maxTokens`, `packTokens`, `confidence`, `pack` (the rendered block verbatim), `citations[]` (its `[^atom-id]`s, in pack order), `atoms[]` (each as under `retrieve`, plus `originIndex`, `originCount`, `headingChain`, `summary` when the atom's frontmatter carried them), `skipped[{id,sourcePath,estimatedTokens}]`, `neutralised`, plus `synthesized` and `answer` (both present with `--synthesize` only), and `note` when an over-budget atom was skipped, a per-document cap shortened the delivery, or a `--rephrase` / `--rerank` refusal degraded the run |
+| `search` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `poolSize`, `prf` (`{fbDocs,fbTerms,alpha,source}` — present ONLY when a feedback pass ran; `source` is `flag` or `profile`), `atoms[{id,title,domain,type,body,score,firstPassScore` + `rerankScore` (reranked runs only)`,sourcePath,originPaths[],matchedTerms[],snippet,scoreNormalised}]`, plus `note` when `indexState` is `unavailable`, when a `--rephrase` / `--rerank` refusal degraded the run, or when `count` is `0` |
+| `ask` | `command`, `adapter`, `query`, `queryRewritten` (present with `--rephrase` only), `k`, `mode`, `indexState`, `count`, `documents`, `poolSize`, `prf` (as under `search`), `budgetMode`, `maxTokens`, `packTokens`, `confidence`, `pack` (the rendered block verbatim), `citations[]` (its `[^atom-id]`s, in pack order), `atoms[]` (each as under `search`, plus `originIndex`, `originCount`, `headingChain`, `summary` when the atom's frontmatter carried them), `skipped[{id,sourcePath,estimatedTokens}]`, `neutralised`, plus `synthesized` and `answer` (both present with `--synthesize` only), and `note` when an over-budget atom was skipped, a per-document cap shortened the delivery, or a `--rephrase` / `--rerank` refusal degraded the run |
 | `bench` | `command`, `markdownPath`, `jsonPath`, `adapters[]`, `skippedAdapters[{name,reason}]`, `corpora[]`, `goldenSet` |
 | any usage failure | `error` |
 
@@ -236,7 +248,7 @@ No manifest beside the atoms dir means there is nothing to compare, which is NOT
 
 | Situation | What the `note` names |
 |---|---|
-| Nothing matched, no type filter in effect (`--include-history`) | that the whole vault was searched, and the phrasing lever — § Query rephrasing |
+| Nothing matched, no type filter in effect (`--include-history`) | that the whole vault was searched, and the phrasing lever — `packages/gnosis/QUERYING.md` § Query rephrasing |
 | Nothing matched WITHIN a type filter | the filter that ran — an explicit `--type` / `--exclude-type` list, or the profile's default exclusion when neither flag was passed — and how to widen it (`--include-history` for the default), then the phrasing lever |
 | `--min-relevance` dropped every atom | the floor and the count it removed (the pool was NOT empty — the query matched) |
 
@@ -271,9 +283,9 @@ npm run gnosis -- ingest --json
 npm run gnosis -- index --adapter fts5
 # index: fts5 — built at <repo>/benchmark-data/cache/index/atoms-fts5.db
 
-# 3. Rank atoms. Query is keywords, NOT a sentence — see § Query rephrasing.
-npm run gnosis -- retrieve "testing strategy layered test model coverage thresholds" -k 5 --json
-# {"command":"retrieve","adapter":"linear","query":"…","k":5,
+# 3. Rank atoms. Query is keywords, NOT a sentence — see QUERYING.md § Query rephrasing.
+npm run gnosis -- search "testing strategy layered test model coverage thresholds" -k 5 --json
+# {"command":"search","adapter":"linear","query":"…","k":5,
 #  "mode":"lexical:bm25-linear","indexState":"ready","count":5,
 #  "atoms":[{"id":"ts-testing-layered-test-model","title":"Layered Test Model",
 #            "domain":"standards","body":"…","score":18.4471,
@@ -307,7 +319,7 @@ npm run gnosis -- index --adapter fts5 --enrichment …/enrichment.jsonl
 
 # 3. WEIGHT the columns. Weights are OVERRIDES, so an unnamed column keeps its
 #    default and `body` stays at 1.
-npm run gnosis -- retrieve "…" --field-weights questions=1,keywords=0.5
+npm run gnosis -- search "…" --field-weights questions=1,keywords=0.5
 ```
 
 **Step 2 reports what LANDED, not what was offered** — the count is read back off the index's own
@@ -337,7 +349,7 @@ ships every enrichment column at `0`, so enrichment is inert until you weight it
 ### `xml` shape
 
 ```bash
-npm run gnosis -- retrieve "functional programming immutability pure functions" -k 1 --format xml
+npm run gnosis -- search "functional programming immutability pure functions" -k 1 --format xml
 ```
 
 ```xml
@@ -369,7 +381,7 @@ npm run gnosis -- retrieve "functional programming immutability pure functions" 
 
 ```xml
 <retrieved_context query="…" adapter="fts5" mode="fts5" indexState="unavailable" count="0">
-  <note>retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with `npm run gnosis -- ingest &lt;path...&gt;`; if the corpus is already ingested, build the index with `npm run gnosis -- index --adapter fts5`</note>
+  <note>search: nothing was searched — no corpus exists at the atoms directory; build it first with `npm run gnosis -- ingest &lt;path...&gt;`; if the corpus is already ingested, build the index with `npm run gnosis -- index --adapter fts5`</note>
 </retrieved_context>
 ```
 
@@ -384,7 +396,7 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 | `minisearch` | `cache/index/atoms-minisearch.json` | **optional** | measured for its load-vs-query cost profile |
 | `lancedb` | `cache/index/atoms-lancedb/` (a tree) | **optional** | LanceDB's BM25 FTS path only — no vectors. A v2-readiness probe |
 
-`minisearch` and `lancedb` are `optionalDependencies` loaded by lazy dynamic import. An absent one is **reported, never hidden**: `index` exits 3 with the loader's own reason, and `retrieve` reports `indexState: "unavailable"` (exit 3). Enable with `npm install` in `packages/gnosis`.
+`minisearch` and `lancedb` are `optionalDependencies` loaded by lazy dynamic import. An absent one is **reported, never hidden**: `index` exits 3 with the loader's own reason, and `search` reports `indexState: "unavailable"` (exit 3). Enable with `npm install` in `packages/gnosis`.
 
 ### Configuration
 
@@ -399,7 +411,7 @@ A root matching **zero** files THROWS, naming that root — a typo would otherwi
 
 ### Analyzers — the chain that builds AND queries an index
 
-An **analyzer** is the token chain `index` runs over every body and `retrieve` runs over every query. `DEFAULT_ANALYZER` is **`porter-fold`**, and every recorded baseline in `handbook/GNOSIS-BASELINES.md` was measured on it. Selected per profile with `defaultAnalyzer` (below) and per bench arm with `--analyzer <id>`; `fts5` only, because it is the only adapter that builds its index with the named chain.
+An **analyzer** is the token chain `index` runs over every body and `search` runs over every query. `DEFAULT_ANALYZER` is **`porter-fold`**, and every recorded baseline in `handbook/GNOSIS-BASELINES.md` was measured on it. Selected per profile with `defaultAnalyzer` (below) and per bench arm with `--analyzer <id>`; `fts5` only, because it is the only adapter that builds its index with the named chain.
 
 | Chain | What it does | Choose it for |
 |---|---|---|
@@ -489,133 +501,10 @@ npm run gnosis -- index  --profile packages/gnosis/profiles/<name>.profile.json
 
 ## Integrating another consumer
 
-The MCP server (`npm run gnosis:mcp`, one tool `gnosis_answer`), the client
+The MCP server (`npm run gnosis:mcp`, one tool `gnosis_ask`), the client
 configuration for opencode / Claude Desktop / Cursor / Zed, the Obsidian route
 and the ingest+index refresh step all live in
 **`packages/gnosis/INTEGRATION.md`**.
-
-## Query rephrasing (MANDATORY before every `retrieve`)
-
-This is a **lexical BM25 engine**. It matches stemmed tokens. It has no idea what a question means.
-
-Measured twice. Rewriting a natural-language question changes ~90% of the top-10 results (raw-vs-rephrased top-10 Jaccard — `minisearch` 0.027 · `linear` 0.074 · `lancedb` 0.108 · `fts5` 0.129), and an LLM-judged relevance pass over 186 blind-scored pairs shows the rewrite is **better**, not merely different:
-
-| metric (mean, 6 needs × 4 adapters) | raw question | rephrased | change |
-|---|---|---|---|
-| precision@10 | 0.20 | 0.80 | **×4** |
-| strict precision@5 (only "directly answers") | 0.09 | 0.58 | **×6** |
-| reciprocal rank of first direct answer | 0.27 | 0.89 | **×3** |
-
-Phrasing is not cosmetic. It is the single largest lever on result quality in this system — larger than the choice of adapter, which is statistically indistinguishable.
-
-| natural-language question | rewritten for the engine | rule |
-|---|---|---|
-| i would like to see testing strategy related info | `testing strategy layered test model coverage thresholds` | drop intent framing; use the terms the documents use |
-| how to start e2e tests | `run e2e playwright test command spec` | "how to start" carries no signal; name the tool |
-| what llm service solutions are available | `llm provider service ollama openrouter gemini anthropic` | enumerate instances — BM25 has no concept of "solutions" |
-| how to use llama-swap | `llama-swap model swap local server` | keep the rare term (high IDF), add context words |
-| architectural requirements of runner | `agentic code runner architecture ownership boundaries design rules` | ambiguous noun → use the full product name |
-| functional programming style | `functional programming immutability pure functions no classes` | expand to the concepts the documents name |
-
-The five rules:
-
-1. **Strip intent words.** "how to", "I want", "please show me", "info about", "available", "related" — high frequency, zero discrimination. They add score mass to documents that match them incidentally.
-2. **Name things as the documents name them.** Query the vocabulary of the corpus, not the vocabulary of the asker.
-3. **Add synonyms by hand.** BM25 has NO synonymy. `e2e` does not match `end-to-end`; `LLM` does not match `language model`. Include both.
-4. **Prefer rare terms.** IDF rewards them. One `llama-swap` outweighs ten `system`s.
-5. **MUST NOT dilute a query that already carries the exact rare term.** This is the measured exception to rule 3. When the user's own words already contain the corpus's domain term, adding synonyms *lowers* precision — the added terms pull in unrelated documents and sink the exact match. `how to use llama-swap` beat its rewrite (P@10 0.60 vs 0.55) for exactly this reason. Rephrase to *supply* a missing domain term, never to decorate one that is already there.
-
-These rules are also EXECUTABLE: `retrieve --rephrase` hands the question to a local chat model under exactly this prompt and searches its rewrite (§ CLI → `--rephrase`). The flag is opt-in and its rewrite is reported, so a caller can always see — and check — what was actually searched.
-
-**Measured 2026-08-18, the flag does NOT reproduce the rules above.** Against the same golden topics the hand rewrite improves, the model's rewrite is inert on Hungarian (nDCG@10 +0.0086, p=0.9164) and significantly harmful on English (nDCG@10 −0.0679, p=0.0089) — it answers Hungarian queries in English, and rewrites the queries rule 5 says to leave alone. Apply the rules yourself; use the flag only to test or re-measure it. Record: `docs/analysis/2026-08-18-dp-gnosis-full-review/10-rephrase-arm-measurement.md`.
-
-**Prompt v2 (`REPHRASE_PROMPT_VERSION = 'v2'`) addresses both diagnosed causes and is UNMEASURED.** The language rule is now rule 1 and carries worked Hungarian examples — v1 had transcribed the non-English rule below as *"emit the ENGLISH word stem"*, one word that no rule here has ever said and that produced the measured Hungarian failure on its own. Rule 5 is additionally enforced in CODE (`carriesExactRareTerm`), short-circuiting BEFORE the cache and the model: a query already carrying an identifier, symbol, path, flag or error string is returned VERBATIM and never reaches the rewriter, so `rephrased "q" -> "q"` is a correct outcome, not a no-op failure. **The advice above stands unchanged until the arms are re-measured** — and re-measuring first needs the frozen `vault-autorephrased` / `vault-hu-autorephrased` goldens regenerated under v2 (`scripts/regenerate-autorephrased-golden.ts`), because they hold v1 rewrites.
-
-Grammar and word order are **irrelevant** — it is a bag of words. `zustand selector stability` and `stability selector zustand` score identically.
-
-**Non-English corpora.** Stemming is English Porter (npm `stemmer`), applied uniformly to every adapter. On an agglutinative language it does nothing useful: a Hungarian run missed the correct document in 3 of 5 queries purely on suffix mismatch — query `használata` never matched document `használ` / `használnak` / `használva`; query `kerekítési összege` never matched `kerekítése` / `összegeket`; query `modulok` never matched `modul` / `moduloknak` / `modulban`. **A language-aware analyzer now EXISTS and is OPT-IN per profile** (§ Analyzers — `hulight-fold` / `ident-hulight-fold`, `defaultAnalyzer`), but `DEFAULT_ANALYZER` is still `porter-fold` and the chain is stamped into the index at BUILD time. So the rule still binds, scoped to what was built: on any corpus whose index was built with `porter-fold` — every corpus but `hu-tax` — a non-English query MUST be written with the **word stem** the document uses, not the inflected form the asker would speak.
-
-**No-match warning.** The engine returns up to `k` results ranked by score and **never signals "no good match"**. A caller MUST treat a low absolute score, or a top result far below the run's usual scores, as a probable miss — and MUST NOT read a returned atom as an answer merely because it was returned. `count < k` only means fewer atoms scored above zero.
-
-## LLM integration prompt
-
-Copy this block verbatim into an agent tool definition (opencode, a Claude Code skill, any tool-calling LLM).
-
-```text
-TOOL: dp-gnosis — lexical (BM25) retrieval over this repository's documentation,
-split into markdown "atoms". Invoke as:
-
-    npm run gnosis -- retrieve "<keyword query>" -k 5 --json
-
-WHEN TO CALL
-- Call it before answering any question about this repo's architecture,
-  standards, ADRs, runner, testing policy, or conventions.
-- Call it again with a different query if the first result set looks off-topic.
-- Do NOT call it for questions about code behaviour that only source files
-  answer; read the source instead.
-
-REWRITE THE QUERY FIRST — MANDATORY
-This engine matches stemmed words. It does not understand questions. Rewriting a
-natural-language question changes ~90% of the top-10 results, so pass keywords,
-never the user's sentence. Measured on a paired benchmark: on a non-English
-corpus this is worth +0.2407 nDCG@10 (p=0.0002); on English it buys deep recall
-(+0.0848 R@100, p=0.0009) rather than a better top-10.
-1. Strip intent framing: "how to", "I want", "show me", "info about", "available".
-2. Use the vocabulary the documents use, not the user's.
-3. Add synonyms yourself — there is no synonymy ("e2e" will not match
-   "end-to-end"; include both).
-4. Keep rare, specific terms; they carry the most weight.
-5. EXCEPTION to 3: if the user's own words already contain the exact rare term,
-   do NOT pad the query with synonyms — the added terms sink the exact match.
-   Rephrase to supply a missing domain term, never to decorate one already there.
-6. Non-English query: write the word STEM the document uses, not the inflected
-   form. Stemming is English-only, so "használata" will not match "használ".
-Word order and grammar are irrelevant — it is a bag of words.
-Example: "how do I start the e2e tests?" -> "run e2e end-to-end playwright test
-command spec".
-
-READ THE JSON
-Fields: adapter, query, k, mode, indexState, count, poolSize, atoms[].
-Each atom: {id, title, domain, type, body, score, sourcePath, originPaths,
-matchedTerms, snippet, scoreNormalised} plus {firstPassScore, rerankScore} on a
-reranked run. atoms[] is sorted by score, descending.
-- exitCode 0  = the search ran.
-- exitCode 2  = you called it wrong; read "error", fix the call, retry once.
-- exitCode 3  = partial. If indexState is "unavailable" NOTHING was searched —
-  say so; do not report "no results found".
-- indexState "empty" = the corpus holds no atoms. "stale" = ranking may lag the
-  current docs; say so when you cite. "mismatched" = the index was REFUSED
-  because it describes another corpus; NOTHING was searched — say so and run
-  the rebuild the note names; do not report "no results found".
-
-CITE
-Cite every claim as: <title> (<id>, <sourcePath>). Quote from the atom "body"
-only; never paraphrase from "title" alone.
-
-SCORES ARE NOT CONFIDENCE — HARD RULE
-This tool ALWAYS returns up to k atoms and NEVER signals "no good match". A
-returned atom is not evidence that an answer exists. Nothing here is a
-calibrated threshold; these are the three signals you have, in this order.
-1. matchedTerms — the strongest and cheapest check. An atom whose matchedTerms
-   miss the rare, specific terms of your query is off-topic however it scored.
-   An EMPTY matchedTerms on every atom means the query shares no analysed term
-   with anything: rewrite it, do not report the atoms.
-2. rerankScore, when the run reranked (mode ends in "+rerank"). It is the one
-   number with an absolute scale: on a healthy cross-encoder a relevant atom
-   scores orders of magnitude above an irrelevant one. Read it, not "score" —
-   "score" is a fused rank sum with no scale. Use it to spot the case where the
-   whole pool is weak, which relative comparison cannot see.
-3. scoreNormalised — WITHIN this answer only: 1 is this answer's top hit, 0 its
-   last, null when it cannot be computed. It says nothing about the vault. Every
-   atom near 1 is the NOISE signature (they all scored alike), not a good set.
-   At k=2 it is always 1 and 0 by construction; it needs k>=5 to mean anything.
-- If the signals are weak or the atoms are plainly off-topic, rewrite the query
-  with different keywords and call again.
-- If a second attempt is still weak, tell the user the vault has no clear answer
-  and name what you searched for. Do NOT present a low-scoring atom as
-  authoritative.
-```
-
 
 ## Authoring — how a document becomes a retrievable atom
 

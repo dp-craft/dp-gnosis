@@ -25,19 +25,21 @@ import type { IndexStamp } from '../adapters/fts5Adapter.js';
 import { carriedAnalyzer, INDEX_SCHEMA_VERSION, readIndexStamp } from '../adapters/fts5Adapter.js';
 import { lanceDbAvailability } from '../adapters/lanceDbAdapter.js';
 import { miniSearchAvailability } from '../adapters/miniSearchAdapter.js';
+import { DECLARED_TYPES, foreignVocabularyMessage, foreignVocabularyValue } from '../config.js';
 import type { SourceIdentity } from '../corpusManifest.js';
 import {
   manifestPathFor,
   readManifestDigest,
   readManifestSourceIdentity,
-  sourceIdentityOf,
+  sourceIdentityOf
 } from '../corpusManifest.js';
-import { DECLARED_TYPES, foreignVocabularyMessage, foreignVocabularyValue } from '../config.js';
 import { DATA_HOME_VAR, DP_GNOSIS_HOME_VARS, statedVar } from '../env.js';
 import { ATOMS_OWNER_FILE, loadCorpus } from '../ingest.js';
-import { ingestCommand, indexRebuildCommand } from '../invocation.js';
+import { indexRebuildCommand, ingestCommand } from '../invocation.js';
 import type { DataRootFact } from '../paths.js';
 import { dataRoot, dataRootFact } from '../paths.js';
+import type { RerankHealth } from '../rerank.js';
+import { rerankHealth } from '../rerank.js';
 import { isUserConfigError } from '../userConfig.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
@@ -108,6 +110,8 @@ interface DoctorFacts {
   readonly dropped: readonly string[];
   readonly availability: AdapterAvailability;
   readonly dataRoot: DataRootScan;
+  /** The opt-in reranker's verdict: absent, broken, or discriminating. */
+  readonly rerank: RerankHealth;
   readonly env: NodeJS.ProcessEnv;
 }
 
@@ -184,6 +188,7 @@ const gather = async (context: CommandContext): Promise<DoctorFacts> => ({
   dropped: droppedDomains(atomsCensus(context.atomsDir, context.profile.domains)),
   availability: await AVAILABILITY_PROBES[context.adapter](),
   dataRoot: scanDataRoot(process.env),
+  rerank: await rerankHealth(),
   env: process.env,
 });
 
@@ -319,7 +324,7 @@ const TYPE_VOCABULARY = 'type-vocabulary';
 
 /**
  * The state that made `doctor` useless: a profile naming a type this build does
- * not define made every `retrieve` refuse, while this pass reported a clean
+ * not define made every `search` refuse, while this pass reported a clean
  * bill of health. It is read with the SAME rule the query path refuses on, and
  * worded with the same message, so the diagnostic and the refusal cannot drift.
  */
@@ -453,6 +458,34 @@ const escapeChecks = (facts: DoctorFacts): readonly DoctorCheck[] =>
       )
     );
 
+const RERANK = 'rerank';
+
+/**
+ * The one check whose ABSENCE is not a finding. `--rerank` is opt-in and costs a
+ * served cross-encoder, so an instance that never set one up is complete, and a
+ * fault here would push `doctor` to exit 3 on a healthy machine.
+ *
+ * A reachable reranker that FAILS the probe is the opposite, and the reason this
+ * check exists at all: a GGUF without its rank head answers HTTP 200 with
+ * well-formed numbers, so `search --rerank` would report a plausible ranking off
+ * a model that discriminated nothing. The probe's own refusal is carried
+ * verbatim — one wording for the diagnostic and the serving-path refusal.
+ */
+const RERANK_VERDICTS: Readonly<Record<RerankHealth['kind'], CheckStatus>> = {
+  unavailable: 'unknown',
+  broken: 'fault',
+  healthy: 'ok',
+};
+
+const rerankDetail = (health: RerankHealth): string =>
+  health.kind === 'healthy'
+    ? `the served reranker discriminates — it scored the RELEVANT probe passage ${String(health.relevantScore)} and the IRRELEVANT one ${String(health.irrelevantScore)}`
+    : health.detail;
+
+const rerankChecks = (facts: DoctorFacts): readonly DoctorCheck[] => [
+  check(RERANK, RERANK_VERDICTS[facts.rerank.kind], rerankDetail(facts.rerank)),
+];
+
 const CHECKS: readonly ((facts: DoctorFacts) => readonly DoctorCheck[])[] = [
   locationChecks,
   indexChecks,
@@ -464,6 +497,7 @@ const CHECKS: readonly ((facts: DoctorFacts) => readonly DoctorCheck[])[] = [
   ownerChecks,
   domainChecks,
   adapterChecks,
+  rerankChecks,
   overrideChecks,
   dataRootChecks,
   blankVarChecks,

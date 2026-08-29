@@ -104,7 +104,7 @@ describe('the wording a CHECKOUT reads, where the shipped profile and the tuple 
 describe('the CLI renders it as a clean refusal', () => {
   it('exits 2 with no stack frames when the user profile declares a foreign type', async () => {
     userProfileDeclaring(FOREIGN);
-    const result = await runCli(['retrieve', 'bm25']);
+    const result = await runCli(['search', 'bm25']);
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain(FOREIGN);
     expect(result.stderr).not.toMatch(/^\s+at /m);

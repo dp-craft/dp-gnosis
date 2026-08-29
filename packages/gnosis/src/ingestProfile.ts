@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 
 import { expandUserPath } from './env.js';
-
 import type { PrfParams } from './prf.js';
 import type { AnalyzerId } from './query.js';
 import { ANALYZERS } from './query.js';
@@ -366,7 +365,6 @@ const unsafePrefix = (value: string): boolean => value.startsWith('/') || value.
  * is returned untouched, which is why every shipped profile matches as before.
  */
 const expandPrefix = (value: string): string => expandUserPath(value).split(sep).join('/');
-
 
 /** An empty member would prefix-match EVERY path, so it is refused, not dropped. */
 const withoutEmptyMember = (

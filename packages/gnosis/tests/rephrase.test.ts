@@ -59,7 +59,7 @@ interface CliOutput {
 }
 
 const cliArgs = (fixture: Fixture, query: string, extra: readonly string[]): string[] => [
-  'retrieve',
+  'search',
   query,
   // Pinned: the rewrite is the subject here, and the default adapter is
   // index-backed — an unpinned run would search the repo's own index.
@@ -351,7 +351,7 @@ describe('retrieve --rephrase', () => {
     const text = await runCli(cliArgs(fixture, RAW_QUERY, ['--rephrase']));
     const xml = await runCli(cliArgs(fixture, RAW_QUERY, ['--rephrase', '--format', 'xml']));
 
-    expect(text.stdout).toContain(`retrieve: rephrased "${RAW_QUERY}" -> "${REWRITTEN_QUERY}"`);
+    expect(text.stdout).toContain(`search: rephrased "${RAW_QUERY}" -> "${REWRITTEN_QUERY}"`);
     expect(xml.stdout).toContain(`queryRewritten="${REWRITTEN_QUERY}"`);
   });
 

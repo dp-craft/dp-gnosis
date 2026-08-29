@@ -230,7 +230,7 @@ describe('index --enrichment-columns', () => {
   });
 
   it('REFUSES the flag on retrieve, which builds no index', async () => {
-    const result = await runCli(['retrieve', 'selector', '--enrichment-columns', 'questions']);
+    const result = await runCli(['search', 'selector', '--enrichment-columns', 'questions']);
 
     expect(result.exitCode).toBe(2);
   });

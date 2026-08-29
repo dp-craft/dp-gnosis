@@ -1,5 +1,5 @@
 /**
- * The dp-gnosis consumer contract — the shape a caller of `answer --json` reads.
+ * The dp-gnosis consumer contract — the shape a caller of `ask --json` reads.
  *
  * This module is a LEAF by hard rule: it declares ZERO dependencies, because a
  * consumer package compiling it under its own `rootDir` (e.g.
@@ -69,7 +69,7 @@ export type GnosisAtom = {
   readonly originEndLine?: number;
 };
 
-/** The `--json` payload of `answer`. */
+/** The `--json` payload of `ask`. */
 export type GnosisAnswer = {
   readonly command: string;
   readonly adapter: string;
@@ -101,7 +101,7 @@ export type GnosisAnswer = {
   readonly atoms: readonly GnosisAtom[];
   readonly skipped: readonly GnosisSkippedAtom[];
   readonly neutralised: number;
-  /** Present ONLY on a `--synthesize` run, together with `answer`. */
+  /** Present ONLY on a `--synthesize` run, together with `ask`. */
   readonly synthesized?: boolean;
   readonly answer?: string | null;
   readonly note?: string;

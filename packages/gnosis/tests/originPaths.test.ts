@@ -45,7 +45,7 @@ const retrieveArgv = (
   adapter: string,
   format: readonly string[]
 ): readonly string[] => [
-  'retrieve',
+  'search',
   'retrieval',
   '-k',
   '2',
@@ -157,7 +157,7 @@ const mergedRetrieveArgv = (
   adapter: string,
   format: readonly string[]
 ): readonly string[] => [
-  'retrieve',
+  'search',
   'provenance',
   '-k',
   '2',

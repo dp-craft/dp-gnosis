@@ -251,7 +251,7 @@ describe('prepareDataset — per-analyzer index', () => {
   it('REFUSES a port whose index stamp disagrees with the chain the arm prepared', async () => {
     const prepared = await prepareWith('porter-fold');
     const db = new Database(prepared.indexPath);
-    db.prepare("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('analyzer', 'nostem-fold')").run();
+    db.prepare('INSERT OR REPLACE INTO index_meta(key, value) VALUES (\'analyzer\', \'nostem-fold\')').run();
     db.close();
 
     const scopedPort = openPort(prepared);
@@ -563,7 +563,7 @@ describe('retrieveDocs', () => {
 describe('CLI equivalence', () => {
   const cliRanking = async (query: string): Promise<readonly string[]> => {
     const result = await runCli([
-      'retrieve',
+      'search',
       query,
       '--adapter',
       'fts5',
@@ -583,7 +583,7 @@ describe('CLI equivalence', () => {
     return atomIds(payload.atoms);
   };
 
-  it('produces the same ranking as the dp-gnosis retrieve command', async () => {
+  it('produces the same ranking as the dp-gnosis search command', async () => {
     const harness = await Promise.all(
       queries.map(query => retrieveDocs(port, query, DEPTH).then(atomIds))
     );
@@ -631,12 +631,12 @@ describe('openPort — linear adapter with BM25 parameters', () => {
    * exactly as the shipped `--adapter linear` CLI does. A re-implemented BM25
    * here would pass every case above and fail this one.
    */
-  it('ranks identically to the dp-gnosis retrieve command at default parameters', async () => {
+  it('ranks identically to the dp-gnosis search command at default parameters', async () => {
     const linear = openPort(prepared, { adapter: 'linear' });
     const harness = await retrieveDocs(linear, queries[0]!, DEPTH).then(atomIds);
     linear.close?.();
     const result = await runCli([
-      'retrieve',
+      'search',
       queries[0]!,
       '--adapter',
       'linear',

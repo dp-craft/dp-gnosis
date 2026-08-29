@@ -25,13 +25,28 @@ concurrency:
 
 jobs:
   gates:
-    runs-on: ubuntu-latest
+    # Linux is the support contract; macOS is best-effort (packages/gnosis
+    # package.json `os`). `better-sqlite3` is a NATIVE build — `node:sqlite`
+    # cannot compile FTS5 (nodejs/node#56951) — so a platform's compiler and
+    # prebuilt availability is a real failure mode, not a hypothetical one.
+    # `fail-fast: false` so a macOS break still reports the Linux verdict.
+    #
+    # `node-version-file: .nvmrc` is deliberately NOT used here: the matrix owns
+    # the version, and two sources would silently disagree. `.nvmrc` stays the
+    # local default.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    name: gates (${{ matrix.os }}, node ${{ matrix.node }})
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - name: Install
@@ -50,7 +65,7 @@ jobs:
         run: npm run bench:test
 
       - name: Build the published surface
-        run: npm run build -w @dp/gnosis
+        run: npm run build -w dp-gnosis
 
       - name: Check the published tarball
-        run: npm pack --dry-run -w @dp/gnosis
+        run: npm pack --dry-run -w dp-gnosis

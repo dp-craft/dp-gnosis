@@ -191,7 +191,7 @@ const retrieve = async (
   extra: readonly string[]
 ): Promise<{ readonly exitCode: number; readonly stdout: string; readonly stderr: string }> =>
   runCli([
-    'retrieve',
+    'search',
     'layered test model tier',
     '-k',
     '4',
@@ -257,7 +257,7 @@ const EXIT_USAGE = 2;
 
 describe('the grouping flags refuse a contradiction rather than picking one', () => {
   it('exits 2 when --flat is paired with a per-document cap', async () => {
-    const result = await runCli(['retrieve', 'anything', '--flat', '--max-per-doc', '3']);
+    const result = await runCli(['search', 'anything', '--flat', '--max-per-doc', '3']);
 
     expect(result.exitCode).toBe(EXIT_USAGE);
     expect(result.stderr).toContain('--flat');
@@ -265,7 +265,7 @@ describe('the grouping flags refuse a contradiction rather than picking one', ()
   });
 
   it.each(['1.5', '-1', 'two'])('exits 2 on --max-per-doc %s, naming the correction', async raw => {
-    const result = await runCli(['retrieve', 'anything', '--max-per-doc', raw]);
+    const result = await runCli(['search', 'anything', '--max-per-doc', raw]);
 
     expect(result.exitCode).toBe(EXIT_USAGE);
     expect(result.stderr).toContain(`"${raw}"`);
@@ -349,7 +349,7 @@ const retrieveJson = async (
   extra: readonly string[]
 ): Promise<JsonPayload> => {
   const result = await runCli([
-    'retrieve',
+    'search',
     'layered test model tier',
     '-k',
     String(WIDE_K),
@@ -400,7 +400,7 @@ describe('a per-document cap deepens the pool instead of shortening the answer',
     const place = await fixture();
 
     const result = await runCli([
-      'retrieve',
+      'search',
       'layered test model tier',
       '-k',
       '4',

@@ -42,7 +42,7 @@ const fixture = async (): Promise<string> => {
 
 const answer = async (extra: readonly string[]): Promise<CliResult> =>
   await runCli([
-    'answer',
+    'ask',
     'layered test model tier',
     '-k',
     '3',
@@ -204,7 +204,7 @@ describe('--synthesize — the request body', () => {
 describe('--synthesize — where the flag is accepted', () => {
   it('is a usage error on retrieve, which has no pack to synthesize over', async () => {
     const result = await runCli([
-      'retrieve',
+      'search',
       'layered test model tier',
       '--adapter',
       'linear',

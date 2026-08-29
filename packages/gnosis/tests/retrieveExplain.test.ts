@@ -158,7 +158,7 @@ interface CliResult {
 
 const retrieve = async (fixture: Fixture, extra: readonly string[]): Promise<CliResult> =>
   await runCli([
-    'retrieve',
+    'search',
     'zestful retrieval',
     '--adapter',
     'linear',
@@ -504,7 +504,7 @@ describe('confidence — in all three renderings', () => {
     const rendered = await renderings(await makeFixture(), []);
 
     expect(rendered.json).toBe('weak');
-    expect(rendered.text).toContain('retrieve: confidence weak');
+    expect(rendered.text).toContain('search: confidence weak');
     expect(rendered.xml).toContain('confidence="weak"');
   });
 
@@ -515,7 +515,7 @@ describe('confidence — in all three renderings', () => {
     const rendered = await renderings(fixture, ['--rerank', '--min-relevance', '0.5']);
 
     expect(rendered.json).toBe('ok');
-    expect(rendered.text).toContain('retrieve: confidence ok');
+    expect(rendered.text).toContain('search: confidence ok');
     expect(rendered.xml).toContain('confidence="ok"');
   });
 
@@ -526,7 +526,7 @@ describe('confidence — in all three renderings', () => {
     const rendered = await renderings(fixture, ['--rerank', '--min-relevance', '0.9']);
 
     expect(rendered.json).toBe('none');
-    expect(rendered.text).toContain('retrieve: confidence none');
+    expect(rendered.text).toContain('search: confidence none');
     expect(rendered.xml).toContain('confidence="none"');
   });
 });
@@ -574,16 +574,16 @@ describe('a run without --min-relevance changes only by the confidence field', (
 
     const lines = text.trimEnd().split('\n');
     expect(lines.filter(line => line.includes('confidence'))).toEqual([
-      'retrieve: confidence weak',
+      'search: confidence weak',
     ]);
     // The second added line is the budget measure (T3.3), pinned the same way.
     expect(lines.filter(line => line.includes('counted as'))).toEqual([
-      'retrieve: budget 64000 counted as bytes',
+      'search: budget 64000 counted as bytes',
     ]);
     const rest = lines.filter(
-      line => !line.startsWith('retrieve: confidence') && !line.startsWith('retrieve: budget')
+      line => !line.startsWith('search: confidence') && !line.startsWith('search: budget')
     );
-    expect(rest[0]).toMatch(/^retrieve: mode [\w:-]+, indexState \w+, atoms \d+$/);
+    expect(rest[0]).toMatch(/^search: mode [\w:-]+, indexState \w+, atoms \d+$/);
     rest.slice(1).forEach(line => expect(line).toMatch(/^ {2}\d+\.\d{4} {2}|^ {4}origin {2}/));
   });
 
@@ -603,7 +603,7 @@ describe('a run without --min-relevance changes only by the confidence field', (
 
 describe('--min-relevance refuses rather than filtering something it cannot calibrate', () => {
   const refuse = async (extra: readonly string[]): Promise<CliResult> =>
-    await runCli(['retrieve', 'zestful retrieval', '--adapter', 'linear', ...extra]);
+    await runCli(['search', 'zestful retrieval', '--adapter', 'linear', ...extra]);
 
   it('refuses a value outside 0…1, never clamping it', async () => {
     const result = await refuse(['--rerank', '--min-relevance', '1.5']);
@@ -649,11 +649,11 @@ describe('--min-relevance refuses rather than filtering something it cannot cali
    * a caller reads that line before it reads this pipeline.
    */
   it('honours the floor on `answer` too, and --help says so', async () => {
-    const result = await runCli(['answer', 'zestful retrieval', '--adapter', 'linear', '--min-relevance', '0.5']);
+    const result = await runCli(['ask', 'zestful retrieval', '--adapter', 'linear', '--min-relevance', '0.5']);
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain('--min-relevance requires --rerank');
-    expect(helpText()).toContain('--min-relevance <p> on `retrieve` and `answer`');
+    expect(helpText()).toContain('--min-relevance <p> on `search` and `ask`');
   });
 });
 
@@ -674,7 +674,7 @@ const retrieveEmpty = async (
   extra: readonly string[]
 ): Promise<CliResult> =>
   await runCli([
-    'retrieve',
+    'search',
     NONSENSE,
     '--adapter',
     'linear',
@@ -759,7 +759,7 @@ describe('an empty answer states WHY it is empty, and stays exit 0', () => {
     const xml = (await retrieveEmpty(fixture, ['--format', 'xml'])).stdout;
 
     expect(text).toContain(NOTHING_MATCHED);
-    expect(text).toContain('retrieve: confidence none');
+    expect(text).toContain('search: confidence none');
     expect(xml).toContain('count="0"');
     expect(xml).toContain('confidence="none"');
     expect(xml.split('\n').some(line => line.startsWith('  <note>') && line.includes(NOTHING_MATCHED))).toBe(true);
@@ -782,7 +782,7 @@ describe('an empty answer states WHY it is empty, and stays exit 0', () => {
   it('reports an ABSENT corpus as "nothing was searched", never as "nothing matched"', async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), 'gnosis-empty-'));
     const result = await runCli([
-      'retrieve',
+      'search',
       NONSENSE,
       '--adapter',
       'linear',
@@ -874,7 +874,7 @@ describe('the relevance floor is NOT applied when the rerank was refused', () =>
 
     expect(text).toContain('was NOT applied');
     expect(text).not.toContain(SCORED_BELOW);
-    expect(text).toContain('retrieve: confidence weak');
+    expect(text).toContain('search: confidence weak');
     expect(xml).toContain('was NOT applied');
     expect(xml).not.toContain(SCORED_BELOW);
     expect(xml).toContain('confidence="weak"');

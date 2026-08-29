@@ -2,6 +2,8 @@
 
 # Gnosis History — resolved defects and the research index
 
+> **`docs/` paths below are provenance, not links** — that tree is gitignored and does not ship with the repository. `GNOSIS-GUIDE.md` owns the statement of that boundary.
+
 **Nothing in this file is a rule to follow today.** Every row is already fixed in code or enforced by a gate. Two uses only:
 
 | Use | Section |

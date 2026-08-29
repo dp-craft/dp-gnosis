@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { cliInvocation, indexRebuildCommand, ingestCommand } from '../src/invocation.js';
 import { isInstalled } from '../src/paths.js';
 
-const INSTALLED_DIR = '/home/u/proj/node_modules/@dp/gnosis/dist';
+const INSTALLED_DIR = '/home/u/proj/node_modules/dp-gnosis/dist';
 const CHECKOUT_DIR = '/home/u/dp-gnosis/packages/gnosis/src';
 
 describe('cliInvocation — the command the CALLER actually has', () => {

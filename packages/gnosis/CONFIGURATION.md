@@ -202,7 +202,7 @@ carries the OLD digest, so the next query REFUSES — exit 3, `indexState:
 test suite queries the production index, so a suite can be fully green over a
 vault that answers nothing.
 
-**After any corpus or profile change, run ONE real `retrieve` and read
+**After any corpus or profile change, run ONE real `search` and read
 `indexState` before believing the vault is served.**
 
 ---
@@ -264,7 +264,7 @@ Then:
 
 | Intent | Command |
 |---|---|
-| cross-project discovery — the DEFAULT | `gnosis retrieve "<q>" --profile work` |
+| cross-project discovery — the DEFAULT | `gnosis search "<q>" --profile work` |
 | narrowed to one project | `… --domain aichatney` |
 | that project's decisions only | `… --domain aichatney --type adr` |
 

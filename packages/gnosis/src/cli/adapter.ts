@@ -7,6 +7,8 @@
  * sees a bare `KnowledgePort`, so it cannot branch on the implementation, and
  * the output schema and exit codes therefore cannot diverge per adapter.
  */
+import { basename, resolve } from 'node:path';
+
 import { createFts5Adapter } from '../adapters/fts5Adapter.js';
 import { createLanceDbAdapter } from '../adapters/lanceDbAdapter.js';
 import {
@@ -17,6 +19,7 @@ import { createLinearScanAdapter } from '../adapters/linearScanAdapter.js';
 import { createMiniSearchAdapter } from '../adapters/miniSearchAdapter.js';
 import type { FieldWeights } from '../config.js';
 import {
+  demoIndexDir,
   fts5IndexPath,
   lancedbHybridIndexDir,
   lancedbIndexDir,
@@ -24,8 +27,8 @@ import {
   minisearchIndexPath,
   noIndexPath
 } from '../paths.js';
-import type { AnalyzerId } from '../query.js';
 import type { KnowledgePort } from '../port.js';
+import type { AnalyzerId } from '../query.js';
 
 /**
  * The closed adapter vocabulary. It grows ADDITIVELY: `lancedb` is the FROZEN
@@ -119,6 +122,17 @@ const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, () => string>> = {
  * every adapter to whatever root the FIRST importer happened to see.
  */
 export const defaultIndexPath = (adapter: AdapterName): string => DEFAULT_INDEX_PATHS[adapter]();
+
+/**
+ * The same per-adapter index NAME, relocated into the demo's fixed subtree
+ * (`paths.ts:demoIndexDir`). The directory is owned there and the file name is
+ * owned here, beside the table it comes from: every adapter keeps its OWN
+ * location for the reason {@link defaultIndexPath} does — sharing one would let
+ * a LanceDB rebuild, which REMOVES its directory, delete another adapter's
+ * index — while `demo` still cannot reach the default locations at all.
+ */
+export const demoIndexPath = (adapter: AdapterName): string =>
+  resolve(demoIndexDir(), basename(DEFAULT_INDEX_PATHS[adapter]()));
 
 /** The corpus root and the index location one port is opened against. */
 interface PortLocation {

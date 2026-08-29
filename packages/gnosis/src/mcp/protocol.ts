@@ -42,7 +42,7 @@ export const SERVER_NAME = 'dp-gnosis';
 export const SERVER_VERSION = '0.1.0';
 
 /** The one tool. A second one would be a second contract to keep in step. */
-export const TOOL_NAME = 'gnosis_answer';
+export const TOOL_NAME = 'gnosis_ask';
 
 /** What a caller may state. `k` absent means "whatever the CLI's default is". */
 export interface AnswerInput {
@@ -51,7 +51,7 @@ export interface AnswerInput {
   readonly domain?: string;
 }
 
-/** The injected seam: one call, one `answer --json` invocation, one pack. */
+/** The injected seam: one call, one `ask --json` invocation, one pack. */
 export type AnswerRunner = (input: AnswerInput) => Promise<CliResult>;
 
 /**
@@ -67,7 +67,7 @@ export type AnswerRunner = (input: AnswerInput) => Promise<CliResult>;
  * never turns an answer into a failure.
  */
 export const answerArgv = (input: AnswerInput): readonly string[] => [
-  'answer',
+  'ask',
   input.question,
   ...(input.k === undefined ? [] : ['-k', String(input.k)]),
   '--json',
@@ -143,7 +143,7 @@ const initializeResult = (params: unknown): Reply => ({
 const TOOL_DESCRIPTOR = {
   name: TOOL_NAME,
   description:
-    'Answer a question from the dp-gnosis vault. Returns one citable knowledge pack: a delimited block of the retrieved atom bodies, each carrying a [^atom-id] footnote that resolves inside the same block. Byte-identical to the CLI `answer --json` pack.',
+    'Answer a question from the dp-gnosis vault. Returns one citable knowledge pack: a delimited block of the retrieved atom bodies, each carrying a [^atom-id] footnote that resolves inside the same block. Byte-identical to the CLI `ask --json` pack.',
   inputSchema: {
     type: 'object',
     properties: {

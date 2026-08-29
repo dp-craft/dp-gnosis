@@ -107,7 +107,7 @@ describe('the engine types satisfy the contract', () => {
  * fixture with optional keys set to `undefined`.
  */
 const BASE = {
-  command: 'answer',
+  command: 'ask',
   adapter: 'fts5',
   query: 'layered test model tiers',
   k: 5,

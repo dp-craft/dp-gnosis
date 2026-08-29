@@ -10,6 +10,7 @@ MUST NOT open engine source, launch a benchmark, or hand-roll an `npx vitest` / 
 |---|---|
 | **This file owns** | adapter verdicts · rerank constants · landmines · the served path · what is settled |
 | **Never here** | the pipeline description (`GNOSIS-DATA-FLOW.md`) · any flag table (the two READMEs) |
+| **`docs/` is NOT published** | `.gitignore` carries `docs/`, so the `docs/analysis/…`, `docs/plans/…` and `claude-artifacts/…` paths cited throughout this handbook are **provenance, not links**: they name where a measurement was recorded in the private working tree. `GNOSIS-RULES.md` § Evidence requires a number to carry its SOURCE, so the citations stay; a reader who cloned this repository will not have the file and is not meant to. Everything a public reader needs is in `handbook/` and the package READMEs. **This is the ONE statement of that boundary — do not restate it per file** |
 | **Binding on every line below** | `GNOSIS-RULES.md` — the failure class, what may be stated as fact, volatile facts that MUST be routed not restated. Auto-loaded via `CLAUDE.md`. Restated counts have gone stale in THIS file three times at once (manifest size, gate totals, landmine tally) |
 
 ## What dp-gnosis is (and is not)
@@ -20,7 +21,7 @@ MUST NOT open engine source, launch a benchmark, or hand-roll an `npx vitest` / 
 | **Is NOT** | **Semantic retrieval AS SHIPPED.** `lancedb-vec` / `lancedb-hybrid` were built and measured in Phase D but are not deployed. The old reason given here — *"they lose to query rephrasing"* — is **FALSIFIED on both halves** (§ Settled): rephrasing is INERT at prompt v2, and dense measures **+0.0358 nDCG@10 (p=0.0001)** on `arguana`, where its sign flips positive. The live reason is narrower: every dense win is FIRST-STAGE and unproven through the reranker, and it costs an embedding server, a 1.1 GB model, a vector column, a cache and a fusion path. The four lexical adapters remain the only production routes; `lancedb` itself is full-text BM25 only, frozen, no vector column |
 | **Optional hops** | `--rerank` (cross-encoder over HTTP at `127.0.0.1:9292`) · `--rephrase` (chat model rewriting the query before the first pass, measured inert). Both opt-in |
 | **The one lever ON by default** | **`--prf`** — RM3 pseudo-relevance feedback, NOT a network hop, ON on the shipped profiles since 2026-08-22. Pure SQLite over fts5's own scorer; `--no-prf` turns it off. Every expanded run reports the cell it used |
-| **Largest measured quality lever** | **Query phrasing**, not adapter choice. MUST rewrite a question to keywords before every `retrieve`. Rule + language split: `packages/gnosis/README.md` § Query rephrasing. Measured effect: `GNOSIS-BASELINES.md` |
+| **Largest measured quality lever** | **Query phrasing**, not adapter choice. MUST rewrite a question to keywords before every `retrieve`. Rule + language split: `packages/gnosis/QUERYING.md` § Query rephrasing. Measured effect: `GNOSIS-BASELINES.md` |
 
 ## Pick your door
 

@@ -63,7 +63,7 @@ const json = async (
   query = 'zestful retrieval'
 ): Promise<JsonPayload> => {
   const result = await runCli([
-    'retrieve',
+    'search',
     query,
     '--adapter',
     'linear',

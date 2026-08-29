@@ -1,5 +1,5 @@
 {
-  "name": "@dp/gnosis",
+  "name": "dp-gnosis",
   "version": "0.1.0",
   "type": "module",
   "description": "Retrieval over a curated markdown atom vault. Liftable unit: code here, vault at benchmark-data/vault/, cache at benchmark-data/cache/.",
@@ -8,7 +8,8 @@
     "node": ">=22"
   },
   "bin": {
-    "dp-gnosis": "dist/cli/main.js"
+    "dp-gnosis": "dist/cli/main.js",
+    "dp-gnosis-mcp": "dist/mcp/main.js"
   },
   "exports": {
     ".": {
@@ -24,12 +25,17 @@
     },
     "./package.json": "./package.json"
   },
-  "comment:files": "What a fresh install must carry to RUN, not to be developed. `profiles/` ships because a profile is resolved at RUNTIME by path (paths.ts:profilesDir), and `golden/` ships with it because every shipped profile names `goldIdsPath: \"../golden\"` \u2014 the gold source ingest breaks exact-body dedupe ties against. Absent, `ingest` REFUSES (goldenIds.ts:sourceError) rather than deduping gold-blind, so a fresh install could not build its first index. `tests/`, `scripts/` and `src/` stay out; `dist/` carries the build.",
+  "comment:files": "What a fresh install must carry to RUN, not to be developed. `profiles/` ships because a profile is resolved at RUNTIME by path (paths.ts:profilesDir), and `golden/` ships with it because every shipped profile names `goldIdsPath: \"../golden\"` — the gold source ingest breaks exact-body dedupe ties against. Absent, `ingest` REFUSES (goldenIds.ts:sourceError) rather than deduping gold-blind, so a fresh install could not build its first index. `QUERYING.md`, `OPTIONAL.md`, `AUTHORING.md`, `CONFIGURATION.md` and `INTEGRATION.md` ship beside `README.md` because they ARE the `demo` corpus (paths.ts:DEMO_CORPUS_ROOTS): `demo` ingests, indexes and searches this package\u0027s own documentation, so an install carrying only the README would demo a one-document vault. `tests/`, `scripts/` and `src/` stay out; `dist/` carries the build.",
   "files": [
     "dist",
     "profiles",
     "golden",
-    "README.md"
+    "README.md",
+    "QUERYING.md",
+    "OPTIONAL.md",
+    "AUTHORING.md",
+    "CONFIGURATION.md",
+    "INTEGRATION.md"
   ],
   "scripts": {
     "test": "vitest run",
@@ -38,18 +44,20 @@
     "prepack": "npm run typecheck && npm run build"
   },
   "comment:build": "`src/api.d.ts` is a DECLARATION file: tsc reads it and emits nothing for it, so the consumer contract would be missing from `dist` after a plain build. It is COPIED rather than pointed at from `src`, so `files` stays `dist`-only and `dist/index.d.ts`'s own `from './api.js'` resolves inside the published tree.",
-  "comment:dependencies": "better-sqlite3 backs the FTS5 adapter; it already resolves from the repo root, so nothing new is installed \u2014 declared here so this package stays a liftable unit (decision N-1). `stemmer` is NOT optional: it is applied uniformly via processTerm to every adapter, so a missing one would silently change ranking rather than skip a leg. MIT, zero transitive deps (\u00a7IX round approved 2026-08-08).",
+  "comment:dependencies": "better-sqlite3 backs the FTS5 adapter; it already resolves from the repo root, so nothing new is installed — declared here so this package stays a liftable unit (decision N-1). `stemmer` is NOT optional: it is applied uniformly via processTerm to every adapter, so a missing one would silently change ranking rather than skip a leg. MIT, zero transitive deps (§IX round approved 2026-08-08). `minisearch` is a SHIPPED lexical adapter, not a research route, so it is a plain dependency: 904K, MIT, zero transitive deps.",
   "dependencies": {
     "better-sqlite3": "^12.11.1",
+    "minisearch": "^7.2.0",
     "stemmer": "^2.0.1"
   },
+  "comment:devDependencies": "`@lancedb/lancedb` (313 MB) and its required peer `apache-arrow` back the three dense/hybrid RESEARCH routes, not a shipped lexical adapter. They sit here, not in `optionalDependencies`, because npm installs optionalDependencies BY DEFAULT — a tool whose front page says \"no embeddings, no cloud\" was downloading a vector database on every install. devDependencies are installed for the package being DEVELOPED and never for a consumer or a global install, so the workspace keeps them and both lancedb adapter suites keep building real indexes with NO skip guard. Loaded by LAZY DYNAMIC IMPORT so an absent one skips its adapter instead of breaking the suite. The loader MUST catch ALL import errors, not just MODULE_NOT_FOUND: @lancedb/lancedb can fail at import time with a native BINDING error on a platform whose prebuilt binary lags the root version, and a narrow catch would hard-fail the suite instead of skipping the adapter.",
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
-  },
-  "comment:optionalDependencies": "Adapter-gated packages, approved in the COMMON.md \u00a7IX round of 2026-08-08 (plan T-18 / T-20). Loaded by LAZY DYNAMIC IMPORT so an absent one skips its adapter instead of breaking the suite. The loader MUST catch ALL import errors, not just MODULE_NOT_FOUND: @lancedb/lancedb can fail at import time with a native BINDING error on a platform whose prebuilt binary lags the root version, and a narrow catch would hard-fail the suite instead of skipping the adapter. apache-arrow is @lancedb/lancedb's required peer.",
-  "optionalDependencies": {
     "@lancedb/lancedb": "^0.33.0",
-    "apache-arrow": "^18.1.0",
-    "minisearch": "^7.2.0"
-  }
+    "@types/better-sqlite3": "^7.6.13",
+    "apache-arrow": "^18.1.0"
+  },
+  "os": [
+    "linux",
+    "darwin"
+  ]
 }

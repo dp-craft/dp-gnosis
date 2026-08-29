@@ -12,11 +12,11 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   rmSync,
   statSync,
-  writeFileSync,
+  writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -24,18 +24,19 @@ import { resolve } from 'node:path';
 import Database from 'better-sqlite3';
 
 import { buildFts5Index, createFts5Adapter } from '../src/adapters/fts5Adapter.js';
+import type { FlagValues } from '../src/cli/args.js';
 import type { CommandContext } from '../src/cli/context.js';
 import { runDoctorCommand } from '../src/cli/doctorCommand.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
-import { CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
+import { CORPUS_ROOTS_ENV_VAR, RERANK_MODEL_ID } from '../src/config.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
-import { clearUserConfigCache } from '../src/userConfig.js';
-import { dataRoot, ingestProfilePath } from '../src/paths.js';
-import { indexRebuildCommand, ingestCommand } from '../src/invocation.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
-import type { FlagValues } from '../src/cli/args.js';
+import { indexRebuildCommand, ingestCommand } from '../src/invocation.js';
+import { dataRoot, ingestProfilePath } from '../src/paths.js';
 import type { AnalyzerId } from '../src/query.js';
+import { resetRerankProbeCache } from '../src/rerank.js';
+import { clearUserConfigCache } from '../src/userConfig.js';
 
 let root = '';
 let atomsDir = '';
@@ -527,5 +528,89 @@ describe('doctor — the corpus AHEAD of its atoms', () => {
     const before = snapshot(liveRoot);
     await runDoctorCommand(liveContext());
     expect(snapshot(liveRoot)).toEqual(before);
+  });
+});
+
+/**
+ * The reranker check. Reranking is OPT-IN, so a machine that has deliberately
+ * never served one MUST stay at exit 0 — the absence of an optional hop is not a
+ * defect, and reporting it as one would teach every reader to ignore `doctor`.
+ * A reachable reranker that FAILS the discrimination probe is the opposite: it
+ * answers HTTP 200 with well-formed numbers nothing downstream can question, so
+ * this pass is the only place it becomes visible.
+ */
+describe('doctor — the opt-in reranker', () => {
+  const RERANK_CHECK = 'rerank';
+
+  const rerankLine = (outcome: CommandOutcome): string =>
+    report(outcome).split('\n').find(line => line.includes(`] ${RERANK_CHECK}:`)) ?? '';
+
+  /** Answers both llama-swap endpoints; `scores` is indexed by probe position. */
+  const stubReranker = (models: readonly string[], scores: readonly number[]): void => {
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> => ({
+      ok: true,
+      status: 200,
+      text: async (): Promise<string> =>
+        JSON.stringify(
+          url.endsWith('/v1/models')
+            ? { data: models.map(id => ({ id })) }
+            : { results: scores.map((relevance_score, index) => ({ index, relevance_score })) }
+        ),
+      json: async (): Promise<unknown> =>
+        url.endsWith('/v1/models')
+          ? { data: models.map(id => ({ id })) }
+          : { results: scores.map((relevance_score, index) => ({ index, relevance_score })) },
+    }));
+  };
+
+  beforeEach(() => {
+    resetRerankProbeCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetRerankProbeCache();
+  });
+
+  it('reports UNKNOWN and stays at exit 0 when no reranker is served', async () => {
+    vi.stubGlobal('fetch', async (): Promise<unknown> => {
+      throw new TypeError('fetch failed');
+    });
+
+    const outcome = await doctor();
+
+    expect(outcome.exitCode).toBe(0);
+    expect(rerankLine(outcome)).toContain('[unknown]');
+  });
+
+  it('reports UNKNOWN, not a fault, when the server is up without the model', async () => {
+    stubReranker(['some-chat-model'], []);
+
+    const outcome = await doctor();
+
+    expect(outcome.exitCode).toBe(0);
+    expect(rerankLine(outcome)).toContain('[unknown]');
+  });
+
+  it('FAULTS at exit 3 on a served reranker whose scores are DEGENERATE', async () => {
+    stubReranker([RERANK_MODEL_ID], [4.6e-23, 4.5e-23]);
+
+    const outcome = await doctor();
+
+    expect(outcome.exitCode).toBe(3);
+    expect(rerankLine(outcome)).toContain('[fault]');
+    expect(rerankLine(outcome)).toContain('DEGENERATE');
+    expect(rerankLine(outcome)).toContain('cls.output.weight');
+  });
+
+  it('reports OK with both probe scores on a reranker that discriminates', async () => {
+    stubReranker([RERANK_MODEL_ID], [0.99, 0.001]);
+
+    const outcome = await doctor();
+
+    expect(outcome.exitCode).toBe(0);
+    expect(rerankLine(outcome)).toContain('[ok]');
+    expect(rerankLine(outcome)).toContain('0.99');
+    expect(rerankLine(outcome)).toContain('0.001');
   });
 });

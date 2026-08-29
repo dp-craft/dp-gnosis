@@ -41,29 +41,29 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   // REFUSES the ingest rather than deduping gold-blind.
   '--gold-ids': { kind: 'value', placeholder: '<dir|file>' },
   '-k': { kind: 'value', placeholder: '<n>' },
-  // `retrieve` only — every other command refuses it through the same
+  // `search` only — every other command refuses it through the same
   // unknown-flag path, because a format it cannot honour MUST NOT look accepted.
   '--format': { kind: 'value', placeholder: '<text|json|xml>' },
-  // `retrieve` only, refused elsewhere through the same unknown-flag path.
+  // `search` only, refused elsewhere through the same unknown-flag path.
   '--type': { kind: 'value', placeholder: '<type[,type]>' },
-  // `retrieve` and `answer` only: the knowledge domains to search. The
+  // `search` and `ask` only: the knowledge domains to search. The
   // vocabulary is the LOADED profile's, so `--profile` changes what is
   // accepted and `--help` prints it rather than this table stating it.
   '--domain': { kind: 'value', placeholder: '<domain[,domain]>' },
-  // `retrieve` only: REPLACES the profile's default type exclusion, so the
+  // `search` only: REPLACES the profile's default type exclusion, so the
   // caller states the whole exclusion rather than adding to an invisible one.
   '--exclude-type': { kind: 'value', placeholder: '<type[,type]>' },
-  // `retrieve` only: search every type, default exclusion included.
+  // `search` only: search every type, default exclusion included.
   '--include-history': { kind: 'boolean' },
-  // `retrieve` only: HOW `--max-tokens` is counted. `bytes` is the conservative
+  // `search` only: HOW `--max-tokens` is counted. `bytes` is the conservative
   // UTF-8 upper bound; `tokens` counts with the served model's own tokenizer.
   '--budget-mode': { kind: 'value', placeholder: `<${BUDGET_MODES.join('|')}>` },
-  // `retrieve` only: the injection budget, counted per `--budget-mode`.
+  // `search` only: the injection budget, counted per `--budget-mode`.
   '--max-tokens': { kind: 'value', placeholder: '<n>' },
-  // `retrieve` only, OPT-IN: drop every delivered atom whose CALIBRATED
+  // `search` only, OPT-IN: drop every delivered atom whose CALIBRATED
   // relevance probability falls below the floor. Subtractive, never reordering.
   '--min-relevance': { kind: 'value', placeholder: '<p>' },
-  // `retrieve` only, OPT-IN: RRF-fuse a reranker pass over the first pass.
+  // `search` only, OPT-IN: RRF-fuse a reranker pass over the first pass.
   '--rerank': { kind: 'boolean' },
   // The four below tune that pass and are meaningless without it, so each one
   // REFUSES on its own: a run labelled with a model or a fusion that never ran
@@ -72,9 +72,9 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--rerank-profile': { kind: 'value', placeholder: `<${RERANK_PRESET_NAMES.join('|')}>` },
   '--rerank-weight': { kind: 'value', placeholder: '<w>' },
   '--rerank-pool': { kind: 'value', placeholder: '<n>' },
-  // `retrieve` only, OPT-IN: rewrite the query into keywords before the first pass.
+  // `search` only, OPT-IN: rewrite the query into keywords before the first pass.
   '--rephrase': { kind: 'boolean' },
-  // `retrieve` and `answer`, OPT-IN: RM3 pseudo-relevance feedback over the first
+  // `search` and `ask`, OPT-IN: RM3 pseudo-relevance feedback over the first
   // pass. The three below tune it and are meaningless without it, so each one
   // REFUSES on its own — the rule `--rerank-model` already follows.
   '--prf': { kind: 'boolean' },
@@ -84,12 +84,12 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--prf-docs': { kind: 'value', placeholder: '<n>' },
   '--prf-terms': { kind: 'value', placeholder: '<n>' },
   '--prf-alpha': { kind: 'value', placeholder: '<a>' },
-  // `retrieve` only: at most n atoms from any ONE source document; `0` caps nothing.
+  // `search` only: at most n atoms from any ONE source document; `0` caps nothing.
   '--max-per-doc': { kind: 'value', placeholder: '<n>' },
-  // `retrieve` only: render the ranking ungrouped and uncapped, as it was before
+  // `search` only: render the ranking ungrouped and uncapped, as it was before
   // grouping existed. It contradicts a per-document cap, so the two together refuse.
   '--flat': { kind: 'boolean' },
-  // `retrieve` and `answer`: BM25F column weights, stated as OVERRIDES over the
+  // `search` and `ask`: BM25F column weights, stated as OVERRIDES over the
   // shipped defaults, so an unnamed column keeps the weight every recorded
   // number was measured at. An unknown column name is a usage error.
   '--field-weights': { kind: 'value', placeholder: `<${FTS_COLUMNS[0]}=w[,${FTS_COLUMNS[1]}=w]>` },
@@ -114,12 +114,17 @@ export const FLAGS: Readonly<Record<string, FlagSpec>> = {
   '--limit': { kind: 'value', placeholder: '<n>' },
   // `enrich` only: the generator id, for this run alone.
   '--enrich-model': { kind: 'value', placeholder: '<id>' },
-  // `answer` ONLY, OPT-IN: synthesise an answer over the pack. `retrieve` refuses
+  // `ask` ONLY, OPT-IN: synthesise an answer over the pack. `search` refuses
   // it through the same unknown-flag path — it has no pack to synthesise over.
   '--synthesize': { kind: 'boolean' },
   '--json': { kind: 'boolean' },
   '--help': { kind: 'boolean' },
   '-h': { kind: 'boolean' },
+  // Answered BEFORE any config or profile is read, like `--help`: it says what
+  // this build IS, which is what a caller asks precisely when something else is
+  // broken. It also outranks `--help` when both are passed.
+  '--version': { kind: 'boolean' },
+  '-v': { kind: 'boolean' },
 };
 
 /** Rendered flag vocabulary, reused by `--help` and by every rejection message. */

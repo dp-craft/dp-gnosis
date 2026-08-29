@@ -10,12 +10,16 @@
  * (`toJSON` / `loadJSON`) and loaded, never rebuilt in memory per process:
  * rebuilding would measure indexing, not loading.
  *
- * LAZY DYNAMIC IMPORT — `minisearch` is an `optionalDependency`, so it may be
- * absent. It is imported inside the call path, and EVERY import error is caught,
- * not just `MODULE_NOT_FOUND`: a transitive or native failure surfaces as a
- * different error class, and a narrow catch would hard-fail the whole suite
- * instead of skipping this one leg. `miniSearchAvailability` exposes the reason
- * so the harness can REPORT the skip rather than swallow it.
+ * LAZY DYNAMIC IMPORT — `minisearch` is a plain `dependency`: it backs a SHIPPED
+ * lexical adapter, so a normal install always carries it and an import failure
+ * here means a BROKEN INSTALL, not an unavailable extra. The lazy load is kept
+ * anyway, because it is what lets `miniSearchAvailability` report the reason
+ * instead of taking the process down — but read a report of "unavailable" from
+ * THIS adapter as a fault to investigate, not as an absent optional leg.
+ *
+ * EVERY import error is caught, not just `MODULE_NOT_FOUND`: a transitive or
+ * native failure surfaces as a different error class, and a narrow catch would
+ * hard-fail the whole suite instead of surfacing one named reason.
  *
  * STEMMING — `stemTerm` from `query.ts` is the SHARED English stemmer every
  * adapter applies, wired here through MiniSearch's `processTerm`, which the
@@ -94,7 +98,7 @@ export interface MiniSearchAdapterOptions extends BuildMiniSearchIndexOptions {
   readonly now: Date;
 }
 
-/** Whether the optional dependency loaded, and why it did not. */
+/** Whether the package loaded, and why it did not. */
 export interface MiniSearchAvailability {
   readonly available: boolean;
   readonly reason?: string;
@@ -141,7 +145,7 @@ const loadMiniSearch = (): Promise<LoadResult> =>
     (error: unknown): LoadResult => ({ ok: false, reason: describeError(error) })
   );
 
-/** Probe the optional dependency so a harness can report WHY a leg was skipped. */
+/** Probe the package so a harness can report WHY a leg was skipped. */
 export const miniSearchAvailability = async (): Promise<MiniSearchAvailability> => {
   const loaded = await loadMiniSearch();
   return loaded.ok ? { available: true } : { available: false, reason: loaded.reason };
@@ -214,7 +218,7 @@ const writeIndex = (ctor: MiniSearchCtor, options: BuildMiniSearchIndexOptions):
  * populated one — a distinction a bare success flag erases, and one that costs
  * every query its answer with no error anywhere.
  *
- * `undefined` — never a throw — when the optional dependency is unavailable, so
+ * `undefined` — never a throw — when the package fails to load, so
  * a caller skips this leg instead of failing. The two outcomes are different
  * facts: nothing COULD be built, versus nothing WAS.
  */

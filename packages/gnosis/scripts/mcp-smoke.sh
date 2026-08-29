@@ -15,7 +15,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 QUESTION="${1:-what is the knowledge pack}"
 
 INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"mcp-smoke","version":"0"}}}'
-CALL="$(QUESTION="$QUESTION" node -e 'process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"gnosis_answer",arguments:{question:process.env.QUESTION,k:3}}}))')"
+CALL="$(QUESTION="$QUESTION" node -e 'process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"gnosis_ask",arguments:{question:process.env.QUESTION,k:3}}}))')"
 
 OUT="$(mktemp)"
 trap 'rm -f "$OUT" "$OUT.in"' EXIT

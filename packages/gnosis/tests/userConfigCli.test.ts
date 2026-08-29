@@ -43,7 +43,7 @@ afterEach(() => {
 describe('a malformed config.json is a USAGE failure, never a crash', () => {
   it('refuses invalid JSON with exit 2 and no stack trace', async () => {
     const path = useConfig('{ this is not json');
-    const result = await runCli(['retrieve', 'zustand selector']);
+    const result = await runCli(['search', 'zustand selector']);
 
     expect(result.exitCode).toBe(EXIT_USAGE);
     expect(result.stderr).toContain(path);
@@ -55,7 +55,7 @@ describe('a malformed config.json is a USAGE failure, never a crash', () => {
 
   it('refuses a relative dataRoot by name, with the correction', async () => {
     const path = useConfig(JSON.stringify({ dataRoot: 'benchmark-data' }));
-    const result = await runCli(['retrieve', 'zustand selector']);
+    const result = await runCli(['search', 'zustand selector']);
 
     expect(result.exitCode).toBe(EXIT_USAGE);
     expect(result.stderr).toContain(path);
@@ -65,7 +65,7 @@ describe('a malformed config.json is a USAGE failure, never a crash', () => {
 
   it('reports the refusal as data in --json mode', async () => {
     useConfig('{ this is not json');
-    const result = await runCli(['retrieve', 'x', '--json']);
+    const result = await runCli(['search', 'x', '--json']);
 
     expect(result.exitCode).toBe(EXIT_USAGE);
     expect(JSON.parse(result.stdout)).toMatchObject({ exitCode: EXIT_USAGE });
@@ -78,7 +78,7 @@ describe('--help survives a broken config.json', () => {
     const result = await runCli(['--help']);
 
     expect(result.exitCode).toBe(EXIT_OK);
-    expect(result.stdout).toContain('retrieve');
+    expect(result.stdout).toContain('search');
     expect(result.stderr).toBe('');
   });
 
@@ -87,6 +87,22 @@ describe('--help survives a broken config.json', () => {
     const result = await runCli([]);
 
     expect(result.exitCode).toBe(EXIT_OK);
+    expect(result.stderr).toBe('');
+  });
+});
+
+/**
+ * `--version` answers the same question `--help` does — "what am I running?" —
+ * at the moment the user's config is broken, so it MUST resolve before the
+ * config is read at all, not after.
+ */
+describe('--version survives a broken config.json', () => {
+  it('prints a version and exits 0', async () => {
+    useConfig('{ this is not json');
+    const result = await runCli(['--version']);
+
+    expect(result.exitCode).toBe(EXIT_OK);
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
     expect(result.stderr).toBe('');
   });
 });

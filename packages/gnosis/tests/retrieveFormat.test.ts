@@ -43,7 +43,7 @@ const retrieveArgv = (
   query: string,
   extra: readonly string[]
 ): readonly string[] => [
-  'retrieve',
+  'search',
   query,
   // Pinned: the RENDERINGS are the subject here and are adapter-independent by
   // construction; the default adapter is index-backed and would search the
@@ -149,7 +149,7 @@ describe('retrieve --format', () => {
       );
 
       expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout)['command']).toBe('retrieve');
+      expect(JSON.parse(result.stdout)['command']).toBe('search');
     });
   });
 
@@ -191,7 +191,7 @@ describe('retrieve --format', () => {
 
       const empty = await runCli(retrieveArgv(fixture, 'zzqqxwv', ['--format', 'xml']));
       const unavailable = await runCli([
-        'retrieve',
+        'search',
         'escaping probe',
         '--adapter',
         'linear',
@@ -222,7 +222,7 @@ describe('retrieve --format', () => {
 
   describe('usage failures', () => {
     it('exits 2 naming both flags when --json contradicts --format xml', async () => {
-      const result = await runCli(['retrieve', 'x', '--json', '--format', 'xml']);
+      const result = await runCli(['search', 'x', '--json', '--format', 'xml']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('--json');
@@ -231,7 +231,7 @@ describe('retrieve --format', () => {
     });
 
     it('exits 2 naming the accepted values for an unknown --format', async () => {
-      const result = await runCli(['retrieve', 'x', '--format', 'yaml']);
+      const result = await runCli(['search', 'x', '--format', 'yaml']);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('yaml');

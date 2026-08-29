@@ -46,7 +46,7 @@ const retrieve = async (extra: readonly string[]): Promise<{
   readonly stderr: string;
 }> =>
   await runCli([
-    'retrieve',
+    'search',
     'zestful retrieval',
     '--atoms-dir',
     fixture.atomsDir,
@@ -176,7 +176,7 @@ describe('--prf', () => {
 
   it('states the same cell on the human-readable rendering', async () => {
     const served = await runCli([
-      'retrieve',
+      'search',
       'zestful retrieval',
       '--atoms-dir',
       fixture.atomsDir,
@@ -186,7 +186,7 @@ describe('--prf', () => {
       fixture.repoRoot,
     ]);
     const plain = await runCli([
-      'retrieve',
+      'search',
       'zestful retrieval',
       '--no-prf',
       '--atoms-dir',
@@ -197,14 +197,14 @@ describe('--prf', () => {
       fixture.repoRoot,
     ]);
 
-    expect(served.stdout).toContain('retrieve: prf');
+    expect(served.stdout).toContain('search: prf');
     expect(served.stdout).toContain('fbTerms 40');
-    expect(plain.stdout).not.toContain('retrieve: prf');
+    expect(plain.stdout).not.toContain('search: prf');
   });
 
   it('reports the same cell on `answer`, and omits it under --no-prf', async () => {
     const argv = (extra: readonly string[]): readonly string[] => [
-      'answer',
+      'ask',
       'zestful retrieval',
       '--atoms-dir',
       fixture.atomsDir,

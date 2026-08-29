@@ -18,12 +18,12 @@ import {
   createFts5Adapter,
   INDEX_SCHEMA_VERSION
 } from '../src/adapters/fts5Adapter.js';
-import { ingestProfilePath } from '../src/paths.js';
 import { runRetrieveCommand } from '../src/cli/retrieveCommand.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
+import { ingestProfilePath } from '../src/paths.js';
 import type { KnowledgePort, RetrievalResult } from '../src/port.js';
-import { DEFAULT_ANALYZER } from '../src/query.js';
 import type { AnalyzerId } from '../src/query.js';
+import { DEFAULT_ANALYZER } from '../src/query.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 const NOW = new Date('2026-08-20T00:00:00.000Z');

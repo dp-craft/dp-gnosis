@@ -130,7 +130,7 @@ const rankingOf = async (
   extra: readonly string[] = []
 ): Promise<readonly (readonly [string, number])[]> => {
   const out = await runCli([
-    'retrieve',
+    'search',
     'zestful retrieval',
     // Pinned: the fusion rule is the subject here, and the default adapter is
     // index-backed — an unpinned run would search the repo's own index.
@@ -317,7 +317,7 @@ describe('retrieve rerank tuning flags', () => {
   const usageErrorFor = async (
     extra: readonly string[]
   ): Promise<Awaited<ReturnType<typeof runCli>>> =>
-    await runCli(['retrieve', 'zestful retrieval', '--adapter', 'linear', ...extra]);
+    await runCli(['search', 'zestful retrieval', '--adapter', 'linear', ...extra]);
 
   beforeEach(() => {
     vi.stubEnv('DP_GNOSIS_CORPUS_ROOTS', 'doc');

@@ -1,8 +1,8 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { configHome, dataHome, dataHomeOverride, DATA_HOME_VAR, statedVar } from './env.js';
+import { configHome, DATA_HOME_VAR, dataHome, dataHomeOverride, statedVar } from './env.js';
 import { loadUserConfig } from './userConfig.js';
 
 /**
@@ -35,7 +35,7 @@ export const repoRoot = (): string => resolve(srcDir(), '..', '..', '..');
  * (`profiles/`, `golden/`). It is anchored on THIS FILE's location — one level
  * above `src/` in the repository, one level above `dist/` in an install — and
  * NOT on `repoRoot()`: `<root>/packages/gnosis` is a fact about the development
- * checkout, and an installed package sits at `<prefix>/@dp/gnosis` instead, so
+ * checkout, and an installed package sits at `<prefix>/dp-gnosis` instead, so
  * the derived form resolved a profile path that does not exist and the CLI died
  * on `--help`. The value is identical to the old one in the checkout.
  *
@@ -44,6 +44,28 @@ export const repoRoot = (): string => resolve(srcDir(), '..', '..', '..');
  * both forms exist here.
  */
 const packageDir = (): string => resolve(srcDir(), '..');
+
+/** A manifest is only a version source when it really carries a version string. */
+const isVersioned = (value: unknown): value is { readonly version: string } =>
+  typeof value === 'object' &&
+  value !== null &&
+  'version' in value &&
+  typeof value.version === 'string';
+
+/**
+ * This build's own version, read from the package manifest that ships beside
+ * the code — `<packageDir>/package.json`, which resolves in a checkout and in
+ * an install alike. It is READ rather than restated in TypeScript because a
+ * second copy drifts from the manifest on the first release that bumps it
+ * (COMMON.md §III constant ownership), and the drift is silent: a CLI that
+ * reports a version it is not is worse than one that reports none.
+ */
+export const packageVersion = (): string => {
+  const path = resolve(packageDir(), 'package.json');
+  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  if (!isVersioned(parsed)) throw new Error(`${path} states no "version" string`);
+  return parsed.version;
+};
 
 /**
  * Whether this package is running from an INSTALL rather than a checkout —
@@ -196,6 +218,40 @@ export const lancedbHybridIndexDir = (root: string = dataRoot()): string =>
 export const noIndexPath = (root: string = dataRoot()): string => resolve(indexDir(root), 'none');
 
 /**
+ * The `demo` command's OWN subtree, FIXED, and the SOLE owner of the demo
+ * location — every other spelling of it derives from here. Two reasons decide
+ * this path, and both must keep holding:
+ *
+ * 1. **Never the default vault layout.** `demo` ingests and indexes the tool's
+ *    own shipped documentation for a reader who owns no corpus, and `ingest`
+ *    WRITES AND PRUNES: pointed at `atomsDir()` it would claim, restamp and
+ *    prune the atoms a real vault owns, on a command whose whole promise is
+ *    that trying it is free. It also gets its own PARENT directory, because
+ *    `writeManifest` stamps `corpus-manifest.json` into the atoms directory's
+ *    parent and a shared parent would overwrite the vault's manifest.
+ * 2. **Under {@link runtimeRoot}, like its sibling {@link benchWorkDir}**, for
+ *    the same reason that one states: the subtree is derived and disposable.
+ *    `runtimeRoot()` is gitignored as a whole, so running `demo` from a
+ *    CHECKOUT leaves the working tree clean. At `<dataRoot>/demo` it did not —
+ *    in a checkout `dataRoot()` IS the repository root, and a run left the
+ *    demo atoms, index and manifest untracked at the top level.
+ */
+const demoRoot = (root: string = dataRoot()): string => resolve(runtimeRoot(root), 'demo');
+
+/** Where `demo` writes its atoms. Under {@link runtimeRoot}, never {@link atomsDir}. */
+export const demoAtomsDir = (root: string = dataRoot()): string =>
+  resolve(demoRoot(root), 'atoms');
+
+/**
+ * Where `demo` builds its index. Under {@link runtimeRoot}, never
+ * {@link indexDir}: the FILE NAME inside it is the selected adapter's, which is
+ * adapter knowledge and belongs beside the adapter table
+ * (`cli/adapter.ts:demoIndexPath`), not here.
+ */
+export const demoIndexDir = (root: string = dataRoot()): string =>
+  resolve(demoRoot(root), 'index');
+
+/**
  * Scratch root for the benchmark: corpus working copies and their indexes.
  * Under `runtimeRoot()` because it is derived and disposable — the bench never
  * measures `atomsDir()` in place, so a run cannot mutate the curated vault.
@@ -247,6 +303,40 @@ export const userProfilePath = (): string =>
  */
 export const shippedProfilePath = (): string =>
   resolve(profilesDir(), 'default.profile.json');
+
+/**
+ * The instance `demo` runs as. It is a profile like any other — a domain and a
+ * path→label table, data only — and it is SHIPPED because the demo corpus is
+ * shipped: the four package documents below carry no domain under the default
+ * profile's rules, so an ingest under that profile would skip every one of them
+ * and report an empty corpus as a successful demo.
+ */
+export const demoProfilePath = (): string =>
+  resolve(profilesDir(), 'demo.profile.json');
+
+/**
+ * The documents `demo` ingests, relative to {@link demoCorpusRoot}. They are the
+ * package's OWN documentation, which is why `package.json`'s `files` ships every
+ * one of them rather than the README alone — an installed demo with one document
+ * is a demo of nothing. A new sibling document MUST be added to BOTH lists or the
+ * demo corpus silently drops it.
+ */
+export const DEMO_CORPUS_ROOTS: readonly string[] = [
+  'README.md',
+  'QUERYING.md',
+  'OPTIONAL.md',
+  'AUTHORING.md',
+  'CONFIGURATION.md',
+  'INTEGRATION.md',
+];
+
+/**
+ * The root those four are walked under: the PACKAGE directory, the same anchor
+ * `profiles/` and `golden/` use, so the demo corpus resolves in a checkout and
+ * in an install alike. It is deliberately NOT `repoRoot()` — an installed
+ * package has no repository, and `demo` is the command a stranger runs first.
+ */
+export const demoCorpusRoot = (): string => packageDir();
 
 /**
  * The ingest profile an invocation runs under when `--profile` names none: the

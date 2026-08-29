@@ -1,5 +1,5 @@
 /**
- * `retrieve` — rank atoms for a query through the selected adapter.
+ * `search` — rank atoms for a query through the selected adapter.
  *
  * `mode` and `indexState` are REPORTED, never hidden. `indexState` is the only
  * thing that separates "searched a populated corpus and nothing matched" from
@@ -68,7 +68,7 @@ const DEFAULT_K = 5;
 const SCORE_DIGITS = 4;
 
 const NO_QUERY =
-  'retrieve requires a query — pass it as a positional argument, e.g. `retrieve "zustand selector" -k 5`';
+  'search requires a query — pass it as a positional argument, e.g. `search "zustand selector" -k 5`';
 
 const kError = (raw: string): string =>
   `-k must be a positive integer — got "${raw}"; pass e.g. \`-k 5\``;
@@ -83,11 +83,11 @@ const resolveK = (flags: FlagValues): number | undefined => {
   return raw === undefined ? DEFAULT_K : parseK(raw);
 };
 
-/** The type filter belongs to `retrieve` alone; `cli.ts` refuses it elsewhere. */
+/** The type filter belongs to `search` alone; `cli.ts` refuses it elsewhere. */
 export const TYPE_FLAG = '--type';
 
 /**
- * The domain filter, `retrieve` and `answer` alone; `cli.ts` refuses it
+ * The domain filter, `search` and `ask` alone; `cli.ts` refuses it
  * elsewhere. Its vocabulary is the LOADED profile's `domains`, never the
  * module-level {@link atomDomains}: a `--profile` instance carries its own
  * knowledge domains, and validating against the shipped tuple would refuse the
@@ -96,27 +96,27 @@ export const TYPE_FLAG = '--type';
 export const DOMAIN_FLAG = '--domain';
 
 /**
- * The exclusion override, `retrieve` only; `cli.ts` refuses it elsewhere. It
+ * The exclusion override, `search` only; `cli.ts` refuses it elsewhere. It
  * REPLACES {@link defaultExcludedTypes} instead of extending it, so what a
  * run excluded is what the caller typed — an exclusion silently unioned with an
  * invisible default is not readable off the command line.
  */
 export const EXCLUDE_TYPE_FLAG = '--exclude-type';
 
-/** Search every type, default exclusion included. `retrieve` only. */
+/** Search every type, default exclusion included. `search` only. */
 export const INCLUDE_HISTORY_FLAG = '--include-history';
 
-/** The budget override, `retrieve` only; `cli.ts` refuses it elsewhere. */
+/** The budget override, `search` only; `cli.ts` refuses it elsewhere. */
 export const MAX_TOKENS_FLAG = '--max-tokens';
 
 /**
- * The reranker, `retrieve` only and OPT-IN: without it the ranking is exactly
+ * The reranker, `search` only and OPT-IN: without it the ranking is exactly
  * what it was before the reranker existed. `cli.ts` refuses it elsewhere.
  */
 export const RERANK_FLAG = '--rerank';
 
 /**
- * The query rewriter, `retrieve` only and OPT-IN: without it the query reaches
+ * The query rewriter, `search` only and OPT-IN: without it the query reaches
  * the adapter exactly as typed. `cli.ts` refuses it elsewhere.
  *
  * The plan's `rewriteRules[]` output — the model reporting WHICH of the six
@@ -127,7 +127,7 @@ export const RERANK_FLAG = '--rerank';
 export const REPHRASE_FLAG = '--rephrase';
 
 /**
- * The per-document cap and the escape hatch from grouping, `retrieve` only;
+ * The per-document cap and the escape hatch from grouping, `search` only;
  * `cli.ts` refuses both elsewhere.
  *
  * They are MUTUALLY EXCLUSIVE by construction: `--flat` says the answer is not
@@ -139,7 +139,7 @@ export const MAX_PER_DOC_FLAG = '--max-per-doc';
 export const FLAT_FLAG = '--flat';
 
 /**
- * The BM25F column weights, `retrieve` and `answer`; `cli.ts` refuses it
+ * The BM25F column weights, `search` and `ask`; `cli.ts` refuses it
  * elsewhere. It is stated as OVERRIDES over {@link DEFAULT_FIELD_WEIGHTS}, not
  * as a whole vector: an unnamed column keeps its default, so
  * `--field-weights questions=2` leaves `body` at 1 rather than silently zeroing
@@ -381,7 +381,7 @@ const resolveRerankOptions = (flags: FlagValues, rerank: boolean): RerankOptions
 };
 
 /**
- * The calibrated relevance floor, `retrieve` only and OPT-IN: without it the
+ * The calibrated relevance floor, `search` only and OPT-IN: without it the
  * delivered set is exactly what it was before this flag existed.
  *
  * It is STRICTLY SUBTRACTIVE — it drops atoms the run already delivered and
@@ -820,7 +820,7 @@ export const resolveTypeFilter = (flags: FlagValues): TypesResult => {
  * well-formed, the corpus simply has not been built yet.
  */
 const noCorpus = (): string =>
-  `retrieve: nothing was searched — no corpus exists at the atoms directory; build it first with \`${ingestCommand()} <path...>\``;
+  `search: nothing was searched — no corpus exists at the atoms directory; build it first with \`${ingestCommand()} <path...>\``;
 
 /**
  * An index-backed adapter has a SECOND way to reach `unavailable`: the corpus is
@@ -973,7 +973,7 @@ export interface BudgetedResult {
  * raise the budget, or read the named source file directly.
  */
 export const budgetWarning = (budgeted: BudgetedResult): string =>
-  `retrieve: ${budgeted.skipped.length} atom(s) did not fit the ${budgeted.maxTokens}-token budget and were skipped — raise it with \`${MAX_TOKENS_FLAG} <n>\` or read the source files named below`;
+  `search: ${budgeted.skipped.length} atom(s) did not fit the ${budgeted.maxTokens}-token budget and were skipped — raise it with \`${MAX_TOKENS_FLAG} <n>\` or read the source files named below`;
 
 export const hasSkips = (budgeted: BudgetedResult): boolean => budgeted.skipped.length > 0;
 
@@ -989,7 +989,7 @@ const skipText = (budgeted: BudgetedResult): readonly string[] =>
  * corpus unless the count and the floor are stated.
  */
 const floorWarning = (budgeted: BudgetedResult): string =>
-  `retrieve: ${budgeted.belowFloor} atom(s) scored below the ${budgeted.minRelevance} calibrated relevance floor and were dropped — lower \`${MIN_RELEVANCE_FLAG} <p>\` or drop the flag to see them`;
+  `search: ${budgeted.belowFloor} atom(s) scored below the ${budgeted.minRelevance} calibrated relevance floor and were dropped — lower \`${MIN_RELEVANCE_FLAG} <p>\` or drop the flag to see them`;
 
 /**
  * An atom with no calibrated score was NOT scored below the floor — it was
@@ -997,7 +997,7 @@ const floorWarning = (budgeted: BudgetedResult): string =>
  * offers a remedy (lower the floor) that cannot reach it.
  */
 const unscoredWarning = (budgeted: BudgetedResult): string =>
-  `retrieve: ${budgeted.unscored} atom(s) were dropped by the ${budgeted.minRelevance} floor with NO calibrated score — they were never scored, not scored below it`;
+  `search: ${budgeted.unscored} atom(s) were dropped by the ${budgeted.minRelevance} floor with NO calibrated score — they were never scored, not scored below it`;
 
 /**
  * The floor was named and deliberately not run. Stated in full, because the
@@ -1005,7 +1005,7 @@ const unscoredWarning = (budgeted: BudgetedResult): string =>
  * floor had run would read an unfiltered answer as a filtered one.
  */
 const unappliedFloorNote = (budgeted: BudgetedResult): string =>
-  `retrieve: the ${budgeted.minRelevance} calibrated relevance floor was NOT applied — the rerank was refused, so no atom carries a calibrated score and nothing could be judged against the floor; the atoms below are the un-floored first pass`;
+  `search: the ${budgeted.minRelevance} calibrated relevance floor was NOT applied — the rerank was refused, so no atom carries a calibrated score and nothing could be judged against the floor; the atoms below are the un-floored first pass`;
 
 const appliedFloorNotes = (budgeted: BudgetedResult): readonly string[] => [
   ...(budgeted.belowFloor > 0 ? [floorWarning(budgeted)] : []),
@@ -1028,10 +1028,10 @@ const floorNotes = (budgeted: BudgetedResult): readonly string[] => {
  * The phrasing lever itself is NOT restated here: the rules live where the
  * caller executes them, and a second copy would drift from them.
  */
-const NOTHING_MATCHED = 'retrieve: nothing in the vault matched these terms';
+const NOTHING_MATCHED = 'search: nothing in the vault matched these terms';
 
 const REPHRASE_REMEDY =
-  'the largest lever is the keyword phrasing — rewrite the query per `packages/gnosis/README.md` § Query rephrasing and retrieve again';
+  'the largest lever is the keyword phrasing — rewrite the query per `packages/gnosis/QUERYING.md` § Query rephrasing and retrieve again';
 
 /** No filter ran, so the whole vault was searched and phrasing is all that is left. */
 const unfilteredEmptyNote = (): string =>
@@ -1096,7 +1096,7 @@ const emptyNotes = (
  * budget and the floor already name their own subtractions.
  */
 const capShortfallNote = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
-  `retrieve: delivered ${budgeted.cappedPool} of the ${request.k} atoms asked for — the per-document cap did that, not the query: the first pass matched ${budgeted.poolSize} atom(s), and at \`${MAX_PER_DOC_FLAG} ${request.maxPerDoc}\` only ${budgeted.cappedPool} of them survive it — raise it with \`${MAX_PER_DOC_FLAG} <n>\`, or pass \`${FLAT_FLAG}\` to cap nothing`;
+  `search: delivered ${budgeted.cappedPool} of the ${request.k} atoms asked for — the per-document cap did that, not the query: the first pass matched ${budgeted.poolSize} atom(s), and at \`${MAX_PER_DOC_FLAG} ${request.maxPerDoc}\` only ${budgeted.cappedPool} of them survive it — raise it with \`${MAX_PER_DOC_FLAG} <n>\`, or pass \`${FLAT_FLAG}\` to cap nothing`;
 
 const isCapShort = (request: RetrieveRequest, budgeted: BudgetedResult): boolean =>
   budgeted.cappedPool < request.k && budgeted.cappedPool < budgeted.poolSize;
@@ -1113,7 +1113,7 @@ const capNotes = (
  */
 const rephraseLines = (request: RetrieveRequest): readonly string[] => {
   const rewritten = request.queryRewritten;
-  if (rewritten !== undefined) return [`retrieve: rephrased "${request.query}" -> "${rewritten}"`];
+  if (rewritten !== undefined) return [`search: rephrased "${request.query}" -> "${rewritten}"`];
   return request.rephraseRefusal === undefined ? [] : [request.rephraseRefusal];
 };
 
@@ -1133,7 +1133,7 @@ const rerankLines = (request: RetrieveRequest): readonly string[] =>
  * and the ranking delivered is the real ranking for the terms that exist.
  */
 const vocabularyGapWarning = (gap: VocabularyGap): string =>
-  `retrieve: ${gap.gapCount} of ${gap.termCount} analysed query term(s) have ZERO postings in ` +
+  `search: ${gap.gapCount} of ${gap.termCount} analysed query term(s) have ZERO postings in ` +
   `this index — ${gap.gapTerms.map(term => `"${term}"`).join(', ')} — no atom holds them, so ` +
   'they add nothing to the ranking and a feedback pass built on it expands from the terms that ' +
   'did hit; check the spelling, or ask with words this corpus uses.';
@@ -1243,7 +1243,7 @@ export const confidenceOf = (
 };
 
 const confidenceLine = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
-  `retrieve: confidence ${confidenceOf(request, budgeted)}`;
+  `search: confidence ${confidenceOf(request, budgeted)}`;
 
 /**
  * WHICH measure was enforced, stated on every run. Without it a caller cannot
@@ -1251,7 +1251,7 @@ const confidenceLine = (request: RetrieveRequest, budgeted: BudgetedResult): str
  * different atoms at the same `--max-tokens`.
  */
 const budgetLine = (request: RetrieveRequest, budgeted: BudgetedResult): string =>
-  `retrieve: budget ${budgeted.maxTokens} counted as ${request.budgetMode}`;
+  `search: budget ${budgeted.maxTokens} counted as ${request.budgetMode}`;
 
 /**
  * The expansion stated on the human rendering too, and ONLY when one ran: the
@@ -1262,14 +1262,14 @@ export const prfLines = (request: RetrieveRequest): readonly string[] => {
   const { prf, prfSource } = request;
   if (prf === undefined || prfSource === undefined) return [];
   return [
-    `retrieve: prf fbDocs ${prf.fbDocs}, fbTerms ${prf.fbTerms}, alpha ${prf.alpha} (${prfSource})`,
+    `search: prf fbDocs ${prf.fbDocs}, fbTerms ${prf.fbTerms}, alpha ${prf.alpha} (${prfSource})`,
   ];
 };
 
 const retrieveText = (request: RetrieveRequest, budgeted: BudgetedResult): string => {
   const { result } = budgeted;
   return [
-    `retrieve: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
+    `search: mode ${result.mode}, indexState ${result.indexState}, atoms ${result.atoms.length}`,
     confidenceLine(request, budgeted),
     budgetLine(request, budgeted),
     ...prfLines(request),
@@ -1662,7 +1662,7 @@ const payload = (
   request: RetrieveRequest,
   budgeted: BudgetedResult
 ): Readonly<Record<string, unknown>> => ({
-  command: 'retrieve',
+  command: 'search',
   adapter: request.context.adapter,
   query: request.query,
   ...rewrittenField(request),
@@ -1949,7 +1949,7 @@ interface BudgetSpec {
   /**
    * The chrome a command emits AROUND the atoms, already counted in the active
    * measure. It is subtracted from `maxTokens` before the fit, so the ceiling
-   * bounds what is emitted rather than only the atoms inside it. `retrieve`
+   * bounds what is emitted rather than only the atoms inside it. `search`
    * reserves nothing and passes 0, keeping its fit byte-identical.
    */
   readonly overhead: number;
@@ -2021,7 +2021,7 @@ const rendered = (
 });
 
 /** This command's name, on the payload of a refusal that has no ranking to render. */
-const RETRIEVE_COMMAND = 'retrieve';
+const SEARCH_COMMAND = 'search';
 
 /**
  * One completed retrieval, everything a rendering needs and nothing rendered
@@ -2059,7 +2059,7 @@ const runOf = (
 
 const refused = (reason: string): RetrievalOutcome => ({
   ok: false,
-  outcome: budgetRefusalOutcome(RETRIEVE_COMMAND, reason),
+  outcome: budgetRefusalOutcome(SEARCH_COMMAND, reason),
 });
 
 /** The ceiling, the measure and the reserve — one decision, stated in one place. */
@@ -2180,7 +2180,7 @@ const initialRequest = (
 
 /**
  * The chrome the run reserves, in the active measure. No overhead text means NO
- * count at all — `retrieve` reserves nothing, so it makes no extra tokenizer
+ * count at all — `search` reserves nothing, so it makes no extra tokenizer
  * call and its budget is the one it always had.
  */
 const overheadCost = async (
@@ -2209,7 +2209,7 @@ const searchWithBudget = async (
  * Split out so a second command reuses the RANKING rather than re-deriving it.
  * `charged` states what that command will actually emit per atom, so its budget
  * charges the text it renders; `overhead` states the fixed chrome it emits
- * AROUND them, subtracted from `maxTokens` before the fit. `retrieve` charges
+ * AROUND them, subtracted from `maxTokens` before the fit. `search` charges
  * the body and reserves nothing, unchanged.
  */
 export const performRetrieval = async (

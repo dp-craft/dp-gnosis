@@ -18,7 +18,7 @@ import { runCli } from '../cli/cli.js';
 import type { AnswerInput, AnswerRunner } from './protocol.js';
 import { answerArgv, handleLine } from './protocol.js';
 
-/** The real seam: ONE `answer --json` invocation, and the pack is read out of it. */
+/** The real seam: ONE `ask --json` invocation, and the pack is read out of it. */
 export const runAnswer: AnswerRunner = async (input: AnswerInput) =>
   await runCli(answerArgv(input));
 

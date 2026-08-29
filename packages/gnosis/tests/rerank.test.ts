@@ -12,7 +12,11 @@ import { join } from 'node:path';
 
 import { estimateTokens } from '../src/budget.js';
 import { runCli } from '../src/cli/cli.js';
-import { RERANK_FUSION_PRESETS, RERANK_MODEL_ID } from '../src/config.js';
+import {
+  RERANK_FUSION_PRESETS,
+  RERANK_MODEL_ID,
+  RERANK_PROBE_MIN_SCORE
+} from '../src/config.js';
 import {
   calibrate,
   fuseRanking,
@@ -52,7 +56,7 @@ const retrieve = async (
   extra: readonly string[]
 ): Promise<{ readonly exitCode: number; readonly stdout: string; readonly stderr: string }> =>
   await runCli([
-    'retrieve',
+    'search',
     'zestful retrieval',
     // Pinned, not defaulted: this file measures the RERANK leg, and the default
     // adapter is index-backed, so an unpinned run would search the repo's own
@@ -287,7 +291,7 @@ describe('probeRerankDiscrimination', () => {
   });
 
   it('REFUSES an INVERTED scorer, distinctly from a constant one', async () => {
-    stubProbeServer([RERANK_MODEL_ID], [1.96e-7, 2.94e-7]);
+    stubProbeServer([RERANK_MODEL_ID], [0.196, 0.294]);
 
     const outcome = await probeRerankDiscrimination();
 
@@ -295,8 +299,61 @@ describe('probeRerankDiscrimination', () => {
     const error = outcome.ok ? '' : outcome.error;
     expect(error).toContain('INVERTED');
     expect(error).not.toContain('CONSTANT');
-    expect(error).toContain(String(1.96e-7));
-    expect(error).toContain(String(2.94e-7));
+    expect(error).toContain(String(0.196));
+    expect(error).toContain(String(0.294));
+  });
+
+  /**
+   * The hole this closes. A GGUF converted without the `cls.output.weight` rank
+   * head scores EVERY pair at ~4.5e-23 — and the directional test passed it
+   * whenever the relevant score landed a hair higher, which is the failure class
+   * this repository exists to police: a component produced nothing and the
+   * pipeline recorded it as data. Magnitude is judged BEFORE direction, so a
+   * degenerate pair that is directionally CORRECT is still refused.
+   */
+  it('REFUSES a DEGENERATE-magnitude pair that is directionally correct', async () => {
+    stubProbeServer([RERANK_MODEL_ID], [4.6e-23, 4.5e-23]);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome.ok).toBe(false);
+    const error = outcome.ok ? '' : outcome.error;
+    expect(error).toContain('DEGENERATE');
+    expect(error).not.toContain('CONSTANT');
+    expect(error).not.toContain('INVERTED');
+    expect(error).toContain('cls.output.weight');
+    expect(error).toContain(String(RERANK_PROBE_MIN_SCORE));
+    expect(error).toContain(String(4.6e-23));
+    expect(error).toContain(String(4.5e-23));
+  });
+
+  it('refuses a degenerate pair that is ALSO inverted as DEGENERATE, magnitude first', async () => {
+    stubProbeServer([RERANK_MODEL_ID], [1.96e-7, 2.94e-7]);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok ? '' : outcome.error).toContain('DEGENERATE');
+  });
+
+  it('PASSES a pair sitting exactly ON the floor — the floor is a minimum, not a gap', async () => {
+    stubProbeServer([RERANK_MODEL_ID], [RERANK_PROBE_MIN_SCORE, 0]);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome).toEqual({
+      ok: true,
+      relevantScore: RERANK_PROBE_MIN_SCORE,
+      irrelevantScore: 0,
+    });
+  });
+
+  it('PASSES a healthy pair well clear of the floor', async () => {
+    stubProbeServer([RERANK_MODEL_ID], [0.99, 0.001]);
+
+    const outcome = await probeRerankDiscrimination();
+
+    expect(outcome).toEqual({ ok: true, relevantScore: 0.99, irrelevantScore: 0.001 });
   });
 
   it('PASSES a model that ranks the relevant passage above the irrelevant one', async () => {

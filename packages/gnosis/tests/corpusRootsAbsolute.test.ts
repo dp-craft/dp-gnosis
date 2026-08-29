@@ -131,7 +131,6 @@ describe('corpusRoots — an absolute entry is used as-is', () => {
     expect(summary.skipped[0]?.reasons.join(' ')).toMatch(/outside every declared ingest root/);
     expect(summary.skipped[0]?.source).toBe(`${toPosix(remote)}/REMOTE.md`);
   });
-
 });
 
 describe('corpusRoots — a ~ entry expands to the home directory', () => {

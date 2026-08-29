@@ -140,9 +140,9 @@ const PINNED_ATOMS_DIR = mkdtempSync(join(tmpdir(), 'gnosis-enrich-cli-pin-'));
 
 describe('each new flag is refused everywhere it cannot be honoured', () => {
   it.each([
-    ['retrieve', LIMIT_FLAG, ['retrieve', 'query', LIMIT_FLAG, '1']],
-    ['retrieve', ENRICH_MODEL_FLAG, ['retrieve', 'query', ENRICH_MODEL_FLAG, '1']],
-    ['retrieve', ENRICHMENT_FLAG, ['retrieve', 'query', ENRICHMENT_FLAG, '1']],
+    ['search', LIMIT_FLAG, ['search', 'query', LIMIT_FLAG, '1']],
+    ['search', ENRICH_MODEL_FLAG, ['search', 'query', ENRICH_MODEL_FLAG, '1']],
+    ['search', ENRICHMENT_FLAG, ['search', 'query', ENRICHMENT_FLAG, '1']],
     [
       'ingest (pinned atoms dir)',
       FIELD_WEIGHTS_FLAG,
@@ -221,7 +221,7 @@ describe('--field-weights merges OVER the shipped defaults', () => {
   it('reaches retrieve as a usage error, exit 2', async () => {
     const fixture = await makeFixture();
     const result = await runCli([
-      'retrieve',
+      'search',
       'zestful',
       '--adapter',
       'linear',

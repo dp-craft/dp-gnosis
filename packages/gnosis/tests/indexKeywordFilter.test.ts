@@ -179,7 +179,7 @@ describe('index --keyword-filter', () => {
   });
 
   it('REFUSES the flag on retrieve, which builds no index', async () => {
-    const result = await runCli(['retrieve', 'selector', '--keyword-filter', 'novel']);
+    const result = await runCli(['search', 'selector', '--keyword-filter', 'novel']);
 
     expect(result.exitCode).toBe(2);
   });

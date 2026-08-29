@@ -171,7 +171,7 @@ export const typeForSource = (repoRelativePath: string): AtomType =>
   expectMember(typeForPath(activeProfile(), repoRelativePath), atomTypes(), 'type');
 
 /**
- * The types the CLI hides from `retrieve` unless the caller asks for them, as
+ * The types the CLI hides from `search` unless the caller asks for them, as
  * declared by the profile (`defaultExcludedTypes`). It is a PRESENTATION
  * default and lives on the CLI path alone: nothing in ingest, the port or an
  * adapter reads it, so a corpus still holds every atom and the bench — which

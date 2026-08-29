@@ -1,10 +1,10 @@
 import { vi } from 'vitest';
 
-import { ingestProfilePath } from '../src/paths.js';
 import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import type { CommandContext } from '../src/cli/context.js';
 import { runIngestCommand } from '../src/cli/ingestCommand.js';
 import type { IngestSummary } from '../src/ingest.js';
+import { ingestProfilePath } from '../src/paths.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /**

@@ -1,5 +1,5 @@
 /**
- * The SERVING-path reranker: `retrieve --rerank`, opt-in.
+ * The SERVING-path reranker: `search --rerank`, opt-in.
  *
  * Two decisions live here and nowhere else.
  *
@@ -32,6 +32,7 @@ import {
   RERANK_FUSION_PRESETS,
   RERANK_MODEL_ID,
   RERANK_PRESET_NAMES,
+  RERANK_PROBE_MIN_SCORE,
   RERANK_URL_ENV_VAR,
   type RerankFusion,
   type RerankPresetName
@@ -256,7 +257,7 @@ interface Endpoint {
 }
 
 const request = (model: string): string =>
-  `retrieve --rerank: reranker model "${model}" was requested`;
+  `search --rerank: reranker model "${model}" was requested`;
 
 const requirement = (model: string): string =>
   ` — llama-swap MUST serve a reranker under the id "${model}"; `;
@@ -291,9 +292,20 @@ type Catalogue =
   | { readonly ok: true; readonly models: readonly string[] }
   | { readonly ok: false; readonly cause: string };
 
-const fetchCatalogue = async (baseUrl: string): Promise<Catalogue> => {
+/**
+ * A ceiling for a caller that MUST come back: `doctor` is an offline pass, and
+ * the default `127.0.0.1` refuses instantly, but a `DP_GNOSIS_RERANK_URL`
+ * pointing at an unreachable HOST would otherwise hang on the connect. The
+ * serving path passes none — a slow catalogue there is worth waiting for.
+ */
+const CATALOGUE_TIMEOUT_MS = 5000;
+
+const catalogueInit = (timeoutMs: number | undefined): RequestInit =>
+  timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(timeoutMs) };
+
+const fetchCatalogue = async (baseUrl: string, timeoutMs?: number): Promise<Catalogue> => {
   try {
-    const response = await fetch(`${baseUrl}${MODELS_PATH}`);
+    const response = await fetch(`${baseUrl}${MODELS_PATH}`, catalogueInit(timeoutMs));
     const body = await response.text();
     return response.ok
       ? { ok: true, models: modelIds(JSON.parse(body)) }
@@ -304,8 +316,11 @@ const fetchCatalogue = async (baseUrl: string): Promise<Catalogue> => {
 };
 
 /** `undefined` when the model is served; otherwise the message to refuse with. */
-const catalogueRefusal = async (endpoint: Endpoint): Promise<string | undefined> => {
-  const catalogue = await fetchCatalogue(endpoint.baseUrl);
+const catalogueRefusal = async (
+  endpoint: Endpoint,
+  timeoutMs?: number
+): Promise<string | undefined> => {
+  const catalogue = await fetchCatalogue(endpoint.baseUrl, timeoutMs);
   if (!catalogue.ok) return unreachableMessage(endpoint, catalogue.cause);
   return catalogue.models.includes(endpoint.model)
     ? undefined
@@ -507,12 +522,22 @@ interface ProbeScores {
 }
 
 /**
- * The two BROKEN signatures seen on llama.cpp b10375. They diagnose
+ * The three BROKEN signatures seen on llama.cpp b10375. They diagnose
  * differently, so the refusal names which one fired.
  */
-type ProbeSignature = 'CONSTANT' | 'INVERTED';
+type ProbeSignature = 'CONSTANT' | 'INVERTED' | 'DEGENERATE';
 
 const SIGNATURE_DIAGNOSIS: Readonly<Record<ProbeSignature, string>> = {
+  DEGENERATE:
+    'DEGENERATE — the RELEVANT score is below ' +
+    `${String(RERANK_PROBE_MIN_SCORE)}, so the model produced no usable signal at all ` +
+    '(the rank head `cls.output.weight` is ABSENT from the GGUF — the ' +
+    'mradermacher/Qwen3-Reranker-*-GGUF and DevQuasar/* conversions, upstream ' +
+    'ggml-org/llama.cpp#16407). The server still answers HTTP 200 with well-formed ' +
+    'numbers around 4.5e-23, so nothing downstream notices; the ordering between two ' +
+    'such scores is noise even when it points the right way. Serve a GGUF converted ' +
+    'with the official convert_hf_to_gguf.py — gscoppino/Qwen3-Reranker-4B-GGUF-llama_cpp ' +
+    'or Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp',
   CONSTANT:
     'CONSTANT — the two scores are IDENTICAL, so the score is invariant to the DOCUMENT ' +
     '(the mxbai-rerank-large-v2 signature). Equal scores leave the first-pass order ' +
@@ -524,8 +549,16 @@ const SIGNATURE_DIAGNOSIS: Readonly<Record<ProbeSignature, string>> = {
     'still answers HTTP 200, with noise)',
 };
 
-/** `undefined` when the model discriminates: relevant strictly above irrelevant. */
+/**
+ * `undefined` when the model discriminates: the relevant score clears
+ * {@link RERANK_PROBE_MIN_SCORE} AND beats the irrelevant one.
+ *
+ * MAGNITUDE is judged FIRST, and that order is load-bearing: a rank-head-less
+ * GGUF scores both documents at ~4.5e-23, which is directionally correct half
+ * the time. Reading the direction first would call that pair healthy.
+ */
 const probeSignature = (scores: ProbeScores): ProbeSignature | undefined => {
+  if (scores.relevant < RERANK_PROBE_MIN_SCORE) return 'DEGENERATE';
   if (scores.relevant > scores.irrelevant) return undefined;
   return scores.relevant === scores.irrelevant ? 'CONSTANT' : 'INVERTED';
 };
@@ -577,8 +610,9 @@ const probeVerdict = (endpoint: Endpoint, scores: ProbeScores): RerankProbeOutco
 
 /**
  * Scores the fixed relevant/irrelevant pair and reports whether the model
- * DISCRIMINATES at all: the scores must DIFFER and the relevant one must win.
- * There is deliberately no minimum gap — the verdict is directional only.
+ * DISCRIMINATES at all: the relevant score must clear
+ * {@link RERANK_PROBE_MIN_SCORE} and must beat the irrelevant one. There is
+ * still no minimum GAP — the floor is an absolute magnitude, not a margin.
  *
  * A caller runs this once before trusting an arm. A model that fails it returns
  * HTTP 200 and well-formed numbers, so nothing downstream can notice.
@@ -650,4 +684,38 @@ export const rerankProbeRefusal = async (
   const { baseUrl, model } = resolved(options);
   const probe = await probeOnce({ baseUrl, model });
   return probe.ok ? undefined : probeRefusal(probe.error);
+};
+
+/**
+ * A DIAGNOSTIC's reading of the same probe, with the one distinction the serving
+ * path does not need: an endpoint that is not there is not the same finding as
+ * an endpoint that is there and broken.
+ *
+ * `unavailable` is what `doctor` reports as UNKNOWN — reranking is opt-in, so a
+ * machine that never served one has no defect to report, and the catalogue call
+ * that establishes it is bounded so an offline pass cannot hang on it. `broken`
+ * carries the probe's own refusal verbatim; there is no second wording.
+ */
+export type RerankHealth =
+  | { readonly kind: 'unavailable'; readonly detail: string }
+  | { readonly kind: 'broken'; readonly detail: string }
+  | { readonly kind: 'healthy'; readonly relevantScore: number; readonly irrelevantScore: number };
+
+const healthOf = (probe: RerankProbeOutcome): RerankHealth =>
+  probe.ok
+    ? { kind: 'healthy', relevantScore: probe.relevantScore, irrelevantScore: probe.irrelevantScore }
+    : { kind: 'broken', detail: probe.error };
+
+/**
+ * The catalogue is asked FIRST and separately, because it is the only cheap
+ * question: it decides `unavailable` before the probe's own long timeout — which
+ * doubles as the cold-load warm-up — is ever entered. The probe itself is
+ * memoised per process, so a `doctor` run beside a `search --rerank` pays once.
+ */
+export const rerankHealth = async (options: RerankOptions = {}): Promise<RerankHealth> => {
+  const { baseUrl, model } = resolved(options);
+  const endpoint: Endpoint = { baseUrl, model };
+  const refusal = await catalogueRefusal(endpoint, CATALOGUE_TIMEOUT_MS);
+  if (refusal !== undefined) return { kind: 'unavailable', detail: refusal };
+  return healthOf(await probeOnce(endpoint));
 };

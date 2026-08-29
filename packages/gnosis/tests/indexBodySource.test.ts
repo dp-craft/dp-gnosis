@@ -166,7 +166,7 @@ describe('index --body-source', () => {
   });
 
   it('REFUSES the flag on retrieve, which builds no index', async () => {
-    const result = await runCli(['retrieve', 'selector', '--body-source', 'long']);
+    const result = await runCli(['search', 'selector', '--body-source', 'long']);
 
     expect(result.exitCode).toBe(2);
   });
