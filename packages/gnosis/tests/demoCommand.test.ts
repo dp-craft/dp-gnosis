@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
-import { atomsDir, demoAtomsDir, demoIndexDir, indexDir, runtimeRoot } from '../src/paths.js';
+import { atomsDir, DEMO_CORPUS_ROOTS, demoAtomsDir, demoIndexDir, demoProfilePath, indexDir, runtimeRoot } from '../src/paths.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 
 /** Both homes are redirected, so the run cannot read or write the developer's own state. */
@@ -139,5 +139,35 @@ describe('demo — the location and profile flags it CANNOT honour', () => {
     );
 
     results.forEach(result => expect(result.stderr).not.toContain('unknown flag'));
+  });
+});
+
+/**
+ * The invariant `paths.ts` states in prose beside {@link DEMO_CORPUS_ROOTS} —
+ * "a new sibling document MUST be added to BOTH lists" — and which nothing
+ * enforced. A document in the roots but under no `domainRules` prefix is
+ * ingested and then dropped as unclaimed: `demo` reports every shipped document
+ * ingested and answers from a subset, which is a component producing nothing
+ * recorded as data.
+ */
+describe('demo — the shipped roots and the profile that claims them', () => {
+  const claimedPrefixes = (): readonly string[] => {
+    const raw: unknown = JSON.parse(readFileSync(demoProfilePath(), 'utf8'));
+    if (typeof raw !== 'object' || raw === null) throw new Error('demo profile is not an object');
+    const rules = (raw as Record<string, unknown>)['domainRules'];
+    if (!Array.isArray(rules)) throw new Error('demo profile states no domainRules');
+    return rules.map(rule => String((rule as Record<string, unknown>)['prefix']));
+  };
+
+  it('claims every shipped root — no ingested document is dropped as unclaimed', () => {
+    const claimed = new Set(claimedPrefixes());
+    const unclaimed = DEMO_CORPUS_ROOTS.filter(root => !claimed.has(root));
+    expect(unclaimed, `shipped in DEMO_CORPUS_ROOTS but claimed by no demo domainRule: ${unclaimed.join(', ')}`).toEqual([]);
+  });
+
+  it('claims nothing the demo does not ship — no rule points at an absent document', () => {
+    const shipped = new Set(DEMO_CORPUS_ROOTS);
+    const orphaned = claimedPrefixes().filter(prefix => !shipped.has(prefix));
+    expect(orphaned, `claimed by a demo domainRule but absent from DEMO_CORPUS_ROOTS: ${orphaned.join(', ')}`).toEqual([]);
   });
 });

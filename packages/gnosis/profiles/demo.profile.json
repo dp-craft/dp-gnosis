@@ -1,6 +1,6 @@
 {
   "comment:purpose": "The instance the `demo` command runs as. Its corpus is this package's OWN documentation, walked under the package directory rather than under a repository — so `demo` works for a reader who owns no vault, in a checkout and in an install alike.",
-  "comment:why-a-profile": "The four documents below sit at the package root and are claimed by NO domainRule of the shipped `default` profile, so an ingest under that profile skips every one of them with `outside every declared ingest root`. A demo that reports an empty corpus as a success is exactly the failure class this repository exists to police, so the demo declares its own domain instead — data only, no TypeScript edit, the same way `hu-tax` onboards a vocabulary the shipped one never heard of.",
+  "comment:why-a-profile": "The six documents below sit at the package root and are claimed by NO domainRule of the shipped `default` profile, so an ingest under that profile skips every one of them with `outside every declared ingest root`. A demo that reports an empty corpus as a success is exactly the failure class this repository exists to police, so the demo declares its own domain instead — data only, no TypeScript edit, the same way `hu-tax` onboards a vocabulary the shipped one never heard of.",
   "comment:locations": "It declares NO repoRoot, atomsDir or indexPath: those are FIXED by the command through src/paths.ts (`demoCorpusRoot`, `demoAtomsDir`, `demoIndexDir`), because they must follow the resolved data root of the machine the demo runs on rather than any path authored here.",
   "name": "demo",
   "domains": ["demo"],
@@ -9,6 +9,8 @@
   "defaultType": "knowledge",
   "domainRules": [
     { "prefix": "README.md", "domain": "demo" },
+    { "prefix": "QUERYING.md", "domain": "demo" },
+    { "prefix": "OPTIONAL.md", "domain": "demo" },
     { "prefix": "AUTHORING.md", "domain": "demo" },
     { "prefix": "CONFIGURATION.md", "domain": "demo" },
     { "prefix": "INTEGRATION.md", "domain": "demo" }

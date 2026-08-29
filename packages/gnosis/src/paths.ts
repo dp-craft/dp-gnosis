@@ -307,7 +307,7 @@ export const shippedProfilePath = (): string =>
 /**
  * The instance `demo` runs as. It is a profile like any other — a domain and a
  * path→label table, data only — and it is SHIPPED because the demo corpus is
- * shipped: the four package documents below carry no domain under the default
+ * shipped: the six package documents below carry no domain under the default
  * profile's rules, so an ingest under that profile would skip every one of them
  * and report an empty corpus as a successful demo.
  */
@@ -331,7 +331,7 @@ export const DEMO_CORPUS_ROOTS: readonly string[] = [
 ];
 
 /**
- * The root those four are walked under: the PACKAGE directory, the same anchor
+ * The root those six are walked under: the PACKAGE directory, the same anchor
  * `profiles/` and `golden/` use, so the demo corpus resolves in a checkout and
  * in an install alike. It is deliberately NOT `repoRoot()` — an installed
  * package has no repository, and `demo` is the command a stranger runs first.
