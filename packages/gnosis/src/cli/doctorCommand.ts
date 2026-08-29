@@ -38,7 +38,11 @@ import { ATOMS_OWNER_FILE, loadCorpus } from '../ingest.js';
 import { indexRebuildCommand, ingestCommand } from '../invocation.js';
 import type { DataRootFact } from '../paths.js';
 import { dataRoot, dataRootFact } from '../paths.js';
+import { chatModelFact } from '../chat.js';
+import { rephraseModelFact } from '../rephrase.js';
 import type { RerankFact, RerankHealth } from '../rerank.js';
+import type { SettingFact } from '../settingFact.js';
+import { synthesizeModelFact } from '../synthesize.js';
 import type { LocalRerankerAvailability } from '../localReranker.js';
 import { localRerankerAvailability } from '../localReranker.js';
 import { rerankBackendFact, rerankHealth, rerankModelFact, rerankUrlFact } from '../rerank.js';
@@ -116,6 +120,8 @@ interface DoctorFacts {
   readonly rerank: RerankHealth;
   /** WHERE that endpoint came from, or why it could not be resolved at all. */
   readonly rerankSettings: RerankScan;
+  /** Which id each chat hop will ask for, and which tier said so. */
+  readonly chatSettings: ChatScan;
   /**
    * The local engine's loadability, probed ONLY when that backend is selected —
    * a machine serving over HTTP has no local engine to have an opinion about.
@@ -162,6 +168,34 @@ const probeRerank = async (scan: RerankScan): Promise<RerankHealth> =>
   scan.ok
     ? await rerankHealth({ baseUrl: scan.url.value, model: scan.model.value })
     : { kind: 'unavailable', detail: scan.reason };
+
+/**
+ * The three chat hop ids as resolved RIGHT NOW, or the reason they could not
+ * be. Same shape and same reason as {@link RerankScan}: a malformed
+ * `config.json` is a finding to report, never an exception to die on.
+ */
+type ChatScan =
+  | {
+      readonly ok: true;
+      readonly rephrase: SettingFact;
+      readonly synthesize: SettingFact;
+      readonly enrich: SettingFact;
+    }
+  | { readonly ok: false; readonly reason: string };
+
+const scanChat = (env: NodeJS.ProcessEnv): ChatScan => {
+  try {
+    return {
+      ok: true,
+      rephrase: rephraseModelFact(env),
+      synthesize: synthesizeModelFact(env),
+      enrich: chatModelFact(env),
+    };
+  } catch (error) {
+    if (!isUserConfigError(error)) throw error;
+    return { ok: false, reason: error.message };
+  }
+};
 
 const scanDataRoot = (env: NodeJS.ProcessEnv): DataRootScan => {
   try {
@@ -246,6 +280,7 @@ const gather = async (context: CommandContext): Promise<DoctorFacts> => ({
   dataRoot: scanDataRoot(process.env),
   rerank: await probeRerank(scanRerank(process.env)),
   rerankSettings: scanRerank(process.env),
+  chatSettings: scanChat(process.env),
   localReranker: await scanLocalReranker(scanRerank(process.env)),
   env: process.env,
 });
@@ -547,12 +582,13 @@ const RERANK_SETTINGS = 'rerank-settings';
  * declared another server and was silently outranked by the environment —
  * which is the state a user who edited the file and saw nothing change is in.
  */
-const beaten = (fact: RerankFact): string =>
+const beaten = (fact: SettingFact): string =>
   fact.origin === 'env' && fact.configured !== undefined
     ? ` and beats the "${fact.configured}" in config.json`
     : '';
 
-const rerankSettingLine = (knob: string, fact: RerankFact): string =>
+/** One resolved knob, its value, its winning tier and the statement it beat. */
+const settingLine = (knob: string, fact: SettingFact): string =>
   `${knob} = ${fact.value} (from the ${fact.origin})${beaten(fact)}`;
 
 /**
@@ -578,9 +614,9 @@ const rerankSettingChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
       RERANK_SETTINGS,
       faults.length > 0 ? 'fault' : 'ok',
       [
-        rerankSettingLine('rerankUrl', scan.url),
-        rerankSettingLine('rerankModel', scan.model),
-        rerankSettingLine('rerankBackend', scan.backend),
+        settingLine('rerankUrl', scan.url),
+        settingLine('rerankModel', scan.model),
+        settingLine('rerankBackend', scan.backend),
         ...faults,
       ].join('; ')
     ),
@@ -595,6 +631,37 @@ const rerankChecks = (facts: DoctorFacts): readonly DoctorCheck[] => [
   check(RERANK, RERANK_VERDICTS[facts.rerank.kind], rerankDetail(facts.rerank)),
 ];
 
+const CHAT_SETTINGS = 'chat-settings';
+
+/**
+ * WHICH id each chat hop will ask its server for, and which tier said so.
+ *
+ * Never a fault: the three hops are opt-in, and an id this machine's llama-swap
+ * does not serve is a statement about the SERVER, which only `setup` (with a
+ * catalogue in hand) can check. What doctor owes is the id and its origin —
+ * without them a failed hop names a model the reader cannot trace to anything
+ * they wrote.
+ */
+const chatSettingChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
+  const scan = facts.chatSettings;
+  if (!scan.ok) return [check(CHAT_SETTINGS, 'unknown', unresolvedChatModels(scan.reason))];
+  return [
+    check(
+      CHAT_SETTINGS,
+      'ok',
+      [
+        settingLine('rephraseModel', scan.rephrase),
+        settingLine('synthesizeModel', scan.synthesize),
+        settingLine('enrichModel', scan.enrich),
+      ].join('; ')
+    ),
+  ];
+};
+
+/** The config is already reported as a fault elsewhere; this states the CONSEQUENCE. */
+const unresolvedChatModels = (reason: string): string =>
+  `the chat hop ids cannot be resolved, so no generator id you wrote is in effect: ${reason}`;
+
 const CHECKS: readonly ((facts: DoctorFacts) => readonly DoctorCheck[])[] = [
   locationChecks,
   indexChecks,
@@ -608,6 +675,7 @@ const CHECKS: readonly ((facts: DoctorFacts) => readonly DoctorCheck[])[] = [
   adapterChecks,
   rerankChecks,
   rerankSettingChecks,
+  chatSettingChecks,
   overrideChecks,
   dataRootChecks,
   blankVarChecks,

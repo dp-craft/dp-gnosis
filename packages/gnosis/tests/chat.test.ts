@@ -11,8 +11,12 @@
  * two runs byte-identical); and a non-JSON answer REFUSES rather than being
  * salvaged.
  */
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { ChatRequest } from '../src/chat.js';
-import { createHttpChatProvider, resolveChatModel, resolveChatUrl } from '../src/chat.js';
+import { chatModelFact, createHttpChatProvider, resolveChatModel, resolveChatUrl } from '../src/chat.js';
 import {
   ENRICH_MAX_TOKENS,
   ENRICH_MODEL_ENV_VAR,
@@ -21,6 +25,7 @@ import {
   ENRICH_TEMPERATURE,
   RERANK_DEFAULT_URL
 } from '../src/config.js';
+import { clearUserConfigCache } from '../src/userConfig.js';
 
 const SCHEMA = { type: 'object', additionalProperties: false, properties: {} };
 
@@ -280,5 +285,57 @@ describe('the seed travels WITH the request, so a caller can bump it', () => {
     const calls = stubServer(['gen'], '{"short":"s"}');
     await createHttpChatProvider({ baseUrl: 'http://stub', model: 'gen' }).complete(REQUEST);
     expect(chatBodyOf(calls).seed).toBe(ENRICH_SEED);
+  });
+});
+
+/**
+ * The enrichment generator id as a PERSISTABLE setting. `--enrich-model` still
+ * outranks everything below it; what changed is that an instance can now STATE
+ * its generator once instead of exporting a variable in every shell.
+ */
+describe('the generator id resolves env > config.json > constant', () => {
+  const configEnv = (
+    config?: Readonly<Record<string, unknown>>,
+    extra: NodeJS.ProcessEnv = {}
+  ): NodeJS.ProcessEnv => {
+    const home = mkdtempSync(join(tmpdir(), 'gnosis-chat-cfg-'));
+    mkdirSync(join(home, 'dp-gnosis'));
+    if (config !== undefined) {
+      writeFileSync(join(home, 'dp-gnosis', 'config.json'), JSON.stringify(config), 'utf8');
+    }
+    clearUserConfigCache();
+    return { XDG_CONFIG_HOME: home, ...extra };
+  };
+
+  it('is the shipped constant when neither the environment nor the file states one', () => {
+    const env = configEnv();
+
+    expect(resolveChatModel(env)).toBe(ENRICH_MODEL_ID);
+    expect(chatModelFact(env).origin).toBe('default');
+  });
+
+  it('reads models.enrich out of config.json when the environment states nothing', () => {
+    const env = configEnv({ models: { enrich: 'box-generator' } });
+
+    expect(resolveChatModel(env)).toBe('box-generator');
+    expect(chatModelFact(env).origin).toBe('config');
+  });
+
+  it('lets the environment variable outrank config.json, reporting the loser', () => {
+    const env = configEnv({ models: { enrich: 'box-generator' } }, {
+      [ENRICH_MODEL_ENV_VAR]: 'env-generator',
+    });
+
+    const fact = chatModelFact(env);
+
+    expect(fact.value).toBe('env-generator');
+    expect(fact.origin).toBe('env');
+    expect(fact.configured).toBe('box-generator');
+  });
+
+  it('REFUSES a blank models.enrich by key name instead of falling through', () => {
+    const env = configEnv({ models: { enrich: '' } });
+
+    expect(() => resolveChatModel(env)).toThrow(/models\.enrich/);
   });
 });

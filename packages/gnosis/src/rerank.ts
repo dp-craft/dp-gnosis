@@ -41,6 +41,8 @@ import {
   type RerankPresetName
 } from './config.js';
 import { configHome, statedVar } from './env.js';
+import type { SettingFact } from './settingFact.js';
+import { factOf } from './settingFact.js';
 import type { RetrievedAtom } from './port.js';
 import { asRerankBackend, loadUserConfig, type RerankBackend } from './userConfig.js';
 
@@ -77,45 +79,12 @@ const PROBE_TIMEOUT_MS = 300000;
 /** The llama-swap model catalogue, per the OpenAI-compatible API. */
 const MODELS_PATH = '/v1/models';
 
-/** Which tier supplied a resolved reranker setting — the precedence, made readable. */
-export type RerankOrigin = 'flag' | 'env' | 'config' | 'default';
-
 /**
- * A resolved reranker setting WITH the tier that supplied it and the statements
- * it beat, mirroring `paths.ts:DataRootFact`. A value alone cannot say that a
- * `config.json` named another server and lost, which is the whole subject of the
- * diagnostic that reads this.
+ * The reranker's own name for a resolved setting. The precedence itself is
+ * `settingFact.ts`'s — five settings resolve through it, and one owner is what
+ * keeps them from disagreeing about which tier wins.
  */
-export interface RerankFact {
-  readonly value: string;
-  readonly origin: RerankOrigin;
-  /** What the environment VARIABLE holds, whether or not it won. */
-  readonly stated: string | undefined;
-  /** What `config.json` declared, whether or not it won. */
-  readonly configured: string | undefined;
-}
-
-/**
- * Every statement about one setting, before the precedence is read off them.
- * Generic in the setting's own type so a fact over a CLOSED vocabulary — the
- * backend — keeps that vocabulary instead of widening to `string`.
- */
-interface RerankTiers<T extends string> {
-  readonly explicit: T | undefined;
-  readonly stated: T | undefined;
-  readonly configured: T | undefined;
-  readonly fallback: T;
-}
-
-const factOf = <T extends string>(tiers: RerankTiers<T>): RerankFact & { readonly value: T } => {
-  const { stated, configured } = tiers;
-  if (tiers.explicit !== undefined) {
-    return { value: tiers.explicit, origin: 'flag', stated, configured };
-  }
-  if (stated !== undefined) return { value: stated, origin: 'env', stated, configured };
-  if (configured !== undefined) return { value: configured, origin: 'config', stated, configured };
-  return { value: tiers.fallback, origin: 'default', stated, configured };
-};
+export type RerankFact = SettingFact;
 
 /** The `rerank` section of `config.json`; a malformed one REFUSES from here. */
 const rerankConfig = (

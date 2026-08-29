@@ -30,10 +30,14 @@ import { runDoctorCommand } from '../src/cli/doctorCommand.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
 import {
   CORPUS_ROOTS_ENV_VAR,
+  ENRICH_MODEL_ENV_VAR,
+  ENRICH_MODEL_ID,
+  REPHRASE_MODEL_ID,
   RERANK_DEFAULT_URL,
   RERANK_MODEL_ENV_VAR,
   RERANK_MODEL_ID,
-  RERANK_URL_ENV_VAR
+  RERANK_URL_ENV_VAR,
+  SYNTHESIZE_MODEL_ID
 } from '../src/config.js';
 import { buildCorpusManifest, serializeCorpusManifest } from '../src/corpusManifest.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
@@ -681,5 +685,66 @@ describe('doctor — where the reranker endpoint came from', () => {
 
     expect(settingsLine(outcome)).toContain('[unknown]');
     expect(settingsLine(outcome)).toContain('rerank.url');
+  });
+});
+
+/**
+ * WHICH chat id each of the three hops (`--rephrase`, `--synthesize`, `enrich`)
+ * is about to ask for, and which statement lost. The three shipped constants
+ * are one machine's private llama-swap ids, so on any other machine the first
+ * question a failed hop raises is "which id did it ask for, and who said so".
+ */
+describe('doctor — where the chat hop ids came from', () => {
+  const CHAT_CHECK = 'chat-settings';
+
+  const chatLine = (outcome: CommandOutcome): string =>
+    report(outcome).split('\n').find(line => line.includes(`] ${CHAT_CHECK}:`)) ?? '';
+
+  const isolatedConfig = (text?: string): void => {
+    const configDir = resolve(root, 'chat-config', 'dp-gnosis');
+    mkdirSync(configDir, { recursive: true });
+    if (text !== undefined) writeFileSync(resolve(configDir, 'config.json'), text, 'utf8');
+    process.env['DP_GNOSIS_CONFIG_HOME'] = resolve(root, 'chat-config');
+    clearUserConfigCache();
+  };
+
+  afterEach(() => {
+    delete process.env[ENRICH_MODEL_ENV_VAR];
+  });
+
+  it('names the shipped defaults when nothing states a chat id', async () => {
+    isolatedConfig();
+
+    const line = chatLine(await doctor());
+
+    expect(line).toContain(`rephraseModel = ${REPHRASE_MODEL_ID} (from the default)`);
+    expect(line).toContain(`synthesizeModel = ${SYNTHESIZE_MODEL_ID} (from the default)`);
+    expect(line).toContain(`enrichModel = ${ENRICH_MODEL_ID} (from the default)`);
+  });
+
+  it('names config.json as the winning tier when it states one', async () => {
+    isolatedConfig(JSON.stringify({ models: { rephrase: 'box-rewriter', enrich: 'box-generator' } }));
+
+    const line = chatLine(await doctor());
+
+    expect(line).toContain('rephraseModel = box-rewriter (from the config)');
+    expect(line).toContain('enrichModel = box-generator (from the config)');
+  });
+
+  it('names the environment as the winner AND the config statement it beat', async () => {
+    isolatedConfig(JSON.stringify({ models: { enrich: 'box-generator' } }));
+    process.env[ENRICH_MODEL_ENV_VAR] = 'env-generator';
+
+    const line = chatLine(await doctor());
+
+    expect(line).toContain('enrichModel = env-generator (from the env)');
+    expect(line).toContain('beats the "box-generator" in config.json');
+  });
+
+  it('REPORTS a malformed models section instead of dying on it', async () => {
+    isolatedConfig(JSON.stringify({ models: { enrich: '' } }));
+
+    expect(chatLine(await doctor())).toContain('[unknown]');
+    expect(chatLine(await doctor())).toContain('models.enrich');
   });
 });

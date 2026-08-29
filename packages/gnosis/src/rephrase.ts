@@ -36,6 +36,10 @@ import {
   RERANK_DEFAULT_URL,
   RERANK_URL_ENV_VAR
 } from './config.js';
+import { statedVar } from './env.js';
+import type { SettingFact } from './settingFact.js';
+import { factOf } from './settingFact.js';
+import { configuredModels } from './userConfig.js';
 
 /** The llama-swap model catalogue, per the OpenAI-compatible API. */
 const MODELS_PATH = '/v1/models';
@@ -132,13 +136,23 @@ export const resolveRephraseUrl = (
   return declared.length > 0 ? declared : RERANK_DEFAULT_URL;
 };
 
-/** The rewriter id to call under. The env override outranks the shipped id. */
-export const resolveRephraseModel = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): string => {
-  const declared = (env[REPHRASE_MODEL_ENV_VAR] ?? '').trim();
-  return declared.length > 0 ? declared : REPHRASE_MODEL_ID;
-};
+/**
+ * The rewriter id WITH the tier that named it, resolved
+ * `env > config.json > constant`. The shipped constant is one machine's private
+ * llama-swap id, so an instance that cannot STATE its own rewriter can only
+ * reach it by exporting a variable in every shell.
+ */
+export const rephraseModelFact = (env: NodeJS.ProcessEnv = process.env): SettingFact =>
+  factOf({
+    explicit: undefined,
+    stated: statedVar(env, REPHRASE_MODEL_ENV_VAR),
+    configured: configuredModels(env).rephrase,
+    fallback: REPHRASE_MODEL_ID,
+  });
+
+/** The resolved rewriter id alone, so no caller re-spells the precedence. */
+export const resolveRephraseModel = (env: NodeJS.ProcessEnv = process.env): string =>
+  rephraseModelFact(env).value;
 
 /**
  * Everything outside this class becomes a space. `-_/.@+#` SURVIVE: they sit

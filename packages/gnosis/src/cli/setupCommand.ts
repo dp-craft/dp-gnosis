@@ -31,11 +31,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+import { resolveChatModel } from '../chat.js';
 import { RERANK_MODEL_ID } from '../config.js';
 import { configHome } from '../env.js';
+import { resolveRephraseModel } from '../rephrase.js';
 import { cliInvocation } from '../invocation.js';
 import type { RerankHealth } from '../rerank.js';
 import { rerankCatalogue, rerankHealth, rerankUrlFact } from '../rerank.js';
+import { resolveSynthesizeModel } from '../synthesize.js';
 import { userConfigPath } from '../userConfig.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
@@ -304,6 +307,49 @@ const configured = (
   };
 };
 
+/**
+ * One chat hop: the id it will ask for, and the `config.json` key that pins it.
+ *
+ * The three hops are REPORTED and never chosen. `setup` may write a reranker
+ * because a two-document discrimination probe PROVES one discriminates; there
+ * is no equivalent probe for a chat model, and an id picked because its name
+ * looked right would configure a generator nobody measured, producing plausible
+ * text — this repository's failure class exactly. So an unserved id is named,
+ * with the key its owner must write by hand.
+ */
+interface ChatHop {
+  readonly key: string;
+  readonly id: string;
+}
+
+const chatHops = (): readonly ChatHop[] => [
+  { key: 'models.rephrase', id: resolveRephraseModel() },
+  { key: 'models.synthesize', id: resolveSynthesizeModel() },
+  { key: 'models.enrich', id: resolveChatModel() },
+];
+
+const CHAT_PREAMBLE =
+  'setup: chat hops are reported, never configured — no discrimination probe exists for a chat model, so these ids are yours to set';
+
+const chatHopLine = (hop: ChatHop): string =>
+  `  ${hop.id}  not served here — write "${hop.key}": "<an id this server advertises>" into config.json`;
+
+/**
+ * Every resolved chat id the catalogue just fetched does NOT advertise,
+ * appended to whatever verdict the reranker probes produced — the two are
+ * independent, so a run that configured a reranker and a run that configured
+ * nothing owe their reader the same chat report.
+ */
+const withChatReport = (outcome: CommandOutcome, models: readonly string[]): CommandOutcome => {
+  const unserved = chatHops().filter(hop => !models.includes(hop.id));
+  if (unserved.length === 0) return outcome;
+  return {
+    ...outcome,
+    data: { ...outcome.data, unservedChatModels: unserved },
+    text: [outcome.text, CHAT_PREAMBLE, ...unserved.map(chatHopLine)].join('\n'),
+  };
+};
+
 const runProbes = async (
   baseUrl: string,
   models: readonly string[],
@@ -312,9 +358,11 @@ const runProbes = async (
   const candidates = selectCandidates(models, requested);
   const probed = await probeCandidates(baseUrl, candidates.probe);
   const winner = passed(probed);
-  return winner === undefined
-    ? nothingPassed(baseUrl, probed, candidates)
-    : configured(baseUrl, probed, candidates, winner);
+  const outcome =
+    winner === undefined
+      ? nothingPassed(baseUrl, probed, candidates)
+      : configured(baseUrl, probed, candidates, winner);
+  return withChatReport(outcome, models);
 };
 
 const POSITIONAL_ERROR = `setup takes no arguments — it probes the servers this machine may run and writes what it finds; name one model with ${RERANK_MODEL_FLAG} <id> to probe that id alone`;

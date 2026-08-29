@@ -22,7 +22,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { RERANK_DEFAULT_URL, RERANK_MODEL_ID } from '../src/config.js';
+import {
+  ENRICH_MODEL_ENV_VAR,
+  ENRICH_MODEL_ID,
+  REPHRASE_MODEL_ENV_VAR,
+  RERANK_DEFAULT_URL,
+  RERANK_MODEL_ID,
+  SYNTHESIZE_MODEL_ENV_VAR
+} from '../src/config.js';
 import type { CommandContext } from '../src/cli/context.js';
 import type { FlagValues } from '../src/cli/args.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
@@ -344,5 +351,55 @@ describe('setup takes no positional arguments', () => {
 
     expect(outcome.exitCode).toBe(EXIT_USAGE);
     expect(outcome.text).toContain('--rerank-model');
+  });
+});
+
+/**
+ * The three CHAT hops are REPORTED, never chosen. `setup` may write a reranker
+ * because a two-document discrimination probe PROVES one; no such probe exists
+ * for a chat model, so an auto-picked generator would be a component nobody
+ * measured, producing plausible text — this repository's failure class. What
+ * `setup` owes the reader instead is the id each hop will ask for and whether
+ * the catalogue it just fetched advertises it.
+ */
+describe('setup reports the chat ids the server does not serve, and configures none', () => {
+  afterEach(() => {
+    delete process.env[REPHRASE_MODEL_ENV_VAR];
+    delete process.env[SYNTHESIZE_MODEL_ENV_VAR];
+    delete process.env[ENRICH_MODEL_ENV_VAR];
+  });
+
+  it('names an unserved chat id with the config.json key that would fix it', async () => {
+    stubServers({
+      [RERANK_DEFAULT_URL]: {
+        models: ['qwen3-reranker-4b'],
+        scores: { 'qwen3-reranker-4b': HEALTHY },
+      },
+    });
+
+    const outcome = await setup();
+
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    expect(outcome.text).toContain(ENRICH_MODEL_ID);
+    expect(outcome.text).toContain('models.enrich');
+    expect(readConfig()['models']).toBeUndefined();
+  });
+
+  it('says nothing about a hop whose resolved id the catalogue DOES advertise', async () => {
+    stubServers({
+      [RERANK_DEFAULT_URL]: {
+        models: ['qwen3-reranker-4b', 'served-chat'],
+        scores: { 'qwen3-reranker-4b': HEALTHY },
+      },
+    });
+    process.env[REPHRASE_MODEL_ENV_VAR] = 'served-chat';
+    process.env[SYNTHESIZE_MODEL_ENV_VAR] = 'served-chat';
+    process.env[ENRICH_MODEL_ENV_VAR] = 'served-chat';
+
+    const outcome = await setup();
+
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    expect(outcome.text).not.toContain('models.enrich');
+    expect(outcome.text).not.toContain('models.rephrase');
   });
 });

@@ -7,19 +7,23 @@
  * the flag ABSENT the output is byte-identical to today's, and a refused
  * rewrite never presents as a successful rephrased run.
  */
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
-import { REPHRASE_MODEL_ID, REPHRASE_PROMPT_VERSION } from '../src/config.js';
+import { REPHRASE_MODEL_ENV_VAR, REPHRASE_MODEL_ID, REPHRASE_PROMPT_VERSION } from '../src/config.js';
 import {
   carriesExactRareTerm,
   normaliseRewrite,
   REPHRASE_SYSTEM_PROMPT,
   rephraseCacheKey,
-  rephraseQuery
+  rephraseModelFact,
+  rephraseQuery,
+  resolveRephraseModel
 } from '../src/rephrase.js';
+import { clearUserConfigCache } from '../src/userConfig.js';
 
 const LABELS = ['Alpha', 'Bravo', 'Delta', 'Gamma'] as const;
 
@@ -369,5 +373,59 @@ describe('retrieve --rephrase', () => {
     expect(payload.note ?? '').toContain('server down');
     expect(payload.queryRewritten).toBeUndefined();
     expect(payload.atoms.map(atom => atom.id)).toEqual(raw.atoms.map(atom => atom.id));
+  });
+});
+
+/**
+ * The rewriter id as a PERSISTABLE setting. It used to resolve
+ * `env -> shipped constant`, and the shipped constant is one machine's private
+ * llama-swap id — so a fresh install could only reach its own rewriter by
+ * exporting a variable in every shell. The tiers are the reranker's, minus the
+ * flag no rephrase call carries.
+ */
+describe('the rewriter id resolves env > config.json > constant', () => {
+  const configEnv = (
+    config?: Readonly<Record<string, unknown>>,
+    extra: NodeJS.ProcessEnv = {}
+  ): NodeJS.ProcessEnv => {
+    const home = mkdtempSync(join(tmpdir(), 'gnosis-rephrase-cfg-'));
+    mkdirSync(join(home, 'dp-gnosis'));
+    if (config !== undefined) {
+      writeFileSync(join(home, 'dp-gnosis', 'config.json'), JSON.stringify(config), 'utf8');
+    }
+    clearUserConfigCache();
+    return { XDG_CONFIG_HOME: home, ...extra };
+  };
+
+  it('is the shipped constant when neither the environment nor the file states one', () => {
+    const env = configEnv();
+
+    expect(resolveRephraseModel(env)).toBe(REPHRASE_MODEL_ID);
+    expect(rephraseModelFact(env).origin).toBe('default');
+  });
+
+  it('reads models.rephrase out of config.json when the environment states nothing', () => {
+    const env = configEnv({ models: { rephrase: 'box-rewriter' } });
+
+    expect(resolveRephraseModel(env)).toBe('box-rewriter');
+    expect(rephraseModelFact(env).origin).toBe('config');
+  });
+
+  it('lets the environment variable outrank config.json, reporting the loser', () => {
+    const env = configEnv({ models: { rephrase: 'box-rewriter' } }, {
+      [REPHRASE_MODEL_ENV_VAR]: 'env-rewriter',
+    });
+
+    const fact = rephraseModelFact(env);
+
+    expect(fact.value).toBe('env-rewriter');
+    expect(fact.origin).toBe('env');
+    expect(fact.configured).toBe('box-rewriter');
+  });
+
+  it('REFUSES a blank models.rephrase by key name instead of falling through', () => {
+    const env = configEnv({ models: { rephrase: '   ' } });
+
+    expect(() => resolveRephraseModel(env)).toThrow(/models\.rephrase/);
   });
 });

@@ -37,6 +37,10 @@ import {
   RERANK_DEFAULT_URL,
   RERANK_URL_ENV_VAR
 } from './config.js';
+import { statedVar } from './env.js';
+import type { SettingFact } from './settingFact.js';
+import { factOf } from './settingFact.js';
+import { configuredModels } from './userConfig.js';
 
 /** The llama-swap model catalogue, per the OpenAI-compatible API. */
 const MODELS_PATH = '/v1/models';
@@ -103,13 +107,22 @@ export const resolveChatUrl = (
   return declared.length > 0 ? declared : RERANK_DEFAULT_URL;
 };
 
-/** The generator id to call under. The env override outranks the shipped id. */
-export const resolveChatModel = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): string => {
-  const declared = (env[ENRICH_MODEL_ENV_VAR] ?? '').trim();
-  return declared.length > 0 ? declared : ENRICH_MODEL_ID;
-};
+/**
+ * The generator id WITH the tier that named it, resolved
+ * `env > config.json > constant`. `--enrich-model` still outranks all three —
+ * the flag is read by the enrich command and passed in, never here.
+ */
+export const chatModelFact = (env: NodeJS.ProcessEnv = process.env): SettingFact =>
+  factOf({
+    explicit: undefined,
+    stated: statedVar(env, ENRICH_MODEL_ENV_VAR),
+    configured: configuredModels(env).enrich,
+    fallback: ENRICH_MODEL_ID,
+  });
+
+/** The resolved generator id alone, so no caller re-spells the precedence. */
+export const resolveChatModel = (env: NodeJS.ProcessEnv = process.env): string =>
+  chatModelFact(env).value;
 
 /**
  * Where to generate, and under which id. The model travels WITH the URL because

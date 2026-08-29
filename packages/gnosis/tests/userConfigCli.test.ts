@@ -70,6 +70,15 @@ describe('a malformed config.json is a USAGE failure, never a crash', () => {
     expect(result.exitCode).toBe(EXIT_USAGE);
     expect(JSON.parse(result.stdout)).toMatchObject({ exitCode: EXIT_USAGE });
   });
+
+  it('refuses a blank models.enrich by key name rather than serving the shipped id', async () => {
+    const path = useConfig(JSON.stringify({ models: { enrich: '  ' } }));
+    const result = await runCli(['search', 'zustand selector']);
+
+    expect(result.exitCode).toBe(EXIT_USAGE);
+    expect(result.stderr).toContain(path);
+    expect(result.stderr).toContain('models.enrich');
+  });
 });
 
 describe('--help survives a broken config.json', () => {

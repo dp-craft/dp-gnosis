@@ -11,13 +11,16 @@
  * outcomes (`INSUFFICIENT`, a valid answer above the pack) and the guarantee
  * that with the flag absent the pack is byte-identical and no call is made.
  */
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { CliResult } from '../src/cli/cli.js';
 import { runCli } from '../src/cli/cli.js';
-import { SYNTHESIZE_MODEL_ID } from '../src/config.js';
+import { SYNTHESIZE_MODEL_ENV_VAR, SYNTHESIZE_MODEL_ID } from '../src/config.js';
+import { resolveSynthesizeModel, synthesizeModelFact } from '../src/synthesize.js';
+import { clearUserConfigCache } from '../src/userConfig.js';
 
 const INTRO =
   'intro prose about the layered test model and its tiers, describing what each tier covers and why the introduction of a document carries enough prose of its own to stand as a separate atom of the whole corpus';
@@ -227,5 +230,58 @@ describe('answer WITHOUT the flag', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe(plainText);
     expect(recorded.urls).toEqual([]);
+  });
+});
+
+/**
+ * The synthesiser id as a PERSISTABLE setting, on the same three tiers as the
+ * rewriter and the reranker: the shipped constant is one machine's private
+ * llama-swap id, so a fresh install had no way to state its own but an
+ * exported variable in every shell.
+ */
+describe('the synthesiser id resolves env > config.json > constant', () => {
+  const configEnv = (
+    config?: Readonly<Record<string, unknown>>,
+    extra: NodeJS.ProcessEnv = {}
+  ): NodeJS.ProcessEnv => {
+    const home = mkdtempSync(join(tmpdir(), 'gnosis-synth-cfg-'));
+    mkdirSync(join(home, 'dp-gnosis'));
+    if (config !== undefined) {
+      writeFileSync(join(home, 'dp-gnosis', 'config.json'), JSON.stringify(config), 'utf8');
+    }
+    clearUserConfigCache();
+    return { XDG_CONFIG_HOME: home, ...extra };
+  };
+
+  it('is the shipped constant when neither the environment nor the file states one', () => {
+    const env = configEnv();
+
+    expect(resolveSynthesizeModel(env)).toBe(SYNTHESIZE_MODEL_ID);
+    expect(synthesizeModelFact(env).origin).toBe('default');
+  });
+
+  it('reads models.synthesize out of config.json when the environment states nothing', () => {
+    const env = configEnv({ models: { synthesize: 'box-synth' } });
+
+    expect(resolveSynthesizeModel(env)).toBe('box-synth');
+    expect(synthesizeModelFact(env).origin).toBe('config');
+  });
+
+  it('lets the environment variable outrank config.json, reporting the loser', () => {
+    const env = configEnv({ models: { synthesize: 'box-synth' } }, {
+      [SYNTHESIZE_MODEL_ENV_VAR]: 'env-synth',
+    });
+
+    const fact = synthesizeModelFact(env);
+
+    expect(fact.value).toBe('env-synth');
+    expect(fact.origin).toBe('env');
+    expect(fact.configured).toBe('box-synth');
+  });
+
+  it('REFUSES a non-string models.synthesize by key name instead of falling through', () => {
+    const env = configEnv({ models: { synthesize: 7 } });
+
+    expect(() => resolveSynthesizeModel(env)).toThrow(/models\.synthesize/);
   });
 });

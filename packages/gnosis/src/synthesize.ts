@@ -31,6 +31,10 @@ import {
   SYNTHESIZE_MODEL_ID,
   SYNTHESIZE_TIMEOUT_MS
 } from './config.js';
+import { statedVar } from './env.js';
+import type { SettingFact } from './settingFact.js';
+import { factOf } from './settingFact.js';
+import { configuredModels } from './userConfig.js';
 
 /** The llama-swap model catalogue, per the OpenAI-compatible API. */
 const MODELS_PATH = '/v1/models';
@@ -94,13 +98,22 @@ export const resolveSynthesizeUrl = (
   return declared.length > 0 ? declared : RERANK_DEFAULT_URL;
 };
 
-/** The synthesiser id to call under. The env override outranks the shipped id. */
-export const resolveSynthesizeModel = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): string => {
-  const declared = (env[SYNTHESIZE_MODEL_ENV_VAR] ?? '').trim();
-  return declared.length > 0 ? declared : SYNTHESIZE_MODEL_ID;
-};
+/**
+ * The synthesiser id WITH the tier that named it, resolved
+ * `env > config.json > constant` — the rewriter's tiers, for the same reason:
+ * the shipped constant names a model only one llama-swap serves.
+ */
+export const synthesizeModelFact = (env: NodeJS.ProcessEnv = process.env): SettingFact =>
+  factOf({
+    explicit: undefined,
+    stated: statedVar(env, SYNTHESIZE_MODEL_ENV_VAR),
+    configured: configuredModels(env).synthesize,
+    fallback: SYNTHESIZE_MODEL_ID,
+  });
+
+/** The resolved synthesiser id alone, so no caller re-spells the precedence. */
+export const resolveSynthesizeModel = (env: NodeJS.ProcessEnv = process.env): string =>
+  synthesizeModelFact(env).value;
 
 /** Every `[^id]` the text cites, deduped, in the order the answer states them. */
 export const citedIds = (answer: string): readonly string[] => [

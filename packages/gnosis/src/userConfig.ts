@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
+import { configHome } from './env.js';
+
 /**
  * The OPTIONAL user configuration file, `config.json`, read from the config home
  * `env.ts:configHome()` resolves. JSON, not YAML, deliberately: `JSON.parse` is
@@ -65,12 +67,33 @@ export interface RerankConfig {
   readonly backend?: RerankBackend | undefined;
 }
 
+/**
+ * The id each CHAT hop asks its server for, in place of the shipped constant.
+ *
+ * The three shipped ids are one machine's private llama-swap names, so on every
+ * other install `enrich`, `--rephrase` and `--synthesize` asked for models that
+ * server never heard of and the only remedy was an exported variable in each
+ * shell. Unlike the reranker there is no URL here: all four hops are served by
+ * the SAME llama-swap instance and share `rerank.url`, and a second address
+ * would be free to drift from the one actually listening.
+ */
+export interface ModelsConfig {
+  /** The rewriter behind `search --rephrase`. */
+  readonly rephrase?: string | undefined;
+  /** The synthesiser behind `answer --synthesize`. */
+  readonly synthesize?: string | undefined;
+  /** The generator the enrichment pass calls. */
+  readonly enrich?: string | undefined;
+}
+
 /** What a `config.json` may declare. Only the keys with a reader live here. */
 export interface UserConfig {
   /** Absolute root the vault and cache trees hang off, in place of the default. */
   readonly dataRoot?: string | undefined;
   /** The reranker endpoint, in place of the shipped address and id. */
   readonly rerank?: RerankConfig | undefined;
+  /** The chat hop ids, in place of the shipped constants. */
+  readonly models?: ModelsConfig | undefined;
 }
 
 export const userConfigPath = (configDir: string): string => join(configDir, USER_CONFIG_FILE);
@@ -184,12 +207,38 @@ const readRerank = (path: string, raw: Readonly<Record<string, unknown>>): Reran
   };
 };
 
+/**
+ * A blank or non-string id REFUSES by key name rather than falling through to
+ * the shipped constant: a user who wrote the key stated something, and silently
+ * serving the id they replaced is the same wrong-value-recorded-as-data failure
+ * a relative `dataRoot` is refused for.
+ */
+const readModelId = (path: string, key: string, value: unknown): string | undefined =>
+  value === undefined ? undefined : requireNonEmptyString(path, key, value);
+
+const readModels = (path: string, raw: Readonly<Record<string, unknown>>): ModelsConfig | undefined => {
+  const value = raw['models'];
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    refuse(`models in gnosis config ${path} must be a JSON object, e.g. {"models": {"enrich": "your-chat-model"}}`);
+  }
+  return {
+    rephrase: readModelId(path, 'models.rephrase', value['rephrase']),
+    synthesize: readModelId(path, 'models.synthesize', value['synthesize']),
+    enrich: readModelId(path, 'models.enrich', value['enrich']),
+  };
+};
+
 const readUserConfig = (configDir: string): UserConfig => {
   const path = userConfigPath(configDir);
   const text = readIfPresent(path);
   if (text === undefined) return {};
   const raw = parseObject(path, text);
-  return { dataRoot: readDataRoot(path, raw), rerank: readRerank(path, raw) };
+  return {
+    dataRoot: readDataRoot(path, raw),
+    rerank: readRerank(path, raw),
+    models: readModels(path, raw),
+  };
 };
 
 const CACHE = new Map<string, UserConfig>();
@@ -213,3 +262,10 @@ export const loadUserConfig = (configDir: string): UserConfig => {
   CACHE.set(configDir, loaded);
   return loaded;
 };
+
+/**
+ * The chat ids the config home `env` names, or nothing at all. The ONE reader
+ * of the `models` block, so the three hops cannot drift on where it lives.
+ */
+export const configuredModels = (env: NodeJS.ProcessEnv): ModelsConfig =>
+  loadUserConfig(configHome(env)).models ?? {};
