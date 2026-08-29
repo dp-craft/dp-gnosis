@@ -17,6 +17,7 @@ import type { CommandOutcome } from '../src/cli/outcome.js';
 import { configHome } from '../src/env.js';
 import { ATOMS_OWNER_FILE } from '../src/ingest.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
+import { SERVED_PRF_PARAMS } from '../src/prf.js';
 import { cliInvocation } from '../src/invocation.js';
 import { atomsDir, dataRoot, fts5IndexPath, ingestProfilePath, USER_PROFILE_FILE } from '../src/paths.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
@@ -75,6 +76,13 @@ describe('init — a fresh instance', () => {
     expect(profile.domainRules.length).toBeGreaterThan(0);
     expect(profile.domains).toContain(profile.domainRules[0]?.domain);
     expect(profile.types).toContain(profile.defaultType);
+  });
+
+  it('carries the retrieve-time defaults, so an installed instance keeps PRF and the type exclusions', async () => {
+    await init();
+    const profile = loadIngestProfile(profilePath());
+    expect(profile.defaultPrf).toEqual(SERVED_PRF_PARAMS);
+    expect(profile.defaultExcludedTypes).toEqual(['feature-log', 'benchmark', 'review', 'brainstorm']);
   });
 
   it('writes NO owner marker — ownership is earned by writing atoms, not by init', async () => {

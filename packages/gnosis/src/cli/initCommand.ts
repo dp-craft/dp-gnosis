@@ -33,6 +33,7 @@ import { DECLARED_TYPES } from '../config.js';
 import { expandUserPath } from '../env.js';
 import { ATOMS_OWNER_FILE } from '../ingest.js';
 import { cliInvocation } from '../invocation.js';
+import { SERVED_PRF_PARAMS } from '../prf.js';
 import { dataRoot, USER_PROFILE_NAME, userProfilePath } from '../paths.js';
 import { DEFAULT_ADAPTER } from './adapter.js';
 import { stringFlag } from './args.js';
@@ -43,6 +44,9 @@ import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
 
 /** The type a source no rule claims takes — one of {@link DECLARED_TYPES}. */
 const DEFAULT_TYPE = 'knowledge';
+
+/** The types a `search` subtracts unless asked otherwise — a PRESENTATION default, never a corpus one: they stay ingested and indexed. */
+const DEFAULT_EXCLUDED_TYPES: readonly string[] = ['feature-log', 'benchmark', 'review', 'brainstorm'];
 
 /** A corpus directory whose basename yields no usable label still needs one. */
 const FALLBACK_DOMAIN = 'notes';
@@ -82,6 +86,8 @@ const profileFor = (
   corpusRoots: roots,
   atomsDir: paths.atomsPath,
   indexPath: paths.indexPath,
+  defaultPrf: SERVED_PRF_PARAMS,
+  defaultExcludedTypes: DEFAULT_EXCLUDED_TYPES,
 });
 
 /** The corpus roots this run was given, each expanded exactly as ingest expands one. */
