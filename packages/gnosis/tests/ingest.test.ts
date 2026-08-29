@@ -263,7 +263,13 @@ describe('ingest', () => {
     expect(summary.skipped[0]?.source).toBe('notes/stray.md');
     expect(reason).toContain('claude-artifacts/standards/');
     expect(reason).toContain('domainRules');
-    expect(reason).toContain('default.profile.json');
+    /**
+     * The refusal names the profile IN USE, never a file: the hardcoded
+     * "profiles/default.profile.json" pointed every `--profile` run — and the
+     * `user.profile.json` init writes — at a file it was not loaded from.
+     */
+    expect(reason).toContain('"default"');
+    expect(reason).not.toContain('default.profile.json');
   });
 
   it('keeps every written atom under the body cap by sub-splitting an oversize section', async () => {

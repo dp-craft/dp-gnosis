@@ -244,8 +244,12 @@ const isExcluded = (profile: IngestProfile, sourcePath: string): boolean =>
  * match THIS string, so an out-of-repo tree is claimed by declaring its
  * absolute (or `~`-rooted) prefix — and a tree nobody declared stays refused by
  * `unmappedSkip`, loudly, because ingest MUST NOT guess a domain.
+ *
+ * Exported because `init` MUST write its `domainRules` prefixes in this form —
+ * an absolute prefix over an in-repo root matches nothing, and every source is
+ * then refused. One owner of the rule, called by both sides.
  */
-const sourceIdentity = (repoRoot: string, absolutePath: string): string => {
+export const sourceIdentity = (repoRoot: string, absolutePath: string): string => {
   const relativePath = toPosix(relative(repoRoot, absolutePath));
   return relativePath.startsWith('..') || isAbsolute(relativePath)
     ? toPosix(absolutePath)
@@ -284,7 +288,7 @@ const unmappedSkip = (source: LoadedSource, profile: IngestProfile): IngestSkip 
   source: source.sourcePath,
   title: basename(source.sourcePath),
   reasons: [
-    `source "${source.sourcePath}" is outside every declared ingest root — move it under one of ${profile.domainRules.map(rule => rule.prefix).join(' | ')}, or declare its root in the "domainRules" table of the ingest profile (profiles/default.profile.json); ingest MUST NOT guess a domain`,
+    `source "${source.sourcePath}" is outside every declared ingest root — move it under one of ${profile.domainRules.map(rule => rule.prefix).join(' | ')}, or declare its root in the "domainRules" table of the ingest profile in use ("${profile.name}"); ingest MUST NOT guess a domain`,
   ],
 });
 

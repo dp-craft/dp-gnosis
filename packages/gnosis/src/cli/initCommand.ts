@@ -31,7 +31,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path';
 
 import { DECLARED_TYPES } from '../config.js';
 import { expandUserPath } from '../env.js';
-import { ATOMS_OWNER_FILE } from '../ingest.js';
+import { ATOMS_OWNER_FILE, sourceIdentity } from '../ingest.js';
 import { cliInvocation } from '../invocation.js';
 import { SERVED_PRF_PARAMS } from '../prf.js';
 import { dataRoot, USER_PROFILE_NAME, userProfilePath } from '../paths.js';
@@ -79,7 +79,7 @@ const profileFor = (
   domains: [...new Set(roots.map(domainOf))],
   types: DECLARED_TYPES,
   defaultType: DEFAULT_TYPE,
-  domainRules: roots.map(root => ({ prefix: root, domain: domainOf(root) })),
+  domainRules: roots.map(root => ({ prefix: sourceIdentity(repoRoot, root), domain: domainOf(root) })),
   typeRules: [],
   segmentRules: [],
   repoRoot,

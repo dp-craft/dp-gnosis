@@ -16,7 +16,7 @@ import { runInitCommand } from '../src/cli/initCommand.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
 import { configHome } from '../src/env.js';
 import { ATOMS_OWNER_FILE } from '../src/ingest.js';
-import { loadIngestProfile } from '../src/ingestProfile.js';
+import { domainForPath, loadIngestProfile } from '../src/ingestProfile.js';
 import { SERVED_PRF_PARAMS } from '../src/prf.js';
 import { cliInvocation } from '../src/invocation.js';
 import { atomsDir, dataRoot, fts5IndexPath, ingestProfilePath, USER_PROFILE_FILE } from '../src/paths.js';
@@ -195,6 +195,32 @@ describe('init — the resolved locations, not the defaults', () => {
     expect(outcome.exitCode).toBe(0);
     expect(existsSync(fresh)).toBe(true);
     expect(readdirSync(occupied)).toEqual(['stray.md']);
+  });
+
+  /**
+   * A prefix is matched against the source's IDENTITY (`ingest.ts:sourceIdentity`):
+   * repo-relative under `repoRoot`, absolute anywhere else. An `init` that wrote
+   * the ABSOLUTE root as the prefix of an in-repo tree produced a profile under
+   * which every source was refused — written 0, skipped N, exit 3.
+   */
+  it('writes a repo-relative prefix for a root UNDER repoRoot, so the identity ingest builds matches it', async () => {
+    const outcome = await initWith({ repoRoot: home, flags: { '--repo-root': home } });
+
+    expect(outcome.exitCode).toBe(0);
+    const profile = loadIngestProfile(profilePath());
+    expect(profile.domainRules[0]?.prefix).toBe('notes');
+    expect(domainForPath(profile, 'notes/stray.md')).toBe('notes');
+  });
+
+  it('keeps an ABSOLUTE prefix for a root outside repoRoot, which is that source\'s identity', async () => {
+    const elsewhere = join(home, 'elsewhere');
+
+    const outcome = await initWith({ repoRoot: elsewhere, flags: { '--repo-root': elsewhere } });
+
+    expect(outcome.exitCode).toBe(0);
+    const profile = loadIngestProfile(profilePath());
+    expect(profile.domainRules[0]?.prefix).toBe(corpusDir);
+    expect(domainForPath(profile, `${corpusDir}/stray.md`)).toBe('notes');
   });
 
   it('keeps the data root as the profile repoRoot when no flag states one', async () => {
