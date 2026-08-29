@@ -199,6 +199,17 @@ absent the query is **refused**, not silently answered from the unreranked order
 Use it for research questions where you will read the top few carefully. Leave it off for
 navigational lookups where you already know roughly what you are looking for.
 
+**Which cross-encoder.** Two are measured and supported: **`qwen3-reranker-4b`** (the default, and
+the best arm on both corpora) and **`qwen3-reranker-0.6b`** (about half the latency, and measurably
+worse at putting the right document first). `--rerank-model` takes any id your server advertises,
+but a model gnosis has not measured is your own risk — and a *broken* one is not hypothetical:
+several published rerankers answer HTTP 200 with well-formed numbers carrying no ranking signal at
+all. Gnosis probes every reranker with a fixed relevant/irrelevant pair before it scores anything
+and **refuses** rather than rank from noise, so a bad model costs you an error, not a silently worse
+answer. **`jina-reranker-v3` / `v3.5` cannot be served through llama.cpp at all** — the GGUF
+conversion drops the projection layers that compute their score, so the server returns noise at
+HTTP 200 and the probe refuses it. `packages/gnosis/OPTIONAL.md` covers which GGUFs work.
+
 ## Ask with keywords, not with a question
 
 This is a lexical engine. It matches stemmed words; it has no idea what a question *means*. Rewriting a natural-language question into keywords is **the single largest measured lever on result quality in this system** — larger than which adapter you pick.
