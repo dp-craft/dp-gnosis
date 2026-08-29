@@ -27,7 +27,9 @@ Framing is **newline-delimited JSON-RPC 2.0** — one object per line, NOT LSP `
 | | `k` (integer, optional) | Omit it to take the CLI's own default; this surface states no second default |
 | | `domain` (string, optional) | Validated against the LOADED profile's domain vocabulary, exactly as `--domain` is |
 
-The tool runs `ask <question> [-k <k>] --json [--domain <d>]` through `runCli` and reads the pack OUT of that payload — **one code path**, so the returned text is byte-identical to the `pack` field of the same `ask --json` invocation. It is asserted by `tests/mcpProtocol.test.ts`, not assumed; a second rendering would drift from the CLI's the first time either changed.
+The tool runs `ask <question> [-k <k>] --json --rerank [--domain <d>]` through `runCli` and reads the pack OUT of that payload — **one code path**, so the returned text is byte-identical to the `pack` field of that same invocation typed at the CLI. It is asserted by `tests/mcpProtocol.test.ts`, not assumed; a second rendering would drift from the CLI's the first time either changed.
+
+**`--rerank` is unconditional here, and is deliberately NOT a tool parameter.** An agent surface has no human to read a weak answer and retry with a flag, so it serves the measured champion rather than first-pass BM25 (`vault` nDCG@10 0.4894 → 0.5791, `vault-hu` 0.4868 → 0.7699 — `handbook/GNOSIS-BASELINES.md`). Two consequences the exit table below carries: every call pays the reranker's seconds, and on a machine serving no reranker every call lands on the exit-3 row — the first-pass pack, with the refusal appended as `note`, never an error. `dp-gnosis setup` is what configures one.
 
 The exit code is the contract and is mirrored, never flattened:
 
@@ -115,9 +117,10 @@ what the old figure was measuring. The `dist/` entry point does earn a real win,
 cache over the index and the module tree in the new run; the old number is left recorded here rather than
 overwritten silently, because what it actually measured is not established.
 
-An MCP server is long-lived, so any cold cost is paid once per client launch, not per question. **This is the
-NO-rerank path** — adding `--rerank` costs ≈12 s per query on top (`handbook/GNOSIS-BASELINES.md` § Serving
-path), and the MCP tool does not enable it.
+An MCP server is long-lived, so any cold cost is paid once per client launch, not per question. **These figures
+are the NO-rerank path, and `gnosis_ask` is not one** — the tool passes `--rerank` unconditionally (§ MCP surface
+— one tool over stdio), which costs ≈12 s per query on top (`handbook/GNOSIS-BASELINES.md` § Serving path). So
+what is timed above is the transport and the index, not a served answer.
 
 ### Obsidian
 

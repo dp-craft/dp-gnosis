@@ -35,13 +35,16 @@ not with a question). You can do that by hand, or let `--rephrase` do it against
 | Get one paste-ready, citable block for an LLM prompt | `dp-gnosis ask "bm25 length normalisation"` |
 | Get a written answer *with* its sources | `dp-gnosis ask "…" --synthesize` ¹ |
 | Check an instance that is misbehaving | `dp-gnosis doctor` |
-| Serve the vault to Claude Desktop, Cursor, Zed or opencode | `dp-gnosis-mcp` |
+| Serve the vault to Claude Desktop, Cursor, Zed or opencode | `dp-gnosis-mcp` ¹ |
 | Sharpen the ranking with a cross-encoder | add `--rerank` ¹ |
 | Point it at your model server, in one command | `dp-gnosis setup` |
 
 ¹ Needs a local model server — run `dp-gnosis setup` and it will find one, or
-`packages/gnosis/OPTIONAL.md` § Setting up the reranker has the manual path. Every other row runs
-with no network call. `--rephrase` and `enrich` are on the same footing.
+`packages/gnosis/OPTIONAL.md` § Setting up the reranker has the manual path. `--rephrase` and
+`enrich` are on the same footing. `dp-gnosis-mcp` is the one marked row that still answers without a
+server: it reranks every query unconditionally, so with none configured it returns the first-pass
+ranking with the refusal attached to each reply rather than failing. Every unmarked row makes no
+network call at all.
 
 In a checkout rather than an install, every `dp-gnosis <cmd>` reads `npm run gnosis -- <cmd>`, and `dp-gnosis-mcp` reads `npm run gnosis:mcp`.
 
