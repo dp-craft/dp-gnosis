@@ -67,7 +67,8 @@ plausible path the user never asked for is the failure this project polices.
 ```json
 {
   "dataRoot": "/home/dev/vaults/work",
-  "rerank": { "url": "http://127.0.0.1:9292", "model": "qwen3-reranker-4b" }
+  "rerank": { "url": "http://127.0.0.1:9292", "model": "qwen3-reranker-4b" },
+  "models": { "rephrase": "qwen3-27b", "synthesize": "qwen3-27b", "enrich": "qwen3-30b-a3b" }
 }
 ```
 
@@ -76,6 +77,9 @@ plausible path the user never asked for is the failure this project polices.
 | `dataRoot` | absolute root the vault and cache trees hang off | relative — a root that moves with the caller's terminal is a different vault per terminal |
 | `rerank.url` | base URL of the server that answers `/v1/rerank` | not a string, blank, or missing an `http://` / `https://` scheme. A scheme-less address is refused rather than repaired: guessing the protocol would send every call somewhere the user never wrote, and the connection error would then name the guess instead of the file |
 | `rerank.model` | the id THAT server serves the reranker under | not a string, or blank |
+| `models.rephrase` | the chat id `search --rephrase` rewrites the query with | not a string, or blank |
+| `models.synthesize` | the chat id `ask --synthesize` writes the answer with | not a string, or blank |
+| `models.enrich` | the chat id `enrich` generates each atom's sidecar record with | not a string, or blank |
 
 **`rerank` is what makes the reranker configurable once instead of per-invocation.**
 Before it existed the URL was environment-only and the model was `--rerank-model`
@@ -86,6 +90,24 @@ built-in constant**:
 |---|---|---|---|---|
 | endpoint | — | `DP_GNOSIS_RERANK_URL` | `rerank.url` | `RERANK_DEFAULT_URL` |
 | model id | `--rerank-model` | `DP_GNOSIS_RERANK_MODEL` | `rerank.model` | `RERANK_MODEL_ID` |
+
+**`models` does the same for the three CHAT hops**, which have no `setup` to find
+them: they share the `rerank.url` endpoint — one server, one address — and
+differ only in the id it serves each under. The shipped ids are the ones one
+machine's llama-swap happens to serve, so on any other server they are the ids
+your run will be refused for, by name.
+
+| Setting | Flag | Environment | `config.json` | Constant |
+|---|---|---|---|---|
+| rephrase model | — | `DP_GNOSIS_LLM_MODEL` | `models.rephrase` | `REPHRASE_MODEL_ID` |
+| synthesize model | — | `DP_GNOSIS_SYNTHESIZE_MODEL` | `models.synthesize` | `SYNTHESIZE_MODEL_ID` |
+| enrich model | `--enrich-model` | `DP_GNOSIS_ENRICH_MODEL` | `models.enrich` | `ENRICH_MODEL_ID` |
+
+**`setup` MUST NOT pick a chat model for you.** A reranker can be probed — score
+a relevant and an irrelevant passage and see whether the pair separates — and
+`setup` refuses one that does not. No such probe exists for a chat model, so
+`setup` reports which of the three resolved ids the server does not advertise
+and writes nothing; guessing one would be the failure this project polices.
 
 `dp-gnosis setup` writes this block for you — it finds the server, probes the
 models it serves for a working rank head, and merges the winner in without

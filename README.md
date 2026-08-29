@@ -37,6 +37,7 @@ not with a question). You can do that by hand, or let `--rephrase` do it against
 | Check an instance that is misbehaving | `dp-gnosis doctor` |
 | Serve the vault to Claude Desktop, Cursor, Zed or opencode | `dp-gnosis-mcp` ¹ |
 | Sharpen the ranking with a cross-encoder | add `--rerank` ¹ |
+| Generate keywords and questions for every atom | `dp-gnosis enrich` ¹ |
 | Point it at your model server, in one command | `dp-gnosis setup` |
 
 ¹ Needs a local model server — run `dp-gnosis setup` and it will find one, or
@@ -169,6 +170,54 @@ guessed at. `packages/gnosis/AUTHORING.md` owns both gates.
 **Exit 3 is not a crash.** It means *partial* — real output was produced and something was refused.
 An `ingest` that writes atoms and skips 118 duplicate or empty sections exits 3 and lists them.
 Read them; do not retry blindly.
+
+## Everything switched on, from zero
+
+The four commands above are the whole default path, and it makes no network call. This is the same
+instance with every optional hop turned on — a model server, the cross-encoder, and the generated
+fields:
+
+```bash
+# 1. Install as above, then point it at your model server, once.
+dp-gnosis setup                       # probes it, writes the working reranker into config.json
+
+# 2. Create the instance — then edit the profile it writes.
+dp-gnosis init ~/notes
+
+# 3. Corpus -> atoms -> index. One operation; `update` runs the pair.
+dp-gnosis update
+
+# 4. Ask, with the cross-encoder.
+dp-gnosis search "bm25 length normalisation" --rerank
+
+# 5. OPTIONAL - the generated fields. THREE commands, not one.
+dp-gnosis enrich                                          # one model call per atom -> a sidecar
+dp-gnosis index --adapter fts5 --enrichment <sidecar>     # merge it - there is no default path
+dp-gnosis search "..." --field-weights questions=1        # weight it - the columns ship at 0
+```
+
+| Step | Needs a model server | Costs |
+|---|---|---|
+| `init`, `ingest`, `index`, `update`, `search`, `ask`, `doctor` | no, not for any of them | seconds |
+| `search --rerank` / `ask --rerank` | yes — an OpenAI-compatible `/v1/rerank` | seconds **per query** |
+| `search --rephrase`, `ask --synthesize` | yes — a chat model | one call per query |
+| `enrich` | yes — a chat model | one call **per atom**, so hours for a real vault. `--limit <n>` prices it before you commit |
+
+**Which model id, and where you say so.** All four hops share one base URL and each calls the id
+YOUR server serves it under, so the shipped ids are almost certainly not yours. `dp-gnosis setup`
+finds the reranker and writes it; the three chat hops — rephrase, synthesize and enrich — are named
+in `config.json` or by environment variable, and `dp-gnosis doctor` reports which tier won.
+`packages/gnosis/CONFIGURATION.md` § 1.3 `config.json` owns that table.
+
+**`enrich` is an experiment, not a step.** Per atom it generates a short and a long summary, a
+document description, ten keywords and a dozen-odd questions, appended to a resumable JSONL sidecar
+stamped with the model that wrote it. None of that reaches the ranking until you BOTH merge it and
+weight it: every enrichment column ships at weight 0, so an index built without `--enrichment` ranks
+exactly as it always has. Weight 0 is not the same as absent, though — a populated column lengthens
+the row that fts5's `bm25()` normalises by, so merging a sidecar moves scores before you have
+weighted anything. Measure it on your own corpus rather than assuming it helps.
+`packages/gnosis/README.md` § Enrichment — generate the sidecar, then actually use it — owns the
+mechanics and the failure table.
 
 ## When something looks wrong, run `doctor`
 

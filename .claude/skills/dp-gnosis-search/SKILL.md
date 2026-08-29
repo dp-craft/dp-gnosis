@@ -111,8 +111,8 @@ When the signals are weak: rewrite the query with different keywords and call ag
 
 | Fact | Detail |
 |---|---|
-| Requirement | llama-swap serving a reranker over its OpenAI-compatible API at `http://127.0.0.1:9292` |
-| URL override | `DP_GNOSIS_RERANK_URL` |
+| Requirement | any server answering OpenAI-compatible `/v1/rerank` — `llama-server` (llama.cpp) or llama-swap. llama-swap is what the baselines were measured on and MUST NOT be stated as required |
+| Address | defaults to `RERANK_DEFAULT_URL` (`packages/gnosis/src/config.ts`), overridden by `DP_GNOSIS_RERANK_URL` or `config.json`. Precedence and keys: `packages/gnosis/CONFIGURATION.md` §1.3 — MUST NOT be restated here. `dp-gnosis setup` writes the pair; `dp-gnosis doctor` names the winning tier |
 | Model id | MUST be read from `RERANK_MODEL_ID` in `packages/gnosis/src/config.ts` — the default is under measurement and MUST NOT be hardcoded here |
 | Failure | Server down, serving a different model, or failing the discrimination probe → **exit 3**: the first-pass ranking is returned, `--json` `mode` carries NO `+rerank` suffix, and `note` names which of the three happened |
 | Probe | Before the first scoring call of a process, the model scores one fixed relevant/irrelevant pair. A model that answers HTTP 200 with no ranking signal is REFUSED (`rerank-probe-failed`), not ranked with |
