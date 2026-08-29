@@ -24,8 +24,8 @@ Every stage refuses out loud instead of handing back a plausible empty answer.
 
 **Where it is the wrong tool:** a question with no rare term in it — *"how should I structure a
 project"* — is a paraphrase problem, and BM25 has no concept of synonymy. Rewriting the question
-into corpus vocabulary is the largest measured quality lever in the system (§ Rephrasing), and it is
-work the caller has to do.
+into corpus vocabulary is the largest measured quality lever in the system (§ Ask with keywords,
+not with a question). You can do that by hand, or let `--rephrase` do it against a local chat model.
 
 ## What you can do with it
 
@@ -33,10 +33,15 @@ work the caller has to do.
 |---|---|
 | Search your notes for keywords | `dp-gnosis search "llama-swap model swap local server"` |
 | Get one paste-ready, citable block for an LLM prompt | `dp-gnosis ask "bm25 length normalisation"` |
-| Get a written answer *with* its sources | `dp-gnosis ask "…" --synthesize` |
+| Get a written answer *with* its sources | `dp-gnosis ask "…" --synthesize` ¹ |
 | Check an instance that is misbehaving | `dp-gnosis doctor` |
 | Serve the vault to Claude Desktop, Cursor, Zed or opencode | `dp-gnosis-mcp` |
-| Sharpen the ranking with a cross-encoder | add `--rerank` |
+| Sharpen the ranking with a cross-encoder | add `--rerank` ¹ |
+| Point it at your model server, in one command | `dp-gnosis setup` |
+
+¹ Needs a local model server — run `dp-gnosis setup` and it will find one, or
+`packages/gnosis/OPTIONAL.md` § Setting up the reranker has the manual path. Every other row runs
+with no network call. `--rephrase` and `enrich` are on the same footing.
 
 In a checkout rather than an install, every `dp-gnosis <cmd>` reads `npm run gnosis -- <cmd>`, and `dp-gnosis-mcp` reads `npm run gnosis:mcp`.
 
@@ -133,8 +138,10 @@ Three things in that output are the point of the tool, not noise:
 
 - **`skipped 3`, each with a reason and a file.** A heading whose body is empty would index nothing
   and could never be retrieved, so it is refused out loud instead of silently contributing zero.
-- **`confidence weak`.** The engine ranks and reports how sure it is. It does not have a "no good
-  match" signal, so a weak verdict on a returned atom is the warning you get — see § Rephrasing.
+- **`confidence weak`.** The run's verdict on its own top hit. Without `--rerank` no atom carries a
+  calibrated score, so `weak` is the only verdict the default path can reach — it becomes a real
+  signal once a reranker is configured (§ Is `--rerank` worth it?). The engine has no "no good
+  match" state, so a weak verdict on a returned atom is the warning you get.
 - **`(1/20)` and `(5/6)`.** The atom's reading position inside its source document, so you know
   whether a hit is the opening of a document or a fragment from its middle.
 
@@ -176,7 +183,7 @@ surface silently overrode another.
 | A search returns nothing at all | `index` was never run after `ingest`, or the corpus root matched no markdown. `doctor` names which |
 | Exit 3 on a query that used to work | The index and the corpus disagree — re-run `ingest` then `index` |
 | Results from the wrong project | Two trees share one index; narrow with `--domain`, or check the `domainRules` prefixes |
-| A setting in the profile appears to do nothing | Something outranks it — a CLI flag, or a `DP_GNOSIS_*` environment variable. `doctor` reports the loser by name |
+| A setting in the profile appears to do nothing | Something outranks it — a CLI flag, a `DP_GNOSIS_*` environment variable, or `config.json`. `doctor` reports the loser by name |
 
 ## Is `--rerank` worth it?
 
@@ -186,14 +193,24 @@ quality lever the tool has, and also the only one that costs seconds.
 | Corpus | BM25 only | with `--rerank` |
 |---|---|---|
 | `vault` — 6628 English documents, 60 topics | 0.4894 | **0.5791** |
-| `vault-hu` — 454 Hungarian documents, 31 topics | 0.4868 | **0.7699** |
+| `vault-hu` — 455 Hungarian documents, 31 topics | 0.4868 | **0.7699** |
 
 nDCG@10, `handbook/GNOSIS-BASELINES.md`, at `qwen3-reranker-4b` over a pool of 100. **The two rows
 are not comparable to each other** — the corpora differ in size by more than an order of magnitude,
 so their random-ranking floors differ; compare down a column, never across.
 
-**The cost is about 12 seconds per query**, and it needs a local llama-swap server. The pool floor
-binds even when you ask for `-k 5`, so a small result set does not make it cheaper. If the server is
+**The cost is about 13 seconds per query**, and it needs a local server exposing an OpenAI-compatible
+`/v1/rerank` — bare `llama-server` from llama.cpp is enough; llama-swap is what the baselines were
+measured on, not a requirement.
+
+**`dp-gnosis setup` wires it up for you.** It finds the server, probes the models it serves for one
+whose rank head actually discriminates, and writes the pair into `config.json` so you never pass a
+flag for it again. That probe is the point: most published Qwen3-Reranker GGUFs are missing the
+`cls.output.weight` head and score every pair at ~4.5e-23 — a server that answers 200 with numbers
+that parse. `setup` rejects those by name instead of configuring one.
+`packages/gnosis/OPTIONAL.md` § Setting up the reranker has the manual path and the two GGUF repos
+that are not silently broken. The pool floor binds
+even when you ask for `-k 5`, so a small result set does not make it cheaper. If the server is
 absent the query is **refused**, not silently answered from the unreranked order.
 
 Use it for research questions where you will read the top few carefully. Leave it off for
@@ -227,6 +244,10 @@ The five rules, the measured effect (precision@10 0.20 → 0.80) and the excepti
 
 That matters because of how the engine treats an empty corpus: **a genuinely empty atoms directory is not an error.** `index` and `ask` both exit 0 and hand back an empty knowledge pack, deliberately — an empty index over an empty corpus is the correct answer. The `index-empty` refusal (exit 3) is reserved for the real defect, where markdown files *are* present and none of them reached the index. So on a fresh clone you get silence, not a complaint.
 
+That silence is the state **after `index` has run** over an empty atoms directory. Before any index
+exists at all the query reports `indexState: unavailable` and exits 3 — the missing-index refusal,
+which is a different thing from the empty-corpus path and is what a fresh clone actually hits first.
+
 Point it at your own markdown, as above.
 
 ## Under the hood
@@ -235,7 +256,7 @@ For readers who want the technical shape before committing to it:
 
 | | |
 |---|---|
-| **Ranking** | BM25. Four lexical adapters — `fts5` (SQLite FTS5, the default and the measured champion), `linear` (reference BM25 in TypeScript), `minisearch`, `lancedb` — work on any install. Three dense/hybrid **research** routes are also wired into `--adapter`, but their dependencies are not installed by default: see `packages/gnosis/OPTIONAL.md` § Dense and hybrid research routes |
+| **Ranking** | BM25. Three lexical adapters work on any install — `fts5` (SQLite FTS5, the default and the measured champion), `linear` (reference BM25 in TypeScript) and `minisearch`. A fourth lexical route, `lancedb`, and three dense/hybrid **research** routes are wired into `--adapter` but need `@lancedb/lancedb` and `apache-arrow` installed beside the package (~323 MB): see `packages/gnosis/OPTIONAL.md` § Dense and hybrid research routes |
 | **Chunking** | Documents split on heading boundaries into ~3200-character atoms, each carrying its heading chain so a heading's terms stay searchable |
 | **Query expansion** | RM3 pseudo-relevance feedback, **on by default** on the shipped profiles. Pure SQLite, no network. Turn it off with `--no-prf` |
 | **Reranking** | Optional cross-encoder over HTTP (`--rerank`, default `qwen3-reranker-4b`), RRF-fused with the first pass. This is the one network hop in the ranking path, and it is opt-in |
@@ -303,6 +324,8 @@ Full table, every arm, the per-query latencies and the deviations: **`handbook/G
 | I want to… | Read |
 |---|---|
 | Use the CLI — every command, flag, exit code and output format | `packages/gnosis/README.md` |
+| Phrase a query so a lexical engine finds it, or wire gnosis into an agent | `packages/gnosis/QUERYING.md` |
+| Set up the reranker, or use a dense / hybrid research adapter | `packages/gnosis/OPTIONAL.md` |
 | Configure an instance — profiles, domains, `corpusRoots`, multi-project setups | `packages/gnosis/CONFIGURATION.md` |
 | Write documents so they become retrievable atoms | `packages/gnosis/AUTHORING.md` |
 | Wire it into an MCP client, Obsidian, or another consumer | `packages/gnosis/INTEGRATION.md` |
@@ -313,8 +336,8 @@ Full table, every arm, the per-query latencies and the deviations: **`handbook/G
 ## Status
 
 **Installable, not yet published.** `npm pack` plus `npm install -g` gives a working `dp-gnosis`
-command whose data lives outside the checkout, and `init` / `doctor` cover first-run setup and
-diagnosis. What remains before a registry release — publish, an uninstall path, and a clean-container
+command whose data lives outside the checkout, and `init` / `setup` / `doctor` cover first-run setup,
+the model backend, and diagnosis. What remains before a registry release — publish, an uninstall path, and a clean-container
 acceptance run — is owned by `docs/2026-08-24-2111-dp-gnosis-standalone-product-v2.md`.
 
 The engine itself is measured and gated; `handbook/GNOSIS-BASELINES.md` is the snapshot and
