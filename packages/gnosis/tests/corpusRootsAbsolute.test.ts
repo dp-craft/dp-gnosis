@@ -200,7 +200,7 @@ describe('prefix rules — ~ expands in a rule exactly as it does in a root', ()
   });
 });
 
-describe('excludePaths keeps its repo-relative behaviour', () => {
+describe('excludePaths matches the source identity, repo-relative or absolute', () => {
   it('still drops a repo-relative source under a declared prefix', async () => {
     const fixture = await makeFixture();
     await writeDoc(join(fixture.repoRoot, 'doc', 'tmp'), 'GENERATED.md', docText('Gen', BODY_B));
@@ -218,14 +218,64 @@ describe('excludePaths keeps its repo-relative behaviour', () => {
     expect(summary.skipped).toEqual([]);
   });
 
-  it('still REFUSES a ".." and an ABSOLUTE prefix, unchanged by absolute corpus roots', () => {
+  // OWNER-AUTHORISED assertion change: the absolute case asserted a refusal
+  // ("/etc" throws /repo-relative/) that this change deliberately removes — an
+  // absolute prefix is now the ONLY way to exclude a subtree of an absolute
+  // corpus root. The ".." case is unchanged and still MUST throw.
+  it('REFUSES a ".." prefix and ACCEPTS an absolute one', () => {
     expect(() => profileWith({
       domainRules: [{ prefix: 'doc', domain: 'engineering' }],
       excludePaths: ['../outside'],
     })).toThrow(/excludePaths/);
-    expect(() => profileWith({
-      domainRules: [{ prefix: 'doc', domain: 'engineering' }],
-      excludePaths: ['/etc'],
-    })).toThrow(/repo-relative/);
+    expect(
+      profileWith({
+        domainRules: [{ prefix: 'doc', domain: 'engineering' }],
+        excludePaths: ['/etc'],
+      }).excludePaths
+    ).toEqual(['/etc']);
+  });
+
+  it('expands a ~-rooted prefix exactly as a domain rule prefix is expanded', () => {
+    expect(
+      profileWith({
+        domainRules: [{ prefix: 'doc', domain: 'engineering' }],
+        excludePaths: ['~/knowledge/tmp'],
+      }).excludePaths
+    ).toEqual([`${toPosix(homedir())}/knowledge/tmp`]);
+  });
+});
+
+/**
+ * The load-bearing case: an ABSOLUTE corpus root — what `init` writes for an
+ * installed instance — with an absolute `excludePaths` prefix naming a subtree
+ * of it. Before this change the profile threw at parse, so no subtree of an
+ * absolute root could be excluded at all.
+ */
+describe('excludePaths over an ABSOLUTE corpus root', () => {
+  it('drops the excluded subtree BEFORE the source is read, so it is neither written nor skipped', async () => {
+    const fixture = await makeFixture();
+    const remote = externalDocRoot(fixture);
+    await writeDoc(join(remote, 'tmp'), 'GENERATED.md', docText('Generated Doc', BODY_A));
+    const summary = await ingest({
+      corpusRoots: [remote],
+      outputDir: fixture.out,
+      repoRoot: fixture.repoRoot,
+      profile: profileWith({
+        domainRules: [{ prefix: toPosix(remote), domain: 'engineering' }],
+        excludePaths: [`${toPosix(remote)}/tmp`],
+      }),
+    });
+    const sources = readdirSync(fixture.out)
+      .filter(name => name.endsWith('.md'))
+      .flatMap(name =>
+        readFileSync(join(fixture.out, name), 'utf8')
+          .split('\n')
+          .filter(line => line.startsWith('  - '))
+          .map(line => line.slice(4))
+      );
+
+    expect(summary.written).toBe(1);
+    expect(summary.skipped).toEqual([]);
+    expect(sources).toEqual([`${toPosix(remote)}/REMOTE.md`]);
   });
 });

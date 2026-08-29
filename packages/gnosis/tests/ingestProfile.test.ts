@@ -131,21 +131,41 @@ describe('ingest profile parsing', () => {
     ).toThrowError(/atomMaxChars/);
   });
 
-  it('carries optional excludePaths, refusing an absolute or parent-traversing prefix', () => {
+  // OWNER-AUTHORISED assertion change: the `/etc/passwd` case asserted a
+  // refusal this change deliberately removes. `excludePaths` matches the SOURCE
+  // IDENTITY, which is absolute for any source outside `repoRoot`, so an
+  // absolute prefix is the only form that can exclude a subtree of an absolute
+  // corpus root. The `..` and empty-member refusals are unchanged.
+  it('carries optional excludePaths, accepting an absolute prefix and refusing a parent-traversing one', () => {
     expect(
       parseIngestProfile({ ...rawMini(), excludePaths: ['docs/tmp', 'docs/benchmarks'] }, 'mini.json')
         .excludePaths
     ).toEqual(['docs/tmp', 'docs/benchmarks']);
     expect(parseIngestProfile(rawMini(), 'mini.json').excludePaths).toBeUndefined();
-    expect(() =>
-      parseIngestProfile({ ...rawMini(), excludePaths: ['/etc/passwd'] }, 'mini.json')
-    ).toThrowError(/\/etc\/passwd/);
+    expect(
+      parseIngestProfile({ ...rawMini(), excludePaths: ['/srv/knowledge/tmp'] }, 'mini.json')
+        .excludePaths
+    ).toEqual(['/srv/knowledge/tmp']);
     expect(() =>
       parseIngestProfile({ ...rawMini(), excludePaths: ['docs/../secrets'] }, 'mini.json')
     ).toThrowError(/docs\/\.\.\/secrets/);
     expect(() =>
       parseIngestProfile({ ...rawMini(), excludePaths: ['docs/tmp', ''] }, 'mini.json')
     ).toThrowError(/excludePaths/);
+  });
+
+  /** The predicate split is per-field: relaxing excludePaths MUST NOT reach the sidecar. */
+  it('still refuses an absolute or parent-traversing summarySidecar', () => {
+    expect(
+      parseIngestProfile({ ...rawMini(), summarySidecar: 'docs/summaries.json' }, 'mini.json')
+        .summarySidecar
+    ).toBe('docs/summaries.json');
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), summarySidecar: '/etc/summaries.json' }, 'mini.json')
+    ).toThrowError(/summarySidecar/);
+    expect(() =>
+      parseIngestProfile({ ...rawMini(), summarySidecar: 'docs/../summaries.json' }, 'mini.json')
+    ).toThrowError(/summarySidecar/);
   });
 
   it('carries optional defaultExcludedTypes, refusing a type outside the profile vocabulary', () => {

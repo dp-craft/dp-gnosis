@@ -207,8 +207,8 @@ every gate stays green.
 
 ### 4.1 How a source is NAMED — the rule every prefix matches against
 
-A prefix in `domainRules` / `typeRules` is matched against the source's
-**identity**, which is:
+A prefix in `domainRules` / `typeRules` / `excludePaths` is matched against the
+source's **identity**, which is:
 
 | Where the source lies | Its identity |
 |---|---|
@@ -224,11 +224,10 @@ silently reassign a domain.
 
 A source under no declared prefix stays refused (§3).
 
-### 4.2 Two limits of out-of-repo roots
+### 4.2 The one limit of out-of-repo roots
 
 | Limit | Detail |
 |---|---|
-| **`excludePaths` cannot exclude anything under an absolute root** | It still REFUSES an absolute or `..` prefix, loudly. Aligning it with `domainRules` is a separate change and has not been made |
 | **Absolute source paths are machine-specific** | An out-of-repo source records its absolute path in the atom's `sources:` frontmatter and in the corpus manifest, so those atoms are not portable to a machine with a different layout. Inherent to the feature |
 
 ---

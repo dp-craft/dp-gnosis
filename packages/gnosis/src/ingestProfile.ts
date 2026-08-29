@@ -91,11 +91,10 @@ export interface IngestProfile {
    */
   readonly atomMaxChars?: number | undefined;
   /**
-   * Repo-relative path prefixes this instance MUST NOT ingest, matched exactly
-   * as a domain rule's prefix is. It stays REPO-RELATIVE-ONLY even though a
-   * corpus root may now be absolute: an absolute prefix is still refused by
-   * name, so a tree reached through an absolute root cannot be partially
-   * excluded — declare a narrower root instead.
+   * Path prefixes this instance MUST NOT ingest, matched exactly as a domain
+   * rule's prefix is — against the source IDENTITY, so a repo-relative prefix
+   * excludes an in-repo subtree and an absolute (or `~`-rooted) one excludes a
+   * subtree of an absolute corpus root. A prefix containing `..` is refused.
    * Absent means nothing is excluded, so an existing profile walks the same
    * corpus it always did.
    */
@@ -352,11 +351,26 @@ const segmentRule = (
 });
 
 /**
- * A path prefix is repo-relative by contract, so an absolute one or one walking
- * out through `..` is REFUSED rather than normalised: silently rebasing it would
- * exclude a directory nobody named, and the symptom is only missing atoms.
+ * A SIDECAR path is repo-relative by contract, so an absolute one or one walking
+ * out through `..` is REFUSED rather than normalised: a rebased location reads
+ * as "no sidecar", and the only symptom is a corpus that lost its summaries.
+ *
+ * Its ONE caller is `repoRelative`. An EXCLUSION prefix is matched against the
+ * source identity and so may legitimately be absolute — it has its own, weaker
+ * predicate ({@link traversingPrefix}). This one MUST stay strict.
  */
 const unsafePrefix = (value: string): boolean => value.startsWith('/') || value.includes('..');
+
+/**
+ * What an EXCLUSION prefix may not be. `excludePaths` matches the source
+ * IDENTITY, which is repo-relative under `repoRoot` and ABSOLUTE for a source
+ * reached through an absolute or `~` corpus root — so an absolute prefix is the
+ * only form that can exclude a subtree of an absolute root, and is accepted like
+ * a `domainRules` prefix. A `..` stays refused: such a prefix names no subtree
+ * of anything the profile declared, and normalising it would exclude a directory
+ * nobody wrote down.
+ */
+const traversingPrefix = (value: string): boolean => value.includes('..');
 
 /**
  * The ONE normalisation every path prefix passes through: `~/` expands to the
@@ -381,12 +395,12 @@ const excludePathList = (
   source: string
 ): readonly string[] | undefined => {
   const value = withoutEmptyMember(optionalStringList(raw, 'excludePaths', source), 'excludePaths', source);
-  const offender = value?.find(unsafePrefix);
+  const offender = value?.find(traversingPrefix);
   return offender === undefined
-    ? value
+    ? value?.map(expandPrefix)
     : fail(
         source,
-        `field "excludePaths" names "${offender}" — a prefix MUST be repo-relative, neither absolute nor containing ".."`
+        `field "excludePaths" names "${offender}" — a prefix MUST NOT contain ".."; state the repo-relative or absolute path of the subtree itself`
       );
 };
 

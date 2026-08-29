@@ -226,8 +226,9 @@ const expandCorpus = async (
  * document that failed a check, so surfacing it in `skipped[]` would drown the
  * refusals a reader has to act on under 22 597 entries nothing can be done
  * about. A forward-slash `startsWith` match against the source IDENTITY (see
- * {@link sourceIdentity}), like `domainRules` — but the profile still refuses an
- * ABSOLUTE `excludePaths` prefix, so only an in-repo source can be excluded.
+ * {@link sourceIdentity}), exactly like `domainRules`: a repo-relative prefix
+ * excludes an in-repo subtree, and an absolute or `~`-rooted one excludes a
+ * subtree of an absolute corpus root.
  */
 const isExcluded = (profile: IngestProfile, sourcePath: string): boolean =>
   (profile.excludePaths ?? []).some(prefix => sourcePath.startsWith(prefix));
