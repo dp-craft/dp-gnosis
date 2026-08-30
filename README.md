@@ -321,8 +321,8 @@ so their random-ranking floors differ; compare down a column, never across.
 measured on, not a requirement.
 
 **Or no server at all.** `rerank.backend: "local"` loads the same GGUF inside the gnosis process
-through `node-llama-cpp` (`npm install node-llama-cpp`, beside the package). It is the SIMPLER
-install, not the faster one.
+through `node-llama-cpp` (`npm install node-llama-cpp --save-prod --omit=dev`, beside the package).
+It is the SIMPLER install, not the faster one.
 
 It uses a GPU when the installed engine finds one and the CPU when it does not — there is nothing to
 configure, and equally no way to decline a GPU it did find. Against that: the model is reloaded per

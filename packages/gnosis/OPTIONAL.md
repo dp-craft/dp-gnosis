@@ -130,7 +130,7 @@ files, the same rank head. It is the SIMPLER install, not the faster one, and th
 in exactly those words.
 
 ```bash
-npm install node-llama-cpp            # beside the package, like the dense routes above
+npm install node-llama-cpp --save-prod --omit=dev   # beside the package, like the dense routes above
 ```
 
 ```json
@@ -209,9 +209,9 @@ against the same `RERANK_PROBE_MIN_SCORE` floor, magnitude before direction, and
 `DEGENERATE` / `CONSTANT` / `INVERTED` with the same diagnosis — a rank-head-less GGUF is the same
 defect whether llama.cpp is reached over a socket or linked into this process.
 
-An absent engine is a refusal naming `npm install node-llama-cpp`, never a silent fall back to the
-HTTP endpoint: the two are different scorers on different score scales, and a caller who asked for
-one and received the other could not tell the rankings apart.
+An absent engine is a refusal naming `npm install node-llama-cpp --save-prod --omit=dev`, never a
+silent fall back to the HTTP endpoint: the two are different scorers on different score scales, and
+a caller who asked for one and received the other could not tell the rankings apart.
 
 ## Dense and hybrid research routes
 

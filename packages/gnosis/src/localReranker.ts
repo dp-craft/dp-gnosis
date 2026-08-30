@@ -46,8 +46,22 @@ export const LOCAL_RERANKER_PACKAGE = 'node-llama-cpp';
  * {@link LOCAL_RERANKER_INSTALL_COMMAND}. One owner, so the command a refusal
  * tells the user to run is the command this module would run for them — a
  * second spelling drifts on the first flag either half gains.
+ *
+ * Both flags exist because the bare `npm install node-llama-cpp` is resolved
+ * against THIS package's own `package.json`, which ships to the consumer with
+ * the engine in `devDependencies`:
+ *
+ * - `--save-prod` because under any dev-omitting npm config — `omit=dev`,
+ *   `NODE_ENV=production` — npm otherwise honours that devDependencies entry by
+ *   installing nothing, removing an existing copy, and exiting 0. That is the
+ *   wizard's exit-0-but-still-missing refusal, manufactured by its own command.
+ * - `--omit=dev` because without it npm reifies the WHOLE devDependency tree,
+ *   so a wizard that promised a llama.cpp binary fetches a vector database as
+ *   well: 1.9 GB rather than 736 MB on the one machine this was measured on
+ *   (Node 24 / npm, fake global-install layout, 2026-08-30), and different on
+ *   another platform.
  */
-const INSTALL_ARGV: readonly string[] = ['install', LOCAL_RERANKER_PACKAGE];
+const INSTALL_ARGV: readonly string[] = ['install', LOCAL_RERANKER_PACKAGE, '--save-prod', '--omit=dev'];
 
 /** What the refusal tells the user to run, verbatim. */
 export const LOCAL_RERANKER_INSTALL_COMMAND = `npm ${INSTALL_ARGV.join(' ')}`;
@@ -170,9 +184,10 @@ export type LocalRerankerInstall =
   | { readonly installed: true }
   | { readonly installed: false; readonly reason: string };
 
-/** What the install process reported: its exit code, and what it said about a failure. */
+/** What the install process reported: its exit code, and everything it said on both streams. */
 export interface InstallOutcome {
   readonly code: number;
+  readonly stdout: string;
   readonly stderr: string;
 }
 
@@ -203,8 +218,8 @@ const exitCode = (error: unknown): number =>
 
 const npmInstall: InstallRunner = async cwd =>
   await new Promise<InstallOutcome>(settle => {
-    execFile('npm', [...INSTALL_ARGV], { cwd, maxBuffer: INSTALL_OUTPUT_LIMIT }, (error, _stdout, stderr) => {
-      settle({ code: error === null ? 0 : exitCode(error), stderr });
+    execFile('npm', [...INSTALL_ARGV], { cwd, maxBuffer: INSTALL_OUTPUT_LIMIT }, (error, stdout, stderr) => {
+      settle({ code: error === null ? 0 : exitCode(error), stdout, stderr });
     });
   });
 
@@ -223,8 +238,28 @@ const notWritableMessage = (directory: string): string =>
 const failedMessage = (outcome: InstallOutcome): string =>
   `\`${LOCAL_RERANKER_INSTALL_COMMAND}\` exited ${String(outcome.code)} — ${outcome.stderr.trim() === '' ? 'it printed nothing on stderr' : outcome.stderr.trim()}`;
 
-const stillMissingMessage = (reason: string): string =>
-  `\`${LOCAL_RERANKER_INSTALL_COMMAND}\` exited 0, but ${reason}`;
+/**
+ * How much of npm's own log an exit-0 refusal carries. The buffer above is
+ * sized so npm never fails for being verbose; this one is sized so the user
+ * reads the END of a log — where npm records what it did or declined to do —
+ * rather than a refusal buried in a fetch trace.
+ */
+const INSTALL_LOG_TAIL = 2000;
+
+const tail = (text: string): string => (text.length <= INSTALL_LOG_TAIL ? text : text.slice(-INSTALL_LOG_TAIL));
+
+/**
+ * What npm ITSELF said. On the exit-0 path there is nothing else to go on: npm
+ * reported success, so its log is the only account of an install that produced
+ * no engine — most often one line saying it omitted the very package asked for.
+ */
+const npmAccount = (outcome: InstallOutcome): string => {
+  const said = [outcome.stdout.trim(), outcome.stderr.trim()].filter(stream => stream !== '').join('\n');
+  return said === '' ? 'it printed nothing on either stream' : tail(said);
+};
+
+const stillMissingMessage = (outcome: InstallOutcome, reason: string): string =>
+  `\`${LOCAL_RERANKER_INSTALL_COMMAND}\` exited 0, but ${reason} — npm said: ${npmAccount(outcome)}`;
 
 /**
  * The re-probe, and the reason {@link installLocalReranker} is not just a
@@ -232,16 +267,16 @@ const stillMissingMessage = (reason: string): string =>
  * binding then fails to load on this platform. Reporting that as installed
  * would be a component that produced nothing, recorded as success.
  */
-const verified = async (load: EngineLoader | undefined): Promise<LocalRerankerInstall> => {
+const verified = async (load: EngineLoader | undefined, outcome: InstallOutcome): Promise<LocalRerankerInstall> => {
   const availability = await localRerankerAvailability(load);
   return availability.available
     ? { installed: true }
-    : { installed: false, reason: stillMissingMessage(availability.reason) };
+    : { installed: false, reason: stillMissingMessage(outcome, availability.reason) };
 };
 
 const runInstall = async (deps: InstallDeps, directory: string): Promise<LocalRerankerInstall> => {
   const outcome = await (deps.run ?? npmInstall)(directory);
-  return outcome.code === 0 ? await verified(deps.load) : { installed: false, reason: failedMessage(outcome) };
+  return outcome.code === 0 ? await verified(deps.load, outcome) : { installed: false, reason: failedMessage(outcome) };
 };
 
 /**

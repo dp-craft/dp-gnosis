@@ -33,7 +33,7 @@ const engineMissing = async (): Promise<unknown> => {
   throw new Error(`Cannot find module '${LOCAL_RERANKER_PACKAGE}'`);
 };
 
-const succeeds: InstallRunner = async () => ({ code: 0, stderr: '' });
+const succeeds: InstallRunner = async () => ({ code: 0, stdout: '', stderr: '' });
 
 /** A runner that records where it was asked to run, so the cwd is asserted rather than assumed. */
 const recording = (outcome: InstallOutcome): { readonly run: InstallRunner; readonly seen: string[] } => {
@@ -66,7 +66,7 @@ describe('localRerankerDirectory', () => {
 
 describe('installLocalReranker', () => {
   it('runs the install in the directory the engine is imported from', async () => {
-    const runner = recording({ code: 0, stderr: '' });
+    const runner = recording({ code: 0, stdout: '', stderr: '' });
 
     await installLocalReranker({ run: runner.run, load: engineLoads });
 
@@ -92,10 +92,38 @@ describe('installLocalReranker', () => {
     expect(reasonOf(result)).toContain(LOCAL_RERANKER_PACKAGE);
   });
 
+  /**
+   * Exit 0 and no engine is the path with NOTHING else to go on: npm reported
+   * success, so its own log is the only account of what it actually did. A
+   * refusal that drops it hands the user a dead end — which is the failure
+   * class this file exists over, one message further along.
+   */
+  it('carries what npm printed on BOTH streams when it exited 0 and the engine is still missing', async () => {
+    const runner = recording({
+      code: 0,
+      stdout: 'up to date, audited 1 package in 400ms',
+      stderr: 'npm warn config omit dev is set',
+    });
+
+    const result = await installLocalReranker({ run: runner.run, load: engineMissing });
+
+    expect(result.installed).toBe(false);
+    expect(reasonOf(result)).toContain('up to date, audited 1 package in 400ms');
+    expect(reasonOf(result)).toContain('npm warn config omit dev is set');
+  });
+
+  // npm CAN exit 0 having said nothing at all. Saying so is the honest report;
+  // a refusal that trails off after "exited 0, but" reads as truncated output.
+  it('says npm printed nothing when it exited 0 silently and the engine is still missing', async () => {
+    const result = await installLocalReranker({ run: succeeds, load: engineMissing });
+
+    expect(reasonOf(result)).toContain('printed nothing');
+  });
+
   // A failed install is reported WITH what npm said on stderr. Swallowing it
   // leaves the user with a refusal that names no cause they can act on.
   it('reports a non-zero exit with its stderr, and never as installed', async () => {
-    const runner = recording({ code: 127, stderr: 'npm ERR! ENOTFOUND registry.npmjs.org' });
+    const runner = recording({ code: 127, stdout: '', stderr: 'npm ERR! ENOTFOUND registry.npmjs.org' });
 
     const result = await installLocalReranker({ run: runner.run, load: engineLoads });
 
@@ -110,7 +138,7 @@ describe('installLocalReranker', () => {
    * honest answer — the engine stays unavailable here — is known beforehand.
    */
   it('refuses without running anything when the target directory is not writable', async () => {
-    const runner = recording({ code: 0, stderr: '' });
+    const runner = recording({ code: 0, stdout: '', stderr: '' });
     const directory = '/dp-gnosis-no-such-directory/packages/gnosis';
 
     const result = await installLocalReranker({ run: runner.run, load: engineLoads, directory });
@@ -119,8 +147,27 @@ describe('installLocalReranker', () => {
     expect(reasonOf(result)).toContain(directory);
   });
 
+  /**
+   * Both flags are load-bearing, and each one prevents a MEASURED failure of
+   * the bare `npm install node-llama-cpp` (Node 24 / npm, fake global-install
+   * layout, 2026-08-30):
+   *
+   * - without `--save-prod`, the engine is resolved against this package's
+   *   devDependencies entry, so any dev-omitting npm config installs NOTHING
+   *   and still exits 0 — the wizard's exit-0-but-missing path, caused by the
+   *   install command itself;
+   * - without `--omit=dev`, npm reifies the whole devDependency tree, so a
+   *   wizard that promised a llama.cpp binary fetched `@lancedb/lancedb` too:
+   *   1.9 GB rather than 736 MB.
+   */
+  it('installs the engine as a prod dependency and omits the dev tree', async () => {
+    expect(LOCAL_RERANKER_INSTALL_COMMAND).toContain('--save-prod');
+    expect(LOCAL_RERANKER_INSTALL_COMMAND).toContain('--omit=dev');
+    expect(LOCAL_RERANKER_INSTALL_COMMAND).toBe('npm install node-llama-cpp --save-prod --omit=dev');
+  });
+
   it('names the command it ran, so the refusal is reproducible by hand', async () => {
-    const runner = recording({ code: 1, stderr: 'boom' });
+    const runner = recording({ code: 1, stdout: '', stderr: 'boom' });
 
     const result = await installLocalReranker({ run: runner.run, load: engineLoads });
 

@@ -126,7 +126,7 @@ describe('the local engine reports BOTH of its states', () => {
     expect(availability.available).toBe(false);
     const reason = availability.available ? '' : availability.reason;
     expect(reason).toContain(LOCAL_RERANKER_INSTALL_COMMAND);
-    expect(LOCAL_RERANKER_INSTALL_COMMAND).toBe('npm install node-llama-cpp');
+    expect(LOCAL_RERANKER_INSTALL_COMMAND).toBe('npm install node-llama-cpp --save-prod --omit=dev');
     expect(reason).toContain('--rerank');
     expect(reason).toContain('HTTP');
   });

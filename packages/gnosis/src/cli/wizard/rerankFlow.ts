@@ -381,11 +381,17 @@ const measureLocal = async (prompter: Prompter, modelPath: string): Promise<bool
  * a prebuilt native binary for the platform it lands on, so another machine's
  * figure differs. Quoting it unlabelled would be a remembered number presented
  * as this user's.
+ *
+ * The size is not the whole cost: the command also REWRITES the `package.json`
+ * in that directory, which the note owes the user before a `no`-defaulted
+ * prompt. Why the flags are spelled that way belongs to
+ * `localReranker.ts:INSTALL_ARGV`, not here.
  */
 const installNote = (directory: string): readonly string[] => [
   '',
   `  \`${LOCAL_RERANKER_INSTALL_COMMAND}\` would run in ${directory}, which is where this package imports the engine from.`,
   '  It fetches and builds a native llama.cpp binary — 764 MB on disk in the checkout this was measured in, and different on another platform.',
+  '  It also records the engine as a dependency of the package there, so it rewrites that `package.json`, and skips the development-only ones — which is why it fetches the engine and not the vector database listed beside it.',
 ];
 
 const INSTALL_DONE = ['', '  the engine installed and loaded — the in-process option is available'];

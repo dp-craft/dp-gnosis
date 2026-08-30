@@ -1120,6 +1120,16 @@ describe('askRerank — the second route downloads, then asks how and where to r
       expect(said).toMatch(/\d+ MB/);
     });
 
+    // The command does not only download: it rewrites the package.json in that
+    // directory, which the user is owed before they answer a `no`-defaulted prompt.
+    it('should state that the install rewrites the package.json in that directory', async () => {
+      const { prompter } = await flow(declined());
+
+      const said = flatten(prompter.transcript);
+      expect(said).toMatch(/records the engine as a dependency/);
+      expect(said).toMatch(/rewrites .*package\.json/);
+    });
+
     // Declining changes nothing: the route continues to the served path, which
     // is exactly what it did before the offer existed. What the served rung then
     // ASKS depends on whether this machine has a llama.cpp on PATH, so the
