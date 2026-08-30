@@ -16,8 +16,8 @@
  * right — but failing at the end of a wizard, after every other question has
  * been answered, spends the user's whole session to report a typo.
  */
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 
 import { DECLARED_TYPES } from '../../config.js';
 import { expandUserPath } from '../../env.js';
@@ -25,9 +25,14 @@ import { DEFAULT_EXCLUDED_TYPES, DEFAULT_TYPE, domainOf } from '../../instance.j
 import type { AnalyzerId } from '../../query.js';
 import type { AdapterName } from '../adapter.js';
 import type { Choice } from './advice.js';
-import { ADAPTER_CHOICES, ANALYZER_CHOICES, analyzerFor, PRF_ADVICE } from './advice.js';
+import { ADAPTER_CHOICES, ANALYZER_CHOICES, describeChoice, PRF_ADVICE } from './advice.js';
+import { excludePrefix, nearestGitignore, translatable } from './gitignore.js';
 import type { RootAnswer } from './plan.js';
+import type { Preset, PresetSelections } from './preset.js';
+import { CUSTOM_PRESET, PRESETS, presetSelections, presetTable } from './preset.js';
 import type { Option, Prompter } from './prompts.js';
+import type { RerankPreference } from './rerankFlow.js';
+import { note, section } from './screen.js';
 
 /** The markdown suffix ingest walks for. */
 const MD = '.md';
@@ -49,16 +54,57 @@ const countMarkdown = (dir: string, depth: number = SCAN_DEPTH): number => {
     .reduce((total, entry) => total + countMarkdown(join(dir, entry.name), depth - 1), here);
 };
 
-/** Why a directory the user typed cannot be a corpus root, or nothing. */
-const rootProblem = (typed: string): string | undefined => {
-  const path = expandUserPath(typed);
+/** Why the PATH itself cannot be a corpus root, before anything is counted. */
+const pathProblem = (path: string): string | undefined => {
   if (!isAbsolute(path)) return 'that path is relative — write it in full, or start it with ~/, so the scope cannot move with the shell';
   if (!existsSync(path)) return `${path} does not exist`;
   if (!statSync(path).isDirectory()) return `${path} is not a directory`;
-  return countMarkdown(path) === 0
-    ? `${path} holds no markdown within ${String(SCAN_DEPTH)} levels — an ingest over it would walk nothing, and a silently empty corpus is how a vault comes to answer nothing while every check stays green`
-    : undefined;
+  return undefined;
 };
+
+const emptyProblem = (path: string): string =>
+  `${path} holds no markdown within ${String(SCAN_DEPTH)} levels — an ingest over it would walk nothing, and a silently empty corpus is how a vault comes to answer nothing while every check stays green`;
+
+/** A typed root, resolved: either a reason to re-ask, or the path and what was found in it. */
+type RootCheck =
+  | { readonly ok: false; readonly problem: string }
+  | { readonly ok: true; readonly path: string; readonly markdown: number };
+
+const checkRoot = (typed: string): RootCheck => {
+  const path = expandUserPath(typed);
+  const problem = pathProblem(path);
+  if (problem !== undefined) return { ok: false, problem };
+  const markdown = countMarkdown(path);
+  return markdown === 0 ? { ok: false, problem: emptyProblem(path) } : { ok: true, path, markdown };
+};
+
+/**
+ * What the scan found, said back. The count is a FLOOR, not a total: the same
+ * bound that keeps {@link countMarkdown} from walking a huge tree also stops it
+ * below anything deeper than {@link SCAN_DEPTH}, so reporting it as an exact
+ * figure would understate a deep corpus and be believed.
+ */
+const foundLine = (path: string, markdown: number): string =>
+  `  found at least ${String(markdown)} markdown files in ${path} — the check stops at ${String(SCAN_DEPTH)} levels deep, so a deeper tree holds more`;
+
+const CORPUS_EXPLANATION = [
+  'A corpus directory is a folder of markdown that gnosis reads. Add as many as you like — you are asked again after each one.',
+  'Symlinked directories inside a corpus root are followed, so a folder of links to projects elsewhere works.',
+  'Each directory gets a DOMAIN LABEL. It rides with every atom from that directory, appears on every result, and `--domain <label>` narrows a search to that project alone. The default is the directory\'s own name.',
+];
+
+const TYPES_EXPLANATION = [
+  'Every atom carries a TYPE. Rules in the profile can assign one from the document\'s path; the default below is what a document gets when no rule claims it.',
+  'Hiding a type is a DISPLAY default only — those documents are still ingested and still indexed, and `--include-history` brings them back into results.',
+];
+
+const MATCHING_EXPLANATION = [
+  'These four answers decide how your words are matched against your documents. They are stamped into the index, so changing one later means rebuilding it.',
+];
+
+const PRESET_EXPLANATION = [
+  'A preset answers the rest of the interview for you. It only PRE-SELECTS a row each menu already offers — every question is still asked, every row is still choosable, and nothing gnosis ships with is changed by picking one.',
+];
 
 const ADD_MORE = 'Add another corpus directory?';
 
@@ -67,10 +113,13 @@ const askRoot = async (prompter: Prompter, ordinal: number): Promise<string> => 
   const typed = await prompter.input(
     ordinal === 0 ? 'Corpus directory (absolute, or ~/…)' : 'Next corpus directory'
   );
-  const problem = rootProblem(typed);
-  if (problem === undefined) return expandUserPath(typed);
-  prompter.say([`  ${problem}`]);
-  return await askRoot(prompter, ordinal);
+  const checked = checkRoot(typed);
+  if (!checked.ok) {
+    prompter.say([`  ${checked.problem}`]);
+    return await askRoot(prompter, ordinal);
+  }
+  prompter.say([foundLine(checked.path, checked.markdown)]);
+  return checked.path;
 };
 
 /** Its domain — the label every atom from it carries into every result. */
@@ -79,7 +128,8 @@ const askDomain = async (prompter: Prompter, root: string): Promise<RootAnswer> 
   domain: await prompter.input(`Domain label for ${root}`, domainOf(root)),
 });
 
-const askRoots = async (
+/** Every corpus directory and its domain label — the whole of section 1's answer. */
+export const askRoots = async (
   prompter: Prompter,
   collected: readonly RootAnswer[] = []
 ): Promise<readonly RootAnswer[]> => {
@@ -88,11 +138,11 @@ const askRoots = async (
   return (await prompter.confirm(ADD_MORE, false)) ? await askRoots(prompter, answered) : answered;
 };
 
-/** A menu row: the title, with the pro and con underneath the highlighted one. */
+/** A menu row: the title, with `describeChoice` underneath the highlighted one. */
 const optionOf = <T extends string>(choice: Choice<T>): Option<T> => ({
   value: choice.value,
   name: choice.title,
-  description: `  + ${choice.pro}\n  − ${choice.con}`,
+  description: describeChoice(choice),
 });
 
 const recommended = <T extends string>(choices: readonly Choice<T>[]): T | undefined =>
@@ -118,9 +168,8 @@ export interface LanguageAnswer {
   readonly analyzer: AnalyzerId;
 }
 
-const askLanguage = async (prompter: Prompter): Promise<LanguageAnswer> => {
-  prompter.say(LANGUAGE_NOTE);
-  const hungarian = await prompter.select<boolean>(
+const askHungarian = async (prompter: Prompter): Promise<boolean> =>
+  await prompter.select<boolean>(
     'What language are the documents mostly in?',
     [
       { value: false, name: 'English (or another Latin-script language)' },
@@ -128,13 +177,57 @@ const askLanguage = async (prompter: Prompter): Promise<LanguageAnswer> => {
     ],
     false
   );
-  const identifiers = await prompter.confirm(
+
+const askIdentifiers = async (prompter: Prompter): Promise<boolean> =>
+  await prompter.confirm(
     'Do they contain code identifiers — function names, flags, snake_case or dotted paths?',
     false
   );
-  const suggested = analyzerFor(hungarian, identifiers);
-  prompter.say([`  → recommended chain: ${suggested}`]);
-  return { hungarian, analyzer: await pick(prompter, 'Analysis chain', ordered(ANALYZER_CHOICES, suggested)) };
+
+/** One preset row: its title, with its summary under the highlighted one. */
+const presetOption = (preset: Preset): Option<Preset> => ({
+  value: preset,
+  name: preset.title,
+  description: `  ${preset.summary}`,
+});
+
+/**
+ * The preset question, asked ONCE and after the two answers that feed it — the
+ * language and the identifiers decide the chain, so a preset asked before them
+ * could not pre-select one.
+ *
+ * Its answer is a set of `initial` values and nothing else. `custom` is on the
+ * menu because a preset that could not be declined would be a default wearing a
+ * question's clothes.
+ */
+const askPreset = async (
+  prompter: Prompter,
+  hungarian: boolean,
+  identifiers: boolean
+): Promise<PresetSelections> => {
+  prompter.say([...presetTable(), ...note(PRESET_EXPLANATION)]);
+  const chosen = await prompter.select<Preset>(
+    'Which of these fits you?',
+    [...PRESETS, CUSTOM_PRESET].map(presetOption),
+    PRESETS.find(preset => preset.recommended === true)
+  );
+  return presetSelections(chosen, hungarian, identifiers);
+};
+
+/** Everything section 4 settles: the two language answers, the preset, the chain. */
+export interface MatchingAnswers {
+  readonly language: LanguageAnswer;
+  readonly preset: PresetSelections;
+}
+
+export const askMatching = async (prompter: Prompter): Promise<MatchingAnswers> => {
+  prompter.say([...section('How text is matched'), ...note(MATCHING_EXPLANATION)]);
+  prompter.say(LANGUAGE_NOTE);
+  const hungarian = await askHungarian(prompter);
+  const preset = await askPreset(prompter, hungarian, await askIdentifiers(prompter));
+  prompter.say([`  → recommended chain: ${preset.analyzer}`]);
+  const analyzer = await pick(prompter, 'Analysis chain', ordered(ANALYZER_CHOICES, preset.analyzer));
+  return { language: { hungarian, analyzer }, preset };
 };
 
 /**
@@ -164,10 +257,11 @@ const EXCLUDED_NOTE = [
   '--include-history brings them back. Uncheck a type to have it shown by default.',
 ];
 
-const askTypes = async (prompter: Prompter): Promise<{
+export const askTypes = async (prompter: Prompter): Promise<{
   readonly defaultType: string;
   readonly excludedTypes: readonly string[];
 }> => {
+  prompter.say([...section('How documents are labelled'), ...note(TYPES_EXPLANATION)]);
   const defaultType = await prompter.select(
     'Default atom type — what a document gets when no rule claims it',
     DECLARED_TYPES.map(typeOption),
@@ -191,37 +285,128 @@ export interface CorpusAnswers {
   readonly language: LanguageAnswer;
   readonly adapter: AdapterName;
   readonly prf: boolean;
+  /** The reranker half's pre-selections, threaded on by the caller. */
+  readonly preset: PresetSelections;
 }
 
-const askExclusions = async (prompter: Prompter): Promise<readonly string[]> => {
+/** One `.gitignore` that covers at least one corpus root, already split. */
+interface GitignoreOffer {
+  readonly path: string;
+  readonly directory: string;
+  readonly usable: readonly string[];
+  readonly droppedCount: number;
+}
+
+const offerFor = (root: string): GitignoreOffer | undefined => {
+  const path = nearestGitignore(root);
+  if (path === undefined) return undefined;
+  const split = translatable(readFileSync(path, 'utf8'));
+  return { path, directory: dirname(path), usable: split.usable, droppedCount: split.dropped.length };
+};
+
+/**
+ * One offer per `.gitignore` FILE, not per root: two roots inside the same
+ * repository resolve to the same file, and asking twice about the same lines
+ * would read as two different questions.
+ */
+const gitignoreOffers = (roots: readonly RootAnswer[]): readonly GitignoreOffer[] => {
+  const found = roots
+    .map(root => offerFor(root.path))
+    .filter((offer): offer is GitignoreOffer => offer !== undefined);
+  return found.filter((offer, index) => found.findIndex(seen => seen.path === offer.path) === index);
+};
+
+const offerNote = (offer: GitignoreOffer): readonly string[] => [
+  '',
+  `  found ${offer.path}`,
+  `  ${String(offer.usable.length)} of its lines are plain paths and can be skipped; ${String(offer.droppedCount)} cannot be used —`,
+  '  a blank, a comment, a wildcard or a negation is not expressible as a path prefix, which is all an exclusion is.',
+];
+
+const entryOption = (entry: string): Option<string> => ({ value: entry, name: entry });
+
+/** The entries of ONE `.gitignore`, offered pre-checked; unchecking is how one is declined. */
+const askOffer = async (
+  prompter: Prompter,
+  repoRoot: string,
+  offer: GitignoreOffer
+): Promise<readonly string[]> => {
+  prompter.say(offerNote(offer));
+  if (offer.usable.length === 0) return [];
+  const chosen = await prompter.multiSelect(
+    `Skip these paths, from ${offer.path}?`,
+    offer.usable.map(entryOption),
+    offer.usable
+  );
+  return chosen.map(entry => excludePrefix(repoRoot, offer.directory, entry));
+};
+
+const askOffers = async (
+  prompter: Prompter,
+  repoRoot: string,
+  pending: readonly GitignoreOffer[],
+  collected: readonly string[] = []
+): Promise<readonly string[]> => {
+  const [head, ...rest] = pending;
+  if (head === undefined) return collected;
+  const chosen = await askOffer(prompter, repoRoot, head);
+  return await askOffers(prompter, repoRoot, rest, [...collected, ...chosen]);
+};
+
+const typedExclusions = (typed: string): readonly string[] =>
+  typed
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(entry => entry.length > 0);
+
+export const askExclusions = async (
+  prompter: Prompter,
+  repoRoot: string,
+  roots: readonly RootAnswer[]
+): Promise<readonly string[]> => {
+  const fromGitignore = await askOffers(prompter, repoRoot, gitignoreOffers(roots));
   const typed = await prompter.input(
     'Paths to skip inside those directories, comma separated (blank for none)',
     ''
   );
-  return typed
-    .split(',')
-    .map(entry => entry.trim())
-    .filter(entry => entry.length > 0);
+  return [...fromGitignore, ...typedExclusions(typed)].filter(
+    (entry, index, all) => all.indexOf(entry) === index
+  );
 };
 
-const askPrf = async (prompter: Prompter): Promise<boolean> => {
+const askPrf = async (prompter: Prompter, initial: boolean): Promise<boolean> => {
   prompter.say(['', `  + ${PRF_ADVICE.pro}`, `  − ${PRF_ADVICE.con}`]);
-  return await prompter.confirm('Serve pseudo-relevance feedback by default?', true);
+  return await prompter.confirm('Serve pseudo-relevance feedback by default?', initial);
 };
 
 /** The whole corpus half of the interview, in the one order it can be asked in. */
-export const askCorpus = async (prompter: Prompter): Promise<CorpusAnswers> => {
+export const askCorpus = async (prompter: Prompter, repoRoot: string): Promise<CorpusAnswers> => {
+  prompter.say([...section('What to index'), ...note(CORPUS_EXPLANATION)]);
   const roots = await askRoots(prompter);
-  const excludePaths = await askExclusions(prompter);
+  const excludePaths = await askExclusions(prompter, repoRoot, roots);
   const types = await askTypes(prompter);
-  const language = await askLanguage(prompter);
-  const adapter = await pick(prompter, 'Ranking adapter', ADAPTER_CHOICES);
+  const matching = await askMatching(prompter);
+  const adapter = await pick(prompter, 'Ranking adapter', ordered(ADAPTER_CHOICES, matching.preset.adapter));
   return {
     roots,
     excludePaths,
     ...types,
-    language,
+    language: matching.language,
+    preset: matching.preset,
     adapter,
-    prf: await askPrf(prompter),
+    prf: await askPrf(prompter, matching.preset.prf),
   };
 };
+
+/**
+ * What the preset chose, handed to the reranker half. It is derived HERE, from
+ * the answers this module owns, rather than restated by each caller: the
+ * language answer and the preset both live on {@link CorpusAnswers}, and a
+ * second derivation could disagree with the first once an amend has re-asked
+ * either of them.
+ */
+export const rerankPreference = (corpus: CorpusAnswers): RerankPreference => ({
+  hungarian: corpus.language.hungarian,
+  rerank: corpus.preset.rerank,
+  poolK: corpus.preset.poolK,
+});

@@ -17,9 +17,37 @@
  * naming a path that 404s — and a name stated from memory is exactly what
  * `GNOSIS-RULES.md` § Volatile facts forbids.
  *
- * Sizes are the ones `OPTIONAL.md` records, kept as APPROXIMATE bytes for one
- * purpose only: warning about disk before a multi-gigabyte download starts. The
- * true size comes from the repository tree.
+ * Sizes are EXACT byte counts, read from the two repository trees on 2026-08-30
+ * (`https://huggingface.co/api/models/gscoppino/Qwen3-Reranker-4B-GGUF-llama_cpp/tree/main`
+ * and `https://huggingface.co/api/models/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp/tree/main`),
+ * replacing decimal-GB figures that had been scaled by `GIB` and so overstated
+ * every displayed download by about 7%. They are still used for ONE purpose
+ * only: the disk warning shown before a multi-gigabyte download starts. The
+ * download itself never reads them — it resolves the true size from the tree.
+ *
+ * The quantisation list per model is CURATED, not the repository's listing: each
+ * of the two repositories publishes nine GGUFs (HF tree API, read 2026-08-30 —
+ * `https://huggingface.co/api/models/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp/tree/main`
+ * and `https://huggingface.co/api/models/gscoppino/Qwen3-Reranker-4B-GGUF-llama_cpp/tree/main`).
+ *
+ * `Q2_K` is excluded for the 0.6B BY MEASUREMENT. The publisher's own table
+ * measures 0.6B Q2_K at -28.7% nDCG@10 against F16 (0.4770 vs 0.6688) on MTEB
+ * AskUbuntuDupQuestions, 361 queries, one RTX 3090, every quant cut from the one
+ * F16 source — `https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp`.
+ * The rule it fails: keep a quant only if it beats NO reranker at all. No
+ * published score exists for not reranking on that task, so Q2_K could not be
+ * shown to beat gnosis's own BM25 first-pass order — which is what "no reranker"
+ * means here; it beats only a computed random-shuffle estimate (~0.41). And it
+ * would still PASS `rerankHealth`: 0.4770 sits far above the ~4.5e-23 garbage
+ * floor that probe detects, so it would load, discriminate, exit 0 and rank
+ * badly forever — `GNOSIS-RULES.md` § The failure class, again.
+ *
+ * The exclusion is model-SPECIFIC, not a blanket rule: the same table measures 4B
+ * Q2_K at -4.5% (0.6691 vs 0.7003 F16 —
+ * `https://huggingface.co/gscoppino/Qwen3-Reranker-4B-GGUF-llama_cpp`), so the 4B
+ * tolerates quantisation far better than the 0.6B does. Both figures come from a
+ * single uploader's model card, not a reproduced study; the caveats are recorded
+ * in `docs/research/2026-08-30-1140-qwen3-reranker-quantisation-evidence.md`.
  */
 import { RERANK_MODEL_ID } from '../../config.js';
 
@@ -83,9 +111,9 @@ const QUALITY_MODEL: RerankerModel = {
   vramFloorBytes: 8 * GIB,
   ramFloorBytes: 16 * GIB,
   quants: [
-    { label: 'Q4_K_M', approxBytes: Math.round(2.5 * GIB), note: 'smallest working 4B; fits a tighter card' },
-    { label: 'Q8_0', approxBytes: Math.round(4.28 * GIB), note: 'the balanced choice' },
-    { label: 'F16', approxBytes: Math.round(8.05 * GIB), note: 'unquantised; costs the most for the least gain' },
+    { label: 'Q4_K_M', approxBytes: 2_496_717_344, note: 'smallest working 4B; fits a tighter card' },
+    { label: 'Q8_0', approxBytes: 4_279_678_912, note: 'the balanced choice' },
+    { label: 'F16', approxBytes: 8_049_922_912, note: 'unquantised; costs the most for the least gain' },
   ],
 };
 
@@ -98,9 +126,9 @@ const FAST_MODEL: RerankerModel = {
   vramFloorBytes: 2 * GIB,
   ramFloorBytes: 4 * GIB,
   quants: [
-    { label: 'Q2_K', approxBytes: Math.round(0.29 * GIB), note: 'smallest that runs' },
-    { label: 'Q8_0', approxBytes: Math.round(0.8 * GIB), note: 'the balanced choice' },
-    { label: 'F16', approxBytes: Math.round(1.2 * GIB), note: 'unquantised' },
+    { label: 'Q4_K_M', approxBytes: 396_476_288, note: 'the smallest quantisation measured to leave this model\'s ranking essentially intact' },
+    { label: 'Q8_0', approxBytes: 639_153_344, note: 'the balanced choice' },
+    { label: 'F16', approxBytes: 1_197_634_304, note: 'unquantised' },
   ],
 };
 

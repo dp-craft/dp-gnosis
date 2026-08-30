@@ -28,7 +28,7 @@ import { rerankHealth } from '../../rerank.js';
 import type { Probed } from '../rerankSetup.js';
 import { candidateUrls, findServer, passed, probeCandidates, selectCandidates } from '../rerankSetup.js';
 import type { Choice, RunMode } from './advice.js';
-import { LOCAL_ENGINE_ADVICE, poolChoices, RERANK_ADVICE, RUN_MODE_CHOICES } from './advice.js';
+import { describeChoice, LOCAL_ENGINE_ADVICE, poolChoices, RERANK_ADVICE, RUN_MODE_CHOICES } from './advice.js';
 import { detectBackends, localBaseUrl, serveCommand, startServer, waitForServer } from './backend.js';
 import { downloadFile, hfGgufFiles } from './download.js';
 import type { HardwareFacts } from './hardware.js';
@@ -36,6 +36,7 @@ import type { Quant, RerankerModel } from './models.js';
 import { GIB, recommendedModel, recommendedQuant, WORKING_MODELS } from './models.js';
 import type { RerankAnswer } from './plan.js';
 import type { Option, Prompter } from './prompts.js';
+import { note, section } from './screen.js';
 
 /** The port `RERANK_DEFAULT_URL` names, and what a wizard-started server binds. */
 const SERVE_PORT = 9292;
@@ -60,16 +61,33 @@ const verdictOf = (probe: Probed): string =>
     ? `  ${probe.model}  PASSED — relevant ${String(probe.health.relevantScore)}, irrelevant ${String(probe.health.irrelevantScore)}`
     : `  ${probe.model}  REJECTED — ${probe.health.detail}`;
 
-const askPool = async (prompter: Prompter, hungarian: boolean): Promise<number> => {
-  const choices = poolChoices(hungarian);
+/**
+ * What the preset chose for this half of the interview, carried in rather than
+ * re-derived. `poolK` is a row {@link poolChoices} itself returned for this
+ * language, so pre-selecting it cannot open the menu on a depth it withholds.
+ */
+export interface RerankPreference {
+  readonly hungarian: boolean;
+  /** Whether `Set up the reranker?` opens on yes. */
+  readonly rerank: boolean;
+  readonly poolK: number;
+}
+
+/**
+ * The pool depth alone. Exported because it is the ONE reranker answer an amend
+ * may re-ask: the rung around it downloads files and starts servers, and this
+ * question does neither.
+ */
+export const askPool = async (prompter: Prompter, preference: RerankPreference): Promise<number> => {
+  const choices = poolChoices(preference.hungarian);
   const picked = await prompter.select(
     'How many candidates should the reranker reorder?',
     choices.map(choice => ({
       value: choice.value,
       name: choice.title,
-      description: `  + ${choice.pro}\n  − ${choice.con}`,
+      description: describeChoice(choice),
     })),
-    choices.find(choice => choice.recommended === true)?.value
+    String(preference.poolK)
   );
   return Number(picked);
 };
@@ -81,9 +99,9 @@ type ProvedRerank =
 
 const accepted = async (
   prompter: Prompter,
-  hungarian: boolean,
+  preference: RerankPreference,
   proved: ProvedRerank
-): Promise<RerankAnswer> => ({ ...proved, poolK: await askPool(prompter, hungarian) });
+): Promise<RerankAnswer> => ({ ...proved, poolK: await askPool(prompter, preference) });
 
 /** Probe every rerank-marked id the server advertises, stopping at the first pass. */
 const probeServer = async (
@@ -312,7 +330,7 @@ const askRunMode = async (
     choices.map(choice => ({
       value: choice.value,
       name: choice.title,
-      description: `  + ${choice.pro}\n  − ${choice.con}`,
+      description: describeChoice(choice),
     })),
     choices.find(choice => choice.recommended === true)?.value
   );
@@ -336,16 +354,22 @@ const ordered = (choices: readonly Choice<RunMode>[], first: RunMode): readonly 
  * The download rung. It ends in a PROBE, never in a download: a served model
  * that answers 200 has proved nothing this project accepts as evidence.
  */
+const resolveRunMode = async (prompter: Prompter, facts: HardwareFacts): Promise<RunMode> => {
+  const backends = await detectBackends();
+  return await askRunMode(prompter, facts, backends.some(backend => backend.kind === 'llama-server'));
+};
+
 const downloadRung = async (
   prompter: Prompter,
   facts: HardwareFacts,
-  places: ServeLocations
+  places: ServeLocations,
+  forced?: RunMode
 ): Promise<ProvedRerank | undefined> => {
+  prompter.say(note(forced === undefined ? DOWNLOAD_NOTE : EMBEDDED_NOTE));
   const choice = await askWhichModel(prompter, facts);
   const modelPath = await fetchModel(prompter, choice, places.modelsDir);
   if (modelPath === undefined) return undefined;
-  const backends = await detectBackends();
-  const mode = await askRunMode(prompter, facts, backends.some(backend => backend.kind === 'llama-server'));
+  const mode = forced ?? (await resolveRunMode(prompter, facts));
   return mode === 'local'
     ? await localRung(prompter, modelPath, choice.model.servedId)
     : await servedRung(prompter, modelPath, choice.model.servedId, places.logPath);
@@ -393,15 +417,154 @@ const NOT_CONFIGURED = [
   '  ranking — and `dp-gnosis setup` can configure one later without re-running this.',
 ];
 
+const RERANK_EXPLANATION = [
+  'A reranker re-orders the first-pass results with a language model. It is optional, it needs a model, and it is the slow hop — everything below still works without one.',
+];
+
+/**
+ * Said BEFORE the probe, because the probe is the answer to "what if I already
+ * have one?": {@link askRerank} asks {@link candidateUrls} first and only reaches
+ * {@link downloadRung} when nothing there discriminates.
+ */
+const EXISTING_SERVER_NOTE = [
+  'Nothing is downloaded until an existing reranker has been ruled out. The addresses below are probed first, and if a model one of them serves passes the two-document discrimination probe, that server is used as it stands.',
+  'This is the path for a llama.cpp, llama-swap or Ollama setup you are already running.',
+];
+
+/**
+ * Said before {@link askWhichModel}, because the download question sounds like an
+ * engine question and is not: {@link fetchModel} fetches a file, and only then
+ * does {@link askRunMode} ask how to run it.
+ */
+const EMBEDDED_NOTE = [
+  'The embedded reranker was chosen, so a model file has to be fetched. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
+  'How it runs is already answered: it is loaded inside the gnosis process, so the wizard does not ask that again. Nothing is written until the file has loaded HERE and passed the same two-document discrimination probe the running server just passed.',
+];
+
+const DOWNLOAD_NOTE = [
+  'Nothing here answered, so a model has to be fetched. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
+  'How it RUNS is the next question: a llama.cpp server, or loaded inside the gnosis process. Both are offered when both are possible; when the in-process engine is not installed, serving it is the only option and the wizard says so instead of asking.',
+];
+
+/** A server-served model that PASSED the probe: where it is, and what it is called. */
+interface FoundServer {
+  readonly url: string;
+  readonly model: string;
+}
+
+/** Which of the two proved routes the user takes when one is ALREADY running. */
+type AdoptChoice = 'server' | 'embedded';
+
+/**
+ * The in-process row, built from {@link RUN_MODE_CHOICES}'s own `local` entry.
+ *
+ * Its pro and con are READ from there rather than restated: the honest cost of
+ * that engine — the per-run load, the GPU it competes for, the uncalibrated
+ * scores `--min-relevance` refuses under, and the UNMEASURED ranking order — is
+ * stated once in `advice.ts`, and a second copy here would rot against it.
+ * Mapping over the filtered row rather than indexing keeps the menu total: a
+ * run mode that stopped existing would remove the row, never render an empty one.
+ */
+const embeddedRows = (): readonly Choice<AdoptChoice>[] =>
+  RUN_MODE_CHOICES.filter(choice => choice.value === 'local').map(choice => ({
+    value: 'embedded' as const,
+    title: 'Set up an embedded reranker instead — gnosis loads a model in this process',
+    when: 'Pick this only if you would rather gnosis carried its own reranker than depended on that server.',
+    pro: choice.pro,
+    con: choice.con,
+  }));
+
+/**
+ * The menu a PASSING server opens. It is a question rather than an adoption
+ * because the wizard cannot know whose server that is — but the recommendation
+ * is not neutral: the found endpoint has just discriminated on this machine, it
+ * is the shipped `RERANK_DEFAULT_BACKEND`, and it is the path every recorded
+ * baseline in `handbook/GNOSIS-BASELINES.md` was measured on.
+ */
+const adoptChoices = (found: FoundServer): readonly Choice<AdoptChoice>[] => [
+  {
+    value: 'server',
+    title: `Use ${found.model}, already running at ${found.url}`,
+    when: 'Pick this unless you have a reason not to.',
+    pro: 'it has just passed the two-document discrimination probe on this machine, it is the shipped default backend, and it is the path every recorded measurement of gnosis was made on',
+    con: 'gnosis does not own that server, so a server that stops takes reranking with it until you start it again',
+    recommended: true,
+  },
+  ...embeddedRows(),
+];
+
+/** Adopting the found server is one confirmation when no second route exists. */
+const confirmFound = async (prompter: Prompter, found: FoundServer): Promise<ProvedRerank | undefined> => {
+  prompter.say([
+    '',
+    `  the in-process engine is not installed — \`${LOCAL_RERANKER_INSTALL_COMMAND}\` adds it, so an embedded reranker cannot be set up from here`,
+  ]);
+  return (await prompter.confirm(`Use ${found.model} at ${found.url}?`, true))
+    ? { backend: 'http', url: found.url, model: found.model }
+    : undefined;
+};
+
+const EMBEDDED_INCOMPLETE = [
+  '',
+  '  The embedded reranker was not set up, so nothing was proved on that route.',
+];
+
+/**
+ * The embedded route, taken with a proved server still in hand — which is why a
+ * failure here does NOT fall through to no reranker. Dropping to the first-pass
+ * ranking after the user asked for a better one, while a passing endpoint was
+ * sitting there, would be a downgrade nobody chose.
+ */
+const embeddedInstead = async (
+  prompter: Prompter,
+  facts: HardwareFacts,
+  places: ServeLocations,
+  found: FoundServer
+): Promise<ProvedRerank | undefined> => {
+  const proved = await downloadRung(prompter, facts, places, 'local');
+  if (proved !== undefined) return proved;
+  prompter.say(EMBEDDED_INCOMPLETE);
+  return (await prompter.confirm(`Use ${found.model} at ${found.url} instead?`, true))
+    ? { backend: 'http', url: found.url, model: found.model }
+    : undefined;
+};
+
+/**
+ * What happens when a served model PASSES: the user is ASKED, never adopted for.
+ * A reranker that answers on this machine may be one this project started, one
+ * the user runs for something else, or one they would rather gnosis did not
+ * depend on — and only they know which.
+ */
+const askFound = async (
+  prompter: Prompter,
+  facts: HardwareFacts,
+  places: ServeLocations,
+  found: FoundServer
+): Promise<ProvedRerank | undefined> => {
+  const availability = await localRerankerAvailability();
+  if (!availability.available) return await confirmFound(prompter, found);
+  const choices = adoptChoices(found);
+  const picked = await prompter.select<AdoptChoice>(
+    'A working reranker is already running. Use it, or set up an embedded one?',
+    choices.map(choice => ({ value: choice.value, name: choice.title, description: describeChoice(choice) })),
+    'server'
+  );
+  return picked === 'server'
+    ? { backend: 'http', url: found.url, model: found.model }
+    : await embeddedInstead(prompter, facts, places, found);
+};
+
 /** The whole reranker half: ask, probe, optionally download and serve, then probe again. */
 export const askRerank = async (
   prompter: Prompter,
-  hungarian: boolean,
+  preference: RerankPreference,
   facts: HardwareFacts,
   places: ServeLocations
 ): Promise<RerankResult> => {
+  prompter.say([...section('Reranking'), ...note(RERANK_EXPLANATION)]);
   prompter.say(['', `  + ${RERANK_ADVICE.pro}`, `  − ${RERANK_ADVICE.con}`]);
-  if (!(await prompter.confirm('Set up the reranker?', true))) return DECLINED;
+  prompter.say(note(EXISTING_SERVER_NOTE));
+  if (!(await prompter.confirm('Set up the reranker?', preference.rerank))) return DECLINED;
 
   prompter.say(['', `  looking for a server on ${candidateUrls().join(' and ')}`]);
   const server = await findServer(candidateUrls());
@@ -409,16 +572,16 @@ export const askRerank = async (
   const catalogue = server.ok ? server.models : [];
   if (!server.ok) prompter.say([`  nothing answered — tried ${server.tried.join(', ')}`]);
 
-  if (winner !== undefined && server.ok) {
-    const proved: ProvedRerank = { backend: 'http', url: server.baseUrl, model: winner.model };
-    return { rerank: await accepted(prompter, hungarian, proved), catalogue };
-  }
-  const proved = await downloadRung(prompter, facts, places);
+  const found = winner === undefined || !server.ok ? undefined : { url: server.baseUrl, model: winner.model };
+  const proved =
+    found === undefined
+      ? await downloadRung(prompter, facts, places)
+      : await askFound(prompter, facts, places, found);
   if (proved === undefined) {
     prompter.say(NOT_CONFIGURED);
     return { rerank: undefined, catalogue };
   }
-  return { rerank: await accepted(prompter, hungarian, proved), catalogue };
+  return { rerank: await accepted(prompter, preference, proved), catalogue };
 };
 
 const CHAT_NOTE = [
