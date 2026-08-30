@@ -25,7 +25,7 @@ import { DEFAULT_EXCLUDED_TYPES, DEFAULT_TYPE, domainOf } from '../../instance.j
 import type { AnalyzerId } from '../../query.js';
 import type { AdapterName } from '../adapter.js';
 import type { Choice } from './advice.js';
-import { ADAPTER_CHOICES, ANALYZER_CHOICES, describeChoice, PRF_ADVICE } from './advice.js';
+import { ADAPTER_CHOICES, ANALYZER_CHOICES, describeChoice, IDENTIFIER_ADVICE, PRF_ADVICE } from './advice.js';
 import { excludePrefix, nearestGitignore, translatable } from './gitignore.js';
 import type { RootAnswer } from './plan.js';
 import type { Preset, PresetSelections } from './preset.js';
@@ -178,11 +178,18 @@ const askHungarian = async (prompter: Prompter): Promise<boolean> =>
     false
   );
 
-const askIdentifiers = async (prompter: Prompter): Promise<boolean> =>
-  await prompter.confirm(
-    'Do they contain code identifiers — function names, flags, snake_case or dotted paths?',
+/**
+ * The identifier question, with the consequence of a YES stated first for the
+ * language already answered. Neither chain splits a camelCase name, so the
+ * examples name only shapes the chains actually see.
+ */
+const askIdentifiers = async (prompter: Prompter, hungarian: boolean): Promise<boolean> => {
+  prompter.say(note([hungarian ? IDENTIFIER_ADVICE.hungarian : IDENTIFIER_ADVICE.english]));
+  return await prompter.confirm(
+    'Do they contain code identifiers — flags, snake_case names or dotted paths?',
     false
   );
+};
 
 /** One preset row: its title, with its summary under the highlighted one. */
 const presetOption = (preset: Preset): Option<Preset> => ({
@@ -224,7 +231,7 @@ export const askMatching = async (prompter: Prompter): Promise<MatchingAnswers> 
   prompter.say([...section('How text is matched'), ...note(MATCHING_EXPLANATION)]);
   prompter.say(LANGUAGE_NOTE);
   const hungarian = await askHungarian(prompter);
-  const preset = await askPreset(prompter, hungarian, await askIdentifiers(prompter));
+  const preset = await askPreset(prompter, hungarian, await askIdentifiers(prompter, hungarian));
   prompter.say([`  → recommended chain: ${preset.analyzer}`]);
   const analyzer = await pick(prompter, 'Analysis chain', ordered(ANALYZER_CHOICES, preset.analyzer));
   return { language: { hungarian, analyzer }, preset };

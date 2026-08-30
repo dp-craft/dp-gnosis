@@ -22,20 +22,20 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { RERANK_DOC_MAX_CHARS, RERANK_K_INIT } from '../../config.js';
+import { RERANK_DEFAULT_URL, RERANK_DOC_MAX_CHARS, RERANK_K_INIT } from '../../config.js';
 import {
   installLocalReranker,
   LOCAL_RERANKER_INSTALL_COMMAND,
   localRerankerAvailability,
   localRerankerDirectory,
-  localRerankScores,
+  localRerankScores
 } from '../../localReranker.js';
-import { rerankHealth } from '../../rerank.js';
+import { rerankHealth, rerankUrlFact } from '../../rerank.js';
 import type { Probed } from '../rerankSetup.js';
 import { candidateUrls, findServer, passed, probeCandidates, selectCandidates } from '../rerankSetup.js';
 import type { Choice, RunMode } from './advice.js';
 import { describeChoice, LOCAL_ENGINE_ADVICE, poolChoices, RERANK_ADVICE, RUN_MODE_CHOICES } from './advice.js';
-import { detectBackends, localBaseUrl, serveCommand, startServer, waitForServer } from './backend.js';
+import { detectBackends, localBaseUrl, portTaken, serveCommand, startServer, waitForServer } from './backend.js';
 import { downloadFile, hfGgufFiles } from './download.js';
 import type { HardwareFacts } from './hardware.js';
 import type { Quant, RerankerModel } from './models.js';
@@ -44,16 +44,20 @@ import type { RerankAnswer } from './plan.js';
 import type { Option, Prompter } from './prompts.js';
 import { note, section } from './screen.js';
 
-/** The port `RERANK_DEFAULT_URL` names, and what a wizard-started server binds. */
-const SERVE_PORT = 9292;
+/**
+ * The port `RERANK_DEFAULT_URL` names, and what a wizard-started server binds.
+ * DERIVED from that constant rather than restated beside it, because
+ * {@link PORT_TAKEN} tells the user the two are the same address — a second
+ * spelling would let that sentence become false without anything saying so.
+ */
+const SERVE_PORT = Number(new URL(RERANK_DEFAULT_URL).port);
 
 /**
- * What is offered when {@link SERVE_PORT} is taken — the next port up, so the
- * two live side by side and neither is a literal at its use site. It is a
- * SUGGESTION: the question it pre-fills is re-asked until the answer is a port
- * nothing is answering on.
+ * What is offered when {@link SERVE_PORT} is taken — the next port up. It is a
+ * SUGGESTION: {@link askPort} re-asks with the NEXT one each time, so answering
+ * by pressing Enter walks up the range instead of re-submitting a taken port.
  */
-const ALTERNATE_SERVE_PORT = 9293;
+const ALTERNATE_SERVE_PORT = SERVE_PORT + 1;
 
 /** The last port a socket can bind. A typed number outside 1..this is re-asked, never coerced. */
 const MAX_TCP_PORT = 65535;
@@ -66,11 +70,25 @@ const START_TIMEOUT_MS = 240_000;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(2)} GB`;
 
+/**
+ * Every id ONE server advertises, AND the address that advertised them.
+ *
+ * The two travel together because the ids alone are not usable: `plan.ts`
+ * writes a chat id with no address of its own, and `rephrase.ts` reads the
+ * RERANKER's address, so an id harvested from Ollama and written on its own
+ * configures three hops against an address that does not serve them — and
+ * nothing records that as wrong.
+ */
+export interface Catalogue {
+  readonly baseUrl: string;
+  readonly models: readonly string[];
+}
+
 /** What the reranker half produced, plus the catalogue the chat step reuses. */
 export interface RerankResult {
   readonly rerank: RerankAnswer | undefined;
-  /** Every id the server advertises, or empty when no server answered. */
-  readonly catalogue: readonly string[];
+  /** What a server advertised, or nothing when none answered. */
+  readonly catalogue: Catalogue | undefined;
 }
 
 const verdictOf = (probe: Probed): string =>
@@ -135,6 +153,19 @@ const probeServer = async (
   const probed = await probeCandidates(baseUrl, candidates.probe);
   prompter.say(probed.map(verdictOf));
   return passed(probed);
+};
+
+/**
+ * The ONE server search, and the ONE way its outcome is reported. Both halves
+ * of this file run it — the reranker probe, and the chat step's second look —
+ * and two spellings of "nothing answered" is two owners of what was tried.
+ */
+const searchForServer = async (prompter: Prompter): Promise<Catalogue | undefined> => {
+  prompter.say(['', `  looking for a server on ${candidateUrls().join(' and ')}`]);
+  const server = await findServer(candidateUrls());
+  if (server.ok) return { baseUrl: server.baseUrl, models: server.models };
+  prompter.say([`  nothing answered — tried ${server.tried.join(', ')}`]);
+  return undefined;
 };
 
 const modelOption = (model: RerankerModel): Option<RerankerModel> => ({
@@ -233,20 +264,20 @@ interface ServeRequest {
   readonly logPath: string;
 }
 
-/**
- * Whether something already answers there. It is `waitForServer` at a zero
- * budget — the SAME readiness call `startServer` probes with, so the two can
- * never disagree about what "answering" means.
- */
-const portTaken = async (port: number): Promise<boolean> => await waitForServer(localBaseUrl(port), 0);
-
 /** A whole number a socket can actually bind, or nothing — a bad answer is re-asked. */
 const legalPort = (typed: string): number | undefined => {
   const port = Number(typed);
   return Number.isInteger(port) && port > 0 && port <= MAX_TCP_PORT ? port : undefined;
 };
 
-const PORT_QUESTION = 'Which port should the new llama.cpp server bind?';
+const PORT_QUESTION = 'Which port should the new llama.cpp server bind? (empty: do not serve it)';
+
+/** What an empty answer means, said back so the exit is not silent. */
+const PORT_DECLINED = ['', '  Nothing was served, so nothing was proved and no reranker is configured from this file.'];
+
+/** Said only of a port that ANSWERS — which is what makes it the reranker's. */
+const SERVED_HERE =
+  '  That is the address `RERANK_DEFAULT_URL` names, which is where a reranker found by the search above is served.';
 
 /**
  * Why the port is checked BEFORE anything is served.
@@ -257,29 +288,57 @@ const PORT_QUESTION = 'Which port should the new llama.cpp server bind?';
  * passes against the OTHER server, and the probe then asks that server for the
  * freshly downloaded model's id — which it does not serve. The result is a
  * failed probe paid for with a multi-gigabyte download.
+ *
+ * Occupancy itself is `portTaken`'s BIND answer (`backend.ts`, which owns
+ * ports and serving); the HTTP probe survives
+ * only to word this line. A port that answers `/v1/models` is the reranker
+ * address {@link SERVED_HERE} describes; a port merely bound is something else
+ * entirely, and telling the two apart is the difference between an explanation
+ * and a guess.
  */
-const PORT_TAKEN = (port: number): readonly string[] => [
+const PORT_TAKEN = (port: number, serving: boolean): readonly string[] => [
   '',
-  `  ${String(port)} is already answering, so a second server cannot bind it.`,
-  '  That is the address `RERANK_DEFAULT_URL` names, which is where a reranker found by the search above is served.',
+  `  ${String(port)} is already ${serving ? 'answering' : 'bound by another process'}, so a second server cannot bind it.`,
+  ...(serving ? [SERVED_HERE] : []),
   '  The new server therefore needs a port of its own, and the config records the port the model is actually served on.',
 ];
 
-const askPort = async (prompter: Prompter, suggested: number): Promise<number> => {
-  const port = legalPort(await prompter.input(PORT_QUESTION, String(suggested)));
+/** The next port to OFFER after one that could not be bound — never the same one again. */
+const nextPort = (port: number): number => Math.min(port + 1, MAX_TCP_PORT);
+
+const checkedPort = async (prompter: Prompter, typed: string, suggested: number): Promise<number | undefined> => {
+  const port = legalPort(typed);
   if (port === undefined) {
     prompter.say([`  that is not a port — it has to be a whole number between 1 and ${String(MAX_TCP_PORT)}`]);
     return await askPort(prompter, suggested);
   }
   if (!(await portTaken(port))) return port;
-  prompter.say([`  ${localBaseUrl(port)} is answering too, so nothing new can bind it`]);
-  return await askPort(prompter, suggested);
+  prompter.say([`  ${String(port)} cannot be bound either, so nothing new can serve there`]);
+  return await askPort(prompter, nextPort(port));
+};
+
+/**
+ * The port to serve on, or nothing at all.
+ *
+ * Both branches used to re-ask with the SAME suggestion, so on a machine where
+ * the offered port was also taken, pressing Enter re-submitted it forever and
+ * the only way out was Ctrl-C — which discards the download that has already
+ * been paid for. So a taken port advances the suggestion, and an empty answer
+ * leaves, which the question text states.
+ */
+const askPort = async (prompter: Prompter, suggested: number): Promise<number | undefined> => {
+  const typed = (await prompter.input(PORT_QUESTION, String(suggested))).trim();
+  if (typed === '') {
+    prompter.say(PORT_DECLINED);
+    return undefined;
+  }
+  return await checkedPort(prompter, typed, suggested);
 };
 
 /** {@link SERVE_PORT} when it is free — otherwise the port the user names. */
-const resolvePort = async (prompter: Prompter): Promise<number> => {
+const resolvePort = async (prompter: Prompter): Promise<number | undefined> => {
   if (!(await portTaken(SERVE_PORT))) return SERVE_PORT;
-  prompter.say(PORT_TAKEN(SERVE_PORT));
+  prompter.say(PORT_TAKEN(SERVE_PORT, await waitForServer(localBaseUrl(SERVE_PORT), 0)));
   return await askPort(prompter, ALTERNATE_SERVE_PORT);
 };
 
@@ -425,6 +484,22 @@ const localEngineUsable = async (prompter: Prompter): Promise<boolean> => {
 const SERVED_ONLY = ['', '  serving the file is the only option here'];
 
 /**
+ * Both routes are dead, said BEFORE anything is fetched.
+ *
+ * The order used to be download-then-decide, so a machine with no
+ * `llama-server` on PATH and no loadable engine paid for the whole file and was
+ * then told `SERVED_ONLY` ("serving it is the only option") immediately
+ * followed by `NO_BACKEND` ("the model cannot be started from here") — two
+ * contradictory statements about a dead end that was knowable beforehand.
+ */
+const NO_ROUTE: readonly string[] = [
+  '',
+  '  Nothing here can run a model file: no llama.cpp server is on PATH, and the in-process engine did not load.',
+  `  Install llama.cpp (or llama-swap), or \`${LOCAL_RERANKER_INSTALL_COMMAND}\`, then re-run the wizard.`,
+  '  Nothing was downloaded — a multi-gigabyte file with nothing to run it is a cost with no result.',
+];
+
+/**
  * The menu itself. The recommendation follows what can actually run HERE:
  * `served` is the shipped default and the measured path, so it leads whenever a
  * llama.cpp server is on PATH; with no server there is nothing to serve the
@@ -458,8 +533,12 @@ const askRunMode = async (
   prompter: Prompter,
   facts: HardwareFacts,
   hasServer: boolean
-): Promise<RunMode> => {
+): Promise<RunMode | undefined> => {
   if (await localEngineUsable(prompter)) return await chooseRunMode(prompter, facts, hasServer);
+  if (!hasServer) {
+    prompter.say(NO_ROUTE);
+    return undefined;
+  }
   prompter.say(SERVED_ONLY);
   return 'served';
 };
@@ -482,7 +561,7 @@ const ordered = (choices: readonly Choice<RunMode>[], first: RunMode): readonly 
  * The download rung. It ends in a PROBE, never in a download: a served model
  * that answers 200 has proved nothing this project accepts as evidence.
  */
-const resolveRunMode = async (prompter: Prompter, facts: HardwareFacts): Promise<RunMode> => {
+const resolveRunMode = async (prompter: Prompter, facts: HardwareFacts): Promise<RunMode | undefined> => {
   const backends = await detectBackends();
   return await askRunMode(prompter, facts, backends.some(backend => backend.kind === 'llama-server'));
 };
@@ -495,17 +574,34 @@ const downloadRung = async (
 ): Promise<ProvedRerank | undefined> => {
   prompter.say(note(intro));
   const choice = await askWhichModel(prompter, facts);
-  const modelPath = await fetchModel(prompter, choice, places.modelsDir);
-  if (modelPath === undefined) return undefined;
   const mode = await resolveRunMode(prompter, facts);
-  return mode === 'local'
-    ? await localRung(prompter, modelPath, choice.model.servedId)
-    : await servedRung(prompter, { modelPath, servedId: choice.model.servedId, logPath: places.logPath });
+  return mode === undefined ? undefined : await runChosen(prompter, places, { mode, choice });
+};
+
+/** Everything decided before a byte is spent: which file, and which engine runs it. */
+interface DownloadPlan {
+  readonly mode: RunMode;
+  readonly choice: { readonly model: RerankerModel; readonly quant: Quant };
+}
+
+/** Fetch the file the plan names, then hand it to the engine the plan named. */
+const runChosen = async (
+  prompter: Prompter,
+  places: ServeLocations,
+  plan: DownloadPlan
+): Promise<ProvedRerank | undefined> => {
+  const modelPath = await fetchModel(prompter, plan.choice, places.modelsDir);
+  if (modelPath === undefined) return undefined;
+  const servedId = plan.choice.model.servedId;
+  return plan.mode === 'local'
+    ? await localRung(prompter, modelPath, servedId)
+    : await servedRung(prompter, { modelPath, servedId, logPath: places.logPath });
 };
 
 /** Serve the file, wait for it, then probe it. A started server is not evidence. */
 const servedRung = async (prompter: Prompter, request: ServeRequest): Promise<ProvedRerank | undefined> => {
   const port = await resolvePort(prompter);
+  if (port === undefined) return undefined;
   if (!(await serveModel(prompter, request, port))) return undefined;
   const url = localBaseUrl(port);
   const model = request.servedId;
@@ -534,7 +630,7 @@ const localRung = async (
     : undefined;
 };
 
-const DECLINED: RerankResult = { rerank: undefined, catalogue: [] };
+const DECLINED: RerankResult = { rerank: undefined, catalogue: undefined };
 
 const NOT_CONFIGURED = [
   '',
@@ -557,21 +653,22 @@ const EXISTING_SERVER_NOTE = [
 ];
 
 /**
- * {@link DOWNLOAD_NOTE}'s counterpart for the route taken while a server IS
- * answering. It exists because that note opens with "Nothing here answered",
- * which is false here — a server answered, passed the probe, and was declined.
- * What the two routes share is their shape: a file is fetched, and how it runs
- * is a separate question.
+ * What the two download routes SHARE, stated once.
+ *
+ * They differ in ONE clause: the route taken while a server IS answering cannot
+ * open with "Nothing here answered", because a server answered, passed the
+ * probe, and was declined. Everything after that opening is the same shape — a
+ * file is fetched, and how it runs is a separate question — so it is written
+ * once and both openings are passed in.
  */
-const OWN_NOTE = [
-  'Setting up your own reranker starts with a model file. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
-  'How it RUNS is the next question: a llama.cpp server, or loaded inside the gnosis process. Nothing is written until the file has passed the same two-document discrimination probe the running server just passed.',
+const fetchNote = (opening: string): readonly string[] => [
+  `${opening} What is fetched is a plain \`.gguf\` model file — it belongs to no engine.`,
+  'How it RUNS is the next question, and it is asked BEFORE the download: a llama.cpp server, or loaded inside the gnosis process. Nothing is written until the file has passed the same two-document discrimination probe a found server would have to pass.',
 ];
 
-const DOWNLOAD_NOTE = [
-  'Nothing here answered, so a model has to be fetched. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
-  'How it RUNS is the next question: a llama.cpp server, or loaded inside the gnosis process. Both are offered when both are possible; when the in-process engine does not load, the wizard reports why, offers to install it, and serves the file if you decline.',
-];
+const OWN_NOTE = fetchNote('Setting up your own reranker starts with a model file.');
+
+const DOWNLOAD_NOTE = fetchNote('Nothing here answered, so a model has to be fetched.');
 
 /** A server-served model that PASSED the probe: where it is, and what it is called. */
 interface FoundServer {
@@ -686,13 +783,9 @@ export const askRerank = async (
   prompter.say(note(EXISTING_SERVER_NOTE));
   if (!(await prompter.confirm('Set up the reranker?', preference.rerank))) return DECLINED;
 
-  prompter.say(['', `  looking for a server on ${candidateUrls().join(' and ')}`]);
-  const server = await findServer(candidateUrls());
-  const winner = server.ok ? await probeServer(prompter, server.baseUrl, server.models) : undefined;
-  const catalogue = server.ok ? server.models : [];
-  if (!server.ok) prompter.say([`  nothing answered — tried ${server.tried.join(', ')}`]);
-
-  const found = winner === undefined || !server.ok ? undefined : { url: server.baseUrl, model: winner.model };
+  const catalogue = await searchForServer(prompter);
+  const winner = catalogue === undefined ? undefined : await probeServer(prompter, catalogue.baseUrl, catalogue.models);
+  const found = winner === undefined || catalogue === undefined ? undefined : { url: catalogue.baseUrl, model: winner.model };
   const proved =
     found === undefined
       ? await downloadRung(prompter, facts, places)
@@ -764,39 +857,60 @@ const NO_CATALOGUE = [
 const NOTHING_YET = ['', '  Still nothing to choose from.'];
 
 /** What the second look found, reported as {@link askRerank} reports the first. */
-const lookAgain = async (prompter: Prompter): Promise<readonly string[]> => {
-  prompter.say(['', `  looking for a server on ${candidateUrls().join(' and ')}`]);
-  const server = await findServer(candidateUrls());
-  if (!server.ok) {
-    prompter.say([`  nothing answered — tried ${server.tried.join(', ')}`]);
-    return [];
-  }
-  prompter.say([`  ${server.baseUrl} answered with ${String(server.models.length)} models`]);
-  return server.models;
+const lookAgain = async (prompter: Prompter): Promise<Catalogue | undefined> => {
+  const found = await searchForServer(prompter);
+  if (found === undefined) return undefined;
+  prompter.say([`  ${found.baseUrl} answered with ${String(found.models.length)} models`]);
+  return found;
 };
 
 /**
  * The user's own answer bounds this, so there is no attempt counter: the first
  * offer opens on yes, every later one on NO, so pressing Enter leaves.
  */
-const retryCatalogue = async (prompter: Prompter, initial: boolean): Promise<readonly string[]> => {
-  if (!(await prompter.confirm('Look for a server again?', initial))) return [];
-  const models = await lookAgain(prompter);
-  if (models.length > 0) return models;
+const retryCatalogue = async (prompter: Prompter, initial: boolean): Promise<Catalogue | undefined> => {
+  if (!(await prompter.confirm('Look for a server again?', initial))) return undefined;
+  const found = await lookAgain(prompter);
+  if (found !== undefined && found.models.length > 0) return found;
   prompter.say(NOTHING_YET);
   return await retryCatalogue(prompter, false);
 };
 
-const recoverCatalogue = async (prompter: Prompter): Promise<readonly string[]> => {
-  prompter.say(NO_CATALOGUE);
-  return await retryCatalogue(prompter, true);
+/** The address the three chat hops will read — `rephrase.ts` resolves the RERANKER's. */
+const chatAddress = (): string => rerankUrlFact().value;
+
+/**
+ * Why a catalogue from another address is refused rather than offered.
+ *
+ * The ids are real and the server is real; what is missing is any way to write
+ * WHERE they are served. `plan.ts` writes `rephrase` / `synthesize` / `enrich`
+ * as bare ids and every chat hop resolves the reranker's address, so offering
+ * an Ollama id here would configure three hops against a port that does not
+ * serve it — a component producing nothing, recorded as configuration.
+ */
+const OTHER_ADDRESS = (baseUrl: string): readonly string[] => [
+  '',
+  `  Those models are served by ${baseUrl}, but the chat hops read ${chatAddress()} — they share the reranker's address and carry none of their own.`,
+  '  Choosing one would write an id against an address that does not serve it, so the three hops are left unset instead.',
+  `  Serve a chat model on ${chatAddress()}, or write \`models\` into config.json by hand.`,
+];
+
+/** The three questions, but only over ids the chat hops will actually reach. */
+const offerFrom = async (prompter: Prompter, found: Catalogue): Promise<ChatModels | undefined> => {
+  if (found.models.length === 0) return undefined;
+  if (found.baseUrl !== chatAddress()) {
+    prompter.say(OTHER_ADDRESS(found.baseUrl));
+    return undefined;
+  }
+  return await chatHops(prompter, found.models);
 };
 
 /** The three chat ids, each CHOSEN by the user from the catalogue — never guessed. */
 export const askChatModels = async (
   prompter: Prompter,
-  catalogue: readonly string[]
+  catalogue: Catalogue | undefined
 ): Promise<ChatModels | undefined> => {
-  const models = catalogue.length > 0 ? catalogue : await recoverCatalogue(prompter);
-  return models.length === 0 ? undefined : await chatHops(prompter, models);
+  if (catalogue === undefined) prompter.say(NO_CATALOGUE);
+  const found = catalogue ?? (await retryCatalogue(prompter, true));
+  return found === undefined ? undefined : await offerFrom(prompter, found);
 };

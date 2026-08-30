@@ -121,8 +121,8 @@ export const ANALYZER_CHOICES: readonly Choice<AnalyzerId>[] = [
     value: 'ident-porter-fold',
     title: 'ident-porter-fold — English, identifier-aware',
     when: 'Pick this if your documents are mostly English AND full of code — function names, flags, snake_case or dotted paths.',
-    pro: 'it does what the English default does, and also splits a code identifier into its parts, so searching for one part reaches the document',
-    con: 'splitting identifiers is all it adds; on ordinary prose it buys nothing over the English default',
+    pro: 'it does what the English default does, and adds each code identifier exactly as written as a search term of its own, so an identifier spelled the way your documents spell it matches, where the default keeps only its trimmed parts',
+    con: 'that one extra term is all it adds, and on English it costs: this chain shipped as the English default once and was reverted after it measured a significant quality loss on the collection gnosis is measured against',
   },
   {
     value: 'hulight-fold',
@@ -160,6 +160,24 @@ export const ANALYZER_CHOICES: readonly Choice<AnalyzerId>[] = [
     con: 'neither word endings nor accents are handled; it ranked worst on every collection it was measured on',
   },
 ];
+
+/**
+ * What answering YES to the identifier question buys or costs, by the language
+ * already chosen — printed BEFORE that question, because the measured sign is
+ * OPPOSITE on the two languages and a bare "do your documents contain
+ * identifiers?" reads as free on both.
+ *
+ * Direction and significance only, no figure: `query.ts` `DEFAULT_ANALYZER`
+ * owns the English measurement and `handbook/GNOSIS-GUIDE.md` § Parameters and
+ * ingest owns the Hungarian one, and this file MUST NOT become a second copy of
+ * either (see the docblock at the top).
+ */
+export const IDENTIFIER_ADVICE = {
+  english:
+    'Answering yes moves you to the identifier-aware English chain, which adds each identifier as written beside the parts the default already matches. On English documents that was measured as a real cost: the chain shipped as the English default once and was reverted after a significant quality loss on the collection gnosis is measured against. Say yes only if finding identifiers exactly as written matters more to you than ordinary English matching.',
+  hungarian:
+    'Answering yes moves you to the identifier-aware Hungarian chain. On Hungarian documents that DO contain identifiers it measured a significant gain over plain Hungarian stemming — the best measured option for such a collection. On Hungarian prose WITHOUT identifiers the plain chain measured better, so answer for what your documents actually hold.',
+} as const;
 
 /** The chain a language answer plus an identifier answer argues for. */
 export const analyzerFor = (hungarian: boolean, identifiers: boolean): AnalyzerId => {

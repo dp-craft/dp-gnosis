@@ -22,14 +22,16 @@ import { dirname, join, resolve } from 'node:path';
 
 import type { CommandContext } from '../src/cli/context.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
+import { OLLAMA_URL } from '../src/cli/rerankSetup.js';
 import { ADAPTER_CHOICES, ANALYZER_CHOICES, RUN_MODE_CHOICES } from '../src/cli/wizard/advice.js';
 import { localBaseUrl, startServer } from '../src/cli/wizard/backend.js';
+import { askMatching } from '../src/cli/wizard/flow.js';
 import type { HardwareFacts } from '../src/cli/wizard/hardware.js';
+import { recommendedModel, recommendedQuant } from '../src/cli/wizard/models.js';
 import { PRESETS } from '../src/cli/wizard/preset.js';
 import type { Option, Prompter } from '../src/cli/wizard/prompts.js';
 import { CANCELLED } from '../src/cli/wizard/prompts.js';
 import type { RerankPreference, RerankResult, ServeLocations } from '../src/cli/wizard/rerankFlow.js';
-import { recommendedModel, recommendedQuant } from '../src/cli/wizard/models.js';
 import { askChatModels, askRerank, timingLines } from '../src/cli/wizard/rerankFlow.js';
 import { runWizard } from '../src/cli/wizardCommand.js';
 import { LOCAL_RERANKER_INSTALL_COMMAND, localRerankerDirectory } from '../src/localReranker.js';
@@ -51,6 +53,39 @@ const engineState = vi.hoisted(() => ({
   installs: false,
   installReason: 'the install exited 1 in this test',
 }));
+
+/**
+ * Whether a llama.cpp server is on PATH, and what starting one does, are FACTS
+ * ABOUT THE HOST — and the wizard branches on both. Left real, a test's target
+ * would depend on whether the machine running it happens to have
+ * `llama-server` installed, which is a verdict that moves for reasons the
+ * assertion knows nothing about. `startServer` defaults to the real one, so the
+ * describe that exercises a genuinely bound port is untouched.
+ *
+ * Whether a port can be bound is the same kind of fact, and the sharpest one:
+ * the wizard's default is the port `RERANK_DEFAULT_URL` names, so on any
+ * machine actually running a reranker there — the machine this feature exists
+ * for — a real bind probe reads it as taken and every port assertion flips.
+ * `taken` therefore DECIDES occupancy, and no test in this file binds a fixed
+ * port.
+ */
+const backendState = vi.hoisted(() => ({
+  llamaServer: false,
+  starts: false,
+  taken: new Set<number>(),
+}));
+
+vi.mock('../src/cli/wizard/backend.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/cli/wizard/backend.js')>();
+  return {
+    ...actual,
+    detectBackends: async () =>
+      backendState.llamaServer ? [{ kind: 'llama-server', path: '/stub/bin/llama-server' }] : [],
+    startServer: async (modelPath: string, port: number, logPath: string) =>
+      backendState.starts ? { ok: true, pid: 4242 } : await actual.startServer(modelPath, port, logPath),
+    portTaken: async (port: number) => backendState.taken.has(port),
+  };
+});
 
 vi.mock('../src/localReranker.js', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/localReranker.js')>();
@@ -773,10 +808,10 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
   };
 
   const script = (adopt: unknown, extra: readonly Reply[] = []): readonly Reply[] => [
+    ...extra,
     { match: /^Set up the reranker\?/, answers: [true] },
     { match: /^A working reranker is already running/, answers: [adopt] },
     { match: /^How many candidates/, answers: [KEEP_DEFAULT] },
-    ...extra,
   ];
 
   beforeEach(() => {
@@ -790,6 +825,7 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     resetRerankProbeCache();
+    backendState.llamaServer = false;
   });
 
   // Given a server whose model PASSES, When the engine is available, Then the
@@ -823,7 +859,7 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
     const { result } = await flow(script(byName(USE_IT)));
 
     expect(result.rerank).toEqual({ backend: 'http', url: FOUND_URL, model: FOUND_MODEL, poolK: 100 });
-    expect(result.catalogue).toEqual([FOUND_MODEL]);
+    expect(result.catalogue).toEqual({ baseUrl: FOUND_URL, models: [FOUND_MODEL] });
   });
 
   // Downloading a model and choosing which engine runs it are two decisions, so
@@ -832,7 +868,12 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
   // flow ends before it.
   it('should reach the model and quantisation questions', async () => {
     const { prompter } = await flow(
-      script(byName(OWN), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
+      script(byName(OWN), [
+        { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
+        { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] },
+        { match: /^How should the model be run\?/, answers: ['served'] },
+        { match: /instead\?/, answers: [false] },
+      ])
     );
 
     expect(prompter.asked).toContain('Which reranker?');
@@ -843,7 +884,12 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
   // no reranker at all — that is a downgrade nobody chose.
   it('should offer the running server when the embedded setup does not complete', async () => {
     const { result, prompter } = await flow(
-      script(byName(OWN), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [true] }])
+      script(byName(OWN), [
+        { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
+        { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] },
+        { match: /^How should the model be run\?/, answers: ['served'] },
+        { match: /instead\?/, answers: [true] },
+      ])
     );
 
     expect(prompter.asked).toContain(`Use ${FOUND_MODEL} at ${FOUND_URL} instead?`);
@@ -852,11 +898,16 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
 
   it('should leave no reranker configured when the embedded setup fails and the server is declined', async () => {
     const { result } = await flow(
-      script(byName(OWN), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
+      script(byName(OWN), [
+        { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
+        { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] },
+        { match: /^How should the model be run\?/, answers: ['served'] },
+        { match: /instead\?/, answers: [false] },
+      ])
     );
 
     expect(result.rerank).toBeUndefined();
-    expect(result.catalogue).toEqual([FOUND_MODEL]);
+    expect(result.catalogue).toEqual({ baseUrl: FOUND_URL, models: [FOUND_MODEL] });
   });
 
   /**
@@ -879,11 +930,13 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
   // what ends this flow is the refused listing, never the missing engine.
   it('should reach the download route with the engine absent, and keep the found server when it does not complete', async () => {
     engineState.available = false;
+    backendState.llamaServer = true;
 
     const { result, prompter } = await flow(
       script(byName(OWN), [
         { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
         { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] },
+        { match: /^Run `npm install/, answers: [false] },
         { match: /instead\?/, answers: [true] },
       ])
     );
@@ -909,7 +962,7 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
 describe('askRerank — the second route downloads, then asks how and where to run it', () => {
   const FOUND_MODEL = 'qwen3-reranker-4b';
   const OWN = 'Set up my own reranker instead — download a model and choose how it runs';
-  const PORT_QUESTION = 'Which port should the new llama.cpp server bind?';
+  const PORT_QUESTION = 'Which port should the new llama.cpp server bind? (empty: do not serve it)';
 
   const FACTS: HardwareFacts = {
     totalRamBytes: 32 * 1024 ** 3,
@@ -938,6 +991,17 @@ describe('askRerank — the second route downloads, then asks how and where to r
 
   let places: ServeLocations = { modelsDir: '', logPath: '' };
 
+  /**
+   * HOLD a port, the way a dev server or a half-dead llama.cpp holds one —
+   * declared through the stubbed `portTaken` rather than by binding a socket.
+   * Binding 9292 for real makes the verdict depend on whether THIS machine is
+   * already serving a reranker, which is a host fact no assertion here is
+   * about.
+   */
+  const occupy = (port: number): void => {
+    backendState.taken.add(port);
+  };
+
   const json = (payload: unknown): unknown => ({
     ok: true,
     status: 200,
@@ -953,15 +1017,16 @@ describe('askRerank — the second route downloads, then asks how and where to r
   });
 
   /**
-   * `serverUrl` is the ONLY address that answers `/v1/models`, so "is that port
-   * taken" is decided by the address rather than by the path — which is the
-   * whole question the port prompt exists to answer.
+   * The addresses that ANSWER `/v1/models`. Occupancy is no longer decided by
+   * this — `portTaken` answers it — so a test that needs a port held declares
+   * it, with {@link occupy}. What these urls decide is what the wizard can
+   * TALK to: the found server, and a server it has just started.
    */
-  const stubNetwork = (serverUrl: string): void => {
+  const stubNetwork = (...serving: readonly string[]): void => {
     const target = chosen();
     vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
       const asked = String(url);
-      if (asked.endsWith('/v1/models')) return asked.startsWith(serverUrl) ? json({ data: [{ id: FOUND_MODEL }] }) : refused();
+      if (asked.endsWith('/v1/models')) return serving.some(base => asked.startsWith(base)) ? json({ data: [{ id: FOUND_MODEL }] }) : refused();
       if (asked.includes('/rerank')) return json({ results: HEALTHY_PROBE });
       if (asked.includes('/api/models/')) return json([{ path: target.file, lfs: { size: WEIGHTS.length, oid: DIGEST } }]);
       if (asked.includes('/resolve/main/')) {
@@ -982,8 +1047,14 @@ describe('askRerank — the second route downloads, then asks how and where to r
     return { result: await askRerank(prompter, PREFERENCE, FACTS, places), prompter };
   };
 
-  /** The whole second route, answered down to the point where the server would start. */
+  /**
+   * The whole second route, answered down to the point where the server would
+   * start. Extras come FIRST, so a test that answers a question differently
+   * OVERRIDES the default rather than being shadowed by it — the prompter takes
+   * the first matching row.
+   */
   const script = (extra: readonly Reply[] = []): readonly Reply[] => [
+    ...extra,
     { match: /^Set up the reranker\?/, answers: [true] },
     { match: /^A working reranker is already running/, answers: [byName(OWN)] },
     { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
@@ -993,7 +1064,6 @@ describe('askRerank — the second route downloads, then asks how and where to r
     { match: /^Start it now\?/, answers: [false] },
     { match: /instead\?/, answers: [false] },
     { match: /^How many candidates/, answers: [KEEP_DEFAULT] },
-    ...extra,
   ];
 
   beforeEach(() => {
@@ -1005,17 +1075,20 @@ describe('askRerank — the second route downloads, then asks how and where to r
     };
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     resetRerankProbeCache();
+    backendState.llamaServer = false;
+    backendState.starts = false;
+    backendState.taken.clear();
     rmSync(dirname(places.modelsDir), { recursive: true, force: true });
   });
 
-  // Given the user chose to set up their own reranker, When the file has landed,
-  // Then the wizard asks WHICH engine runs it — the row committed them to a
-  // download, not to an engine.
-  it('should ask how the model should be run after the download', async () => {
+  // Given the user chose to set up their own reranker, When the model and the
+  // quantisation are chosen, Then the wizard asks WHICH engine runs it — the row
+  // committed them to a download, not to an engine.
+  it('should ask how the model should be run', async () => {
     stubNetwork('http://127.0.0.1:9999');
     vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
 
@@ -1028,6 +1101,7 @@ describe('askRerank — the second route downloads, then asks how and where to r
   // new server cannot bind it: `startServer` would report `alreadyServing` and
   // the probe would then ask the FOUND server for an id it does not serve.
   it('should name the taken port and ask for another when the found server holds the default one', async () => {
+    occupy(9292);
     stubNetwork(localBaseUrl(9292));
     vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
 
@@ -1037,23 +1111,86 @@ describe('askRerank — the second route downloads, then asks how and where to r
     expect(flatten(prompter.transcript)).toContain('9292 is already answering');
   });
 
-  // The alternate port is what the started command, the wait and the health
-  // probe all use — a config that recorded a port the model is not served on
-  // would be a component producing nothing, written down as data.
-  it('should offer 9293 and carry the answered port into the serve command', async () => {
-    stubNetwork(localBaseUrl(9292));
-    vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
+  /**
+   * A port a socket cannot bind is TAKEN even when nothing there answers
+   * `/v1/models` — a dev server, or a llama.cpp that died holding the socket.
+   * The old check was one HTTP probe, so it called this port free, and the
+   * spawn then died on `bind: address in use` AFTER reporting a pid.
+   */
+  it('should treat a port that is bound but not serving as taken', async () => {
+    occupy(9292);
+    stubNetwork('http://127.0.0.1:9999');
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
 
     const { prompter } = await flow(script([{ match: /^Which port/, answers: [KEEP_DEFAULT] }]));
 
-    const started = prompter.asked.find(question => question.startsWith('Start it now?'));
-    const told = flatten(prompter.transcript);
-    expect(started === undefined ? told : started).toContain('9293');
+    expect(prompter.asked).toContain(PORT_QUESTION);
+    expect(flatten(prompter.transcript)).toContain('9292 is already bound by another process');
+  });
+
+  /**
+   * The one the config is written from. The rendered command carrying 9293
+   * proves what was STARTED; only the answer proves what will be RECORDED, and
+   * a config naming a port the model is not served on is exactly the failure
+   * this rung exists to prevent.
+   */
+  it('should carry the alternate port into the answer, not only into the command', async () => {
+    occupy(9292);
+    backendState.llamaServer = true;
+    backendState.starts = true;
+    stubNetwork(localBaseUrl(9292), localBaseUrl(9293));
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
+
+    const { result, prompter } = await flow(
+      script([{ match: /^Which port/, answers: [KEEP_DEFAULT] }, { match: /^Start it now\?/, answers: [true] }])
+    );
+
+    expect(prompter.asked.find(question => question.startsWith('Start it now?'))).toContain('9293');
+    expect(result.rerank?.backend === 'http' ? result.rerank.url : undefined).toBe('http://127.0.0.1:9293');
+  });
+
+  /**
+   * The exit. Both branches used to re-ask with the SAME suggestion, so an
+   * occupied 9293 re-offered 9293 forever and only Ctrl-C left — discarding a
+   * download already paid for.
+   */
+  it('should suggest the next port when the offered one is taken too', async () => {
+    occupy(9292);
+    occupy(9293);
+    backendState.llamaServer = true;
+    backendState.starts = true;
+    stubNetwork(localBaseUrl(9292), localBaseUrl(9294));
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
+
+    const { result, prompter } = await flow(
+      script([
+        { match: /^Which port/, answers: [KEEP_DEFAULT, KEEP_DEFAULT] },
+        { match: /^Start it now\?/, answers: [true] },
+      ])
+    );
+
+    expect(prompter.asked.filter(question => question === PORT_QUESTION)).toHaveLength(2);
+    expect(result.rerank?.backend === 'http' ? result.rerank.url : undefined).toBe('http://127.0.0.1:9294');
+  });
+
+  // And the way out that is not Ctrl-C: an empty answer leaves the file unserved
+  // rather than re-asking, and the question says so.
+  it('should stop asking for a port on an empty answer', async () => {
+    occupy(9292);
+    stubNetwork(localBaseUrl(9292));
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
+
+    const { result, prompter } = await flow(script([{ match: /^Which port/, answers: [''] }]));
+
+    expect(prompter.asked.filter(question => question === PORT_QUESTION)).toHaveLength(1);
+    expect(PORT_QUESTION).toContain('empty');
+    expect(result.rerank).toBeUndefined();
   });
 
   // A typed value a socket cannot bind is re-asked, never coerced: a port of 0
   // or 70000 would fail inside llama.cpp, after the download has been paid for.
   it('should re-ask the port when the typed value is not a legal one', async () => {
+    occupy(9292);
     stubNetwork(localBaseUrl(9292));
     vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
 
@@ -1070,6 +1207,49 @@ describe('askRerank — the second route downloads, then asks how and where to r
     const { prompter } = await flow(script());
 
     expect(prompter.asked).not.toContain(PORT_QUESTION);
+  });
+
+  /**
+   * The order the questions are asked in is the order the COSTS are paid in.
+   * Downloading first reached `resolveRunMode` with the bytes already spent,
+   * and on a machine that can run neither route it then printed "serving the
+   * file is the only option here" immediately followed by "the model cannot be
+   * started from here".
+   */
+  it('should choose how the model runs BEFORE the download is confirmed', async () => {
+    stubNetwork('http://127.0.0.1:9999');
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
+
+    const { prompter } = await flow(script());
+
+    const mode = prompter.asked.indexOf('How should the model be run?');
+    const download = prompter.asked.findIndex(question => question.startsWith('Download '));
+    expect(mode).toBeGreaterThanOrEqual(0);
+    expect(download).toBeGreaterThan(mode);
+  });
+
+  // Neither route can run: no llama.cpp on PATH, and the engine install declined.
+  // The dead end is knowable before the first byte, so it is said before it.
+  it('should refuse before downloading when nothing here can run the file', async () => {
+    engineState.available = false;
+    engineState.installs = false;
+    stubNetwork('http://127.0.0.1:9999');
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
+
+    const { result, prompter } = await flow([
+      { match: /^Set up the reranker\?/, answers: [true] },
+      { match: /^A working reranker is already running/, answers: [byName(OWN)] },
+      { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
+      { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] },
+      { match: /^Run `npm install/, answers: [false] },
+      { match: /instead\?/, answers: [false] },
+    ]);
+
+    const said = flatten(prompter.transcript);
+    expect(prompter.asked.some(question => question.startsWith('Download '))).toBe(false);
+    expect(said).toContain('Nothing was downloaded');
+    expect(said).not.toContain('serving the file is the only option here');
+    expect(result.rerank).toBeUndefined();
   });
 
   /**
@@ -1094,6 +1274,10 @@ describe('askRerank — the second route downloads, then asks how and where to r
     beforeEach(() => {
       engineState.available = false;
       engineState.installs = false;
+      // "serving is the only option" is a statement about a machine that CAN
+      // serve. With no llama.cpp on PATH either, neither route runs and the
+      // wizard says THAT instead — a different branch, asserted separately.
+      backendState.llamaServer = true;
       stubNetwork('http://127.0.0.1:9999');
       vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
     });
@@ -1201,9 +1385,12 @@ describe('askChatModels — an empty catalogue is explained, not skipped', () =>
     resetRerankProbeCache();
   });
 
+  /** A prompter that answers nothing: these questions never reach one. */
+  const prompter = (): Scripted => scriptedPrompter([]);
+
   const ask = async (replies: readonly Reply[]): Promise<{ readonly picked: unknown; readonly prompter: Scripted }> => {
     const prompter = scriptedPrompter(replies);
-    return { picked: await askChatModels(prompter, []), prompter };
+    return { picked: await askChatModels(prompter, undefined), prompter };
   };
 
   // The claim has to hold when NOTHING was probed — the declined-reranker case —
@@ -1248,5 +1435,134 @@ describe('askChatModels — an empty catalogue is explained, not skipped', () =>
 
     expect(prompter.asked.filter(question => question === AGAIN)).toHaveLength(2);
     expect(picked).toBeUndefined();
+  });
+
+  /**
+   * The catalogue and the ADDRESS that advertised it are one fact.
+   *
+   * `candidateUrls()` probes the reranker's address and then Ollama's, so the
+   * ids can come from either — while `plan.ts` writes the three chat ids with
+   * no address at all and every chat hop resolves the RERANKER's. Offering an
+   * Ollama id here therefore configured three hops against a port that does not
+   * serve them, and nothing recorded that as wrong.
+   */
+  it('should refuse ids gathered from an address the chat hops will not read', async () => {
+    const picked = await askChatModels(prompter(), { baseUrl: OLLAMA_URL, models: [CHAT_MODEL] });
+
+    expect(picked).toBeUndefined();
+  });
+
+  it('should say WHY those ids were not offered, naming both addresses', async () => {
+    const scripted = prompter();
+
+    await askChatModels(scripted, { baseUrl: OLLAMA_URL, models: [CHAT_MODEL] });
+
+    const said = flatten(scripted.transcript);
+    expect(said).toContain(OLLAMA_URL);
+    expect(said).toContain(SERVER_URL);
+    expect(said).toContain('does not serve it');
+  });
+
+  // And the ids from the address the hops DO read are offered as before.
+  it('should offer ids that came from the address the chat hops read', async () => {
+    const scripted = scriptedPrompter([
+      { match: /^Configure the chat hops now\?/, answers: [true] },
+      { match: /^Model for `search --rephrase`/, answers: [CHAT_MODEL] },
+      { match: /^Model for `ask --synthesize`/, answers: [KEEP_DEFAULT] },
+      { match: /^Model for `enrich`/, answers: [KEEP_DEFAULT] },
+    ]);
+
+    const picked = await askChatModels(scripted, { baseUrl: SERVER_URL, models: [CHAT_MODEL] });
+
+    expect(picked).toEqual({ rephrase: CHAT_MODEL, synthesize: undefined, enrich: undefined });
+  });
+});
+
+/**
+ * The identifier question and the row it leads to.
+ *
+ * `ident-porter-fold` does NOT split anything the English default does not
+ * already split — `query.ts:identStageOver` PREPENDS an unstemmed whole-token
+ * term beside the parts the base chain emits, and `NON_WORD_SPLIT_RE` splits on
+ * non-alphanumerics under BOTH chains. So a wizard line promising a split is
+ * promising a mechanism the code lacks.
+ *
+ * And the measured sign is OPPOSITE on the two languages — significant harm on
+ * English (`query.ts:DEFAULT_ANALYZER`), a significant Hungarian-with-identifiers
+ * gain (`handbook/GNOSIS-GUIDE.md` § Parameters and ingest) — so the question
+ * MUST say which one the user is being offered before they answer it.
+ */
+describe('wizard — what the identifier question and its row claim', () => {
+  const identRow = (): { readonly pro: string; readonly con: string } => {
+    const row = ANALYZER_CHOICES.find(choice => choice.value === 'ident-porter-fold');
+    if (row === undefined) throw new Error('ident-porter-fold is not on the analyzer menu');
+    return row;
+  };
+
+  const matchingScript = (hungarian: boolean): readonly Reply[] => [
+    { match: /^What language/, answers: [hungarian] },
+    { match: /^Do they contain code identifiers/, answers: [KEEP_DEFAULT] },
+    { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
+    { match: /^Analysis chain/, answers: [KEEP_DEFAULT] },
+  ];
+
+  const askedIdentifiers = (scripted: Scripted): string => {
+    const question = scripted.asked.find(message => /code identifiers/.test(message));
+    if (question === undefined) throw new Error('the identifier question was never asked');
+    return question;
+  };
+
+  // Given the pro of the identifier row, Then it does not claim a split: the
+  // chain adds a whole-token term and splits nothing the default does not.
+  it('should describe the identifier chain as adding the whole identifier, not as splitting one', () => {
+    const { pro } = identRow();
+
+    expect(pro).not.toMatch(/split/i);
+    expect(pro).toMatch(/as written/i);
+  });
+
+  // Given the con, Then it states the measured English cost — the chain shipped
+  // as the default and was REVERTED on significant harm to the primary corpus.
+  it('should state that the identifier chain was reverted as the English default on measured harm', () => {
+    const { con } = identRow();
+
+    expect(con).not.toMatch(/buys nothing/i);
+    expect(con).toMatch(/revert/i);
+    expect(con).toMatch(/lost|loss|harm/i);
+  });
+
+  // The chains split camelCase under NEITHER analyzer, so the question must not
+  // offer function names as an example of what they handle.
+  it('should not offer function names as an example the chains handle', async () => {
+    const scripted = scriptedPrompter(matchingScript(false));
+
+    await askMatching(scripted);
+
+    expect(askedIdentifiers(scripted)).not.toMatch(/function names/i);
+  });
+
+  // Given English was chosen, When the identifier question is asked, Then its
+  // measured English cost has ALREADY been stated.
+  it('should state the English cost before asking the identifier question', async () => {
+    const scripted = scriptedPrompter(matchingScript(false));
+
+    await askMatching(scripted);
+
+    const said = flatten(scripted.transcript);
+    expect(said).toMatch(/reverted/i);
+    expect(said.indexOf('reverted')).toBeLessThan(said.indexOf('? Do they contain code identifiers'));
+  });
+
+  // Given Hungarian was chosen, Then the SAME question leads with the opposite
+  // measured sign — a gain — and never with the English cost.
+  it('should state the Hungarian gain, not the English cost, when the documents are Hungarian', async () => {
+    const scripted = scriptedPrompter(matchingScript(true));
+
+    await askMatching(scripted);
+
+    const said = flatten(scripted.transcript);
+    expect(said).toMatch(/significant gain/i);
+    expect(said).not.toMatch(/reverted/i);
+    expect(said.indexOf('significant gain')).toBeLessThan(said.indexOf('? Do they contain code identifiers'));
   });
 });

@@ -25,6 +25,7 @@ import { runAnswerCommand, SYNTHESIZE_FLAG } from './answerCommand.js';
 import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
 import { runBenchCommand } from './benchCommand.js';
+import { staleBuildRefusal } from './buildFreshness.js';
 import type { CommandContext, CommandHandler } from './context.js';
 import { runDemoCommand } from './demoCommand.js';
 import { runDoctorCommand } from './doctorCommand.js';
@@ -469,11 +470,20 @@ const RENDERERS: Readonly<Record<OutputFormat, (outcome: CommandOutcome) => CliR
  * Run one CLI invocation. `argv` excludes the node executable and script path.
  * A parse failure, or a format that did not resolve, renders in human mode: no
  * format can be trusted from an argv the CLI refused.
+ *
+ * The staleness guard sits here, ahead of `outcomeFor`, so NOTHING dispatches
+ * behind a build older than its source — not a command, not `--version`, not
+ * `--help`, each of which a stale build answers just as wrongly as a query. It
+ * renders through the chosen format like any other outcome, and it no-ops off
+ * the one path where a build can be stale (`buildFreshness.ts`), so the suites,
+ * which run from `src/`, never pay for it.
  */
 export const runCli = async (argv: readonly string[]): Promise<CliResult> => {
   const parsed = parseArgs(argv);
   if (!parsed.ok) return renderText(usageError(parsed.error));
   const format = resolveFormat(parsed.args.flags);
   if (!format.ok) return renderText(usageError(format.error));
-  return RENDERERS[format.format](await outcomeFor(parsed.args));
+  const render = RENDERERS[format.format];
+  const stale = staleBuildRefusal();
+  return stale === undefined ? render(await outcomeFor(parsed.args)) : render(stale);
 };

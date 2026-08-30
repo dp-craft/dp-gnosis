@@ -35,8 +35,8 @@
 
 import { execFile } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+
+import { packageDir } from './paths.js';
 
 /** The optional native engine this backend needs. A devDependency, not a dependency. */
 export const LOCAL_RERANKER_PACKAGE = 'node-llama-cpp';
@@ -165,19 +165,13 @@ export const localRerankerAvailability = async (
 };
 
 /**
- * WHERE the install runs: this package's own directory, resolved from this
- * file's own location — one level above `src/` in a checkout, one above `dist/`
- * in an install. It is not `process.cwd()`, which is the tree the user happened
- * to be standing in when they started the wizard: an engine installed there is
- * an engine this package's import still cannot find, and the wizard would have
+ * WHERE the install runs: this package's own directory, from `paths.ts`, which
+ * OWNS it. It is not `process.cwd()`, which is the tree the user happened to be
+ * standing in when they started the wizard: an engine installed there is an
+ * engine this package's import still cannot find, and the wizard would have
  * fetched hundreds of megabytes to change nothing.
- *
- * `paths.ts` owns every path the VAULT and the cache are resolved against and
- * derives its own package directory the same way; this one is derived here
- * because it is a fact about where THIS module's dynamic import resolves from,
- * which is the thing being repaired.
  */
-export const localRerankerDirectory = (): string => resolve(dirname(fileURLToPath(import.meta.url)), '..');
+export const localRerankerDirectory = (): string => packageDir();
 
 /** What an install did, or the whole reason the engine is still unavailable. */
 export type LocalRerankerInstall =
@@ -213,13 +207,26 @@ export interface InstallDeps {
  */
 const INSTALL_OUTPUT_LIMIT = 32 * 1024 * 1024;
 
-const exitCode = (error: unknown): number =>
-  isRecord(error) && typeof error['code'] === 'number' ? error['code'] : 1;
+/**
+ * What a failed `execFile` reported, in the TWO shapes it reports it in.
+ *
+ * A command that RAN and failed carries a numeric `code` and says why on
+ * stderr. A command that never ran at all — npm absent from `PATH`, or named
+ * `npm.cmd` on Windows — rejects with `code: 'ENOENT'`, a STRING, and an empty
+ * stderr. Reading the numeric field alone turned that into "`npm install
+ * node-llama-cpp` exited 1 — it printed nothing on stderr": a real cause
+ * reported as a different one, with no remedy the reader can act on. So the
+ * spawn error's own text becomes the reason when the process said nothing.
+ */
+const failureOf = (error: unknown, stdout: string, stderr: string): InstallOutcome =>
+  isRecord(error) && typeof error['code'] === 'number'
+    ? { code: error['code'], stdout, stderr }
+    : { code: 1, stdout, stderr: stderr.trim() === '' ? describeError(error) : stderr };
 
 const npmInstall: InstallRunner = async cwd =>
   await new Promise<InstallOutcome>(settle => {
     execFile('npm', [...INSTALL_ARGV], { cwd, maxBuffer: INSTALL_OUTPUT_LIMIT }, (error, stdout, stderr) => {
-      settle({ code: error === null ? 0 : exitCode(error), stdout, stderr });
+      settle(error === null ? { code: 0, stdout, stderr } : failureOf(error, stdout, stderr));
     });
   });
 

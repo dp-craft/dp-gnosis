@@ -42,8 +42,13 @@ export const repoRoot = (): string => resolve(srcDir(), '..', '..', '..');
  * It takes NO root, deliberately: an authored asset follows the CODE, while the
  * vault and the cache follow the caller's root. That split is the whole reason
  * both forms exist here.
+ *
+ * Exported because it is also where an optional engine must be INSTALLED —
+ * `localReranker.ts` runs `npm install` there, since that is the directory its
+ * own dynamic import resolves from. A second derivation of the same path is a
+ * second owner of it.
  */
-const packageDir = (): string => resolve(srcDir(), '..');
+export const packageDir = (): string => resolve(srcDir(), '..');
 
 /** A manifest is only a version source when it really carries a version string. */
 const isVersioned = (value: unknown): value is { readonly version: string } =>

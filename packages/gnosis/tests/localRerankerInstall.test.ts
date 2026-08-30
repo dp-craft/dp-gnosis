@@ -22,7 +22,7 @@ import {
   installLocalReranker,
   LOCAL_RERANKER_INSTALL_COMMAND,
   LOCAL_RERANKER_PACKAGE,
-  localRerankerDirectory,
+  localRerankerDirectory
 } from '../src/localReranker.js';
 
 /** An engine that loads: the ONE shape `localRerankerAvailability` checks for. */
@@ -164,6 +164,26 @@ describe('installLocalReranker', () => {
     expect(LOCAL_RERANKER_INSTALL_COMMAND).toContain('--save-prod');
     expect(LOCAL_RERANKER_INSTALL_COMMAND).toContain('--omit=dev');
     expect(LOCAL_RERANKER_INSTALL_COMMAND).toBe('npm install node-llama-cpp --save-prod --omit=dev');
+  });
+
+  /**
+   * The bug this commit set out to fix, at its own root. `execFile` rejects with
+   * `code: 'ENOENT'` — a STRING — when npm is not on `PATH` at all, so the
+   * numeric read fell back to 1 with an empty stderr and the user was told the
+   * command "exited 1 and printed nothing". The command never ran.
+   *
+   * The REAL runner is exercised here, with `PATH` emptied so the spawn cannot
+   * resolve npm: nothing is fetched and nothing is installed.
+   */
+  it('names the spawn failure itself when npm cannot be found on PATH', async () => {
+    vi.stubEnv('PATH', '');
+
+    const result = await installLocalReranker({ load: engineMissing });
+
+    vi.unstubAllEnvs();
+    expect(result.installed).toBe(false);
+    expect(reasonOf(result)).toContain('ENOENT');
+    expect(reasonOf(result)).not.toContain('it printed nothing on stderr');
   });
 
   it('names the command it ran, so the refusal is reproducible by hand', async () => {
