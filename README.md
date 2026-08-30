@@ -55,6 +55,19 @@ You need **Node 22 or newer**, on **Linux or macOS**. Windows is not supported. 
 `stemmer`, `minisearch` and `@inquirer/prompts` are the only required dependencies; the last of them
 is there so the setup wizard can ask its questions.
 
+**Check what you have before you clone anything.** Both of these must print a version, and Node must
+be 22 or newer:
+
+```bash
+node -v     # v22.x or newer
+npm -v      # npm ships inside Node — there is nothing separate to install
+```
+
+If `node` is missing, or prints something older than v22, install it from the official downloads
+page — **<https://nodejs.org/en/download>**. Take the **LTS** build for your platform; `npm` arrives
+with it. That page also offers `nvm` and `fnm`, which are the better choice on Linux, where a
+distribution's own `nodejs` package can be older than 22. `git` is the only other thing you need.
+
 **It is not on the npm registry yet**, so there are two honest paths.
 
 *As a tool you use* — build a tarball and install it. You get `dp-gnosis` and `dp-gnosis-mcp`
@@ -63,11 +76,15 @@ checkout:
 
 ```bash
 git clone https://github.com/dp-craft/dp-gnosis.git && cd dp-gnosis && npm install
-cd packages/gnosis && npm pack        # builds dist/ and writes dp-gnosis-<version>.tgz
-npm install -g ./dp-gnosis-*.tgz
+cd packages/gnosis && npm pack && npm install -g ./dp-gnosis-*.tgz
 dp-gnosis --version                   # prints the version — the install worked
 dp-gnosis wizard                      # the guided setup: asks, then builds, then proves it answers
 ```
+
+That middle line is chained on purpose. `npm pack` builds `dist/` and writes
+`dp-gnosis-<version>.tgz` **into `packages/gnosis/`**; the `&&` is what guarantees the install runs
+from that same directory and only if the tarball was actually produced. Split the two apart and a
+failed `npm pack`, or a `cd` that did not stick, turns into the misleading error in the next section.
 
 *As a checkout you develop in* — skip the pack and call it through npm. Every `dp-gnosis <cmd>`
 below becomes `npm run gnosis -- <cmd>`, and the data stays inside the repository:
@@ -84,6 +101,40 @@ a real search answers. Nothing is written until it shows you a summary and you c
 commands it drives — `init`, `setup`, `ingest`, `index`, `doctor` — all still work on their own, and
 they are the scriptable path; the wizard refuses without a terminal rather than reading EOF as an
 answer.
+
+**If git says it "could not create work tree dir".**
+
+```
+fatal: could not create work tree dir 'dp-gnosis': No such file or directory
+bash: cd: packages/gnosis: No such file or directory
+Error: ENOENT: process.cwd failed with error no such file or directory, ... uv_cwd
+```
+
+Three errors, one cause, and it is not this repository: **the directory your shell is sitting in has
+been deleted.** Every command that resolves a relative path then fails before it starts — `git` cannot
+work out where to put the clone, `cd packages/gnosis` has nothing to be relative to, and only npm's
+`uv_cwd` line names it outright. It happens when an earlier checkout is removed or moved from another
+terminal while this one is still inside it. Move to a directory that exists and start again:
+
+```bash
+cd ~ && git clone https://github.com/dp-craft/dp-gnosis.git && cd dp-gnosis && npm install
+```
+
+**If npm says the tarball "seems to be corrupted".**
+
+```
+npm warn tarball tarball data for file:dp-gnosis-*.tgz (null) seems to be corrupted. Trying again.
+npm warn tarball tarball data for file:dp-gnosis-*.tgz (null) seems to be corrupted. Trying again.
+npm error code ENOENT
+```
+
+Nothing is corrupt — there is no tarball at all. The `*` is still in the name npm reports, which is
+what a shell leaves behind when a glob matches no file, so npm went looking for a file literally
+called `dp-gnosis-*.tgz`, failed to read it twice with that warning, and only the `ENOENT` line
+underneath says what actually happened. Two causes, both cured by running the chained line above:
+you were not in `packages/gnosis/` when you ran the install, or `npm pack` never wrote the file. If
+`npm pack` is the one failing, read *its* output — its `prepack` runs the typecheck and the build, so
+a `tsc` error stops the tarball from ever being written.
 
 **If the install fails while compiling.** `better-sqlite3` is a native module, and gnosis needs it
 built with FTS5 — Node's own `node:sqlite` cannot compile FTS5

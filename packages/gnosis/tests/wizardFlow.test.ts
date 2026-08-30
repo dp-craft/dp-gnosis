@@ -21,17 +21,34 @@ import { dirname, join, resolve } from 'node:path';
 
 import type { CommandContext } from '../src/cli/context.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
+import { ADAPTER_CHOICES, ANALYZER_CHOICES } from '../src/cli/wizard/advice.js';
+import { localBaseUrl, startServer } from '../src/cli/wizard/backend.js';
+import { PRESETS } from '../src/cli/wizard/preset.js';
 import type { Option, Prompter } from '../src/cli/wizard/prompts.js';
 import { CANCELLED } from '../src/cli/wizard/prompts.js';
-import { localBaseUrl, startServer } from '../src/cli/wizard/backend.js';
 import { timingLines } from '../src/cli/wizard/rerankFlow.js';
 import { runWizard } from '../src/cli/wizardCommand.js';
-import { atomsDir, fts5IndexPath, userProfilePath } from '../src/paths.js';
+import { atomsDir, dataRoot, fts5IndexPath, userProfilePath } from '../src/paths.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /** An answer meaning "take the default this question offered". */
 const KEEP_DEFAULT = Symbol('keep-default');
+
+/**
+ * An answer meaning "take the row this menu rendered under this name". The
+ * amend menu's values are the amendment records themselves, which a script
+ * cannot construct, and picking one by INDEX would silently move the moment a
+ * row is added — which is precisely the class of failure this file exists over.
+ */
+interface Pick {
+  readonly pickName: string;
+}
+
+const byName = (pickName: string): Pick => ({ pickName });
+
+const isPick = (value: unknown): value is Pick =>
+  typeof value === 'object' && value !== null && 'pickName' in value;
 
 interface Reply {
   readonly match: RegExp;
@@ -39,10 +56,18 @@ interface Reply {
   readonly answers: readonly unknown[];
 }
 
+/** One menu as the user saw it: its question, every row's name and description. */
+interface Menu {
+  readonly message: string;
+  readonly names: readonly string[];
+  readonly descriptions: readonly string[];
+}
+
 interface Scripted extends Prompter {
   /** Every line the user was TOLD, and every question they were asked. */
   readonly transcript: readonly string[];
   readonly asked: readonly string[];
+  readonly menus: readonly Menu[];
 }
 
 /**
@@ -53,6 +78,7 @@ interface Scripted extends Prompter {
 const scriptedPrompter = (replies: readonly Reply[]): Scripted => {
   const transcript: string[] = [];
   const asked: string[] = [];
+  const menus: Menu[] = [];
   const used = new Map<Reply, number>();
 
   const answerFor = (message: string): unknown => {
@@ -79,14 +105,32 @@ const scriptedPrompter = (replies: readonly Reply[]): Scripted => {
   return {
     transcript,
     asked,
+    menus,
     say: lines => {
       transcript.push(...lines);
     },
     progress: line => {
       transcript.push(line);
     },
-    select: async <T>(message: string, options: readonly Option<T>[], initial?: T): Promise<T> =>
-      resolveAnswer(message, initial === undefined ? (options[0] as Option<T>).value : initial),
+    select: async <T>(message: string, options: readonly Option<T>[], initial?: T): Promise<T> => {
+      menus.push({
+        message,
+        names: options.map(option => option.name),
+        descriptions: options.map(option => option.description ?? ''),
+      });
+      const answer = resolveAnswer<unknown>(
+        message,
+        initial === undefined ? (options[0] as Option<T>).value : initial
+      );
+      if (!isPick(answer)) return answer as T;
+      const row = options.find(option => option.name === answer.pickName);
+      if (row === undefined) {
+        throw new Error(
+          `no row named "${answer.pickName}" on "${message}" — rows: ${options.map(option => option.name).join(', ')}`
+        );
+      }
+      return row.value;
+    },
     multiSelect: async <T>(message: string, _options: readonly Option<T>[], checked: readonly T[]): Promise<readonly T[]> =>
       resolveAnswer<readonly T[]>(message, checked),
     confirm: async (message, initial) => resolveAnswer(message, initial),
@@ -125,16 +169,29 @@ const baseScript = (): Reply[] => [
   { match: /^Types to hide/, answers: [KEEP_DEFAULT] },
   { match: /^What language/, answers: [KEEP_DEFAULT] },
   { match: /^Do they contain code identifiers/, answers: [KEEP_DEFAULT] },
+  { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
   { match: /^Analysis chain/, answers: [KEEP_DEFAULT] },
   { match: /^Ranking adapter/, answers: [KEEP_DEFAULT] },
   { match: /^Serve pseudo-relevance feedback/, answers: [KEEP_DEFAULT] },
   { match: /^Set up the reranker\?/, answers: [false] },
-  { match: /^Write it\?/, answers: [true] },
+  { match: /^Write it\?/, answers: ['write'] },
 ];
 
 /** Replace one entry of the base script, keeping the ORDER the flow asks in. */
 const scriptWith = (match: RegExp, answers: readonly unknown[]): readonly Reply[] =>
   baseScript().map(reply => (reply.match.source === match.source ? { match, answers } : reply));
+
+/**
+ * The base script with some entries replaced and any new question appended.
+ * Lookup is by regex, so an override MUST displace the base entry rather than
+ * sit behind it — the first match wins.
+ */
+const overriding = (overrides: readonly Reply[]): readonly Reply[] => [
+  ...baseScript().filter(
+    reply => !overrides.some(override => override.match.source === reply.match.source)
+  ),
+  ...overrides,
+];
 
 const wizard = async (
   replies: readonly Reply[] = baseScript(),
@@ -143,6 +200,9 @@ const wizard = async (
   const prompter = scriptedPrompter(replies);
   return { outcome: await runWizard(contextWith(positionals), prompter), prompter };
 };
+
+/** The transcript as one string with its wrapping collapsed, so a wrapped sentence still matches. */
+const flatten = (lines: readonly string[]): string => lines.join(' ').replace(/\s+/g, ' ');
 
 const profilePath = (): string => userProfilePath();
 
@@ -262,16 +322,72 @@ describe('wizard — the confirmed happy path', () => {
     expect(atomFiles().length).toBeGreaterThan(0);
   });
 
+  // Given a corpus root holding two markdown files, When the wizard accepts it,
+  // Then it says how many it found — bounded by the scan depth, so "at least".
+  it('should report how much markdown an accepted corpus root holds', async () => {
+    expect(flatten(prompter.transcript)).toContain(`at least 2 markdown files in ${happyCorpusDir}`);
+  });
+
+  // Given the Build section, When the summary is shown, Then the wizard has
+  // already said what runs now and that enrichment is NOT part of setup —
+  // `wizardCommand.ts:buildSteps` runs ingest and index and nothing else.
+  it('should set the expectation that ingest and index run now and enrichment does not', async () => {
+    const said = flatten(prompter.transcript);
+    expect(said).toContain('ingest and index both run now');
+    expect(said).toContain('Enrichment is NOT part of setup');
+    expect(said).toContain('dp-gnosis enrich');
+    expect(said).toContain('needs a chat model');
+  });
+
+  // Given every menu built from an advice table, When it is rendered, Then each
+  // row leads with the clause naming WHO should pick it, above its pro and con.
+  it('should lead every analysis-chain and adapter row with who should pick it', async () => {
+    const menus = prompter.menus.filter(menu => /^(Analysis chain|Ranking adapter)$/.test(menu.message));
+    expect(menus).toHaveLength(2);
+    const rows = menus.flatMap(menu => menu.descriptions);
+    expect(rows).toHaveLength(ANALYZER_CHOICES.length + ADAPTER_CHOICES.length);
+    rows.forEach(description => {
+      expect(description).toMatch(/^ {2}Pick this/);
+      expect(description.indexOf('  + ')).toBeGreaterThan(description.indexOf('Pick this'));
+    });
+  });
+
+  // Given the preset question, When section 4 runs, Then it is asked AFTER the
+  // two answers that feed the chain and BEFORE the chain menu — a preset asked
+  // any earlier could not pre-select a chain, and asked any later would
+  // pre-select a menu already past.
+  it('should ask the preset after the language answers and before the analysis chain', async () => {
+    const at = (message: RegExp): number => prompter.asked.findIndex(question => message.test(question));
+
+    expect(at(/^Which of these fits you\?/)).toBeGreaterThan(at(/^What language/));
+    expect(at(/^Which of these fits you\?/)).toBeGreaterThan(at(/^Do they contain code identifiers/));
+    expect(at(/^Which of these fits you\?/)).toBeLessThan(at(/^Analysis chain/));
+  });
+
+  // The comparison table is shown ABOVE the question, so the tradeoff is in
+  // view when the choice is made rather than after it.
+  it('should print the preset comparison table before asking which preset', async () => {
+    const said = flatten(prompter.transcript);
+
+    expect(said.indexOf('candidate pool')).toBeGreaterThan(-1);
+    expect(said.indexOf('candidate pool')).toBeLessThan(said.indexOf('? Which of these fits you?'));
+    PRESETS.forEach(preset => {
+      expect(said).toContain(preset.id);
+    });
+  });
+
   it('should run ingest BEFORE index, which is one operation in two commands', async () => {
     const joined = prompter.transcript.join('\n');
-    expect(joined.indexOf('running ingest')).toBeGreaterThan(-1);
-    expect(joined.indexOf('running index')).toBeGreaterThan(joined.indexOf('running ingest'));
+    expect(joined.indexOf('splitting your documents into atoms')).toBeGreaterThan(-1);
+    expect(joined.indexOf('building the search index')).toBeGreaterThan(
+      joined.indexOf('splitting your documents into atoms')
+    );
   });
 });
 
 describe('wizard — nothing is written until the summary is confirmed', () => {
   it('should write NOTHING when the summary is declined', async () => {
-    const { outcome } = await wizard(scriptWith(/^Write it\?/, [false]));
+    const { outcome } = await wizard(scriptWith(/^Write it\?/, ['cancel']));
 
     expect(outcome.exitCode).toBe(3);
     expect(outcome.text).toContain('no profile and no config were written');
@@ -432,5 +548,133 @@ describe('timingLines — the projection says when nothing will cancel it', () =
 
     expect(lines).toContain('a projection, not a measured run');
     expect(lines).not.toContain('Ctrl-C');
+  });
+});
+
+/**
+ * A skipped section is a REPORT, not a failure. `ingest` exits 3 for both — a
+ * mirrored appendix on any real corpus is enough — and a wizard that stopped
+ * the chain there would leave the machine holding atoms and no index, which is
+ * the silently-unserved vault this command exists to prevent. The fixture
+ * writes two files sharing one body past the dedupe floor, so the run really
+ * does write atoms AND refuse one.
+ */
+describe('wizard — a partial ingest is a report, not a stop', () => {
+  const MIRRORED =
+    'Gnosis chunks a document into heading-bounded atoms and ranks them with BM25 over a lexical index, which is the whole of what the engine does at query time, and this paragraph is long enough to clear the dedupe floor.';
+
+  const reportPath = (): string => join(dataRoot(), 'ingest-report.txt');
+
+  beforeEach(() => {
+    writeFileSync(join(corpusDir, 'appendix-a.md'), `# Appendix A\n\n${MIRRORED}\n`, 'utf8');
+    writeFileSync(join(corpusDir, 'appendix-b.md'), `# Appendix B\n\n${MIRRORED}\n`, 'utf8');
+  });
+
+  it('should run index after an ingest that exited 3 having left atoms behind', async () => {
+    const { outcome, prompter } = await wizard();
+
+    expect(prompter.transcript.join('\n')).toContain('building the search index');
+    expect((outcome.data as Record<string, unknown>)['indexState']).toBe('ready');
+    expect(outcome.exitCode).toBe(0);
+  }, 120_000);
+
+  it('should report the ingest summary line and a report path rather than every skipped section', async () => {
+    const { outcome } = await wizard();
+
+    expect(outcome.text).toContain('ingest: written');
+    expect(outcome.text).toContain(`full report: ${reportPath()}`);
+    expect(outcome.text).not.toContain('duplicate-body-of');
+    expect(readFileSync(reportPath(), 'utf8')).toContain('duplicate-body-of');
+  }, 120_000);
+});
+
+/**
+ * The summary is the amend point. Nothing has been written when it is reached,
+ * so it is the last moment at which a wrong answer — the reported failure was
+ * pressing Enter through the hidden-types multi-select — costs one question to
+ * correct instead of the whole interview.
+ */
+describe('wizard — the summary can amend one answer before writing', () => {
+  const SUMMARY_HEADING = 'This is everything that will be written:';
+
+  const amending = (row: string, extra: readonly Reply[]): readonly Reply[] =>
+    overriding([
+      { match: /^Write it\?/, answers: ['amend', 'write'] },
+      { match: /^Which answer should be changed\?/, answers: [byName(row)] },
+      ...extra,
+    ]);
+
+  const countAsked = (prompter: Scripted, message: RegExp): number =>
+    prompter.asked.filter(question => message.test(question)).length;
+
+  // Given a user who accepted the hidden types and then chose to change them,
+  // When the amend re-asks that one question, Then the SECOND answer is what is
+  // written and no other section of the interview is asked again.
+  it('should re-ask only the types questions and write the second answer', async () => {
+    const script = amending('Atom types', [
+      { match: /^Types to hide/, answers: [KEEP_DEFAULT, ['review']] },
+    ]);
+
+    const { outcome, prompter } = await wizard(script);
+
+    expect(outcome.exitCode).toBe(0);
+    expect(readProfile()['defaultExcludedTypes']).toEqual(['review']);
+    expect(countAsked(prompter, /^Types to hide/)).toBe(2);
+    expect(countAsked(prompter, /^Default atom type/)).toBe(2);
+    expect(countAsked(prompter, /^Corpus directory/)).toBe(1);
+    expect(countAsked(prompter, /^What language/)).toBe(1);
+    expect(countAsked(prompter, /^Paths to skip/)).toBe(1);
+  }, 120_000);
+
+  // The amended plan is REBUILT and shown again, so the answer that was changed
+  // is read in its written form before it is committed.
+  it('should render the summary again after an amendment', async () => {
+    const script = overriding([
+      { match: /^Write it\?/, answers: ['amend', 'cancel'] },
+      { match: /^Which answer should be changed\?/, answers: [byName('Atom types')] },
+    ]);
+
+    const { outcome, prompter } = await wizard(script);
+
+    expect(prompter.transcript.filter(line => line === SUMMARY_HEADING)).toHaveLength(2);
+    expect(countAsked(prompter, /^Write it\?/)).toBe(2);
+    expect(outcome.exitCode).toBe(3);
+    expect(existsSync(profilePath())).toBe(false);
+  });
+
+  // Given no reranker was configured, When the amend menu is built, Then the
+  // pool row is absent — there is no pool to deepen — while the two answers
+  // that are never amendable say why in the reader's own view.
+  it('should omit the reranker pool row when no reranker was configured', async () => {
+    const script = overriding([
+      { match: /^Write it\?/, answers: ['amend', 'cancel'] },
+      { match: /^Which answer should be changed\?/, answers: [byName('Paths to skip')] },
+    ]);
+
+    const { prompter } = await wizard(script);
+    const menu = prompter.menus.find(entry => entry.message === 'Which answer should be changed?');
+
+    expect(menu?.names).toEqual([
+      'Corpus directories and their labels',
+      'Paths to skip',
+      'Atom types',
+      'How text is matched',
+    ]);
+    const said = flatten(prompter.transcript);
+    expect(said).toContain('The data root is not on this list because its value gates the two checks');
+    expect(said).toContain('The reranker setup is not on this list because it downloads files and starts servers');
+  });
+
+  // The three-way replaced a yes/no, and BOTH of the old answers have to keep
+  // meaning what they did: `Cancel` writes nothing at all.
+  it('should write nothing when Cancel is chosen at the summary', async () => {
+    const { outcome, prompter } = await wizard(scriptWith(/^Write it\?/, ['cancel']));
+    const menu = prompter.menus.find(entry => entry.message === 'Write it?');
+
+    expect(menu?.names).toEqual(['Write it', 'Change an answer', 'Cancel']);
+    expect(outcome.exitCode).toBe(3);
+    expect(outcome.text).toContain('no profile and no config were written');
+    expect(existsSync(profilePath())).toBe(false);
+    expect(atomFiles()).toEqual([]);
   });
 });

@@ -8,7 +8,7 @@
  * scriptable and tested, and this command is the guided path through them. A
  * wizard that reimplemented any of that would become a second owner of it.
  *
- * Three rules shape it.
+ * Four rules shape it.
  *
  * **No configuration is written until the summary is confirmed.** Every answer
  * is collected into a plan (`wizard/plan.ts`, pure), rendered, and only then
@@ -30,7 +30,20 @@
  * therefore runs `index` as part of the same step, never as advice, and then
  * runs one real `search` and reads `indexState` back. That read, not the exit
  * code of the build, is what says the instance works.
+ *
+ * **A partial ingest is a REPORT, and the chain continues through it.** `ingest`
+ * exits 3 whenever it refused anything — one empty heading or one mirrored
+ * appendix is enough on a real corpus — and it exits 3 again when it wrote
+ * nothing at all. The exit code alone cannot tell those apart, so the wizard
+ * asks the only question that distinguishes them: are there atoms on disk?
+ * None means blocked and the chain stops; any means `index` MUST still run,
+ * because stopping there is precisely the atoms-without-an-index state the rule
+ * above exists to prevent. What was refused is not lost — the ingest step's
+ * whole output is written to `ingest-report.txt` at the data root, and its
+ * summary line and that path are shown on BOTH screens, so a run that skipped
+ * hundreds of documents says so even when it succeeded.
  */
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { atomFileCount, existingInstance, instancePaths, writeInstance } from '../instance.js';
@@ -43,18 +56,27 @@ import type { CommandContext } from './context.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
 import { writeUserConfig } from './rerankSetup.js';
+import type { Draft } from './wizard/amend.js';
+import { amend } from './wizard/amend.js';
 import type { CorpusAnswers } from './wizard/flow.js';
-import { askCorpus } from './wizard/flow.js';
+import { askCorpus, rerankPreference } from './wizard/flow.js';
 import { readHardware } from './wizard/hardware.js';
 import type { ChatAnswer, PlanLocations, WizardAnswers, WizardPlan } from './wizard/plan.js';
 import { buildPlan } from './wizard/plan.js';
-import type { Prompter } from './wizard/prompts.js';
+import type { Option, Prompter } from './wizard/prompts.js';
 import { CANCELLED, terminalPrompter } from './wizard/prompts.js';
 import type { RerankResult } from './wizard/rerankFlow.js';
 import { askChatModels, askRerank } from './wizard/rerankFlow.js';
+import { banner, note, section } from './wizard/screen.js';
 
 /** The verb, named here so `cli.ts` registers and scopes it from one place. */
 export const WIZARD_COMMAND = 'wizard';
+
+/** The step whose non-zero exit is read against the atoms it left, not alone. */
+const INGEST_STEP = 'ingest';
+
+/** Where the ingest step's full output is kept, so the screens can stay short. */
+const INGEST_REPORT = 'ingest-report.txt';
 
 /** Where a wizard-downloaded model and a wizard-started server's log live. */
 const MODELS_SUBDIR = 'models';
@@ -107,6 +129,11 @@ const instanceRefusal = (root: string): string | undefined => {
   return atoms > 0 ? alreadyOccupied(atomsPath, atoms) : undefined;
 };
 
+const ROOT_EXPLANATION = [
+  'Everything dp-gnosis builds lives under one data root — the atoms your documents are split into, the search index, any reranker model downloaded here, and the server log.',
+  'Your own documents are never moved, written to or modified. They are only read.',
+];
+
 const ROOT_NOTE = (resolved: string): readonly string[] => [
   '',
   'dp-gnosis keeps its atoms and its index under one data root.',
@@ -115,6 +142,7 @@ const ROOT_NOTE = (resolved: string): readonly string[] => [
 
 const askDataRoot = async (prompter: Prompter): Promise<string | undefined> => {
   const resolved = dataRoot();
+  prompter.say([...section('Where things go'), ...note(ROOT_EXPLANATION)]);
   prompter.say(ROOT_NOTE(resolved));
   const typed = await prompter.input('Data root', resolved);
   return typed === resolved ? undefined : typed;
@@ -167,12 +195,22 @@ const runCommand = async (argv: readonly string[]): Promise<{ readonly exitCode:
 
 interface Step {
   readonly label: string;
+  /** What this step DOES, in the reader's words — the command name says nothing. */
+  readonly narration: string;
   readonly argv: readonly string[];
 }
 
 const buildSteps = (plan: WizardPlan, adapter: string): readonly Step[] => [
-  { label: 'ingest', argv: ['ingest', '--profile', plan.locations.profilePath] },
-  { label: 'index', argv: ['index', '--adapter', adapter, '--profile', plan.locations.profilePath] },
+  {
+    label: INGEST_STEP,
+    narration: 'splitting your documents into atoms',
+    argv: ['ingest', '--profile', plan.locations.profilePath],
+  },
+  {
+    label: 'index',
+    narration: 'building the search index',
+    argv: ['index', '--adapter', adapter, '--profile', plan.locations.profilePath],
+  },
 ];
 
 interface StepResult {
@@ -182,18 +220,71 @@ interface StepResult {
 }
 
 /**
- * Sequential by construction, and it STOPS at the first non-zero exit. `ingest`
- * and `index` are one operation in two commands; running the second over a
- * failed first would build an index for a corpus that was never written.
+ * What STOPS the chain. Every step but `ingest` blocks on any non-zero exit;
+ * `ingest` blocks only when it left no atoms, because it returns the same 3 for
+ * a corpus it refused entirely and for one it merely reported skips on. The
+ * atoms on disk are the distinguisher — never the exit code.
  */
-const runSteps = async (prompter: Prompter, steps: readonly Step[]): Promise<readonly StepResult[]> =>
+const blocked = (plan: WizardPlan, result: StepResult): boolean =>
+  result.exitCode !== EXIT_OK &&
+  (result.label !== INGEST_STEP || atomFileCount(plan.locations.atomsDir) === 0);
+
+/** Milliseconds in the unit the elapsed line reports. */
+const SECOND_MS = 1000;
+
+const elapsed = (startedAt: number): string =>
+  `  done in ${((Date.now() - startedAt) / SECOND_MS).toFixed(1)}s`;
+
+/**
+ * One step, announced by what it DOES and closed by how long it took. Two lines
+ * per step and no more: `ingest` over a real corpus already prints hundreds,
+ * and a wizard that narrated each one would bury both of these.
+ */
+const runStep = async (prompter: Prompter, step: Step): Promise<StepResult> => {
+  prompter.say([`  ${step.narration}…`]);
+  const startedAt = Date.now();
+  const result = await runCommand(step.argv);
+  prompter.say([elapsed(startedAt)]);
+  return { label: step.label, ...result };
+};
+
+/**
+ * Sequential by construction, and it STOPS at the first BLOCKING exit. `ingest`
+ * and `index` are one operation in two commands; running the second over a
+ * failed first would build an index for a corpus that was never written, and
+ * skipping it over a merely partial first would leave atoms nothing can query.
+ */
+const runSteps = async (
+  prompter: Prompter,
+  plan: WizardPlan,
+  steps: readonly Step[]
+): Promise<readonly StepResult[]> =>
   await steps.reduce<Promise<readonly StepResult[]>>(async (pending, step) => {
     const done = await pending;
-    if (done.some(result => result.exitCode !== EXIT_OK)) return done;
-    prompter.say([`  running ${step.label}…`]);
-    const result = await runCommand(step.argv);
-    return [...done, { label: step.label, ...result }];
+    if (done.some(result => blocked(plan, result))) return done;
+    return [...done, await runStep(prompter, step)];
   }, Promise.resolve([]));
+
+/**
+ * The ingest step's output, kept in full on disk and quoted by its first line —
+ * the `ingest: written N, pruned N, skipped N` summary. A corpus that skipped
+ * hundreds of sections prints hundreds of lines, and a screen that dumped them
+ * buries the one line saying how many there were.
+ */
+const ingestStdout = (results: readonly StepResult[]): string =>
+  results.find(result => result.label === INGEST_STEP)?.stdout ?? '';
+
+const firstLine = (text: string): string => text.split('\n')[0] ?? '';
+
+const newlineTerminated = (text: string): string => (text.endsWith('\n') ? text : `${text}\n`);
+
+const ingestReport = (plan: WizardPlan, results: readonly StepResult[]): readonly string[] => {
+  const stdout = ingestStdout(results);
+  if (stdout.trim().length === 0) return [];
+  const path = join(plan.locations.repoRoot, INGEST_REPORT);
+  writeFileSync(path, newlineTerminated(stdout), 'utf8');
+  return ['', `  ${firstLine(stdout)}`, `  full report: ${path}`];
+};
 
 /** What ONE real search says about the index — the only closing check that counts. */
 const indexStateOf = (stdout: string): string => {
@@ -235,13 +326,21 @@ const nextSteps = (profilePath: string, adapter: string): readonly string[] => [
   'the tool has (packages/gnosis/QUERYING.md § Query rephrasing).',
 ];
 
-const failed = (plan: WizardPlan, results: readonly StepResult[]): CommandOutcome => {
-  const broke = results.find(result => result.exitCode !== EXIT_OK);
+/** `ingest`'s own output is already quoted by the report, so it is not repeated. */
+const failureDetail = (broke: StepResult | undefined): readonly string[] =>
+  broke === undefined || broke.label === INGEST_STEP ? [] : ['', broke.stdout];
+
+const failed = (
+  plan: WizardPlan,
+  results: readonly StepResult[],
+  report: readonly string[]
+): CommandOutcome => {
+  const broke = results.find(result => blocked(plan, result));
   const message = `${WIZARD_COMMAND}: the profile and config were written, but \`${broke?.label ?? 'the build'}\` exited ${String(broke?.exitCode ?? 1)} — fix what it reported, then re-run it with --profile ${plan.locations.profilePath}`;
   return {
     exitCode: EXIT_PARTIAL,
     data: { command: WIZARD_COMMAND, error: message, steps: results.map(result => ({ step: result.label, exitCode: result.exitCode })) },
-    text: [message, '', broke?.stdout ?? ''].join('\n'),
+    text: [message, ...report, ...failureDetail(broke)].join('\n'),
   };
 };
 
@@ -266,7 +365,14 @@ const remedyFor = (state: string): string | undefined =>
 const REBUILD = (profilePath: string): string =>
   `rebuild it with: ${cliInvocation()} index --profile ${profilePath}`;
 
-const succeeded = (plan: WizardPlan, state: string, adapter: string): CommandOutcome => {
+/** What the build left behind: the state one real search read, and its report. */
+interface BuildOutcome {
+  readonly state: string;
+  readonly report: readonly string[];
+}
+
+const succeeded = (plan: WizardPlan, adapter: string, built: BuildOutcome): CommandOutcome => {
+  const state = built.state;
   const remedy = remedyFor(state);
   const served = state === 'ready';
   const text = [
@@ -276,6 +382,7 @@ const succeeded = (plan: WizardPlan, state: string, adapter: string): CommandOut
     `  profile      ${plan.locations.profilePath}`,
     `  indexState   ${state}`,
     ...(served ? [] : ['', `  ${remedy ?? 'the closing search did not report an index state'}`, `  ${REBUILD(plan.locations.profilePath)}`]),
+    ...built.report,
     ...nextSteps(plan.locations.profilePath, adapter),
   ].join('\n');
   return {
@@ -290,10 +397,26 @@ const CANCELLED_TEXT = `${WIZARD_COMMAND}: cancelled — no profile and no confi
 const commit = async (prompter: Prompter, plan: WizardPlan, adapter: string): Promise<CommandOutcome> => {
   writeInstance(instancePaths(plan.locations.atomsDir, plan.locations.indexPath), plan.profile);
   if (Object.keys(plan.configPatch).length > 0) writeUserConfig(plan.configPatch);
-  const results = await runSteps(prompter, buildSteps(plan, adapter));
-  if (results.some(result => result.exitCode !== EXIT_OK)) return failed(plan, results);
-  return succeeded(plan, await verify(plan, adapter), adapter);
+  const results = await runSteps(prompter, plan, buildSteps(plan, adapter));
+  const report = ingestReport(plan, results);
+  if (results.some(result => blocked(plan, result))) return failed(plan, results, report);
+  return succeeded(plan, adapter, { state: await verify(plan, adapter), report });
 };
+
+/**
+ * What confirming the summary actually starts, and what it does NOT.
+ *
+ * Both claims are read off `buildSteps` rather than described from intent: it
+ * holds `ingest` and `index` and nothing else, and `runStep` closes each one
+ * with its own elapsed line. Enrichment is a THIRD command with its own model
+ * (`enrich --enrich-model`) whose output only reaches the index through a later
+ * `index --enrichment`, so a wizard that left it unmentioned would let a first
+ * run finish believing the generated fields were part of what it just built.
+ */
+const BUILD_EXPLANATION = [
+  'On confirming, ingest and index both run now, one after the other — your documents are split into atoms and the index is built over them. Each prints how long it took.',
+  'Enrichment is NOT part of setup. `dp-gnosis enrich` is a separate run you can make later; it needs a chat model, and the index has to be rebuilt afterwards for what it generates to be searchable.',
+];
 
 const WELCOME = [
   '',
@@ -322,26 +445,68 @@ const answersFrom = (
   chat,
 });
 
+/**
+ * The three things the summary can be answered with. It is a `select` rather
+ * than the `confirm` it grew out of because the reported failure was pressing
+ * Enter through a multi-select with no way back: a yes/no offers correcting
+ * nothing, and Ctrl-C throws the whole interview away to fix one answer.
+ */
+type Decision = 'write' | 'amend' | 'cancel';
+
+const REVIEW_QUESTION = 'Write it?';
+
+const REVIEW_OPTIONS: readonly Option<Decision>[] = [
+  { value: 'write', name: 'Write it' },
+  { value: 'amend', name: 'Change an answer' },
+  { value: 'cancel', name: 'Cancel' },
+];
+
+/** What an amendment cannot change, so it is resolved once and carried through. */
+interface ReviewContext {
+  readonly chosenRoot: string | undefined;
+  readonly root: string;
+  readonly chat: ChatAnswer | undefined;
+}
+
+/**
+ * Summary, decision, and — on an amendment — the same three again over the
+ * amended draft. The plan is REBUILT from the draft on every pass rather than
+ * patched, so an amended answer that no longer validates refuses exactly as it
+ * would have on the first pass instead of being swallowed by the amend path.
+ */
+const review = async (
+  prompter: Prompter,
+  context: ReviewContext,
+  draft: Draft
+): Promise<CommandOutcome> => {
+  const plan = buildPlan(
+    answersFrom(context.chosenRoot, draft.corpus, draft.rerank, context.chat),
+    locationsFor(context.root, draft.corpus.adapter)
+  );
+  if (!plan.ok) return refuse(`${WIZARD_COMMAND}: ${plan.error}`);
+  prompter.say(summaryOf(plan.plan));
+  const decision = await prompter.select<Decision>(REVIEW_QUESTION, REVIEW_OPTIONS, 'write');
+  if (decision === 'write') return await commit(prompter, plan.plan, draft.corpus.adapter);
+  if (decision === 'cancel') return refuse(CANCELLED_TEXT);
+  return await review(prompter, context, await amend(prompter, context.root, draft));
+};
+
 const interview = async (prompter: Prompter): Promise<CommandOutcome> => {
+  prompter.say(banner());
   prompter.say(WELCOME);
   const chosenRoot = await askDataRoot(prompter);
   const root = chosenRoot ?? dataRoot();
   const refusal = instanceRefusal(root);
   if (refusal !== undefined) return refuse(refusal);
-  const corpus = await askCorpus(prompter);
-  const rerank = await askRerank(prompter, corpus.language.hungarian, await readHardware(root), {
+  const corpus = await askCorpus(prompter, root);
+  const rerank = await askRerank(prompter, rerankPreference(corpus), await readHardware(root), {
     modelsDir: join(root, MODELS_SUBDIR),
     logPath: join(root, SERVER_LOG),
   });
   const chat = await askChatModels(prompter, rerank.catalogue);
 
-  const plan = buildPlan(answersFrom(chosenRoot, corpus, rerank, chat), locationsFor(root, corpus.adapter));
-  if (!plan.ok) return refuse(`${WIZARD_COMMAND}: ${plan.error}`);
-
-  prompter.say(summaryOf(plan.plan));
-  return (await prompter.confirm('Write it?', true))
-    ? await commit(prompter, plan.plan, corpus.adapter)
-    : refuse(CANCELLED_TEXT);
+  prompter.say([...section('Build'), ...note(BUILD_EXPLANATION)]);
+  return await review(prompter, { chosenRoot, root, chat }, { corpus, rerank });
 };
 
 /**

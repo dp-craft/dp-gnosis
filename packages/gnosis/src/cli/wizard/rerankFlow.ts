@@ -28,7 +28,7 @@ import { rerankHealth } from '../../rerank.js';
 import type { Probed } from '../rerankSetup.js';
 import { candidateUrls, findServer, passed, probeCandidates, selectCandidates } from '../rerankSetup.js';
 import type { Choice, RunMode } from './advice.js';
-import { LOCAL_ENGINE_ADVICE, poolChoices, RERANK_ADVICE, RUN_MODE_CHOICES } from './advice.js';
+import { describeChoice, LOCAL_ENGINE_ADVICE, poolChoices, RERANK_ADVICE, RUN_MODE_CHOICES } from './advice.js';
 import { detectBackends, localBaseUrl, serveCommand, startServer, waitForServer } from './backend.js';
 import { downloadFile, hfGgufFiles } from './download.js';
 import type { HardwareFacts } from './hardware.js';
@@ -36,6 +36,7 @@ import type { Quant, RerankerModel } from './models.js';
 import { GIB, recommendedModel, recommendedQuant, WORKING_MODELS } from './models.js';
 import type { RerankAnswer } from './plan.js';
 import type { Option, Prompter } from './prompts.js';
+import { note, section } from './screen.js';
 
 /** The port `RERANK_DEFAULT_URL` names, and what a wizard-started server binds. */
 const SERVE_PORT = 9292;
@@ -60,16 +61,33 @@ const verdictOf = (probe: Probed): string =>
     ? `  ${probe.model}  PASSED — relevant ${String(probe.health.relevantScore)}, irrelevant ${String(probe.health.irrelevantScore)}`
     : `  ${probe.model}  REJECTED — ${probe.health.detail}`;
 
-const askPool = async (prompter: Prompter, hungarian: boolean): Promise<number> => {
-  const choices = poolChoices(hungarian);
+/**
+ * What the preset chose for this half of the interview, carried in rather than
+ * re-derived. `poolK` is a row {@link poolChoices} itself returned for this
+ * language, so pre-selecting it cannot open the menu on a depth it withholds.
+ */
+export interface RerankPreference {
+  readonly hungarian: boolean;
+  /** Whether `Set up the reranker?` opens on yes. */
+  readonly rerank: boolean;
+  readonly poolK: number;
+}
+
+/**
+ * The pool depth alone. Exported because it is the ONE reranker answer an amend
+ * may re-ask: the rung around it downloads files and starts servers, and this
+ * question does neither.
+ */
+export const askPool = async (prompter: Prompter, preference: RerankPreference): Promise<number> => {
+  const choices = poolChoices(preference.hungarian);
   const picked = await prompter.select(
     'How many candidates should the reranker reorder?',
     choices.map(choice => ({
       value: choice.value,
       name: choice.title,
-      description: `  + ${choice.pro}\n  − ${choice.con}`,
+      description: describeChoice(choice),
     })),
-    choices.find(choice => choice.recommended === true)?.value
+    String(preference.poolK)
   );
   return Number(picked);
 };
@@ -81,9 +99,9 @@ type ProvedRerank =
 
 const accepted = async (
   prompter: Prompter,
-  hungarian: boolean,
+  preference: RerankPreference,
   proved: ProvedRerank
-): Promise<RerankAnswer> => ({ ...proved, poolK: await askPool(prompter, hungarian) });
+): Promise<RerankAnswer> => ({ ...proved, poolK: await askPool(prompter, preference) });
 
 /** Probe every rerank-marked id the server advertises, stopping at the first pass. */
 const probeServer = async (
@@ -312,7 +330,7 @@ const askRunMode = async (
     choices.map(choice => ({
       value: choice.value,
       name: choice.title,
-      description: `  + ${choice.pro}\n  − ${choice.con}`,
+      description: describeChoice(choice),
     })),
     choices.find(choice => choice.recommended === true)?.value
   );
@@ -341,6 +359,7 @@ const downloadRung = async (
   facts: HardwareFacts,
   places: ServeLocations
 ): Promise<ProvedRerank | undefined> => {
+  prompter.say(note(DOWNLOAD_NOTE));
   const choice = await askWhichModel(prompter, facts);
   const modelPath = await fetchModel(prompter, choice, places.modelsDir);
   if (modelPath === undefined) return undefined;
@@ -393,15 +412,41 @@ const NOT_CONFIGURED = [
   '  ranking — and `dp-gnosis setup` can configure one later without re-running this.',
 ];
 
+const RERANK_EXPLANATION = [
+  'A reranker re-orders the first-pass results with a language model. It is optional, it needs a model, and it is the slow hop — everything below still works without one.',
+];
+
+/**
+ * Said BEFORE the probe, because the probe is the answer to "what if I already
+ * have one?": {@link askRerank} asks {@link candidateUrls} first and only reaches
+ * {@link downloadRung} when nothing there discriminates.
+ */
+const EXISTING_SERVER_NOTE = [
+  'Nothing is downloaded until an existing reranker has been ruled out. The addresses below are probed first, and if a model one of them serves passes the two-document discrimination probe, that server is used as it stands.',
+  'This is the path for a llama.cpp, llama-swap or Ollama setup you are already running.',
+];
+
+/**
+ * Said before {@link askWhichModel}, because the download question sounds like an
+ * engine question and is not: {@link fetchModel} fetches a file, and only then
+ * does {@link askRunMode} ask how to run it.
+ */
+const DOWNLOAD_NOTE = [
+  'Nothing here answered, so a model has to be fetched. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
+  'How it RUNS is the next question: a llama.cpp server, or loaded inside the gnosis process. Both are offered when both are possible; when the in-process engine is not installed, serving it is the only option and the wizard says so instead of asking.',
+];
+
 /** The whole reranker half: ask, probe, optionally download and serve, then probe again. */
 export const askRerank = async (
   prompter: Prompter,
-  hungarian: boolean,
+  preference: RerankPreference,
   facts: HardwareFacts,
   places: ServeLocations
 ): Promise<RerankResult> => {
+  prompter.say([...section('Reranking'), ...note(RERANK_EXPLANATION)]);
   prompter.say(['', `  + ${RERANK_ADVICE.pro}`, `  − ${RERANK_ADVICE.con}`]);
-  if (!(await prompter.confirm('Set up the reranker?', true))) return DECLINED;
+  prompter.say(note(EXISTING_SERVER_NOTE));
+  if (!(await prompter.confirm('Set up the reranker?', preference.rerank))) return DECLINED;
 
   prompter.say(['', `  looking for a server on ${candidateUrls().join(' and ')}`]);
   const server = await findServer(candidateUrls());
@@ -411,14 +456,14 @@ export const askRerank = async (
 
   if (winner !== undefined && server.ok) {
     const proved: ProvedRerank = { backend: 'http', url: server.baseUrl, model: winner.model };
-    return { rerank: await accepted(prompter, hungarian, proved), catalogue };
+    return { rerank: await accepted(prompter, preference, proved), catalogue };
   }
   const proved = await downloadRung(prompter, facts, places);
   if (proved === undefined) {
     prompter.say(NOT_CONFIGURED);
     return { rerank: undefined, catalogue };
   }
-  return { rerank: await accepted(prompter, hungarian, proved), catalogue };
+  return { rerank: await accepted(prompter, preference, proved), catalogue };
 };
 
 const CHAT_NOTE = [
