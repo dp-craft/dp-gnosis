@@ -23,14 +23,37 @@ import type { CommandContext } from '../src/cli/context.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
 import { ADAPTER_CHOICES, ANALYZER_CHOICES } from '../src/cli/wizard/advice.js';
 import { localBaseUrl, startServer } from '../src/cli/wizard/backend.js';
+import type { HardwareFacts } from '../src/cli/wizard/hardware.js';
 import { PRESETS } from '../src/cli/wizard/preset.js';
 import type { Option, Prompter } from '../src/cli/wizard/prompts.js';
 import { CANCELLED } from '../src/cli/wizard/prompts.js';
-import { timingLines } from '../src/cli/wizard/rerankFlow.js';
+import type { RerankPreference, RerankResult, ServeLocations } from '../src/cli/wizard/rerankFlow.js';
+import { askRerank, timingLines } from '../src/cli/wizard/rerankFlow.js';
 import { runWizard } from '../src/cli/wizardCommand.js';
+import { LOCAL_RERANKER_INSTALL_COMMAND } from '../src/localReranker.js';
 import { atomsDir, dataRoot, fts5IndexPath, userProfilePath } from '../src/paths.js';
+import { resetRerankProbeCache } from '../src/rerank.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 import { activeProfile } from '../src/vocabulary.js';
+
+/**
+ * The in-process engine is a devDependency, so a checkout HAS it and a consumer
+ * does not — and the wizard branches on exactly that. Only the availability
+ * probe is replaced, so every other export (the install command the refusal
+ * names, the scorer the local backend uses) stays the real one.
+ */
+const engineState = vi.hoisted(() => ({ available: true }));
+
+vi.mock('../src/localReranker.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/localReranker.js')>();
+  return {
+    ...actual,
+    localRerankerAvailability: async () =>
+      engineState.available
+        ? { available: true }
+        : { available: false, reason: 'the engine is absent in this test' },
+  };
+});
 
 /** An answer meaning "take the default this question offered". */
 const KEEP_DEFAULT = Symbol('keep-default');
@@ -676,5 +699,161 @@ describe('wizard — the summary can amend one answer before writing', () => {
     expect(outcome.text).toContain('no profile and no config were written');
     expect(existsSync(profilePath())).toBe(false);
     expect(atomFiles()).toEqual([]);
+  });
+});
+
+/**
+ * A reranker that is ALREADY running and passes the probe is a question, not an
+ * adoption. The wizard cannot know whose server that is — one this project
+ * started, one the user runs for something else, or one they would rather gnosis
+ * did not depend on — so it asks, and the answer decides which backend is written.
+ *
+ * Both llama-swap endpoints and the Hugging Face listing are answered in-process
+ * by a stubbed `fetch`: this describe is about the DECISION, and a test that
+ * needed a live server or a multi-gigabyte download would measure neither.
+ */
+describe('askRerank — a passing served model is offered, never adopted', () => {
+  const FOUND_URL = 'http://127.0.0.1:9999';
+  const FOUND_MODEL = 'qwen3-reranker-4b';
+  const USE_IT = `Use ${FOUND_MODEL}, already running at ${FOUND_URL}`;
+  const EMBEDDED = 'Set up an embedded reranker instead — gnosis loads a model in this process';
+
+  const FACTS: HardwareFacts = {
+    totalRamBytes: 32 * 1024 ** 3,
+    freeDiskBytes: 200 * 1024 ** 3,
+    vramBytes: 8 * 1024 ** 3,
+    gpuName: 'Test GPU',
+  };
+
+  const PLACES: ServeLocations = { modelsDir: '/tmp/dp-gnosis-wizard-never/models', logPath: '/tmp/dp-gnosis-wizard-never/log' };
+
+  const PREFERENCE: RerankPreference = { hungarian: false, rerank: true, poolK: 100 };
+
+  const okResponse = (payload: unknown): unknown => ({
+    ok: true,
+    status: 200,
+    text: async (): Promise<string> => JSON.stringify(payload),
+  });
+
+  /** The discriminating answer to the two-document probe: the relevant document wins. */
+  const HEALTHY_PROBE = [
+    { index: 0, relevance_score: 2.07 },
+    { index: 1, relevance_score: -11 },
+  ];
+
+  /**
+   * Answers `/v1/models` and `/v1/rerank` as a healthy reranker, and REFUSES the
+   * Hugging Face tree listing — so the embedded route reaches its questions and
+   * then fails, which is the branch the last two tests are about.
+   */
+  const stubServer = (): void => {
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+      const target = String(url);
+      if (target.endsWith('/v1/models')) return okResponse({ data: [{ id: FOUND_MODEL }] });
+      if (target.includes('/rerank')) return okResponse({ results: HEALTHY_PROBE });
+      return { ok: false, status: 503, text: async (): Promise<string> => '', json: async (): Promise<unknown> => ({}) };
+    });
+  };
+
+  const flow = async (replies: readonly Reply[]): Promise<{ readonly result: RerankResult; readonly prompter: Scripted }> => {
+    const prompter = scriptedPrompter(replies);
+    return { result: await askRerank(prompter, PREFERENCE, FACTS, PLACES), prompter };
+  };
+
+  const script = (adopt: unknown, extra: readonly Reply[] = []): readonly Reply[] => [
+    { match: /^Set up the reranker\?/, answers: [true] },
+    { match: /^A working reranker is already running/, answers: [adopt] },
+    { match: /^How many candidates/, answers: [KEEP_DEFAULT] },
+    ...extra,
+  ];
+
+  beforeEach(() => {
+    engineState.available = true;
+    resetRerankProbeCache();
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', FOUND_URL);
+    stubServer();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    resetRerankProbeCache();
+  });
+
+  // Given a server whose model PASSES, When the engine is available, Then the
+  // wizard opens a two-row menu instead of writing the endpoint it found.
+  it('should ask which reranker to use rather than adopting the one that passed', async () => {
+    const { prompter } = await flow(script(byName(USE_IT)));
+
+    const menu = prompter.menus.find(entry => /already running/.test(entry.message));
+    expect(menu?.names).toEqual([USE_IT, EMBEDDED]);
+    expect(menu?.descriptions[1]).toContain('uncalibrated');
+    expect(menu?.descriptions[1]).toContain('UNMEASURED');
+  });
+
+  it('should write the found url and model under the http backend when the running server is chosen', async () => {
+    const { result } = await flow(script(byName(USE_IT)));
+
+    expect(result.rerank).toEqual({ backend: 'http', url: FOUND_URL, model: FOUND_MODEL, poolK: 100 });
+    expect(result.catalogue).toEqual([FOUND_MODEL]);
+  });
+
+  // The run mode is ALREADY answered by choosing the embedded row, so asking it
+  // again would spend a question on a decision the user has just made.
+  it('should reach the model and quantisation questions without re-asking how the model should be run', async () => {
+    const { prompter } = await flow(
+      script(byName(EMBEDDED), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
+    );
+
+    expect(prompter.asked).toContain('Which reranker?');
+    expect(prompter.asked).toContain('Which quantisation?');
+    expect(prompter.asked.some(question => /How should the model be run\?/.test(question))).toBe(false);
+  });
+
+  // A working reranker was in hand, so a failed embedded setup MUST NOT drop to
+  // no reranker at all — that is a downgrade nobody chose.
+  it('should offer the running server when the embedded setup does not complete', async () => {
+    const { result, prompter } = await flow(
+      script(byName(EMBEDDED), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [true] }])
+    );
+
+    expect(prompter.asked).toContain(`Use ${FOUND_MODEL} at ${FOUND_URL} instead?`);
+    expect(result.rerank).toEqual({ backend: 'http', url: FOUND_URL, model: FOUND_MODEL, poolK: 100 });
+  });
+
+  it('should leave no reranker configured when the embedded setup fails and the server is declined', async () => {
+    const { result } = await flow(
+      script(byName(EMBEDDED), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
+    );
+
+    expect(result.rerank).toBeUndefined();
+    expect(result.catalogue).toEqual([FOUND_MODEL]);
+  });
+
+  // With no in-process engine there is no second row to offer, so the wizard
+  // names the install command and asks a single confirmation instead.
+  it('should name the install command and confirm rather than offer a menu when the engine is absent', async () => {
+    engineState.available = false;
+
+    const { result, prompter } = await flow([
+      { match: /^Set up the reranker\?/, answers: [true] },
+      { match: /^Use qwen3-reranker-4b at http/, answers: [true] },
+      { match: /^How many candidates/, answers: [KEEP_DEFAULT] },
+    ]);
+
+    expect(prompter.menus.some(entry => /already running/.test(entry.message))).toBe(false);
+    expect(flatten(prompter.transcript)).toContain(LOCAL_RERANKER_INSTALL_COMMAND);
+    expect(result.rerank).toEqual({ backend: 'http', url: FOUND_URL, model: FOUND_MODEL, poolK: 100 });
+  });
+
+  it('should configure no reranker when the found server is declined and no engine can replace it', async () => {
+    engineState.available = false;
+
+    const { result } = await flow([
+      { match: /^Set up the reranker\?/, answers: [true] },
+      { match: /^Use qwen3-reranker-4b at http/, answers: [false] },
+    ]);
+
+    expect(result.rerank).toBeUndefined();
   });
 });
