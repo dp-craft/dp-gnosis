@@ -13,6 +13,7 @@
  * silently re-aligns the moment a question is added, and then every assertion
  * below would be about the wrong answer.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -21,16 +22,17 @@ import { dirname, join, resolve } from 'node:path';
 
 import type { CommandContext } from '../src/cli/context.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
-import { ADAPTER_CHOICES, ANALYZER_CHOICES } from '../src/cli/wizard/advice.js';
+import { ADAPTER_CHOICES, ANALYZER_CHOICES, RUN_MODE_CHOICES } from '../src/cli/wizard/advice.js';
 import { localBaseUrl, startServer } from '../src/cli/wizard/backend.js';
 import type { HardwareFacts } from '../src/cli/wizard/hardware.js';
 import { PRESETS } from '../src/cli/wizard/preset.js';
 import type { Option, Prompter } from '../src/cli/wizard/prompts.js';
 import { CANCELLED } from '../src/cli/wizard/prompts.js';
 import type { RerankPreference, RerankResult, ServeLocations } from '../src/cli/wizard/rerankFlow.js';
-import { askRerank, timingLines } from '../src/cli/wizard/rerankFlow.js';
+import { recommendedModel, recommendedQuant } from '../src/cli/wizard/models.js';
+import { askChatModels, askRerank, timingLines } from '../src/cli/wizard/rerankFlow.js';
 import { runWizard } from '../src/cli/wizardCommand.js';
-import { LOCAL_RERANKER_INSTALL_COMMAND } from '../src/localReranker.js';
+import { LOCAL_RERANKER_INSTALL_COMMAND, localRerankerDirectory } from '../src/localReranker.js';
 import { atomsDir, dataRoot, fts5IndexPath, userProfilePath } from '../src/paths.js';
 import { resetRerankProbeCache } from '../src/rerank.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
@@ -42,16 +44,22 @@ import { activeProfile } from '../src/vocabulary.js';
  * probe is replaced, so every other export (the install command the refusal
  * names, the scorer the local backend uses) stays the real one.
  */
-const engineState = vi.hoisted(() => ({ available: true }));
+const engineState = vi.hoisted(() => ({
+  available: true,
+  /** What the REAL probe would carry: the cause, not a guess at it. */
+  reason: 'it did not load (a native binding error this test invented)',
+  installs: false,
+  installReason: 'the install exited 1 in this test',
+}));
 
 vi.mock('../src/localReranker.js', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/localReranker.js')>();
   return {
     ...actual,
     localRerankerAvailability: async () =>
-      engineState.available
-        ? { available: true }
-        : { available: false, reason: 'the engine is absent in this test' },
+      engineState.available ? { available: true } : { available: false, reason: engineState.reason },
+    installLocalReranker: async () =>
+      engineState.installs ? { installed: true } : { installed: false, reason: engineState.installReason },
   };
 });
 
@@ -197,6 +205,10 @@ const baseScript = (): Reply[] => [
   { match: /^Ranking adapter/, answers: [KEEP_DEFAULT] },
   { match: /^Serve pseudo-relevance feedback/, answers: [KEEP_DEFAULT] },
   { match: /^Set up the reranker\?/, answers: [false] },
+  // Declining the reranker leaves the model catalogue empty, and the chat step
+  // now says so and offers to look for a server. Answered `no` here for the same
+  // reason the reranker is declined: a unit suite MUST NOT depend on the network.
+  { match: /^Look for a server again\?/, answers: [false] },
   { match: /^Write it\?/, answers: ['write'] },
 ];
 
@@ -716,7 +728,7 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
   const FOUND_URL = 'http://127.0.0.1:9999';
   const FOUND_MODEL = 'qwen3-reranker-4b';
   const USE_IT = `Use ${FOUND_MODEL}, already running at ${FOUND_URL}`;
-  const EMBEDDED = 'Set up an embedded reranker instead — gnosis loads a model in this process';
+  const OWN = 'Set up my own reranker instead — download a model and choose how it runs';
 
   const FACTS: HardwareFacts = {
     totalRamBytes: 32 * 1024 ** 3,
@@ -786,9 +798,25 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
     const { prompter } = await flow(script(byName(USE_IT)));
 
     const menu = prompter.menus.find(entry => /already running/.test(entry.message));
-    expect(menu?.names).toEqual([USE_IT, EMBEDDED]);
-    expect(menu?.descriptions[1]).toContain('uncalibrated');
-    expect(menu?.descriptions[1]).toContain('UNMEASURED');
+    expect(menu?.names).toEqual([USE_IT, OWN]);
+    expect(menu?.descriptions[1]).toContain('download');
+  });
+
+  /**
+   * The row covers BOTH run modes now, so it MUST NOT speak for one of them.
+   * `advice.ts` states the in-process engine's cost once and `askRunMode` shows
+   * it on the menu that actually chooses between the engines; a copy here would
+   * be a second owner of that prose, and would describe an engine this row no
+   * longer commits the user to.
+   */
+  it('should state the route\'s own case rather than repeating the in-process engine advice', () => {
+    const localCon = RUN_MODE_CHOICES.find(choice => choice.value === 'local')?.con ?? '';
+
+    return flow(script(byName(USE_IT))).then(({ prompter }) => {
+      const menu = prompter.menus.find(entry => /already running/.test(entry.message));
+      expect(localCon.length).toBeGreaterThan(0);
+      expect(menu?.descriptions[1]).not.toContain(localCon);
+    });
   });
 
   it('should write the found url and model under the http backend when the running server is chosen', async () => {
@@ -798,23 +826,24 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
     expect(result.catalogue).toEqual([FOUND_MODEL]);
   });
 
-  // The run mode is ALREADY answered by choosing the embedded row, so asking it
-  // again would spend a question on a decision the user has just made.
-  it('should reach the model and quantisation questions without re-asking how the model should be run', async () => {
+  // Downloading a model and choosing which engine runs it are two decisions, so
+  // the row commits the user only to the first. The run-mode question itself is
+  // asserted where the download SUCCEEDS — here the listing is refused, so the
+  // flow ends before it.
+  it('should reach the model and quantisation questions', async () => {
     const { prompter } = await flow(
-      script(byName(EMBEDDED), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
+      script(byName(OWN), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
     );
 
     expect(prompter.asked).toContain('Which reranker?');
     expect(prompter.asked).toContain('Which quantisation?');
-    expect(prompter.asked.some(question => /How should the model be run\?/.test(question))).toBe(false);
   });
 
   // A working reranker was in hand, so a failed embedded setup MUST NOT drop to
   // no reranker at all — that is a downgrade nobody chose.
   it('should offer the running server when the embedded setup does not complete', async () => {
     const { result, prompter } = await flow(
-      script(byName(EMBEDDED), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [true] }])
+      script(byName(OWN), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [true] }])
     );
 
     expect(prompter.asked).toContain(`Use ${FOUND_MODEL} at ${FOUND_URL} instead?`);
@@ -823,37 +852,391 @@ describe('askRerank — a passing served model is offered, never adopted', () =>
 
   it('should leave no reranker configured when the embedded setup fails and the server is declined', async () => {
     const { result } = await flow(
-      script(byName(EMBEDDED), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
+      script(byName(OWN), [{ match: /^Which reranker\?/, answers: [KEEP_DEFAULT] }, { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] }, { match: /instead\?/, answers: [false] }])
     );
 
     expect(result.rerank).toBeUndefined();
     expect(result.catalogue).toEqual([FOUND_MODEL]);
   });
 
-  // With no in-process engine there is no second row to offer, so the wizard
-  // names the install command and asks a single confirmation instead.
-  it('should name the install command and confirm rather than offer a menu when the engine is absent', async () => {
+  /**
+   * The second route no longer forces the in-process engine: it downloads a
+   * `.gguf` and THEN asks how to run it, and serving that file needs no engine
+   * at all. Hiding the row on an absent engine therefore withheld a route this
+   * machine can take, and answered a question the user never got to ask.
+   */
+  it('should offer both rows even when the in-process engine is absent', async () => {
     engineState.available = false;
 
-    const { result, prompter } = await flow([
-      { match: /^Set up the reranker\?/, answers: [true] },
-      { match: /^Use qwen3-reranker-4b at http/, answers: [true] },
-      { match: /^How many candidates/, answers: [KEEP_DEFAULT] },
-    ]);
+    const { result, prompter } = await flow(script(byName(USE_IT)));
 
-    expect(prompter.menus.some(entry => /already running/.test(entry.message))).toBe(false);
-    expect(flatten(prompter.transcript)).toContain(LOCAL_RERANKER_INSTALL_COMMAND);
+    const menu = prompter.menus.find(entry => /already running/.test(entry.message));
+    expect(menu?.names).toEqual([USE_IT, OWN]);
     expect(result.rerank).toEqual({ backend: 'http', url: FOUND_URL, model: FOUND_MODEL, poolK: 100 });
   });
 
-  it('should configure no reranker when the found server is declined and no engine can replace it', async () => {
+  // And the row LEADS somewhere with the engine absent: the download runs, and
+  // what ends this flow is the refused listing, never the missing engine.
+  it('should reach the download route with the engine absent, and keep the found server when it does not complete', async () => {
     engineState.available = false;
 
-    const { result } = await flow([
-      { match: /^Set up the reranker\?/, answers: [true] },
-      { match: /^Use qwen3-reranker-4b at http/, answers: [false] },
+    const { result, prompter } = await flow(
+      script(byName(OWN), [
+        { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
+        { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] },
+        { match: /instead\?/, answers: [true] },
+      ])
+    );
+
+    expect(prompter.asked).toContain('Which reranker?');
+    expect(result.rerank).toEqual({ backend: 'http', url: FOUND_URL, model: FOUND_MODEL, poolK: 100 });
+  });
+});
+
+/**
+ * The route taken WITH a proved server in hand, all the way through a download.
+ *
+ * Everything the network would do is answered in-process: the model catalogue,
+ * the two-document probe, the Hugging Face tree listing and the file body. The
+ * "model" is a handful of bytes whose sha256 the listing publishes, which is
+ * what `download.ts` verifies against — so the download is real code on fake
+ * weights, and the questions AFTER it are what this describe is about.
+ *
+ * Those questions are two: which engine runs the file, and — because
+ * `RERANK_DEFAULT_URL` names the very port a wizard-started server would bind —
+ * which port the new server gets when the found one already holds it.
+ */
+describe('askRerank — the second route downloads, then asks how and where to run it', () => {
+  const FOUND_MODEL = 'qwen3-reranker-4b';
+  const OWN = 'Set up my own reranker instead — download a model and choose how it runs';
+  const PORT_QUESTION = 'Which port should the new llama.cpp server bind?';
+
+  const FACTS: HardwareFacts = {
+    totalRamBytes: 32 * 1024 ** 3,
+    freeDiskBytes: 200 * 1024 ** 3,
+    vramBytes: 8 * 1024 ** 3,
+    gpuName: 'Test GPU',
+  };
+
+  const PREFERENCE: RerankPreference = { hungarian: false, rerank: true, poolK: 100 };
+
+  const HEALTHY_PROBE = [
+    { index: 0, relevance_score: 2.07 },
+    { index: 1, relevance_score: -11 },
+  ];
+
+  /** The bytes that stand in for a GGUF, and the digest the listing publishes for them. */
+  const WEIGHTS = Buffer.from('these bytes are not a model, only something to verify');
+  const DIGEST = createHash('sha256').update(WEIGHTS).digest('hex');
+
+  /** What KEEP_DEFAULT selects on this hardware — read from the catalogue, never spelled out. */
+  const chosen = (): { readonly repo: string; readonly file: string } => {
+    const model = recommendedModel(FACTS.vramBytes, FACTS.totalRamBytes);
+    const quant = recommendedQuant(model, FACTS.freeDiskBytes);
+    return { repo: model.repo, file: `stand-in-${quant.label}.gguf` };
+  };
+
+  let places: ServeLocations = { modelsDir: '', logPath: '' };
+
+  const json = (payload: unknown): unknown => ({
+    ok: true,
+    status: 200,
+    json: async (): Promise<unknown> => payload,
+    text: async (): Promise<string> => JSON.stringify(payload),
+  });
+
+  const refused = (): unknown => ({
+    ok: false,
+    status: 503,
+    text: async (): Promise<string> => '',
+    json: async (): Promise<unknown> => ({}),
+  });
+
+  /**
+   * `serverUrl` is the ONLY address that answers `/v1/models`, so "is that port
+   * taken" is decided by the address rather than by the path — which is the
+   * whole question the port prompt exists to answer.
+   */
+  const stubNetwork = (serverUrl: string): void => {
+    const target = chosen();
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+      const asked = String(url);
+      if (asked.endsWith('/v1/models')) return asked.startsWith(serverUrl) ? json({ data: [{ id: FOUND_MODEL }] }) : refused();
+      if (asked.includes('/rerank')) return json({ results: HEALTHY_PROBE });
+      if (asked.includes('/api/models/')) return json([{ path: target.file, lfs: { size: WEIGHTS.length, oid: DIGEST } }]);
+      if (asked.includes('/resolve/main/')) {
+        return {
+          ok: true,
+          status: 200,
+          body: (async function* body(): AsyncGenerator<Uint8Array> {
+            yield new Uint8Array(WEIGHTS);
+          })(),
+        };
+      }
+      return refused();
+    });
+  };
+
+  const flow = async (replies: readonly Reply[]): Promise<{ readonly result: RerankResult; readonly prompter: Scripted }> => {
+    const prompter = scriptedPrompter(replies);
+    return { result: await askRerank(prompter, PREFERENCE, FACTS, places), prompter };
+  };
+
+  /** The whole second route, answered down to the point where the server would start. */
+  const script = (extra: readonly Reply[] = []): readonly Reply[] => [
+    { match: /^Set up the reranker\?/, answers: [true] },
+    { match: /^A working reranker is already running/, answers: [byName(OWN)] },
+    { match: /^Which reranker\?/, answers: [KEEP_DEFAULT] },
+    { match: /^Which quantisation\?/, answers: [KEEP_DEFAULT] },
+    { match: /^Download /, answers: [true] },
+    { match: /^How should the model be run\?/, answers: ['served'] },
+    { match: /^Start it now\?/, answers: [false] },
+    { match: /instead\?/, answers: [false] },
+    { match: /^How many candidates/, answers: [KEEP_DEFAULT] },
+    ...extra,
+  ];
+
+  beforeEach(() => {
+    engineState.available = true;
+    resetRerankProbeCache();
+    places = {
+      modelsDir: join(mkdtempSync(resolve(tmpdir(), 'dp-gnosis-models-')), 'models'),
+      logPath: join(home, 'serve.log'),
+    };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    resetRerankProbeCache();
+    rmSync(dirname(places.modelsDir), { recursive: true, force: true });
+  });
+
+  // Given the user chose to set up their own reranker, When the file has landed,
+  // Then the wizard asks WHICH engine runs it — the row committed them to a
+  // download, not to an engine.
+  it('should ask how the model should be run after the download', async () => {
+    stubNetwork('http://127.0.0.1:9999');
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
+
+    const { prompter } = await flow(script());
+
+    expect(prompter.asked).toContain('How should the model be run?');
+  });
+
+  // The load-bearing one. The found server is ON the default rerank port, so a
+  // new server cannot bind it: `startServer` would report `alreadyServing` and
+  // the probe would then ask the FOUND server for an id it does not serve.
+  it('should name the taken port and ask for another when the found server holds the default one', async () => {
+    stubNetwork(localBaseUrl(9292));
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
+
+    const { prompter } = await flow(script([{ match: /^Which port/, answers: [KEEP_DEFAULT] }]));
+
+    expect(prompter.asked).toContain(PORT_QUESTION);
+    expect(flatten(prompter.transcript)).toContain('9292 is already answering');
+  });
+
+  // The alternate port is what the started command, the wait and the health
+  // probe all use — a config that recorded a port the model is not served on
+  // would be a component producing nothing, written down as data.
+  it('should offer 9293 and carry the answered port into the serve command', async () => {
+    stubNetwork(localBaseUrl(9292));
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
+
+    const { prompter } = await flow(script([{ match: /^Which port/, answers: [KEEP_DEFAULT] }]));
+
+    const started = prompter.asked.find(question => question.startsWith('Start it now?'));
+    const told = flatten(prompter.transcript);
+    expect(started === undefined ? told : started).toContain('9293');
+  });
+
+  // A typed value a socket cannot bind is re-asked, never coerced: a port of 0
+  // or 70000 would fail inside llama.cpp, after the download has been paid for.
+  it('should re-ask the port when the typed value is not a legal one', async () => {
+    stubNetwork(localBaseUrl(9292));
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', localBaseUrl(9292));
+
+    const { prompter } = await flow(script([{ match: /^Which port/, answers: ['not-a-port', '9295'] }]));
+
+    expect(prompter.asked.filter(question => question === PORT_QUESTION)).toHaveLength(2);
+  });
+
+  // When the default port is free the route is unchanged — no port question at all.
+  it('should ask no port question when the default port is free', async () => {
+    stubNetwork('http://127.0.0.1:9999');
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
+
+    const { prompter } = await flow(script());
+
+    expect(prompter.asked).not.toContain(PORT_QUESTION);
+  });
+
+  /**
+   * What the wizard says when the in-process engine does not load — and what it
+   * offers to do about it.
+   *
+   * The old line said "the in-process engine is not installed" whatever the
+   * probe found, and prescribed an install for a package that may be present and
+   * failing on a native binding, which that command does not repair. A real
+   * cause reported as a different one is this repository's failure class with a
+   * remedy attached, so the probe's own reason is what the user reads.
+   *
+   * The install is then OFFERED rather than only named — behind a confirmation
+   * that states the command, the directory and the size BEFORE the answer,
+   * because a wizard that fetches hundreds of megabytes on an implied yes has
+   * spent the user's disk on their behalf.
+   */
+  describe('the absent engine is reported by its own cause, and the install is offered', () => {
+    const INSTALL_QUESTION = /^Run `npm install/;
+    const RUN_MODE_QUESTION = 'How should the model be run?';
+
+    beforeEach(() => {
+      engineState.available = false;
+      engineState.installs = false;
+      stubNetwork('http://127.0.0.1:9999');
+      vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9999');
+    });
+
+    const declined = (): readonly Reply[] => script([{ match: INSTALL_QUESTION, answers: [false] }]);
+
+    it('should print the probe\'s own reason instead of claiming the package is not installed', async () => {
+      const { prompter } = await flow(declined());
+
+      const said = flatten(prompter.transcript);
+      expect(said).toContain(engineState.reason);
+      expect(said).not.toContain('the in-process engine is not installed');
+    });
+
+    // Everything the answer costs, stated before the answer: what runs, where it
+    // runs, and that it is a large native download.
+    it('should state the command, the directory and the download size before asking', async () => {
+      const { prompter } = await flow(declined());
+
+      const said = flatten(prompter.transcript);
+      expect(prompter.asked.some(question => INSTALL_QUESTION.test(question))).toBe(true);
+      expect(said).toContain(LOCAL_RERANKER_INSTALL_COMMAND);
+      expect(said).toContain(localRerankerDirectory());
+      expect(said).toMatch(/\d+ MB/);
+    });
+
+    // Declining changes nothing: the route continues to the served path, which
+    // is exactly what it did before the offer existed. What the served rung then
+    // ASKS depends on whether this machine has a llama.cpp on PATH, so the
+    // assertion is on the mode the wizard took, not on a question it may skip.
+    it('should serve the file without asking the run-mode question when the install is declined', async () => {
+      const { prompter } = await flow(declined());
+
+      expect(prompter.asked).not.toContain(RUN_MODE_QUESTION);
+      expect(flatten(prompter.transcript)).toContain('serving the file is the only option');
+    });
+
+    /**
+     * An install that failed leaves the engine exactly as unavailable as before,
+     * and says why. Reporting it as done — or dropping the reason — would put the
+     * user on a menu whose in-process row cannot run.
+     */
+    it('should report a failed install and keep serving as the only run mode', async () => {
+      const { prompter } = await flow(script([{ match: INSTALL_QUESTION, answers: [true] }]));
+
+      expect(flatten(prompter.transcript)).toContain(engineState.installReason);
+      expect(prompter.asked).not.toContain(RUN_MODE_QUESTION);
+    });
+
+    // And an install that succeeded — verified by a re-probe inside
+    // `installLocalReranker`, never by npm's exit code — opens the menu it was
+    // asked for.
+    it('should ask how the model is run once the install is verified', async () => {
+      engineState.installs = true;
+
+      const { prompter } = await flow(script([{ match: INSTALL_QUESTION, answers: [true] }]));
+
+      expect(prompter.asked).toContain(RUN_MODE_QUESTION);
+    });
+  });
+});
+
+/**
+ * The chat hops, when there is nothing to choose from.
+ *
+ * An empty catalogue used to end the wizard's chat section in silence, and
+ * `search --rephrase`, `ask --synthesize` and `enrich` simply never appeared —
+ * a component produced nothing and the interview recorded it as an answer. The
+ * catalogue is ALSO empty when the user declined reranking outright, in which
+ * case nothing was ever probed, so what the wizard says has to be true of both.
+ */
+describe('askChatModels — an empty catalogue is explained, not skipped', () => {
+  const SERVER_URL = 'http://127.0.0.1:9998';
+  const AGAIN = 'Look for a server again?';
+  const CHAT_MODEL = 'qwen3-8b';
+
+  const answering = (): void => {
+    vi.stubGlobal('fetch', async (url: string): Promise<unknown> => {
+      const asked = String(url);
+      return asked.startsWith(SERVER_URL) && asked.endsWith('/v1/models')
+        ? { ok: true, status: 200, text: async (): Promise<string> => JSON.stringify({ data: [{ id: CHAT_MODEL }] }) }
+        : { ok: false, status: 503, text: async (): Promise<string> => '' };
+    });
+  };
+
+  beforeEach(() => {
+    resetRerankProbeCache();
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', SERVER_URL);
+    answering();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    resetRerankProbeCache();
+  });
+
+  const ask = async (replies: readonly Reply[]): Promise<{ readonly picked: unknown; readonly prompter: Scripted }> => {
+    const prompter = scriptedPrompter(replies);
+    return { picked: await askChatModels(prompter, []), prompter };
+  };
+
+  // The claim has to hold when NOTHING was probed — the declined-reranker case —
+  // so it MUST NOT assert that a server failed to answer.
+  it('should say why there is nothing to choose from without claiming a probe failed', async () => {
+    const { prompter } = await ask([{ match: /^Look for a server again\?/, answers: [false] }]);
+
+    const said = flatten(prompter.transcript);
+    expect(prompter.asked).toContain(AGAIN);
+    expect(said).toContain('no server has advertised a model catalogue');
+    expect(said).toMatch(/search --rephrase/);
+    expect(said).not.toMatch(/nothing answered/);
+  });
+
+  it('should leave the three hops unset when the user declines to look again', async () => {
+    const { picked } = await ask([{ match: /^Look for a server again\?/, answers: [false] }]);
+
+    expect(picked).toBeUndefined();
+  });
+
+  // The re-probe is the point of the question: a server started AFTER the
+  // reranker section is exactly the case the silent skip lost.
+  it('should reach the chat questions when the second look finds a server', async () => {
+    const { picked, prompter } = await ask([
+      { match: /^Look for a server again\?/, answers: [true] },
+      { match: /^Configure the chat hops now\?/, answers: [true] },
+      { match: /^Model for `search --rephrase`/, answers: [CHAT_MODEL] },
+      { match: /^Model for `ask --synthesize`/, answers: [KEEP_DEFAULT] },
+      { match: /^Model for `enrich`/, answers: [KEEP_DEFAULT] },
     ]);
 
-    expect(result.rerank).toBeUndefined();
+    expect(flatten(prompter.transcript)).toContain(`${SERVER_URL} answered`);
+    expect(picked).toEqual({ rephrase: CHAT_MODEL, synthesize: undefined, enrich: undefined });
+  });
+
+  // Still nothing: the wizard says so and offers ONE more look, with the default
+  // now `no` — pressing Enter leaves, so the user's own answer bounds the loop.
+  it('should offer another look on a default of no when the second look finds nothing', async () => {
+    vi.stubEnv('DP_GNOSIS_RERANK_URL', 'http://127.0.0.1:9997');
+
+    const { picked, prompter } = await ask([{ match: /^Look for a server again\?/, answers: [true, KEEP_DEFAULT] }]);
+
+    expect(prompter.asked.filter(question => question === AGAIN)).toHaveLength(2);
+    expect(picked).toBeUndefined();
   });
 });

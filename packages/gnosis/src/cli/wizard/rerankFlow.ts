@@ -23,7 +23,13 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { RERANK_DOC_MAX_CHARS, RERANK_K_INIT } from '../../config.js';
-import { LOCAL_RERANKER_INSTALL_COMMAND, localRerankerAvailability, localRerankScores } from '../../localReranker.js';
+import {
+  installLocalReranker,
+  LOCAL_RERANKER_INSTALL_COMMAND,
+  localRerankerAvailability,
+  localRerankerDirectory,
+  localRerankScores,
+} from '../../localReranker.js';
 import { rerankHealth } from '../../rerank.js';
 import type { Probed } from '../rerankSetup.js';
 import { candidateUrls, findServer, passed, probeCandidates, selectCandidates } from '../rerankSetup.js';
@@ -40,6 +46,17 @@ import { note, section } from './screen.js';
 
 /** The port `RERANK_DEFAULT_URL` names, and what a wizard-started server binds. */
 const SERVE_PORT = 9292;
+
+/**
+ * What is offered when {@link SERVE_PORT} is taken — the next port up, so the
+ * two live side by side and neither is a literal at its use site. It is a
+ * SUGGESTION: the question it pre-fills is re-asked until the answer is a port
+ * nothing is answering on.
+ */
+const ALTERNATE_SERVE_PORT = 9293;
+
+/** The last port a socket can bind. A typed number outside 1..this is re-asked, never coerced. */
+const MAX_TCP_PORT = 65535;
 
 /** Whole-number percent, for the one progress line. */
 const PERCENT = 100;
@@ -209,26 +226,79 @@ const startedLines = (
       ]
     : [`  started as pid ${String(started.pid)}; log at ${logPath}`, '  waiting for it to answer — a first load can take minutes'];
 
-/** Start a detected llama.cpp server over the downloaded file, and wait for it. */
-const serveModel = async (
-  prompter: Prompter,
-  modelPath: string,
-  logPath: string
-): Promise<boolean> => {
-  const rendered = serveCommand(modelPath, SERVE_PORT).rendered;
+/** The file to serve, where its output goes, and what it will be called once probed. */
+interface ServeRequest {
+  readonly modelPath: string;
+  readonly servedId: string;
+  readonly logPath: string;
+}
+
+/**
+ * Whether something already answers there. It is `waitForServer` at a zero
+ * budget — the SAME readiness call `startServer` probes with, so the two can
+ * never disagree about what "answering" means.
+ */
+const portTaken = async (port: number): Promise<boolean> => await waitForServer(localBaseUrl(port), 0);
+
+/** A whole number a socket can actually bind, or nothing — a bad answer is re-asked. */
+const legalPort = (typed: string): number | undefined => {
+  const port = Number(typed);
+  return Number.isInteger(port) && port > 0 && port <= MAX_TCP_PORT ? port : undefined;
+};
+
+const PORT_QUESTION = 'Which port should the new llama.cpp server bind?';
+
+/**
+ * Why the port is checked BEFORE anything is served.
+ *
+ * {@link SERVE_PORT} is the port `RERANK_DEFAULT_URL` names, so it is the port a
+ * reranker found by the search above is served on. Serving into it anyway is not
+ * an error the user would see: `startServer` reports `alreadyServing`, the wait
+ * passes against the OTHER server, and the probe then asks that server for the
+ * freshly downloaded model's id — which it does not serve. The result is a
+ * failed probe paid for with a multi-gigabyte download.
+ */
+const PORT_TAKEN = (port: number): readonly string[] => [
+  '',
+  `  ${String(port)} is already answering, so a second server cannot bind it.`,
+  '  That is the address `RERANK_DEFAULT_URL` names, which is where a reranker found by the search above is served.',
+  '  The new server therefore needs a port of its own, and the config records the port the model is actually served on.',
+];
+
+const askPort = async (prompter: Prompter, suggested: number): Promise<number> => {
+  const port = legalPort(await prompter.input(PORT_QUESTION, String(suggested)));
+  if (port === undefined) {
+    prompter.say([`  that is not a port — it has to be a whole number between 1 and ${String(MAX_TCP_PORT)}`]);
+    return await askPort(prompter, suggested);
+  }
+  if (!(await portTaken(port))) return port;
+  prompter.say([`  ${localBaseUrl(port)} is answering too, so nothing new can bind it`]);
+  return await askPort(prompter, suggested);
+};
+
+/** {@link SERVE_PORT} when it is free — otherwise the port the user names. */
+const resolvePort = async (prompter: Prompter): Promise<number> => {
+  if (!(await portTaken(SERVE_PORT))) return SERVE_PORT;
+  prompter.say(PORT_TAKEN(SERVE_PORT));
+  return await askPort(prompter, ALTERNATE_SERVE_PORT);
+};
+
+/** Start a detected llama.cpp server over the downloaded file on `port`, and wait for it. */
+const serveModel = async (prompter: Prompter, request: ServeRequest, port: number): Promise<boolean> => {
+  const rendered = serveCommand(request.modelPath, port).rendered;
   const backends = await detectBackends();
   if (!backends.some(backend => backend.kind === 'llama-server')) {
     prompter.say(NO_BACKEND(rendered));
     return false;
   }
   if (!(await prompter.confirm(`Start it now?  ${rendered}`, true))) return false;
-  const started = await startServer(modelPath, SERVE_PORT, logPath);
+  const started = await startServer(request.modelPath, port, request.logPath);
   if (!started.ok) {
     prompter.say([`  could not start it: ${started.error}`]);
     return false;
   }
-  prompter.say(startedLines(started, logPath));
-  return await waitForServer(localBaseUrl(SERVE_PORT), START_TIMEOUT_MS);
+  prompter.say(startedLines(started, request.logPath));
+  return await waitForServer(localBaseUrl(port), START_TIMEOUT_MS);
 };
 
 /** Where a wizard-downloaded model and its server log live under the data root. */
@@ -304,25 +374,62 @@ const measureLocal = async (prompter: Prompter, modelPath: string): Promise<bool
 };
 
 /**
- * WHICH of the two ways the downloaded file is run. The engine's absence is
- * stated rather than hidden: a menu that offered an option this checkout cannot
- * take would spend a question to reach an error.
+ * What an install would cost, stated BEFORE the question that starts it.
  *
- * The recommendation follows what can actually run HERE. `served` is the shipped
- * default and the measured path, so it leads whenever a llama.cpp server is on
- * PATH; with no server there is nothing to serve the file, and recommending it
- * anyway would point a laptop at an install it did not ask for.
+ * The size is one machine's MEASUREMENT — `du -sh node_modules/node-llama-cpp`
+ * in this checkout on 2026-08-30 — and is labelled as one: the package fetches
+ * a prebuilt native binary for the platform it lands on, so another machine's
+ * figure differs. Quoting it unlabelled would be a remembered number presented
+ * as this user's.
  */
-const askRunMode = async (
+const installNote = (directory: string): readonly string[] => [
+  '',
+  `  \`${LOCAL_RERANKER_INSTALL_COMMAND}\` would run in ${directory}, which is where this package imports the engine from.`,
+  '  It fetches and builds a native llama.cpp binary — 764 MB on disk in the checkout this was measured in, and different on another platform.',
+];
+
+const INSTALL_DONE = ['', '  the engine installed and loaded — the in-process option is available'];
+
+/**
+ * Offers the install, and REPORTS what came back rather than assuming it.
+ *
+ * The reason is the probe's own: it names what actually failed, which an
+ * install repairs only when the package was absent. `installLocalReranker`
+ * re-probes after npm exits, so a `true` here means the engine LOADED, never
+ * that a command exited 0.
+ *
+ * The confirmation opens on `no`. An install this size on a stray Enter is a
+ * decision the wizard would have made for the user.
+ */
+const offerInstall = async (prompter: Prompter, reason: string): Promise<boolean> => {
+  prompter.say(['', `  ${reason}`, ...installNote(localRerankerDirectory())]);
+  if (!(await prompter.confirm(`Run \`${LOCAL_RERANKER_INSTALL_COMMAND}\` now?`, false))) return false;
+  prompter.progress(`  running ${LOCAL_RERANKER_INSTALL_COMMAND} — this takes a few minutes`);
+  const outcome = await installLocalReranker();
+  prompter.say(outcome.installed ? INSTALL_DONE : ['', `  ${outcome.reason}`]);
+  return outcome.installed;
+};
+
+/** Whether the in-process engine can run here — after offering to make it so. */
+const localEngineUsable = async (prompter: Prompter): Promise<boolean> => {
+  const availability = await localRerankerAvailability();
+  return availability.available || (await offerInstall(prompter, availability.reason));
+};
+
+const SERVED_ONLY = ['', '  serving the file is the only option here'];
+
+/**
+ * The menu itself. The recommendation follows what can actually run HERE:
+ * `served` is the shipped default and the measured path, so it leads whenever a
+ * llama.cpp server is on PATH; with no server there is nothing to serve the
+ * file, and recommending it anyway would point a laptop at an install it did
+ * not ask for.
+ */
+const chooseRunMode = async (
   prompter: Prompter,
   facts: HardwareFacts,
   hasServer: boolean
 ): Promise<RunMode> => {
-  const availability = await localRerankerAvailability();
-  if (!availability.available) {
-    prompter.say(['', `  the in-process engine is not installed — \`${LOCAL_RERANKER_INSTALL_COMMAND}\` adds it; serving the file is the only option here`]);
-    return 'served';
-  }
   prompter.say(['', `  ${facts.gpuName === undefined ? LOCAL_ENGINE_ADVICE.cpu : LOCAL_ENGINE_ADVICE.gpu}`]);
   const choices = hasServer ? RUN_MODE_CHOICES : ordered(RUN_MODE_CHOICES, 'local');
   return await prompter.select(
@@ -334,6 +441,21 @@ const askRunMode = async (
     })),
     choices.find(choice => choice.recommended === true)?.value
   );
+};
+
+/**
+ * WHICH of the two ways the downloaded file is run — asked only once the
+ * in-process engine is known to work. A menu offering an option this machine
+ * cannot take would spend a question to reach an error.
+ */
+const askRunMode = async (
+  prompter: Prompter,
+  facts: HardwareFacts,
+  hasServer: boolean
+): Promise<RunMode> => {
+  if (await localEngineUsable(prompter)) return await chooseRunMode(prompter, facts, hasServer);
+  prompter.say(SERVED_ONLY);
+  return 'served';
 };
 
 /**
@@ -363,30 +485,27 @@ const downloadRung = async (
   prompter: Prompter,
   facts: HardwareFacts,
   places: ServeLocations,
-  forced?: RunMode
+  intro: readonly string[] = DOWNLOAD_NOTE
 ): Promise<ProvedRerank | undefined> => {
-  prompter.say(note(forced === undefined ? DOWNLOAD_NOTE : EMBEDDED_NOTE));
+  prompter.say(note(intro));
   const choice = await askWhichModel(prompter, facts);
   const modelPath = await fetchModel(prompter, choice, places.modelsDir);
   if (modelPath === undefined) return undefined;
-  const mode = forced ?? (await resolveRunMode(prompter, facts));
+  const mode = await resolveRunMode(prompter, facts);
   return mode === 'local'
     ? await localRung(prompter, modelPath, choice.model.servedId)
-    : await servedRung(prompter, modelPath, choice.model.servedId, places.logPath);
+    : await servedRung(prompter, { modelPath, servedId: choice.model.servedId, logPath: places.logPath });
 };
 
 /** Serve the file, wait for it, then probe it. A started server is not evidence. */
-const servedRung = async (
-  prompter: Prompter,
-  modelPath: string,
-  servedId: string,
-  logPath: string
-): Promise<ProvedRerank | undefined> => {
-  if (!(await serveModel(prompter, modelPath, logPath))) return undefined;
-  const url = localBaseUrl(SERVE_PORT);
-  const health = await rerankHealth({ baseUrl: url, model: servedId, backend: 'http' });
-  prompter.say([verdictOf({ model: servedId, health })]);
-  return health.kind === 'healthy' ? { backend: 'http', url, model: servedId } : undefined;
+const servedRung = async (prompter: Prompter, request: ServeRequest): Promise<ProvedRerank | undefined> => {
+  const port = await resolvePort(prompter);
+  if (!(await serveModel(prompter, request, port))) return undefined;
+  const url = localBaseUrl(port);
+  const model = request.servedId;
+  const health = await rerankHealth({ baseUrl: url, model, backend: 'http' });
+  prompter.say([verdictOf({ model, health })]);
+  return health.kind === 'healthy' ? { backend: 'http', url, model } : undefined;
 };
 
 /**
@@ -432,18 +551,20 @@ const EXISTING_SERVER_NOTE = [
 ];
 
 /**
- * Said before {@link askWhichModel}, because the download question sounds like an
- * engine question and is not: {@link fetchModel} fetches a file, and only then
- * does {@link askRunMode} ask how to run it.
+ * {@link DOWNLOAD_NOTE}'s counterpart for the route taken while a server IS
+ * answering. It exists because that note opens with "Nothing here answered",
+ * which is false here — a server answered, passed the probe, and was declined.
+ * What the two routes share is their shape: a file is fetched, and how it runs
+ * is a separate question.
  */
-const EMBEDDED_NOTE = [
-  'The embedded reranker was chosen, so a model file has to be fetched. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
-  'How it runs is already answered: it is loaded inside the gnosis process, so the wizard does not ask that again. Nothing is written until the file has loaded HERE and passed the same two-document discrimination probe the running server just passed.',
+const OWN_NOTE = [
+  'Setting up your own reranker starts with a model file. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
+  'How it RUNS is the next question: a llama.cpp server, or loaded inside the gnosis process. Nothing is written until the file has passed the same two-document discrimination probe the running server just passed.',
 ];
 
 const DOWNLOAD_NOTE = [
   'Nothing here answered, so a model has to be fetched. What is fetched is a plain `.gguf` model file — it belongs to no engine.',
-  'How it RUNS is the next question: a llama.cpp server, or loaded inside the gnosis process. Both are offered when both are possible; when the in-process engine is not installed, serving it is the only option and the wizard says so instead of asking.',
+  'How it RUNS is the next question: a llama.cpp server, or loaded inside the gnosis process. Both are offered when both are possible; when the in-process engine does not load, the wizard reports why, offers to install it, and serves the file if you decline.',
 ];
 
 /** A server-served model that PASSED the probe: where it is, and what it is called. */
@@ -453,26 +574,26 @@ interface FoundServer {
 }
 
 /** Which of the two proved routes the user takes when one is ALREADY running. */
-type AdoptChoice = 'server' | 'embedded';
+type AdoptChoice = 'server' | 'own';
 
 /**
- * The in-process row, built from {@link RUN_MODE_CHOICES}'s own `local` entry.
+ * The second row: fetch a model, then answer how it runs.
  *
- * Its pro and con are READ from there rather than restated: the honest cost of
- * that engine — the per-run load, the GPU it competes for, the uncalibrated
- * scores `--min-relevance` refuses under, and the UNMEASURED ranking order — is
- * stated once in `advice.ts`, and a second copy here would rot against it.
- * Mapping over the filtered row rather than indexing keeps the menu total: a
- * run mode that stopped existing would remove the row, never render an empty one.
+ * Its pro and con are the ROUTE's own. They used to be READ from
+ * {@link RUN_MODE_CHOICES}'s `local` entry, which was right while this row
+ * forced the in-process engine and is wrong now that it leads to
+ * {@link askRunMode} like every other download. The per-engine tradeoffs stay
+ * stated once, in `advice.ts`, and are shown on the menu that actually decides
+ * between the engines — quoting them here would describe a commitment this row
+ * no longer makes.
  */
-const embeddedRows = (): readonly Choice<AdoptChoice>[] =>
-  RUN_MODE_CHOICES.filter(choice => choice.value === 'local').map(choice => ({
-    value: 'embedded' as const,
-    title: 'Set up an embedded reranker instead — gnosis loads a model in this process',
-    when: 'Pick this only if you would rather gnosis carried its own reranker than depended on that server.',
-    pro: choice.pro,
-    con: choice.con,
-  }));
+const OWN_ROW: Choice<AdoptChoice> = {
+  value: 'own',
+  title: 'Set up my own reranker instead — download a model and choose how it runs',
+  when: 'Pick this only if you would rather gnosis carried its own reranker than depended on that server.',
+  pro: 'the model is fetched and configured here, so reranking stops depending on a server this wizard did not start',
+  con: 'it downloads a multi-gigabyte file first, and which engine runs it is a further question with tradeoffs of its own',
+};
 
 /**
  * The menu a PASSING server opens. It is a question rather than an adoption
@@ -490,40 +611,29 @@ const adoptChoices = (found: FoundServer): readonly Choice<AdoptChoice>[] => [
     con: 'gnosis does not own that server, so a server that stops takes reranking with it until you start it again',
     recommended: true,
   },
-  ...embeddedRows(),
+  OWN_ROW,
 ];
 
-/** Adopting the found server is one confirmation when no second route exists. */
-const confirmFound = async (prompter: Prompter, found: FoundServer): Promise<ProvedRerank | undefined> => {
-  prompter.say([
-    '',
-    `  the in-process engine is not installed — \`${LOCAL_RERANKER_INSTALL_COMMAND}\` adds it, so an embedded reranker cannot be set up from here`,
-  ]);
-  return (await prompter.confirm(`Use ${found.model} at ${found.url}?`, true))
-    ? { backend: 'http', url: found.url, model: found.model }
-    : undefined;
-};
-
-const EMBEDDED_INCOMPLETE = [
+const OWN_INCOMPLETE = [
   '',
-  '  The embedded reranker was not set up, so nothing was proved on that route.',
+  '  Your own reranker was not set up, so nothing was proved on that route.',
 ];
 
 /**
- * The embedded route, taken with a proved server still in hand — which is why a
+ * The download route, taken with a proved server still in hand — which is why a
  * failure here does NOT fall through to no reranker. Dropping to the first-pass
  * ranking after the user asked for a better one, while a passing endpoint was
  * sitting there, would be a downgrade nobody chose.
  */
-const embeddedInstead = async (
+const ownInstead = async (
   prompter: Prompter,
   facts: HardwareFacts,
   places: ServeLocations,
   found: FoundServer
 ): Promise<ProvedRerank | undefined> => {
-  const proved = await downloadRung(prompter, facts, places, 'local');
+  const proved = await downloadRung(prompter, facts, places, OWN_NOTE);
   if (proved !== undefined) return proved;
-  prompter.say(EMBEDDED_INCOMPLETE);
+  prompter.say(OWN_INCOMPLETE);
   return (await prompter.confirm(`Use ${found.model} at ${found.url} instead?`, true))
     ? { backend: 'http', url: found.url, model: found.model }
     : undefined;
@@ -534,6 +644,12 @@ const embeddedInstead = async (
  * A reranker that answers on this machine may be one this project started, one
  * the user runs for something else, or one they would rather gnosis did not
  * depend on — and only they know which.
+ *
+ * Both rows are offered unconditionally. The second one used to be withheld
+ * where the in-process engine was absent, which was right while it FORCED that
+ * engine; it now downloads a file and asks {@link askRunMode} how to run it, and
+ * serving that file needs no local engine at all. Withholding it hid a route
+ * this machine can take.
  */
 const askFound = async (
   prompter: Prompter,
@@ -541,17 +657,15 @@ const askFound = async (
   places: ServeLocations,
   found: FoundServer
 ): Promise<ProvedRerank | undefined> => {
-  const availability = await localRerankerAvailability();
-  if (!availability.available) return await confirmFound(prompter, found);
   const choices = adoptChoices(found);
   const picked = await prompter.select<AdoptChoice>(
-    'A working reranker is already running. Use it, or set up an embedded one?',
+    'A working reranker is already running. Use it, or set up your own?',
     choices.map(choice => ({ value: choice.value, name: choice.title, description: describeChoice(choice) })),
     'server'
   );
   return picked === 'server'
     ? { backend: 'http', url: found.url, model: found.model }
-    : await embeddedInstead(prompter, facts, places, found);
+    : await ownInstead(prompter, facts, places, found);
 };
 
 /** The whole reranker half: ask, probe, optionally download and serve, then probe again. */
@@ -607,12 +721,14 @@ const askOneModel = async (
   return picked === SKIP ? undefined : picked;
 };
 
-/** The three chat ids, each CHOSEN by the user from the catalogue — never guessed. */
-export const askChatModels = async (
-  prompter: Prompter,
-  catalogue: readonly string[]
-): Promise<{ readonly rephrase?: string | undefined; readonly synthesize?: string | undefined; readonly enrich?: string | undefined } | undefined> => {
-  if (catalogue.length === 0) return undefined;
+/** What the three questions produce; every id is the user's own pick. */
+interface ChatModels {
+  readonly rephrase?: string | undefined;
+  readonly synthesize?: string | undefined;
+  readonly enrich?: string | undefined;
+}
+
+const chatHops = async (prompter: Prompter, catalogue: readonly string[]): Promise<ChatModels | undefined> => {
   prompter.say(CHAT_NOTE);
   if (!(await prompter.confirm('Configure the chat hops now?', false))) return undefined;
   return {
@@ -620,4 +736,61 @@ export const askChatModels = async (
     synthesize: await askOneModel(prompter, 'Model for `ask --synthesize`', catalogue),
     enrich: await askOneModel(prompter, 'Model for `enrich`', catalogue),
   };
+};
+
+/**
+ * Why an empty catalogue is a question rather than an exit.
+ *
+ * The catalogue is empty in TWO cases: nothing answered the reranker search, and
+ * the reranker was declined outright — in which case nothing was ever probed. So
+ * the wording claims no failed probe; the re-probe below reports what it finds.
+ * The case this exists for is the ordinary one: the server had not been started
+ * when the reranker section ran, and the three chat hops then vanished with no
+ * line of output at all.
+ */
+const NO_CATALOGUE = [
+  '',
+  '  So far no server has advertised a model catalogue, and there is nothing to',
+  '  choose a chat model from — `search --rephrase`, `ask --synthesize` and',
+  '  `enrich` would stay unset. Starting one now and looking again is enough.',
+];
+
+const NOTHING_YET = ['', '  Still nothing to choose from.'];
+
+/** What the second look found, reported as {@link askRerank} reports the first. */
+const lookAgain = async (prompter: Prompter): Promise<readonly string[]> => {
+  prompter.say(['', `  looking for a server on ${candidateUrls().join(' and ')}`]);
+  const server = await findServer(candidateUrls());
+  if (!server.ok) {
+    prompter.say([`  nothing answered — tried ${server.tried.join(', ')}`]);
+    return [];
+  }
+  prompter.say([`  ${server.baseUrl} answered with ${String(server.models.length)} models`]);
+  return server.models;
+};
+
+/**
+ * The user's own answer bounds this, so there is no attempt counter: the first
+ * offer opens on yes, every later one on NO, so pressing Enter leaves.
+ */
+const retryCatalogue = async (prompter: Prompter, initial: boolean): Promise<readonly string[]> => {
+  if (!(await prompter.confirm('Look for a server again?', initial))) return [];
+  const models = await lookAgain(prompter);
+  if (models.length > 0) return models;
+  prompter.say(NOTHING_YET);
+  return await retryCatalogue(prompter, false);
+};
+
+const recoverCatalogue = async (prompter: Prompter): Promise<readonly string[]> => {
+  prompter.say(NO_CATALOGUE);
+  return await retryCatalogue(prompter, true);
+};
+
+/** The three chat ids, each CHOSEN by the user from the catalogue — never guessed. */
+export const askChatModels = async (
+  prompter: Prompter,
+  catalogue: readonly string[]
+): Promise<ChatModels | undefined> => {
+  const models = catalogue.length > 0 ? catalogue : await recoverCatalogue(prompter);
+  return models.length === 0 ? undefined : await chatHops(prompter, models);
 };

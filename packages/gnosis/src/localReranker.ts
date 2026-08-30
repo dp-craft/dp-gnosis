@@ -33,11 +33,24 @@
  * been MEASURED against this engine.
  */
 
+import { execFile } from 'node:child_process';
+import { accessSync, constants } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /** The optional native engine this backend needs. A devDependency, not a dependency. */
 export const LOCAL_RERANKER_PACKAGE = 'node-llama-cpp';
 
+/**
+ * The argv {@link installLocalReranker} runs, and the SOURCE of
+ * {@link LOCAL_RERANKER_INSTALL_COMMAND}. One owner, so the command a refusal
+ * tells the user to run is the command this module would run for them — a
+ * second spelling drifts on the first flag either half gains.
+ */
+const INSTALL_ARGV: readonly string[] = ['install', LOCAL_RERANKER_PACKAGE];
+
 /** What the refusal tells the user to run, verbatim. */
-export const LOCAL_RERANKER_INSTALL_COMMAND = `npm install ${LOCAL_RERANKER_PACKAGE}`;
+export const LOCAL_RERANKER_INSTALL_COMMAND = `npm ${INSTALL_ARGV.join(' ')}`;
 
 /** Whether the local engine loaded, and — when it did not — the whole message. */
 export type LocalRerankerAvailability =
@@ -135,6 +148,114 @@ export const localRerankerAvailability = async (
 ): Promise<LocalRerankerAvailability> => {
   const loaded = await loadEngine(load);
   return loaded.ok ? { available: true } : { available: false, reason: unavailableMessage(loaded.detail) };
+};
+
+/**
+ * WHERE the install runs: this package's own directory, resolved from this
+ * file's own location — one level above `src/` in a checkout, one above `dist/`
+ * in an install. It is not `process.cwd()`, which is the tree the user happened
+ * to be standing in when they started the wizard: an engine installed there is
+ * an engine this package's import still cannot find, and the wizard would have
+ * fetched hundreds of megabytes to change nothing.
+ *
+ * `paths.ts` owns every path the VAULT and the cache are resolved against and
+ * derives its own package directory the same way; this one is derived here
+ * because it is a fact about where THIS module's dynamic import resolves from,
+ * which is the thing being repaired.
+ */
+export const localRerankerDirectory = (): string => resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** What an install did, or the whole reason the engine is still unavailable. */
+export type LocalRerankerInstall =
+  | { readonly installed: true }
+  | { readonly installed: false; readonly reason: string };
+
+/** What the install process reported: its exit code, and what it said about a failure. */
+export interface InstallOutcome {
+  readonly code: number;
+  readonly stderr: string;
+}
+
+/**
+ * How the install is run. A PARAMETER for the same reason {@link EngineLoader}
+ * is one: the real install fetches and builds a native binary, so a suite that
+ * used it could exercise exactly one of the outcomes below, on whichever
+ * machine happened to run it.
+ */
+export type InstallRunner = (cwd: string) => Promise<InstallOutcome>;
+
+/** Everything {@link installLocalReranker} takes from a caller, all of it defaulted. */
+export interface InstallDeps {
+  readonly run?: InstallRunner;
+  readonly load?: EngineLoader;
+  readonly directory?: string;
+}
+
+/**
+ * npm is verbose and the default `execFile` buffer is 1 MB, past which the call
+ * fails with ENOBUFS — an install that WORKED, reported as a failure. The
+ * output is bounded rather than unbounded because it is held in memory.
+ */
+const INSTALL_OUTPUT_LIMIT = 32 * 1024 * 1024;
+
+const exitCode = (error: unknown): number =>
+  isRecord(error) && typeof error['code'] === 'number' ? error['code'] : 1;
+
+const npmInstall: InstallRunner = async cwd =>
+  await new Promise<InstallOutcome>(settle => {
+    execFile('npm', [...INSTALL_ARGV], { cwd, maxBuffer: INSTALL_OUTPUT_LIMIT }, (error, _stdout, stderr) => {
+      settle({ code: error === null ? 0 : exitCode(error), stderr });
+    });
+  });
+
+const writable = (directory: string): boolean => {
+  try {
+    accessSync(directory, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const notWritableMessage = (directory: string): string =>
+  `the local rerank backend would install ${LOCAL_RERANKER_PACKAGE} into ${directory}, which is not writable — install it there as a user who can write it, or select the http backend, which needs no local engine at all`;
+
+const failedMessage = (outcome: InstallOutcome): string =>
+  `\`${LOCAL_RERANKER_INSTALL_COMMAND}\` exited ${String(outcome.code)} — ${outcome.stderr.trim() === '' ? 'it printed nothing on stderr' : outcome.stderr.trim()}`;
+
+const stillMissingMessage = (reason: string): string =>
+  `\`${LOCAL_RERANKER_INSTALL_COMMAND}\` exited 0, but ${reason}`;
+
+/**
+ * The re-probe, and the reason {@link installLocalReranker} is not just a
+ * child process: `npm install` exits 0 having written a package whose native
+ * binding then fails to load on this platform. Reporting that as installed
+ * would be a component that produced nothing, recorded as success.
+ */
+const verified = async (load: EngineLoader | undefined): Promise<LocalRerankerInstall> => {
+  const availability = await localRerankerAvailability(load);
+  return availability.available
+    ? { installed: true }
+    : { installed: false, reason: stillMissingMessage(availability.reason) };
+};
+
+const runInstall = async (deps: InstallDeps, directory: string): Promise<LocalRerankerInstall> => {
+  const outcome = await (deps.run ?? npmInstall)(directory);
+  return outcome.code === 0 ? await verified(deps.load) : { installed: false, reason: failedMessage(outcome) };
+};
+
+/**
+ * Installs the engine into {@link localRerankerDirectory} and re-probes it.
+ *
+ * An unwritable target is refused BEFORE npm is started: npm would fail deep
+ * inside a fetch it had already paid for, and the honest answer — the engine
+ * stays unavailable here — is known beforehand.
+ */
+export const installLocalReranker = async (deps: InstallDeps = {}): Promise<LocalRerankerInstall> => {
+  const directory = deps.directory ?? localRerankerDirectory();
+  return writable(directory)
+    ? await runInstall(deps, directory)
+    : { installed: false, reason: notWritableMessage(directory) };
 };
 
 /**
