@@ -61,10 +61,12 @@ export const asRerankBackend = (source: string, value: string): RerankBackend =>
 export interface RerankConfig {
   /** Absolute `http://` or `https://` base URL of the llama-swap server. */
   readonly url?: string | undefined;
-  /** The model id THIS server serves the reranker under. */
+  /** The model id THIS server serves the reranker under. An HTTP id, never a file. */
   readonly model?: string | undefined;
   /** Which implementation scores. Absent means the shipped `http` one. */
   readonly backend?: RerankBackend | undefined;
+  /** Absolute path to the GGUF the `local` backend scores with. */
+  readonly modelPath?: string | undefined;
 }
 
 /**
@@ -186,6 +188,27 @@ const readRerankUrl = (path: string, value: unknown): string | undefined => {
 const readRerankModel = (path: string, value: unknown): string | undefined =>
   value === undefined ? undefined : requireNonEmptyString(path, 'rerank.model', value);
 
+/**
+ * The GGUF the `local` backend scores with. A SEPARATE key from `rerank.model`,
+ * which is a served model id: overloading one key to mean either an HTTP id or
+ * a filesystem path would leave no way to say which was meant, and the two
+ * resolve through different machinery.
+ *
+ * A relative path is REFUSED rather than resolved against the working
+ * directory. `dp-gnosis` is run from anywhere and served from an MCP client
+ * whose cwd nobody chose, so the same key would name a different file per
+ * caller — and a rerank scored by a file the user did not mean returns a
+ * plausible ranking with nothing to notice it by.
+ */
+const readRerankModelPath = (path: string, value: unknown): string | undefined => {
+  if (value === undefined) return undefined;
+  const modelPath = requireNonEmptyString(path, 'rerank.modelPath', value);
+  if (isAbsolute(modelPath)) return modelPath;
+  return refuse(
+    `rerank.modelPath in gnosis config ${path} must be an ABSOLUTE path to a .gguf file, got "${modelPath}"`
+  );
+};
+
 const readRerankBackend = (path: string, value: unknown): RerankBackend | undefined =>
   value === undefined
     ? undefined
@@ -204,6 +227,7 @@ const readRerank = (path: string, raw: Readonly<Record<string, unknown>>): Reran
     url: readRerankUrl(path, value['url']),
     model: readRerankModel(path, value['model']),
     backend: readRerankBackend(path, value['backend']),
+    modelPath: readRerankModelPath(path, value['modelPath']),
   };
 };
 

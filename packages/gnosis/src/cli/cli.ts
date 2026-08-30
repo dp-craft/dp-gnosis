@@ -79,6 +79,7 @@ import {
 } from './retrieveCommand.js';
 import { runSetupCommand, SETUP_COMMAND } from './setupCommand.js';
 import { runUpdateCommand } from './updateCommand.js';
+import { runWizardCommand, WIZARD_COMMAND } from './wizardCommand.js';
 
 /** What one invocation produced. The caller owns writing it to a real process. */
 export interface CliResult {
@@ -88,6 +89,7 @@ export interface CliResult {
 }
 
 const COMMANDS: Readonly<Record<string, CommandHandler>> = {
+  wizard: runWizardCommand,
   init: runInitCommand,
   setup: runSetupCommand,
   demo: runDemoCommand,
@@ -182,11 +184,13 @@ const DEMO_COMMAND = 'demo';
  * with no vault can run. `setup` may for a third: it configures the RERANKER
  * BACKEND, which is a property of the machine and not of any instance — it must
  * run before an instance exists, or a first-run user cannot configure the one
- * optional hop the product ships. Every other command refuses, so the message
- * arrives on the first thing the user types rather than partway through an
- * ingest.
+ * optional hop the product ships. `wizard` may because it is the guided form of
+ * the first two: it WRITES the declaration, exactly as `init` does, and refusing
+ * it for the absence of the thing it creates would leave a first-run user with
+ * nothing to run. Every other command refuses, so the message arrives on the
+ * first thing the user types rather than partway through an ingest.
  */
-const ROOTLESS_COMMANDS: readonly string[] = [INIT_COMMAND, DEMO_COMMAND, SETUP_COMMAND];
+const ROOTLESS_COMMANDS: readonly string[] = [INIT_COMMAND, DEMO_COMMAND, SETUP_COMMAND, WIZARD_COMMAND];
 const buildContext = (args: ParsedArgs): ContextResult => {
   const profile = loadProfile(args);
   if (!profile.ok) return { ok: false, error: profile.error };

@@ -25,16 +25,24 @@
  * an ingest alone leaves the index carrying the old digest and every later query
  * refuses.
  */
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { existsSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join } from 'node:path';
+import { isAbsolute } from 'node:path';
 
-import { DECLARED_TYPES } from '../config.js';
 import { expandUserPath } from '../env.js';
-import { ATOMS_OWNER_FILE, sourceIdentity } from '../ingest.js';
+import { sourceIdentity } from '../ingest.js';
+import type { InstancePaths } from '../instance.js';
+import {
+  atomFileCount,
+  DEFAULT_EXCLUDED_TYPES,
+  DEFAULT_TYPE,
+  domainOf,
+  existingInstance,
+  instancePaths,
+  profileTemplate,
+  writeInstance,
+} from '../instance.js';
 import { cliInvocation } from '../invocation.js';
+import { dataRoot, USER_PROFILE_NAME } from '../paths.js';
 import { SERVED_PRF_PARAMS } from '../prf.js';
-import { dataRoot, USER_PROFILE_NAME, userProfilePath } from '../paths.js';
 import { DEFAULT_ADAPTER } from './adapter.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
@@ -42,53 +50,21 @@ import { REPO_ROOT_FLAG } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
 import { EXIT_OK, EXIT_PARTIAL, usageError } from './outcome.js';
 
-/** The type a source no rule claims takes — one of {@link DECLARED_TYPES}. */
-const DEFAULT_TYPE = 'knowledge';
-
-/** The types a `search` subtracts unless asked otherwise — a PRESENTATION default, never a corpus one: they stay ingested and indexed. */
-const DEFAULT_EXCLUDED_TYPES: readonly string[] = ['feature-log', 'benchmark', 'review', 'brainstorm'];
-
-/** A corpus directory whose basename yields no usable label still needs one. */
-const FALLBACK_DOMAIN = 'notes';
-
-/** An atom file, as `ingest` writes and `pruneOrphans` considers one. */
-const MD_SUFFIX = '.md';
-
-const NON_LABEL = /[^a-z0-9]+/g;
-
-const EDGE_DASHES = /^-+|-+$/g;
-
-/**
- * One domain per corpus directory, named after the directory. Declared, never
- * guessed at ingest time: the rule table below is what assigns `x_domain`, and
- * a source under no prefix is refused rather than labelled by inference.
- */
-const domainOf = (root: string): string => {
-  const label = basename(root).toLowerCase().replace(NON_LABEL, '-').replace(EDGE_DASHES, '');
-  return label.length > 0 ? label : FALLBACK_DOMAIN;
-};
-
 /** What `init` serialises. Plain data — the loader is what validates it. */
 const profileFor = (
   roots: readonly string[],
   paths: InstancePaths,
   repoRoot: string
-): Readonly<Record<string, unknown>> => ({
-  'comment:editing': 'Edit this file to shape your instance: add a domain to `domains` before any rule may name it, and claim a directory with a `domainRules` prefix. A source under no prefix is REFUSED, never guessed.',
-  name: USER_PROFILE_NAME,
-  domains: [...new Set(roots.map(domainOf))],
-  types: DECLARED_TYPES,
-  defaultType: DEFAULT_TYPE,
-  domainRules: roots.map(root => ({ prefix: sourceIdentity(repoRoot, root), domain: domainOf(root) })),
-  typeRules: [],
-  segmentRules: [],
-  repoRoot,
-  corpusRoots: roots,
-  atomsDir: paths.atomsPath,
-  indexPath: paths.indexPath,
-  defaultPrf: SERVED_PRF_PARAMS,
-  defaultExcludedTypes: DEFAULT_EXCLUDED_TYPES,
-});
+): Readonly<Record<string, unknown>> =>
+  profileTemplate({
+    roots: roots.map(root => ({ path: root, prefix: sourceIdentity(repoRoot, root), domain: domainOf(root) })),
+    repoRoot,
+    atomsDir: paths.atomsPath,
+    indexPath: paths.indexPath,
+    defaultType: DEFAULT_TYPE,
+    excludedTypes: DEFAULT_EXCLUDED_TYPES,
+    defaultPrf: SERVED_PRF_PARAMS,
+  });
 
 /** The corpus roots this run was given, each expanded exactly as ingest expands one. */
 type RootsResult =
@@ -115,21 +91,6 @@ const resolveRoots = (positionals: readonly string[]): RootsResult => {
     : { ok: false, error: relativeRootError(offender) };
 };
 
-/** Where the three artefacts of one instance live, resolved once per run. */
-interface InstancePaths {
-  readonly profilePath: string;
-  readonly atomsPath: string;
-  readonly indexPath: string;
-  readonly ownerPath: string;
-}
-
-const instancePaths = (context: CommandContext): InstancePaths => ({
-  profilePath: userProfilePath(),
-  atomsPath: context.atomsDir,
-  indexPath: context.indexPath,
-  ownerPath: join(context.atomsDir, ATOMS_OWNER_FILE),
-});
-
 /**
  * The base a RELATIVE corpus root and `summarySidecar` resolve against. Read
  * off the FLAG rather than the resolved context: with no flag the context still
@@ -138,11 +99,6 @@ const instancePaths = (context: CommandContext): InstancePaths => ({
  */
 const initRepoRoot = (context: CommandContext): string =>
   stringFlag(context.flags, REPO_ROOT_FLAG) ?? dataRoot();
-
-const existingInstance = (paths: InstancePaths): string | undefined => {
-  if (existsSync(paths.profilePath)) return paths.profilePath;
-  return existsSync(paths.ownerPath) ? paths.ownerPath : undefined;
-};
 
 /**
  * PARTIAL, not usage: the argv was well formed and nothing was written — what
@@ -154,12 +110,6 @@ const refuseExisting = (found: string): CommandOutcome => {
   return { exitCode: EXIT_PARTIAL, data: { command: 'init', error: message }, text: message };
 };
 
-/** How many atom files the resolved atoms directory already holds. */
-const atomFileCount = (atomsPath: string): number =>
-  existsSync(atomsPath)
-    ? readdirSync(atomsPath).filter(name => name.endsWith(MD_SUFFIX)).length
-    : 0;
-
 /**
  * Same exit as the sibling refusal, and for the same reason: the argv was well
  * formed, nothing was written, and what stopped the run is the STATE of this
@@ -169,21 +119,6 @@ const atomFileCount = (atomsPath: string): number =>
 const refuseOccupied = (atomsPath: string, atoms: number): CommandOutcome => {
   const message = `init: ${atomsPath} already holds ${atoms} atom file${atoms === 1 ? '' : 's'} (*.md), and init MUST NOT adopt atoms it did not write — the next ingest would prune every one of them as an orphan; point DP_GNOSIS_DATA_HOME at a new root, or ingest with the profile that wrote them`;
   return { exitCode: EXIT_PARTIAL, data: { command: 'init', error: message }, text: message };
-};
-
-const writeInstance = (
-  paths: InstancePaths,
-  roots: readonly string[],
-  repoRoot: string
-): void => {
-  mkdirSync(dirname(paths.profilePath), { recursive: true });
-  mkdirSync(paths.atomsPath, { recursive: true });
-  mkdirSync(dirname(paths.indexPath), { recursive: true });
-  writeFileSync(
-    paths.profilePath,
-    `${JSON.stringify(profileFor(roots, paths, repoRoot), null, 2)}\n`,
-    'utf8'
-  );
 };
 
 const nextSteps = (profilePath: string): readonly string[] => [
@@ -218,12 +153,12 @@ const created = (paths: InstancePaths, roots: readonly string[]): CommandOutcome
 });
 
 const initialise = (context: CommandContext, roots: readonly string[]): CommandOutcome => {
-  const paths = instancePaths(context);
+  const paths = instancePaths(context.atomsDir, context.indexPath);
   const found = existingInstance(paths);
   if (found !== undefined) return refuseExisting(found);
   const atoms = atomFileCount(paths.atomsPath);
   if (atoms > 0) return refuseOccupied(paths.atomsPath, atoms);
-  writeInstance(paths, roots, initRepoRoot(context));
+  writeInstance(paths, profileFor(roots, paths, initRepoRoot(context)));
   return created(paths, roots);
 };
 

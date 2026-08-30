@@ -33,13 +33,11 @@ import type { PrfParams } from '../prf.js';
 import { DEFAULT_PRF_PARAMS } from '../prf.js';
 import { rephraseQuery } from '../rephrase.js';
 import type { RerankFusionOverrides, RerankOptions } from '../rerank.js';
-import { localRerankRefusal } from '../localReranker.js';
 import {
   calibrate,
   rerankAtoms,
-  rerankModelFact,
+  rerankCalibrationKey,
   rerankProbeRefusal,
-  resolveRerankBackend,
   resolveRerankFusion
 } from '../rerank.js';
 import type { TokenCountResult } from '../tokenize.js';
@@ -423,6 +421,15 @@ const orphanFloorError = (): string =>
 const uncalibratedModelError = (model: string): string =>
   `${MIN_RELEVANCE_FLAG} needs a reranker with a measured score scale and "${model}" has none — pass ${RERANK_MODEL_FLAG} naming one of ${CALIBRATED_MODEL_IDS.join(', ')}, or drop ${MIN_RELEVANCE_FLAG}`;
 
+/**
+ * The local engine has no measured scale AT ALL, so there is no id to name and
+ * no flag that would supply one. `RERANK_CALIBRATION` was measured against the
+ * SERVED endpoint, and reading a local score through it would publish a
+ * probability against a scale nothing measured — so the floor refuses instead.
+ */
+const uncalibratedBackendError = (): string =>
+  `${MIN_RELEVANCE_FLAG} needs a reranker with a measured score scale and the local rerank backend has none — its raw scores have never been calibrated against the served endpoint's, so no floor over them would mean anything; select the http backend, or drop ${MIN_RELEVANCE_FLAG}`;
+
 const parseMinRelevance = (raw: string): number | undefined => {
   const value = Number(raw);
   return Number.isFinite(value) && value >= MIN_RELEVANCE_MIN && value <= MIN_RELEVANCE_MAX
@@ -434,19 +441,25 @@ type MinRelevanceResult =
   | { readonly ok: true; readonly minRelevance: number | undefined }
   | { readonly ok: false; readonly error: string };
 
-const calibratedFloor = (floor: number, model: string): MinRelevanceResult =>
-  RERANK_CALIBRATION[model] === undefined
+const calibratedFloor = (floor: number, model: string | undefined): MinRelevanceResult => {
+  if (model === undefined) return { ok: false, error: uncalibratedBackendError() };
+  return RERANK_CALIBRATION[model] === undefined
     ? { ok: false, error: uncalibratedModelError(model) }
     : { ok: true, minRelevance: floor };
+};
 
-/** The model the run will actually score with — the SAME four tiers `rerank.ts` resolves. */
-const rerankModelOf = (options: RerankOptions): string => rerankModelFact(options.model).value;
+/**
+ * The `RERANK_CALIBRATION` key this run may be read against — the SAME four
+ * tiers `rerank.ts` resolves, and `undefined` under a backend that has no
+ * measured scale.
+ */
+const rerankModelOf = (options: RerankOptions): string | undefined => rerankCalibrationKey(options);
 
 /** Absent flag = no floor. Every other outcome is a value or a refusal. */
 const resolveMinRelevance = (
   flags: FlagValues,
   rerank: boolean,
-  model: string
+  model: string | undefined
 ): MinRelevanceResult => {
   const raw = stringFlag(flags, MIN_RELEVANCE_FLAG);
   if (raw === undefined) return { ok: true, minRelevance: undefined };
@@ -1200,10 +1213,12 @@ const vocabularyGapField = (
 export type RetrieveConfidence = 'none' | 'weak' | 'ok';
 
 /** The calibrated probability behind one atom; `undefined` = no such evidence. */
-const calibratedOf = (request: RetrieveRequest, atom: RetrievedAtom): number | undefined =>
-  atom.rerankScore === undefined
+const calibratedOf = (request: RetrieveRequest, atom: RetrievedAtom): number | undefined => {
+  const model = rerankModelOf(request.rerankOptions);
+  return atom.rerankScore === undefined || model === undefined
     ? undefined
-    : calibrate(rerankModelOf(request.rerankOptions), atom.rerankScore);
+    : calibrate(model, atom.rerankScore);
+};
 
 /**
  * The strongest evidence delivered, chosen by SCORE rather than by position:
@@ -1849,22 +1864,6 @@ const trimmed = (result: RetrievalResult, request: RetrieveRequest): RetrievalRe
 };
 
 /**
- * The SELECTED backend's own gate: the local engine's loadability, or the
- * served endpoint's discrimination probe.
- *
- * A `local` selection MUST NOT fall through to the HTTP endpoint. The two are
- * different scorers on different score scales, so a caller who asked for the
- * local one and silently received the remote one has been handed a ranking it
- * cannot tell apart from the one it asked for — the wrong answer, delivered
- * confidently. It degrades to the first pass and says so, like every other
- * rerank refusal.
- */
-const backendRefusal = async (request: RetrieveRequest): Promise<string | undefined> =>
-  resolveRerankBackend() === 'local'
-    ? await localRerankRefusal()
-    : await rerankProbeRefusal(request.rerankOptions);
-
-/**
  * The reranked-and-fused ranking, or the first pass plus the refusal that
  * explains why there is no second one.
  *
@@ -1884,7 +1883,7 @@ const rankedResult = async (
   result: RetrievalResult
 ): Promise<RankedOutcome> => {
   if (!request.rerank) return { result: trimmed(result, request), refusal: undefined };
-  const unusable = await backendRefusal(request);
+  const unusable = await rerankProbeRefusal(request.rerankOptions);
   if (unusable !== undefined) return { result: trimmed(result, request), refusal: unusable };
   const reranked = await rerankAtoms(effectiveQuery(request), result.atoms, request.rerankOptions);
   if (!reranked.ok) return { result: trimmed(result, request), refusal: reranked.error };

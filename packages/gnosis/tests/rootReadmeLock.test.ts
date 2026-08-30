@@ -223,7 +223,7 @@ describe('README § Install names exactly the required dependencies, both direct
   });
 
   it('parses a non-empty claim, so an empty-set match cannot pass vacuously', () => {
-    expect(claimed).toEqual(['better-sqlite3', 'minisearch', 'stemmer']);
+    expect(claimed).toEqual(['@inquirer/prompts', 'better-sqlite3', 'minisearch', 'stemmer']);
   });
 });
 

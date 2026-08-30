@@ -64,6 +64,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 
 | Command | Positionals | Honoured flags |
 |---|---|---|
+| `wizard` | **none** (passing one is exit 2) | none — it asks for everything, including the flags the other commands take. It needs no declared instance, and it REFUSES without an interactive terminal (exit 2, naming `init` and `setup` as the scriptable path) |
 | `init` | **one or more corpus directories**, each ABSOLUTE or `~/`-prefixed. None is exit 2; a relative one is exit 2 naming it, because a scope that moves with the shell is a different vault per terminal | `--repo-root` (the base a relative corpus root resolves against; defaults to the data root, NOT the frozen repo root), `--atoms-dir`, `--index-path`, `--json` |
 | `setup` | **none** (passing one is exit 2) | `--rerank-model` (probe exactly that id instead of the ones it would select), `--json`. It needs no declared instance — it configures the BACKEND, not a vault |
 | `demo` | **none** (passing one is exit 2) | `--adapter`, `--json`, `-k`. `--atoms-dir`, `--index-path`, `--repo-root` and `--profile` are **REFUSED at exit 2** through the standard unknown-flag wording — `demo` owns its paths by construction and cannot honour them; see below |
@@ -77,6 +78,20 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
 
 `update` runs `ingest` then `index` as ONE command — the pair that MUST NOT be split, because an `ingest` alone restamps the corpus digest while the index beside it still carries the old one and the next query refuses. Its exit code is the **more severe of the two hops**: an `ingest` that exits 3 (files skipped, each with a reason) followed by an `index` that exits 0 makes `update` exit **3**, never 0 — `exit 3` already means "real output was produced AND something was refused", and a caller reading 0 would never learn files were skipped. An `ingest` that exits **2** stops the command before `index` runs at all. Both hops are reported: with `--json`, `data` carries `ingest` and `index` under their own keys (`index` is `null` when it never ran), and the text shows both renderings in order.
+
+`wizard` is the guided form of everything below it — the one command a fresh clone can start from. It asks what to index, how to label it, which analysis chain and adapter to rank with, whether to serve pseudo-relevance feedback and whether to set up a reranker; then it writes the profile, merges `config.json`, runs `ingest` and `index` as one step, and finishes by running a real `search` and reading `indexState` back.
+
+Two properties matter more than the questions.
+
+**Nothing is written until you confirm a rendered summary.** Every answer is collected into a plan first, so `Ctrl-C` at any point leaves the machine exactly as it was. The one thing that can outlive an abort is a downloaded model file, which is not configuration.
+
+**It configures a reranker only after PROVING one works.** It looks for a server exactly as `setup` does; when none answers it can fetch a verified GGUF from Hugging Face — sized against this machine’s RAM, VRAM and free disk, and offered ONLY from the verified repositories — and then asks HOW to run it: in a detected `llama-server`, or in-process with `node-llama-cpp`. Either way the same two-document discrimination probe runs before anything is written. It never installs llama.cpp or Ollama itself; when neither is present it prints the exact serve command. See `packages/gnosis/OPTIONAL.md` § Which GGUF for why the repository matters more than the quantisation.
+
+**Served or in-process is a choice between SPEED and EASE, and the wizard says so in those words.** Served keeps the model resident and is the path every recorded baseline was measured on. In-process needs no server at all, and it picks its own hardware — a GPU when the installed `node-llama-cpp` finds one, the CPU otherwise, with no key to set either way. What it costs for that: the model is reloaded per process, it competes with a server for that GPU, no timeout bounds a run, it is uncalibrated so `--min-relevance` refuses under it, and its ranking quality has never been measured against the served path. Because per-document cost spans more than an order of magnitude between a GPU and a CPU, the wizard quotes no constant: it times the engine on the machine in front of it and shows you that number, with the projection to a full pool labelled as a projection. `packages/gnosis/OPTIONAL.md` § The in-process backend has the measured figures and the GPU-contention caveat.
+
+Its measured recommendations are stated qualitatively and routed: the wizard names `handbook/GNOSIS-BASELINES.md` rather than printing a quality figure, because a copied number rots without the corpus, serving config and sha that make it a fact.
+
+Exit codes: **0** configured and built, and the closing `search` reported a matched index · **3** written but a build step failed, the summary was declined, or the run was cancelled — in the last two cases nothing was written · **2** usage, including no terminal.
 
 `setup` configures the reranker in one non-interactive command: it finds the server, finds a model on it that actually discriminates, and writes that pair into `config.json`. There is no prompt and nothing to answer — the selection rule is printed in the output rather than asked.
 

@@ -46,6 +46,7 @@
   "comment:build": "`src/api.d.ts` is a DECLARATION file: tsc reads it and emits nothing for it, so the consumer contract would be missing from `dist` after a plain build. It is COPIED rather than pointed at from `src`, so `files` stays `dist`-only and `dist/index.d.ts`'s own `from './api.js'` resolves inside the published tree.",
   "comment:dependencies": "better-sqlite3 backs the FTS5 adapter; it already resolves from the repo root, so nothing new is installed — declared here so this package stays a liftable unit (decision N-1). `stemmer` is NOT optional: it is applied uniformly via processTerm to every adapter, so a missing one would silently change ranking rather than skip a leg. MIT, zero transitive deps (§IX round approved 2026-08-08). `minisearch` is a SHIPPED lexical adapter, not a research route, so it is a plain dependency: 904K, MIT, zero transitive deps.",
   "dependencies": {
+    "@inquirer/prompts": "^8.7.0",
     "better-sqlite3": "^12.11.1",
     "minisearch": "^7.2.0",
     "stemmer": "^2.0.1"
@@ -54,7 +55,8 @@
   "devDependencies": {
     "@lancedb/lancedb": "^0.33.0",
     "@types/better-sqlite3": "^7.6.13",
-    "apache-arrow": "^18.1.0"
+    "apache-arrow": "^18.1.0",
+    "node-llama-cpp": "^3.20.0"
   },
   "os": [
     "linux",

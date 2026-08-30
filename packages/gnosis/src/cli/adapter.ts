@@ -106,7 +106,7 @@ export const hasPersistentIndex = (adapter: AdapterName): boolean => adapter !==
  * over one tree is therefore safe here, and it is what keeps the expensive
  * embedding sidecar (`<indexDir>.embed-cache`) warm across the pair.
  */
-const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, () => string>> = {
+const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, (root?: string) => string>> = {
   linear: noIndexPath,
   fts5: fts5IndexPath,
   minisearch: minisearchIndexPath,
@@ -120,8 +120,14 @@ const DEFAULT_INDEX_PATHS: Readonly<Record<AdapterName, () => string>> = {
  * Resolved per call, not at import time: the data root the index hangs off is
  * itself resolved per call (`paths.ts:dataRoot()`), so a frozen map would pin
  * every adapter to whatever root the FIRST importer happened to see.
+ *
+ * `root` is for a caller deciding a location for a root that is not yet in
+ * effect — `wizard` places an index under a data root the user has only just
+ * chosen, and re-deriving the per-adapter file names beside this table would
+ * make a second owner of them.
  */
-export const defaultIndexPath = (adapter: AdapterName): string => DEFAULT_INDEX_PATHS[adapter]();
+export const defaultIndexPath = (adapter: AdapterName, root?: string): string =>
+  DEFAULT_INDEX_PATHS[adapter](root);
 
 /**
  * The same per-adapter index NAME, relocated into the demo's fixed subtree

@@ -25,7 +25,7 @@ import type { IndexStamp } from '../adapters/fts5Adapter.js';
 import { carriedAnalyzer, INDEX_SCHEMA_VERSION, readIndexStamp } from '../adapters/fts5Adapter.js';
 import { lanceDbAvailability } from '../adapters/lanceDbAdapter.js';
 import { miniSearchAvailability } from '../adapters/miniSearchAdapter.js';
-import { DECLARED_TYPES, foreignVocabularyMessage, foreignVocabularyValue } from '../config.js';
+import { DECLARED_TYPES, foreignVocabularyMessage, foreignVocabularyValue, RERANK_DEFAULT_BACKEND } from '../config.js';
 import type { SourceIdentity } from '../corpusManifest.js';
 import {
   manifestPathFor,
@@ -40,12 +40,13 @@ import type { DataRootFact } from '../paths.js';
 import { dataRoot, dataRootFact } from '../paths.js';
 import { chatModelFact } from '../chat.js';
 import { rephraseModelFact } from '../rephrase.js';
-import type { RerankFact, RerankHealth } from '../rerank.js';
+import type { RerankBackendFact, RerankFact, RerankHealth } from '../rerank.js';
 import type { SettingFact } from '../settingFact.js';
 import { synthesizeModelFact } from '../synthesize.js';
 import type { LocalRerankerAvailability } from '../localReranker.js';
 import { localRerankerAvailability } from '../localReranker.js';
-import { rerankBackendFact, rerankHealth, rerankModelFact, rerankUrlFact } from '../rerank.js';
+import { rerankBackendFact, rerankHealth, rerankModelFact, rerankUrlFact, resolveRerankModelPath } from '../rerank.js';
+import type { RerankBackend } from '../userConfig.js';
 import { isUserConfigError } from '../userConfig.js';
 import type { AdapterName } from './adapter.js';
 import { hasPersistentIndex } from './adapter.js';
@@ -141,7 +142,8 @@ type RerankScan =
       readonly ok: true;
       readonly url: RerankFact;
       readonly model: RerankFact;
-      readonly backend: RerankFact;
+      /** Narrow, so a reader of the scan keeps the two-name vocabulary. */
+      readonly backend: RerankBackendFact;
     }
   | { readonly ok: false; readonly reason: string };
 
@@ -570,9 +572,19 @@ const RERANK_VERDICTS: Readonly<Record<RerankHealth['kind'], CheckStatus>> = {
   healthy: 'ok',
 };
 
-const rerankDetail = (health: RerankHealth): string =>
+/**
+ * The probe follows the SELECTED backend, so the verdict names which scorer it
+ * is about. Calling an in-process rerank "the served reranker" would send a
+ * reader to a server that had nothing to do with the number beside it.
+ */
+const SCORER_NAME: Readonly<Record<RerankBackend, string>> = {
+  http: 'the served reranker',
+  local: 'the in-process reranker',
+};
+
+const rerankDetail = (health: RerankHealth, backend: RerankBackend): string =>
   health.kind === 'healthy'
-    ? `the served reranker discriminates — it scored the RELEVANT probe passage ${String(health.relevantScore)} and the IRRELEVANT one ${String(health.irrelevantScore)}`
+    ? `${SCORER_NAME[backend]} discriminates — it scored the RELEVANT probe passage ${String(health.relevantScore)} and the IRRELEVANT one ${String(health.irrelevantScore)}`
     : health.detail;
 
 const RERANK_SETTINGS = 'rerank-settings';
@@ -605,6 +617,18 @@ const settingLine = (knob: string, fact: SettingFact): string =>
 const localEngineLines = (availability: LocalRerankerAvailability | undefined): readonly string[] =>
   availability === undefined || availability.available ? [] : [availability.reason];
 
+const UNSET_MODEL_PATH = '(unset — the local backend refuses by key rather than guessing a GGUF)';
+
+/**
+ * Shown ONLY under the local backend, because it is the setting that decides
+ * that run and it has no shipped default to fall back to. Under `http` it would
+ * be a key nothing reads.
+ */
+const modelPathLines = (backend: RerankBackend, env: NodeJS.ProcessEnv): readonly string[] =>
+  backend === 'local'
+    ? [`rerankModelPath = ${resolveRerankModelPath(undefined, env) ?? UNSET_MODEL_PATH}`]
+    : [];
+
 const rerankSettingChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
   const scan = facts.rerankSettings;
   if (!scan.ok) return [check(RERANK_SETTINGS, 'unknown', unresolvedEndpoint(scan.reason))];
@@ -617,6 +641,7 @@ const rerankSettingChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
         settingLine('rerankUrl', scan.url),
         settingLine('rerankModel', scan.model),
         settingLine('rerankBackend', scan.backend),
+        ...modelPathLines(scan.backend.value, facts.env),
         ...faults,
       ].join('; ')
     ),
@@ -627,8 +652,19 @@ const rerankSettingChecks = (facts: DoctorFacts): readonly DoctorCheck[] => {
 const unresolvedEndpoint = (reason: string): string =>
   `the reranker endpoint cannot be resolved, so neither an address nor a model id you wrote is in effect: ${reason}`;
 
+/**
+ * Read off the SCAN, never resolved a second time. `scanRerank` is the one place
+ * a malformed `config.json` is caught and turned into a report, so resolving the
+ * backend again here would throw straight past it — `doctor` dying on the file it
+ * exists to diagnose. The `http` arm is unreachable in practice: a scan that did
+ * not resolve makes `probeRerank` report `unavailable`, and the name is read only
+ * on the healthy branch.
+ */
+const scoredBy = (scan: RerankScan): RerankBackend =>
+  scan.ok ? scan.backend.value : RERANK_DEFAULT_BACKEND;
+
 const rerankChecks = (facts: DoctorFacts): readonly DoctorCheck[] => [
-  check(RERANK, RERANK_VERDICTS[facts.rerank.kind], rerankDetail(facts.rerank)),
+  check(RERANK, RERANK_VERDICTS[facts.rerank.kind], rerankDetail(facts.rerank, scoredBy(facts.rerankSettings))),
 ];
 
 const CHAT_SETTINGS = 'chat-settings';

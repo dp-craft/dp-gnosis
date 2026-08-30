@@ -35,6 +35,12 @@ It is non-interactive, it probes the shipped `RERANK_MODEL_ID` first whenever th
 (every recorded baseline is at that model), and its merge-write leaves every other `config.json` key
 alone. Exit 0 written · 3 server reachable but nothing passed · 2 usage.
 
+`dp-gnosis wizard` is the GUIDED form of the same thing, and it goes further: when no server
+answers, it can fetch a verified GGUF from this file’s table — sized against the machine’s RAM,
+VRAM and free disk — start a detected `llama-server` over it, and probe THAT before writing
+anything. It offers only the verified repositories, never the broken ones below. Everything after this subsection
+applies to both commands.
+
 | Setting | Default | Stated in |
 |---|---|---|
 | Base URL | `http://127.0.0.1:9292` — `RERANK_DEFAULT_URL` (`src/config.ts`) | `config.json`, `DP_GNOSIS_RERANK_URL` |
@@ -115,6 +121,97 @@ ggml-org/llama.cpp#16407).
 e.g. `gscoppino/Qwen3-Reranker-4B-GGUF-llama_cpp` or `Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp`.
 `search --rerank` runs the same probe on the serving path and refuses at exit 3 with the same
 wording, returning the first-pass ranking rather than a reranked one nobody could question.
+
+### The in-process backend — no server at all
+
+`rerank.backend: "local"` scores inside the gnosis process instead of over HTTP, using
+[`node-llama-cpp`](https://github.com/withcatai/node-llama-cpp) — the same llama.cpp, the same GGUF
+files, the same rank head. It is the SIMPLER install, not the faster one, and the wizard offers it
+in exactly those words.
+
+```bash
+npm install node-llama-cpp            # beside the package, like the dense routes above
+```
+
+```json
+{ "rerank": { "backend": "local", "modelPath": "/home/you/models/qwen3-reranker-0.6b-q8_0.gguf" } }
+```
+
+`rerank.modelPath` MUST be absolute and MUST NOT be relative; `rerank.model` stays an HTTP model id
+and is not read under this backend. `CONFIGURATION.md` § 1.3 owns both keys.
+
+**The engine picks the hardware, and you do not.** `localReranker.ts` calls `getLlama()` with no
+options at all, so the engine uses whatever GPU backend the installed `node-llama-cpp` was built
+with — Vulkan on the machine everything below was measured on — and the CPU when it finds none.
+Which backends a given build carries is node-llama-cpp's own documentation to state, not this
+file's. That is why this backend needs no configuration beyond the two keys above: there is
+deliberately no `rerank.gpu` key, because there is nothing for it to set.
+Read the flip side in the same breath — a GPU that is present is a GPU that is used, so you cannot
+pin a run to the CPU while one is there, and on a single card the engine is competing for it with
+any llama.cpp server you are also running (the contention note below).
+
+**What it costs, measured.** `qwen3-reranker-0.6b-q8_0`, Vulkan on an AMD RADV GFX1201, 100
+synthetic 2 000-character documents, the rerank step alone, 2026-08-29:
+
+| | model load | 100 documents | per document |
+|---|---|---|---|
+| GPU (Vulkan) | 1 846 ms | 6 472 ms | 64.7 ms |
+| CPU (`gpu: false`, 12 cores) | 2 914 ms warm | 170 763 ms | 1 708 ms |
+
+Read those two rows against each other and nothing else. They are the rerank STEP over synthetic
+documents; the served figures in `handbook/GNOSIS-BASELINES.md` are WHOLE-QUERY times over the real
+corpus, so the two MUST NOT be subtracted. What the rows do settle is the shape of the choice: on a
+GPU the in-process engine is worth having, and on a CPU a pool of 100 is minutes per search rather
+than seconds. The wizard times YOUR machine before it writes anything.
+
+**On a CPU the run is long and nothing cancels it.** The local scoring path is given no deadline:
+`rerank.ts` forwards its `timeoutMs` to the HTTP scorer alone, so the served path is bounded and the
+in-process one is not. At the CPU rate tabulated above, a pool of 100 runs for minutes and only
+Ctrl-C ends it. That is a property to plan around rather than a fault to report — an interactive
+CPU-only search is the case it bites, and a long-lived `dp-gnosis-mcp` on a GPU the case it does
+not.
+
+**The model load is per PROCESS.** A one-shot `dp-gnosis search` pays it on every invocation; a
+long-lived `dp-gnosis-mcp` pays it once and then never again. That asymmetry, not throughput, is
+where this backend earns its place.
+
+**It competes with a llama.cpp server for the GPU.** Running llama-swap and the in-process engine
+at once on one card fails with `InsufficientMemoryError`, at every context size. This is an
+architectural consequence of two processes wanting the same VRAM, not a defect. `curl
+http://127.0.0.1:9292/unload` frees it, but llama-swap reloads on demand, so the freeing is
+transient — pick one or the other on a single-GPU machine.
+
+**It is deliberately UNCALIBRATED.** `RERANK_CALIBRATION` (`src/config.ts`) is keyed by model ID and
+was measured against the SERVED endpoint, so inheriting an entry would publish a probability
+computed against a scale nothing measured on this engine. Under `local`, `confidence` reports `weak`
+and `--min-relevance` REFUSES by name. Ranking works; the probability does not, until someone
+measures one.
+
+**Ranking QUALITY under `local` is UNMEASURED.** The path loads, discriminates and reorders —
+verified end to end on 2026-08-30 in this checkout, with `qwen3-reranker-0.6b-q8_0`, the engine
+installed and NOTHING answering at `127.0.0.1:9292`:
+
+```bash
+DP_GNOSIS_RERANK_BACKEND=local DP_GNOSIS_RERANK_MODEL_PATH=<abs>.gguf \
+  dp-gnosis search "…" -k 3 --rerank --json
+```
+
+It returned `"mode":"fts5+rerank"`, `"poolSize":100`, `"confidence":"weak"` and exit 0, in 10.5 s
+wall including process start and model load. That is a proof the PATH RUNS, and nothing more: no
+paired benchmark arm has scored this backend against the served one, so nothing states that the two
+produce the same ORDERING. Keep it apart from the calibration point above — that one is about the
+PROBABILITY `--min-relevance` reads, this one about the order the results come back in. It is why
+`RERANK_DEFAULT_BACKEND` stays `http` (`src/config.ts`): `local` is an available route, not a
+promoted one.
+
+**The probe is the same probe.** The local path scores the same fixed relevant/irrelevant pair
+against the same `RERANK_PROBE_MIN_SCORE` floor, magnitude before direction, and refuses on
+`DEGENERATE` / `CONSTANT` / `INVERTED` with the same diagnosis — a rank-head-less GGUF is the same
+defect whether llama.cpp is reached over a socket or linked into this process.
+
+An absent engine is a refusal naming `npm install node-llama-cpp`, never a silent fall back to the
+HTTP endpoint: the two are different scorers on different score scales, and a caller who asked for
+one and received the other could not tell the rankings apart.
 
 ## Dense and hybrid research routes
 

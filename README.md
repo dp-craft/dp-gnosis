@@ -52,7 +52,8 @@ In a checkout rather than an install, every `dp-gnosis <cmd>` reads `npm run gno
 ## Install
 
 You need **Node 22 or newer**, on **Linux or macOS**. Windows is not supported. `better-sqlite3`,
-`stemmer` and `minisearch` are the only required dependencies.
+`stemmer`, `minisearch` and `@inquirer/prompts` are the only required dependencies; the last of them
+is there so the setup wizard can ask its questions.
 
 **It is not on the npm registry yet**, so there are two honest paths.
 
@@ -65,6 +66,7 @@ git clone https://github.com/dp-craft/dp-gnosis.git && cd dp-gnosis && npm insta
 cd packages/gnosis && npm pack        # builds dist/ and writes dp-gnosis-<version>.tgz
 npm install -g ./dp-gnosis-*.tgz
 dp-gnosis --version                   # prints the version — the install worked
+dp-gnosis wizard                      # the guided setup: asks, then builds, then proves it answers
 ```
 
 *As a checkout you develop in* — skip the pack and call it through npm. Every `dp-gnosis <cmd>`
@@ -72,7 +74,16 @@ below becomes `npm run gnosis -- <cmd>`, and the data stays inside the repositor
 
 ```bash
 git clone https://github.com/dp-craft/dp-gnosis.git && cd dp-gnosis && npm install
+npm run setup                         # the same guided setup, in the checkout
 ```
+
+**`dp-gnosis wizard` (`npm run setup`) is the shortest way in.** It asks what to index and how to
+label it, recommends an analysis chain and an adapter and explains the tradeoff of each, offers to
+find a reranker, or download one and either serve it or run it in-process, and then runs the ingest and the index build and checks that
+a real search answers. Nothing is written until it shows you a summary and you confirm it. The
+commands it drives — `init`, `setup`, `ingest`, `index`, `doctor` — all still work on their own, and
+they are the scriptable path; the wizard refuses without a terminal rather than reading EOF as an
+answer.
 
 **If the install fails while compiling.** `better-sqlite3` is a native module, and gnosis needs it
 built with FTS5 — Node's own `node:sqlite` cannot compile FTS5
@@ -94,6 +105,9 @@ subtree under the data root and it cannot reach the default atoms or index paths
 is untouched whether or not you have one.
 
 ## Your first search, in four commands
+
+`dp-gnosis wizard` does all four for you, with explanations and a summary to confirm. The long way,
+so you can see what it does:
 
 ```bash
 # 1. Create an instance and point it at your markdown.
@@ -199,7 +213,7 @@ dp-gnosis search "..." --field-weights questions=1        # weight it - the colu
 | Step | Needs a model server | Costs |
 |---|---|---|
 | `init`, `ingest`, `index`, `update`, `search`, `ask`, `doctor` | no, not for any of them | seconds |
-| `search --rerank` / `ask --rerank` | yes — an OpenAI-compatible `/v1/rerank` | seconds **per query** |
+| `search --rerank` / `ask --rerank` | a server, or nothing — an OpenAI-compatible `/v1/rerank`, or the in-process backend | seconds **per query** |
 | `search --rephrase`, `ask --synthesize` | yes — a chat model | one call per query |
 | `enrich` | yes — a chat model | one call **per atom**, so hours for a real vault. `--limit <n>` prices it before you commit |
 
@@ -254,6 +268,18 @@ so their random-ranking floors differ; compare down a column, never across.
 **The cost is about 13 seconds per query**, and it needs a local server exposing an OpenAI-compatible
 `/v1/rerank` — bare `llama-server` from llama.cpp is enough; llama-swap is what the baselines were
 measured on, not a requirement.
+
+**Or no server at all.** `rerank.backend: "local"` loads the same GGUF inside the gnosis process
+through `node-llama-cpp` (`npm install node-llama-cpp`, beside the package). It is the SIMPLER
+install, not the faster one.
+
+It uses a GPU when the installed engine finds one and the CPU when it does not — there is nothing to
+configure, and equally no way to decline a GPU it did find. Against that: the model is reloaded per
+process, it competes with any llama.cpp server for that GPU, and on a CPU a full pool takes minutes
+with no timeout to end it. Its scores are uncalibrated, so `--min-relevance` refuses under it; its
+ranking has never been measured against the served path, which is why the default backend stays
+HTTP. `packages/gnosis/OPTIONAL.md` § The in-process backend has the measured GPU and CPU costs, the
+contention caveat, and the run that proves the path works.
 
 **`dp-gnosis setup` wires it up for you.** It finds the server, probes the models it serves for one
 whose rank head actually discriminates, and writes the pair into `config.json` so you never pass a

@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "gnosis": "tsx packages/gnosis/src/cli/main.ts",
+    "setup": "tsx packages/gnosis/src/cli/main.ts wizard",
     "gnosis:mcp": "tsx packages/gnosis/src/mcp/main.ts",
     "gnosis:test": "vitest run --config packages/gnosis/vitest.config.ts",
     "gnosis:bench": "./packages/gnosis-bench/bench.sh",

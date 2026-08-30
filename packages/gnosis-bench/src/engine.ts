@@ -1000,6 +1000,12 @@ export const retrieveDocs = async (
  * with. Omitting either measures the shipped default, so this stays the one seam
  * — the bench selects a rule and a model, it never builds one.
  */
+/**
+ * A measured rerank arm. It pins `backend: 'http'` at both call sites below
+ * rather than carrying the key: a bench row names the model and the pool it was
+ * measured under, and an exported `DP_GNOSIS_RERANK_BACKEND` that silently swapped
+ * the SCORER would produce a row indistinguishable from the served one.
+ */
 export interface RerankArm {
   readonly fusion?: RerankFusion;
   /** Absent means the engine's shipped `RERANK_MODEL_ID` — today's every run. */
@@ -1020,7 +1026,7 @@ export const rerankIfRequested = async (
   arm: RerankArm = {}
 ): Promise<readonly RetrievedAtom[]> => {
   if (!requested) return atoms;
-  const outcome = await rerankAtoms(query, atoms, arm);
+  const outcome = await rerankAtoms(query, atoms, { ...arm, backend: 'http' });
   return outcome.ok
     ? outcome.atoms
     : fail(`dp-gnosis-bench: rerank refused — ${outcome.error}`, RERANK_REFUSED_CAUSE);
@@ -1038,7 +1044,7 @@ export const rerankIfRequested = async (
  * verbatim, exactly as `rerankIfRequested` carries a refusal.
  */
 export const assertRerankDiscriminates = async (arm: RerankArm = {}): Promise<void> => {
-  const outcome = await probeRerankDiscrimination(arm);
+  const outcome = await probeRerankDiscrimination({ ...arm, backend: 'http' });
   if (!outcome.ok) {
     fail(`dp-gnosis-bench: rerank discrimination probe FAILED — ${outcome.error}`, RERANK_PROBE_CAUSE);
   }

@@ -18,6 +18,7 @@ import {
   RERANK_BACKEND_ENV_VAR,
   RERANK_DEFAULT_BACKEND,
   RERANK_MODEL_ID,
+  RERANK_MODEL_PATH_ENV_VAR,
 } from '../src/config.js';
 import { LOCAL_RERANKER_INSTALL_COMMAND, localRerankerAvailability } from '../src/localReranker.js';
 import { rerankBackendFact, resetRerankProbeCache, resolveRerankBackend } from '../src/rerank.js';
@@ -109,9 +110,18 @@ describe('an unknown backend REFUSES by name, listing what is accepted', () => {
   });
 });
 
-describe('the local engine is absent, and says so completely', () => {
+/**
+ * The engine is a devDependency, so a CHECKOUT has it and a CONSUMER does not.
+ * Both states are covered here through an injected loader rather than through
+ * whichever one this machine happens to be in: a test that read the real module
+ * would cover the consumer's state on no machine at all, and the absent state
+ * is the one whose message a user ever reads.
+ */
+describe('the local engine reports BOTH of its states', () => {
   it('reports unavailable with the install command and the HTTP alternative', async () => {
-    const availability = await localRerankerAvailability();
+    const availability = await localRerankerAvailability(async () => {
+      throw new Error('Cannot find package');
+    });
 
     expect(availability.available).toBe(false);
     const reason = availability.available ? '' : availability.reason;
@@ -119,6 +129,12 @@ describe('the local engine is absent, and says so completely', () => {
     expect(LOCAL_RERANKER_INSTALL_COMMAND).toBe('npm install node-llama-cpp');
     expect(reason).toContain('--rerank');
     expect(reason).toContain('HTTP');
+  });
+
+  it('reports available when the loader hands back an engine', async () => {
+    const availability = await localRerankerAvailability(async () => ({ getLlama: () => {} }));
+
+    expect(availability.available).toBe(true);
   });
 });
 
@@ -227,19 +243,73 @@ describe('search --rerank under the local backend', () => {
     resetRerankProbeCache();
   });
 
-  it('exits 3 with the install command and leaves the first-pass ranking intact', async () => {
+  /**
+   * The backend is selected and NOTHING names a GGUF. A guessed file would
+   * score under a model nobody chose, so the run refuses BY KEY — and it
+   * refuses before any I/O, which is what keeps the first pass deliverable.
+   * The config home is emptied so the refusal is about the selection under
+   * test, not about whatever this machine's own config.json happens to state.
+   */
+  it('exits 3 naming the unset rerank.modelPath and leaves the first-pass ranking intact', async () => {
     const urls = healthyServer();
     const firstPass = await runCli(searchArgs(profilePath, []));
+    vi.stubEnv('DP_GNOSIS_CONFIG_HOME', emptyConfigDir());
     vi.stubEnv(RERANK_BACKEND_ENV_VAR, 'local');
+    clearUserConfigCache();
 
     const outcome = await runCli(searchArgs(profilePath, ['--rerank']));
 
     const payload = JSON.parse(outcome.stdout) as SearchPayload;
     const expected = JSON.parse(firstPass.stdout) as SearchPayload;
     expect(outcome.exitCode).toBe(3);
-    expect(payload.note ?? '').toContain(LOCAL_RERANKER_INSTALL_COMMAND);
+    expect(payload.note ?? '').toContain('rerank.modelPath');
+    expect(payload.note ?? '').toContain(RERANK_MODEL_PATH_ENV_VAR);
     expect(payload.mode).not.toContain('+rerank');
     expect(payload.atoms.map(atom => atom.id)).toEqual(expected.atoms.map(atom => atom.id));
+    expect(urls).toEqual([]);
+  });
+
+  /**
+   * A path WAS named and there is nothing there. The refusal MUST say that
+   * about the path the user wrote — a fallback to the endpoint would answer
+   * over HTTP under a backend the caller took off HTTP on purpose.
+   */
+  it('exits 3 saying there is no file at the configured path, still without touching the endpoint', async () => {
+    const urls = healthyServer();
+    vi.stubEnv('DP_GNOSIS_CONFIG_HOME', emptyConfigDir());
+    vi.stubEnv(RERANK_BACKEND_ENV_VAR, 'local');
+    vi.stubEnv(RERANK_MODEL_PATH_ENV_VAR, join(tmpdir(), 'gnosis-absent-reranker.gguf'));
+    clearUserConfigCache();
+
+    const outcome = await runCli(searchArgs(profilePath, ['--rerank']));
+
+    const payload = JSON.parse(outcome.stdout) as SearchPayload;
+    expect(outcome.exitCode).toBe(3);
+    expect(payload.note ?? '').toContain('there is no file at that path');
+    expect(urls).toEqual([]);
+  });
+
+  /**
+   * The variable OUTRANKS `rerank.modelPath`, which `userConfig.ts` refuses a
+   * relative value for: an MCP client's working directory is nobody's choice,
+   * so one relative path names a different file per caller and the ranking it
+   * scored would be indistinguishable from the configured one. Refused by
+   * VARIABLE name, since that is the tier the user has to correct.
+   */
+  it('exits 3 naming the env var when it states a RELATIVE gguf path', async () => {
+    const urls = healthyServer();
+    vi.stubEnv('DP_GNOSIS_CONFIG_HOME', emptyConfigDir());
+    vi.stubEnv(RERANK_BACKEND_ENV_VAR, 'local');
+    vi.stubEnv(RERANK_MODEL_PATH_ENV_VAR, join('models', 'reranker.gguf'));
+    clearUserConfigCache();
+
+    const outcome = await runCli(searchArgs(profilePath, ['--rerank']));
+
+    const payload = JSON.parse(outcome.stdout) as SearchPayload;
+    expect(outcome.exitCode).toBe(3);
+    expect(payload.note ?? '').toContain(RERANK_MODEL_PATH_ENV_VAR);
+    expect(payload.note ?? '').toContain('ABSOLUTE');
+    expect(payload.mode).not.toContain('+rerank');
     expect(urls).toEqual([]);
   });
 
@@ -288,7 +358,14 @@ describe('doctor names the backend in effect', () => {
     expect(await settingsLine()).toContain('rerankBackend = http (from the default)');
   });
 
-  it('states the local backend AND that its engine will not load', async () => {
+  /**
+   * `scanLocalReranker` probes the REAL module, and the engine is a
+   * devDependency, so in a checkout it loads and the line carries the backend
+   * with no fault appended. The engine-absent branch is therefore unreachable
+   * from `doctor` here — it is covered where the loader can be injected, above,
+   * and asserting a fault would assert something this code does not do.
+   */
+  it('states the local backend, and appends no fault while its engine loads', async () => {
     vi.stubEnv(RERANK_BACKEND_ENV_VAR, 'local');
     vi.stubEnv('DP_GNOSIS_CONFIG_HOME', emptyConfigDir());
     clearUserConfigCache();
@@ -296,7 +373,7 @@ describe('doctor names the backend in effect', () => {
     const line = await settingsLine();
 
     expect(line).toContain('rerankBackend = local (from the env)');
-    expect(line).toContain(LOCAL_RERANKER_INSTALL_COMMAND);
-    expect(line).toContain('[fault]');
+    expect(line).not.toContain(LOCAL_RERANKER_INSTALL_COMMAND);
+    expect(line).not.toContain('[fault]');
   });
 });

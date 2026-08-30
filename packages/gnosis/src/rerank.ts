@@ -18,6 +18,9 @@
  *
  * The HTTP client is `bench/reranker.ts`'s: one client, one wire format.
  */
+import { existsSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
+
 import {
   createRerankerClient,
   extractDoc,
@@ -34,6 +37,7 @@ import {
   RERANK_FUSION_PRESETS,
   RERANK_MODEL_ENV_VAR,
   RERANK_MODEL_ID,
+  RERANK_MODEL_PATH_ENV_VAR,
   RERANK_PRESET_NAMES,
   RERANK_PROBE_MIN_SCORE,
   RERANK_URL_ENV_VAR,
@@ -41,9 +45,10 @@ import {
   type RerankPresetName
 } from './config.js';
 import { configHome, statedVar } from './env.js';
+import { localRerankerAvailability, localRerankScores } from './localReranker.js';
+import type { RetrievedAtom } from './port.js';
 import type { SettingFact } from './settingFact.js';
 import { factOf } from './settingFact.js';
-import type { RetrievedAtom } from './port.js';
 import { asRerankBackend, loadUserConfig, type RerankBackend } from './userConfig.js';
 
 /**
@@ -89,8 +94,12 @@ export type RerankFact = SettingFact;
 /** The `rerank` section of `config.json`; a malformed one REFUSES from here. */
 const rerankConfig = (
   env: NodeJS.ProcessEnv
-): Readonly<{ url?: string | undefined; model?: string | undefined; backend?: RerankBackend | undefined }> =>
-  loadUserConfig(configHome(env)).rerank ?? {};
+): Readonly<{
+  url?: string | undefined;
+  model?: string | undefined;
+  backend?: RerankBackend | undefined;
+  modelPath?: string | undefined;
+}> => loadUserConfig(configHome(env)).rerank ?? {};
 
 /**
  * The base URL to query, resolved `flag > env > config.json > constant`. The
@@ -158,6 +167,39 @@ export const resolveRerankUrl = (env: NodeJS.ProcessEnv = process.env): string =
 /** The resolved model id alone, so no caller re-spells the precedence. */
 export const resolveRerankModel = (env: NodeJS.ProcessEnv = process.env): string =>
   rerankModelFact(undefined, env).value;
+
+/**
+ * The GGUF the `local` backend scores with, resolved `flag > env > config.json`.
+ *
+ * There is no fourth tier, and {@link RERANK_MODEL_PATH_ENV_VAR} records why: a
+ * guessed default would name a file that might well exist and score, and its
+ * ranking would be indistinguishable from the configured one. `undefined` means
+ * the instance named none, which the local backend refuses over BY KEY.
+ */
+export const resolveRerankModelPath = (
+  explicit: string | undefined = undefined,
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined =>
+  explicit ?? statedVar(env, RERANK_MODEL_PATH_ENV_VAR) ?? rerankConfig(env).modelPath;
+
+/**
+ * The `RERANK_CALIBRATION` key this run may be read against, or `undefined`
+ * when it has none.
+ *
+ * The local engine is deliberately UNKEYED (`localReranker.ts`): the table is
+ * keyed by model ID alone and was measured against the SERVED endpoint, so
+ * inheriting an entry would publish a calibrated probability computed against a
+ * scale nothing measured. `confidence` reads `weak` under it and
+ * `--min-relevance` refuses, which is the honest state until a calibration is
+ * actually measured against this engine.
+ */
+export const rerankCalibrationKey = (
+  options: RerankOptions = {},
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined =>
+  rerankBackendFact(options.backend, env).value === 'local'
+    ? undefined
+    : rerankModelFact(options.model, env).value;
 
 /** One fused entry: the first-pass item and the score that reordered it. */
 export interface FusedItem<T> {
@@ -459,13 +501,110 @@ const scoreTexts = async (endpoint: Endpoint, request: ScoreRequest): Promise<Sc
   }
 };
 
+/**
+ * WHICH implementation scores this run — the served endpoint, or the in-process
+ * engine over a GGUF on disk.
+ *
+ * It is a value rather than a branch inside each gate because the two are two
+ * different scoring stacks on two different score scales, and EVERY gate below
+ * has to dispatch on it: what "is it usable" means, what a refusal has to name,
+ * and which memo entry a probe verdict belongs to. One value carried through
+ * them is what keeps a `local` run from being judged by an HTTP answer.
+ */
+type Scorer =
+  | { readonly kind: 'http'; readonly endpoint: Endpoint }
+  | { readonly kind: 'local'; readonly modelPath: string };
+
+const LOCAL_KEY = 'rerank.modelPath';
+
+const localRequest = (modelPath: string): string =>
+  `search --rerank: the local rerank backend was selected, scoring with ${modelPath}`;
+
+const LOCAL_DROP =
+  ', or set the http backend, where --rerank scores over HTTP with no local engine at all.';
+
+/** No GGUF named at all — refused BY KEY, never by guessing a file. */
+const noModelPathMessage = (): string =>
+  `search --rerank: the local rerank backend is selected but no GGUF is configured — set "${LOCAL_KEY}" in config.json (or ${RERANK_MODEL_PATH_ENV_VAR}) to the ABSOLUTE path of a reranker .gguf${LOCAL_DROP}`;
+
+/**
+ * A RELATIVE path stated in the environment. `userConfig.ts` refuses one under
+ * `rerank.modelPath` because `dp-gnosis` is served from an MCP client whose
+ * working directory nobody chose, so the same path names a different file per
+ * caller — and the variable OUTRANKS that key, so leaving it unchecked would
+ * reinstate exactly the file the key refuses. Named by VARIABLE, since that is
+ * the tier the user has to correct.
+ */
+const relativeModelPathMessage = (modelPath: string): string =>
+  `${localRequest(modelPath)}; ${RERANK_MODEL_PATH_ENV_VAR} must state an ABSOLUTE path to a reranker .gguf, and this one is relative to whichever directory the caller happened to run from${LOCAL_DROP}`;
+
+/** A path was named and there is nothing there. Says the path, not "a file". */
+const missingModelMessage = (modelPath: string): string =>
+  `${localRequest(modelPath)}; there is no file at that path — correct "${LOCAL_KEY}" in config.json${LOCAL_DROP}`;
+
+/** The engine did not load: the availability reason carries the install command. */
+const engineMessage = (reason: string): string => `search --rerank: ${reason}`;
+
+/**
+ * The local scorer's own resolution gate, mirroring `catalogueRefusal`: it asks
+ * the two cheap questions — is there a file, and is there an engine — before any
+ * document is scored, so a misconfigured instance refuses by name instead of
+ * failing inside a native call.
+ */
+const localRefusal = async (modelPath: string): Promise<string | undefined> => {
+  if (!existsSync(modelPath)) return missingModelMessage(modelPath);
+  const availability = await localRerankerAvailability();
+  return availability.available ? undefined : engineMessage(availability.reason);
+};
+
+/** The scorer this run will use, or the refusal that stops it before any I/O. */
+type ScorerResult = { readonly ok: true; readonly scorer: Scorer } | { readonly ok: false; readonly error: string };
+
+const scorerOf = (settings: Resolved): ScorerResult => {
+  if (settings.backend === 'http') {
+    return { ok: true, scorer: { kind: 'http', endpoint: { baseUrl: settings.baseUrl, model: settings.model } } };
+  }
+  if (settings.modelPath === undefined) return { ok: false, error: noModelPathMessage() };
+  return isAbsolute(settings.modelPath)
+    ? { ok: true, scorer: { kind: 'local', modelPath: settings.modelPath } }
+    : { ok: false, error: relativeModelPathMessage(settings.modelPath) };
+};
+
+/** `undefined` when this scorer can be scored with at all. */
+const scorerRefusal = async (scorer: Scorer, timeoutMs?: number): Promise<string | undefined> =>
+  scorer.kind === 'http'
+    ? await catalogueRefusal(scorer.endpoint, timeoutMs)
+    : await localRefusal(scorer.modelPath);
+
+/**
+ * The local engine returns raw scores index-aligned with the documents it was
+ * given; the wire format returns `{index, relevanceScore}` pairs. They are
+ * carried in the SAME shape from here on, so fusion, the probe and the
+ * calibration gate cannot tell which backend produced a run — the one place
+ * they must not differ.
+ */
+const asResults = (scores: readonly number[]): readonly RerankResult[] =>
+  scores.map((relevanceScore, index) => ({ index, relevanceScore }));
+
+const scoreWith = async (scorer: Scorer, request: ScoreRequest): Promise<ScoreResult> => {
+  if (scorer.kind === 'http') return await scoreTexts(scorer.endpoint, request);
+  const outcome = await localRerankScores(scorer.modelPath, request.query, request.documents);
+  return outcome.ok ? { ok: true, results: asResults(outcome.scores) } : { ok: false, error: outcome.error };
+};
+
+/** One memo entry per SCORER: two backends never share a probe verdict. */
+const scorerKey = (scorer: Scorer): string =>
+  scorer.kind === 'http'
+    ? `http\u0000${scorer.endpoint.baseUrl}\u0000${scorer.endpoint.model}`
+    : `local\u0000${scorer.modelPath}`;
+
 const scoreDocuments = async (
-  endpoint: Endpoint,
+  scorer: Scorer,
   query: string,
   atoms: readonly RetrievedAtom[],
   window: DocWindow
 ): Promise<ScoreResult> =>
-  await scoreTexts(endpoint, {
+  await scoreWith(scorer, {
     query,
     documents: atoms.map(atom => extractDoc(atom.body, window.extract, window.maxChars)),
     timeoutMs: TIMEOUT_MS,
@@ -496,6 +635,17 @@ export interface RerankOptions {
   readonly model?: string | undefined;
   readonly rerankDocMaxChars?: number | undefined;
   readonly rerankExtract?: ExtractStrategy | undefined;
+  /**
+   * WHICH implementation scores. Absent resolves through the same four tiers as
+   * every other setting here, so an uninstructed call obeys the instance. A
+   * caller whose question is ABOUT a served endpoint — `setup` walking
+   * candidate addresses, the bench measuring an arm — MUST pin `'http'`: it is
+   * asking whether that server discriminates, and an instance configured for
+   * the local engine would otherwise answer about a different scorer entirely.
+   */
+  readonly backend?: RerankBackend | undefined;
+  /** The GGUF the `local` backend scores with, in place of `rerank.modelPath`. */
+  readonly modelPath?: string | undefined;
 }
 
 /** The tier-resolved URL and model id, the shipped preset and doc window. */
@@ -504,6 +654,8 @@ interface Resolved {
   readonly fusion: RerankFusion;
   readonly model: string;
   readonly window: DocWindow;
+  readonly backend: RerankBackend;
+  readonly modelPath: string | undefined;
 }
 
 const resolved = (options: RerankOptions): Resolved => ({
@@ -514,6 +666,8 @@ const resolved = (options: RerankOptions): Resolved => ({
     maxChars: options.rerankDocMaxChars ?? RERANK_DOC_MAX_CHARS,
     extract: options.rerankExtract ?? EXTRACT_STRATEGY,
   },
+  backend: rerankBackendFact(options.backend).value,
+  modelPath: resolveRerankModelPath(options.modelPath),
 });
 
 /**
@@ -576,11 +730,13 @@ export const rerankAtoms = async (
   atoms: readonly RetrievedAtom[],
   options: RerankOptions = {}
 ): Promise<RerankOutcome> => {
-  const { baseUrl, fusion, model, window } = resolved(options);
-  const endpoint: Endpoint = { baseUrl, model };
-  const refusal = await catalogueRefusal(endpoint);
+  const settings = resolved(options);
+  const { fusion, window } = settings;
+  const selected = scorerOf(settings);
+  if (!selected.ok) return { ok: false, error: selected.error };
+  const refusal = await scorerRefusal(selected.scorer);
   if (refusal !== undefined) return { ok: false, error: refusal };
-  const scored = await scoreDocuments(endpoint, query, atoms, window);
+  const scored = await scoreDocuments(selected.scorer, query, atoms, window);
   if (!scored.ok) return { ok: false, error: scored.error };
   const fused = fuseRanking(withScores(atoms, scored.results), bestFirst(scored.results), fusion);
   return { ok: true, atoms: fused.map(entry => ({ ...entry.item, score: entry.score })) };
@@ -669,6 +825,33 @@ const probeFailedMessage = (
   `${requirement(endpoint.model)}serve a reranker whose rank head this build supports, ` +
   `then re-run${DROP}`;
 
+/**
+ * The SAME verdict, worded for the file the engine loaded. The diagnosis text is
+ * shared verbatim — a rank-head-less GGUF is the same defect whether llama.cpp
+ * is reached over a socket or linked into this process — and only the remedy
+ * differs, because there is no server here to reconfigure.
+ */
+const localProbeFailedMessage = (
+  modelPath: string,
+  signature: ProbeSignature,
+  scores: ProbeScores
+): string =>
+  `${localRequest(modelPath)}; it failed the two-document discrimination probe ` +
+  `(${SIGNATURE_DIAGNOSIS[signature]}). It scored the RELEVANT passage ` +
+  `${String(scores.relevant)} and the IRRELEVANT passage ${String(scores.irrelevant)} — ` +
+  `point "${LOCAL_KEY}" at a GGUF converted with the official convert_hf_to_gguf.py, ` +
+  `then re-run${LOCAL_DROP}`;
+
+const probeMessage = (scorer: Scorer, signature: ProbeSignature, scores: ProbeScores): string =>
+  scorer.kind === 'http'
+    ? probeFailedMessage(scorer.endpoint, signature, scores)
+    : localProbeFailedMessage(scorer.modelPath, signature, scores);
+
+const incompleteMessage = (scorer: Scorer): string =>
+  scorer.kind === 'http'
+    ? callFailedMessage(scorer.endpoint, INCOMPLETE_PROBE)
+    : `${localRequest(scorer.modelPath)}; ${INCOMPLETE_PROBE}${LOCAL_DROP}`;
+
 const INCOMPLETE_PROBE = 'the response did not score both probe documents';
 
 const scoreAt = (results: readonly RerankResult[], index: number): number | undefined =>
@@ -687,19 +870,19 @@ export type RerankProbeOutcome =
   | { readonly ok: false; readonly error: string };
 
 /** The refusal, or the verdict — a call that returned unusable results is a refusal too. */
-const probeOutcomeOf = (endpoint: Endpoint, scored: ScoreResult): RerankProbeOutcome => {
+const probeOutcomeOf = (scorer: Scorer, scored: ScoreResult): RerankProbeOutcome => {
   if (!scored.ok) return { ok: false, error: scored.error };
   const scores = probeScoresOf(scored.results);
   return scores === undefined
-    ? { ok: false, error: callFailedMessage(endpoint, INCOMPLETE_PROBE) }
-    : probeVerdict(endpoint, scores);
+    ? { ok: false, error: incompleteMessage(scorer) }
+    : probeVerdict(scorer, scores);
 };
 
-const probeVerdict = (endpoint: Endpoint, scores: ProbeScores): RerankProbeOutcome => {
+const probeVerdict = (scorer: Scorer, scores: ProbeScores): RerankProbeOutcome => {
   const signature = probeSignature(scores);
   return signature === undefined
     ? { ok: true, relevantScore: scores.relevant, irrelevantScore: scores.irrelevant }
-    : { ok: false, error: probeFailedMessage(endpoint, signature, scores) };
+    : { ok: false, error: probeMessage(scorer, signature, scores) };
 };
 
 /**
@@ -714,16 +897,21 @@ const probeVerdict = (endpoint: Endpoint, scores: ProbeScores): RerankProbeOutco
 export const probeRerankDiscrimination = async (
   options: RerankOptions = {}
 ): Promise<RerankProbeOutcome> => {
-  const { baseUrl, model } = resolved(options);
-  const endpoint: Endpoint = { baseUrl, model };
-  const refusal = await catalogueRefusal(endpoint);
+  const selected = scorerOf(resolved(options));
+  if (!selected.ok) return { ok: false, error: selected.error };
+  return await probeScorer(selected.scorer);
+};
+
+/** The probe itself, once a scorer has been resolved. */
+const probeScorer = async (scorer: Scorer): Promise<RerankProbeOutcome> => {
+  const refusal = await scorerRefusal(scorer);
   if (refusal !== undefined) return { ok: false, error: refusal };
-  const scored = await scoreTexts(endpoint, {
+  const scored = await scoreWith(scorer, {
     query: PROBE_QUERY,
     documents: PROBE_DOCUMENTS,
     timeoutMs: PROBE_TIMEOUT_MS,
   });
-  return probeOutcomeOf(endpoint, scored);
+  return probeOutcomeOf(scorer, scored);
 };
 
 /**
@@ -734,9 +922,6 @@ export const probeRerankDiscrimination = async (
 const PROBE_FAILED_CAUSE = 'dp-gnosis/rerank-probe-failed';
 
 const probeRefusal = (error: string): string => `${PROBE_FAILED_CAUSE}: ${error}`;
-
-/** One memo entry per endpoint: the URL and the model both change the verdict. */
-const probeKey = (endpoint: Endpoint): string => `${endpoint.baseUrl}\u0000${endpoint.model}`;
 
 /**
  * The per-process probe memo. It holds the PROMISE, not the outcome, so two
@@ -752,12 +937,12 @@ export const resetRerankProbeCache = (): void => {
   probeCache.clear();
 };
 
-/** The probe's verdict for `endpoint`, computed at most once per process. */
-const probeOnce = (endpoint: Endpoint): Promise<RerankProbeOutcome> => {
-  const key = probeKey(endpoint);
+/** The probe's verdict for `scorer`, computed at most once per process. */
+const probeOnce = (scorer: Scorer): Promise<RerankProbeOutcome> => {
+  const key = scorerKey(scorer);
   const cached = probeCache.get(key);
   if (cached !== undefined) return cached;
-  const pending = probeRerankDiscrimination({ ...endpoint });
+  const pending = probeScorer(scorer);
   probeCache.set(key, pending);
   return pending;
 };
@@ -775,8 +960,9 @@ const probeOnce = (endpoint: Endpoint): Promise<RerankProbeOutcome> => {
 export const rerankProbeRefusal = async (
   options: RerankOptions = {}
 ): Promise<string | undefined> => {
-  const { baseUrl, model } = resolved(options);
-  const probe = await probeOnce({ baseUrl, model });
+  const selected = scorerOf(resolved(options));
+  if (!selected.ok) return probeRefusal(selected.error);
+  const probe = await probeOnce(selected.scorer);
   return probe.ok ? undefined : probeRefusal(probe.error);
 };
 
@@ -807,9 +993,9 @@ const healthOf = (probe: RerankProbeOutcome): RerankHealth =>
  * memoised per process, so a `doctor` run beside a `search --rerank` pays once.
  */
 export const rerankHealth = async (options: RerankOptions = {}): Promise<RerankHealth> => {
-  const { baseUrl, model } = resolved(options);
-  const endpoint: Endpoint = { baseUrl, model };
-  const refusal = await catalogueRefusal(endpoint, CATALOGUE_TIMEOUT_MS);
+  const selected = scorerOf(resolved(options));
+  if (!selected.ok) return { kind: 'unavailable', detail: selected.error };
+  const refusal = await scorerRefusal(selected.scorer, CATALOGUE_TIMEOUT_MS);
   if (refusal !== undefined) return { kind: 'unavailable', detail: refusal };
-  return healthOf(await probeOnce(endpoint));
+  return healthOf(await probeOnce(selected.scorer));
 };

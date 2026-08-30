@@ -219,6 +219,19 @@ export const RERANK_DEFAULT_BACKEND: RerankBackend = 'http';
 export const RERANK_BACKEND_ENV_VAR = 'DP_GNOSIS_RERANK_BACKEND';
 
 /**
+ * Environment override for `config.json`'s `rerank.modelPath`, read in
+ * `resolveRerankModelPath` alone.
+ *
+ * There is deliberately NO shipped default beside it. Every other rerank
+ * setting has one because a wrong guess is merely unreachable — an address
+ * nothing answers, an id nothing serves. A GGUF path guessed wrong would name a
+ * file that might well exist and score, and the ranking it produced would be
+ * indistinguishable from the one the user configured. The local backend with no
+ * path REFUSES by key name instead.
+ */
+export const RERANK_MODEL_PATH_ENV_VAR = 'DP_GNOSIS_RERANK_MODEL_PATH';
+
+/**
  * First-pass depth: how many candidates the reranker reorders. A FLOOR, not a
  * cap — `retrieveCommand.ts` resolves the first pass as `max(k, RERANK_K_INIT)`,
  * so a caller asking for more keeps its own `k`.

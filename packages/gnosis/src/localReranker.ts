@@ -1,11 +1,19 @@
 /**
- * The IN-PROCESS reranker backend — `rerank.backend: "local"`, scored by
- * `node-llama-cpp` instead of over HTTP.
+ * The IN-PROCESS reranker engine — what `rerank.backend: "local"` scores with.
  *
- * The engine is an OPTIONAL native dependency and is deliberately NOT in
- * `package.json`: the shipped path is the HTTP one, and a user who never
- * installs it must lose nothing. So this module owns exactly one thing today —
- * whether the engine is loadable, and the refusal to report when it is not.
+ * This module knows one thing: how to turn a GGUF file on disk plus a query and
+ * some documents into raw cross-encoder scores. It does NOT know which config
+ * key names the file, what a good score is, or whether the result may be served.
+ * Those are `rerank.ts`'s, and keeping them there is what lets ONE probe, ONE
+ * fusion and ONE calibration decision govern both backends.
+ *
+ * The engine is `node-llama-cpp`, a **devDependency** of this package (ADR
+ * 2026-08-29, `docs/research/`): present in a checkout so the suite can exercise
+ * the real thing, absent for a consumer, who installs it beside the package the
+ * way `OPTIONAL.md` § Enabling them already documents for lancedb. It is the
+ * same llama.cpp the served path talks to, so the local backend reranks with the
+ * same implementation over the same GGUF files rather than introducing a second,
+ * unmeasured scoring stack.
  *
  * The load follows `adapters/lanceDbAdapter.ts:loadLance`, for the reason
  * recorded there: an import of a native module fails in TWO ways — module
@@ -19,12 +27,13 @@
  * different scale from the served endpoint's for the same model id, so
  * inheriting that entry would report a calibrated probability computed against
  * a scale nothing measured — a plausible number for a measurement that never
- * happened. With no entry, `confidence` honestly reports `weak` and
- * `--min-relevance` refuses by name. An entry may be added only when a
- * calibration has actually been MEASURED against this engine.
+ * happened. `rerank.ts:rerankCalibrationKey` therefore returns nothing under
+ * this backend: `confidence` honestly reports `weak` and `--min-relevance`
+ * refuses by name. An entry may be added only when a calibration has actually
+ * been MEASURED against this engine.
  */
 
-/** The optional dependency this backend needs. Not a `package.json` entry. */
+/** The optional native engine this backend needs. A devDependency, not a dependency. */
 export const LOCAL_RERANKER_PACKAGE = 'node-llama-cpp';
 
 /** What the refusal tells the user to run, verbatim. */
@@ -35,25 +44,83 @@ export type LocalRerankerAvailability =
   | { readonly available: true }
   | { readonly available: false; readonly reason: string };
 
-type LoadResult = { readonly ok: true } | { readonly ok: false; readonly detail: string };
+/**
+ * How the engine module is obtained. It is a PARAMETER rather than a hard-wired
+ * import so the suite can exercise BOTH states in one process: the engine is a
+ * devDependency, so a checkout has it and a consumer does not, and a test that
+ * could only observe whichever state the machine happened to be in would cover
+ * the consumer's state nowhere.
+ */
+export type EngineLoader = () => Promise<unknown>;
 
 const describeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === 'object' && value !== null;
+
 /**
- * The ONLY place `node-llama-cpp` is loaded. The specifier is held in a
+ * The four shapes this module calls, and nothing else the package exports.
+ *
+ * They are declared HERE rather than imported from `node-llama-cpp` on purpose:
+ * the type checker MUST NOT be asked to resolve a package a consumer will not
+ * have installed. Each is reached through a type PREDICATE over `unknown`, so
+ * an engine whose surface changed is caught as a refusal naming the missing
+ * method rather than as a crash inside a call that was never checked.
+ */
+interface RankingContext {
+  readonly rankAll: (query: string, documents: readonly string[]) => Promise<readonly number[]>;
+  readonly dispose: () => Promise<void>;
+}
+
+interface LoadedModel {
+  readonly createRankingContext: () => Promise<unknown>;
+  readonly dispose: () => Promise<void>;
+}
+
+interface Llama {
+  readonly loadModel: (options: { readonly modelPath: string }) => Promise<unknown>;
+}
+
+interface Engine {
+  readonly getLlama: () => Promise<unknown>;
+}
+
+const isEngine = (value: unknown): value is Engine =>
+  isRecord(value) && typeof value['getLlama'] === 'function';
+
+const isLlama = (value: unknown): value is Llama =>
+  isRecord(value) && typeof value['loadModel'] === 'function';
+
+const isLoadedModel = (value: unknown): value is LoadedModel =>
+  isRecord(value) && typeof value['createRankingContext'] === 'function' && typeof value['dispose'] === 'function';
+
+const isRankingContext = (value: unknown): value is RankingContext =>
+  isRecord(value) && typeof value['rankAll'] === 'function' && typeof value['dispose'] === 'function';
+
+const isDisposable = (value: unknown): value is { readonly dispose: () => Promise<void> } =>
+  isRecord(value) && typeof value['dispose'] === 'function';
+
+/**
+ * The ONE place `node-llama-cpp` is loaded. The specifier is held in a
  * `string`-typed binding, not written as a literal, so the module is not a
- * build-time dependency of this package — the type checker MUST NOT be asked to
- * resolve a package that is not installed. The result is taken as `unknown`,
+ * build-time dependency of this package. The result is taken as `unknown`,
  * which keeps the dynamic import off the `any` path.
  */
-const loadEngine = async (): Promise<LoadResult> => {
+const importEngine: EngineLoader = async () => {
   const specifier: string = LOCAL_RERANKER_PACKAGE;
+  return await import(specifier);
+};
+
+type LoadResult = { readonly ok: true; readonly engine: Engine } | { readonly ok: false; readonly detail: string };
+
+const loadEngine = async (load: EngineLoader): Promise<LoadResult> => {
   try {
-    const loaded: unknown = await import(specifier);
-    return loaded === undefined || loaded === null
-      ? { ok: false, detail: 'the module loaded as nothing' }
-      : { ok: true };
+    const loaded: unknown = await load();
+    if (loaded === undefined || loaded === null) return { ok: false, detail: 'the module loaded as nothing' };
+    return isEngine(loaded)
+      ? { ok: true, engine: loaded }
+      : { ok: false, detail: 'the module loaded but exports no getLlama' };
   } catch (error: unknown) {
     return { ok: false, detail: describeError(error) };
   }
@@ -63,25 +130,140 @@ const unavailableMessage = (detail: string): string =>
   `the local rerank backend needs ${LOCAL_RERANKER_PACKAGE}, which did not load (${detail}) — install it with \`${LOCAL_RERANKER_INSTALL_COMMAND}\`, or select the http backend, where --rerank works over HTTP with no local engine at all`;
 
 /** Probes the optional dependency so a caller can report WHY the backend is refused. */
-export const localRerankerAvailability = async (): Promise<LocalRerankerAvailability> => {
-  const loaded = await loadEngine();
+export const localRerankerAvailability = async (
+  load: EngineLoader = importEngine
+): Promise<LocalRerankerAvailability> => {
+  const loaded = await loadEngine(load);
   return loaded.ok ? { available: true } : { available: false, reason: unavailableMessage(loaded.detail) };
 };
 
 /**
- * Stated as a refusal, not a fallback: the scoring implementation is not built
- * yet, and answering over the HTTP endpoint instead would hand back a ranking
- * from a backend the caller did not select — a wrong answer that reads exactly
- * like a right one.
+ * One loaded GGUF, kept for the life of the process and keyed by its path.
+ *
+ * The load is the expensive half — MEASURED at 1 846 ms for
+ * `qwen3-reranker-0.6b-q8_0` on Vulkan, 2026-08-29, against a rerank of 100
+ * documents in 6 472 ms in the same run. A one-shot `dp-gnosis search` pays it
+ * once and exits; a long-lived `dp-gnosis-mcp` pays it once and then never
+ * again, which is the whole reason this backend is worth offering at all. The
+ * memo holds the PROMISE, so two concurrent first calls share one load rather
+ * than loading the file twice.
+ *
+ * The ranking CONTEXT is deliberately not cached with it. It is the cheap half,
+ * and a per-call context means two concurrent queries never share one sequence —
+ * a hazard the MCP server, which serves calls in parallel, would otherwise own.
  */
-const SCORING_UNIMPLEMENTED = `the local rerank backend loaded ${LOCAL_RERANKER_PACKAGE} but scores nothing yet — select the http backend to rerank`;
+const MODELS = new Map<string, Promise<LoadedModel>>();
+
+const openModel = async (engine: Engine, modelPath: string): Promise<LoadedModel> => {
+  const llama = await engine.getLlama();
+  if (!isLlama(llama)) throw new Error(`${LOCAL_RERANKER_PACKAGE}'s getLlama returned no loadModel`);
+  const model = await llama.loadModel({ modelPath });
+  if (!isLoadedModel(model)) throw new Error(`${LOCAL_RERANKER_PACKAGE} loaded ${modelPath} but it has no ranking API`);
+  return model;
+};
+
+const cachedModel = (engine: Engine, modelPath: string): Promise<LoadedModel> => {
+  const held = MODELS.get(modelPath);
+  if (held !== undefined) return held;
+  const pending = openModel(engine, modelPath);
+  MODELS.set(modelPath, pending);
+  return pending;
+};
+
+const disposeOne = async (model: LoadedModel): Promise<void> => {
+  await model.dispose();
+};
+
+const released = async (pending: Promise<LoadedModel>): Promise<void> => {
+  await pending.then(disposeOne, () => undefined);
+};
 
 /**
- * What the SERVING path reports when the local backend is selected. ALWAYS a
- * refusal today, for the reason above; the atoms the caller receives are the
- * first pass, and the run exits PARTIAL rather than claiming a rerank.
+ * Forgets one entry AND frees what it held.
+ *
+ * Both halves matter. A load that REJECTED stays in the map as a rejected
+ * promise, so every later call would reuse the first failure instead of
+ * retrying a file the user has since corrected; and a load that SUCCEEDED holds
+ * VRAM that nothing else will release inside a long-lived process.
  */
-export const localRerankRefusal = async (): Promise<string> => {
-  const availability = await localRerankerAvailability();
-  return availability.available ? SCORING_UNIMPLEMENTED : availability.reason;
+const evict = async (modelPath: string): Promise<void> => {
+  const held = MODELS.get(modelPath);
+  MODELS.delete(modelPath);
+  if (held !== undefined) await released(held);
+};
+
+/**
+ * Drops every loaded model and frees what it held. For tests, which load a real
+ * GGUF and would otherwise leave the native handle open when the run ends.
+ */
+export const resetLocalRerankerCache = async (): Promise<void> => {
+  const held = [...MODELS.values()];
+  MODELS.clear();
+  await Promise.all(held.map(released));
+};
+
+/**
+ * The raw scores, index-aligned with `documents`, and how long the scoring took.
+ *
+ * The elapsed time is returned rather than logged because it is the only honest
+ * answer to "is this machine fast enough?": per-document cost spans more than an
+ * order of magnitude between a GPU and a CPU, so a constant quoted from one
+ * machine forecasts nothing about another. The wizard measures it on the machine
+ * in front of it and shows the user that number.
+ */
+export type LocalScoreOutcome =
+  | { readonly ok: true; readonly scores: readonly number[]; readonly elapsedMs: number }
+  | { readonly ok: false; readonly error: string };
+
+const scoreFailed = (modelPath: string, cause: string): string =>
+  `the local rerank backend could not score with ${modelPath} (${cause})`;
+
+const scoreCount = (modelPath: string, got: number, wanted: number): string =>
+  scoreFailed(modelPath, `it returned ${String(got)} scores for ${String(wanted)} documents`);
+
+const usableScores = (scores: readonly number[]): boolean =>
+  scores.every(score => Number.isFinite(score));
+
+/**
+ * A context that CREATED but does not rank still holds its own native
+ * allocation, so it is released before the refusal returns: the MCP server
+ * process outlives many searches, and a leak per refused call accumulates in it.
+ */
+const noRankAll = async (modelPath: string, context: unknown): Promise<LocalScoreOutcome> => {
+  if (isDisposable(context)) await context.dispose();
+  return { ok: false, error: scoreFailed(modelPath, 'the model exposes no rankAll') };
+};
+
+/**
+ * Scores `documents` against `query` with the GGUF at `modelPath`. It reports a
+ * refusal for every failure class — an absent engine, an unloadable file, a
+ * short or non-finite result — and never a partial ranking: a rerank that lost
+ * documents on the way back would silently drop candidates the first pass found.
+ */
+export const localRerankScores = async (
+  modelPath: string,
+  query: string,
+  documents: readonly string[],
+  load: EngineLoader = importEngine
+): Promise<LocalScoreOutcome> => {
+  const loaded = await loadEngine(load);
+  if (!loaded.ok) return { ok: false, error: unavailableMessage(loaded.detail) };
+  try {
+    const model = await cachedModel(loaded.engine, modelPath);
+    const context = await model.createRankingContext();
+    if (!isRankingContext(context)) return await noRankAll(modelPath, context);
+    const started = Date.now();
+    const release = async (): Promise<void> => {
+      await context.dispose();
+    };
+    const scores = await context.rankAll(query, documents).finally(release);
+    const elapsedMs = Date.now() - started;
+    if (scores.length !== documents.length) return { ok: false, error: scoreCount(modelPath, scores.length, documents.length) };
+    return usableScores(scores)
+      ? { ok: true, scores, elapsedMs }
+      : { ok: false, error: scoreFailed(modelPath, 'it returned a score that is not a finite number') };
+  } catch (error: unknown) {
+    await evict(modelPath);
+    return { ok: false, error: scoreFailed(modelPath, describeError(error)) };
+  }
 };

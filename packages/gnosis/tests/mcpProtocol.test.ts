@@ -344,6 +344,10 @@ describe('zero dependency — the guard', () => {
     const manifest = JSON.parse(readFileSync(path, 'utf8')) as Json;
 
     expect(Object.keys(manifest['dependencies'] as Json)).toEqual([
+      // @inquirer/prompts does not break this block's premise: src/mcp's own import
+      // graph is unchanged (the test above still proves it is node builtins only).
+      // The library is reachable only from src/cli/wizard/prompts.ts.
+      '@inquirer/prompts',
       'better-sqlite3',
       'minisearch',
       'stemmer',
@@ -352,6 +356,12 @@ describe('zero dependency — the guard', () => {
       '@lancedb/lancedb',
       '@types/better-sqlite3',
       'apache-arrow',
+      // node-llama-cpp is the in-process rerank engine, and devDependencies is the
+      // placement that lets a checkout exercise the real one while a consumer's
+      // install is unchanged: npm installs devDependencies for neither a consumer
+      // nor a global install — the same reasoning the optionalDependencies note
+      // below records for @lancedb/lancedb.
+      'node-llama-cpp',
     ]);
     // optionalDependencies was removed entirely: npm installs optionalDependencies by
     // default, so @lancedb/lancedb (313 MB) was being downloaded by every consumer of a

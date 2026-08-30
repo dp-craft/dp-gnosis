@@ -76,7 +76,9 @@ plausible path the user never asked for is the failure this project polices.
 |---|---|---|
 | `dataRoot` | absolute root the vault and cache trees hang off | relative — a root that moves with the caller's terminal is a different vault per terminal |
 | `rerank.url` | base URL of the server that answers `/v1/rerank` | not a string, blank, or missing an `http://` / `https://` scheme. A scheme-less address is refused rather than repaired: guessing the protocol would send every call somewhere the user never wrote, and the connection error would then name the guess instead of the file |
-| `rerank.model` | the id THAT server serves the reranker under | not a string, or blank |
+| `rerank.model` | the id THAT server serves the reranker under — an HTTP model id, never a file path | not a string, or blank |
+| `rerank.backend` | WHICH implementation scores: `http` (the shipped served endpoint) or `local` (in-process, `node-llama-cpp`) | any other name. A name that resolved to nothing would rerank silently badly |
+| `rerank.modelPath` | absolute path to the `.gguf` the `local` backend loads | not a string, blank, or **relative**. `dp-gnosis` is run from anywhere and served from an MCP client whose working directory nobody chose, so a relative path names a different file per caller — and a rerank scored by a file you did not mean returns a plausible ranking with nothing to notice it by |
 | `models.rephrase` | the chat id `search --rephrase` rewrites the query with | not a string, or blank |
 | `models.synthesize` | the chat id `ask --synthesize` writes the answer with | not a string, or blank |
 | `models.enrich` | the chat id `enrich` generates each atom's sidecar record with | not a string, or blank |
@@ -90,6 +92,16 @@ built-in constant**:
 |---|---|---|---|---|
 | endpoint | — | `DP_GNOSIS_RERANK_URL` | `rerank.url` | `RERANK_DEFAULT_URL` |
 | model id | `--rerank-model` | `DP_GNOSIS_RERANK_MODEL` | `rerank.model` | `RERANK_MODEL_ID` |
+| backend | — | `DP_GNOSIS_RERANK_BACKEND` | `rerank.backend` | `RERANK_DEFAULT_BACKEND` |
+| GGUF path | — | `DP_GNOSIS_RERANK_MODEL_PATH` | `rerank.modelPath` | **none** |
+
+`rerank.modelPath` is the one setting with no fourth tier, and the absence is
+deliberate. Every other one defaults harmlessly: a guessed address answers
+nothing, a guessed id is served by nobody, and the refusal names the guess. A
+guessed GGUF path could name a file that exists and scores, and its ranking
+would be indistinguishable from the one you configured. The `local` backend with
+no path REFUSES by key name instead. `OPTIONAL.md` § The in-process backend has
+the rest of it.
 
 **`models` does the same for the three CHAT hops**, which have no `setup` to find
 them: they share the `rerank.url` endpoint — one server, one address — and
@@ -272,6 +284,9 @@ and its own index. A second PROJECT does not.
 ---
 
 ## 7. Worked setups
+
+`dp-gnosis wizard` writes a profile of this shape for you and explains each choice as it asks;
+what follows is the vocabulary it writes, and what to edit afterwards.
 
 ### 7.1 One project
 
