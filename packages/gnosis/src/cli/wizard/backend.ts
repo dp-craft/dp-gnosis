@@ -25,11 +25,16 @@
  *
  * Detection walks `process.env.PATH` rather than shelling out to `command -v`:
  * no shell, no quoting question, no dependency, and the same answer.
+ *
+ * `portTaken` lives here too, with the other port and process concerns, so a
+ * caller that must know whether a port can be served asks the module that owns
+ * serving — and a test can stub the host fact instead of binding a real port.
  */
 
 import { spawn } from 'node:child_process';
 import { closeSync, constants, openSync } from 'node:fs';
 import { access } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { delimiter, join } from 'node:path';
 
 /** The three servers the wizard knows how to talk to. */
@@ -110,6 +115,41 @@ export const serveCommand = (modelPath: string, port: number): ServeCommand => {
 
 /** The loopback address a wizard-started server binds, and the caller probes. */
 export const localBaseUrl = (port: number): string => `http://127.0.0.1:${String(port)}`;
+
+/** The address a wizard-started server binds, and the address the bind probe tests. */
+const LOOPBACK_HOST = '127.0.0.1';
+
+/**
+ * Whether a server could BIND that port here — decided by binding it, which is
+ * the question actually being asked.
+ *
+ * It used to be one `GET /v1/models`. Anything that is not an OpenAI-compatible
+ * server — a dev server, a llama.cpp that died holding its socket — answers
+ * non-200 or refuses the connection, so the port read as free, `spawnServer`
+ * returned a pid before llama.cpp died on `bind: address in use`, the wizard
+ * printed "started as pid N", and the wait then burned its whole budget before
+ * failing with no cause. After a multi-gigabyte download.
+ *
+ * Any bind error counts as taken, EACCES included: "this process cannot serve
+ * there" is the fact the caller needs, and which errno produced it changes
+ * nothing about the answer.
+ *
+ * It is a FACT ABOUT THE HOST, which is why it is exported from here rather
+ * than kept private to the interview: a suite that has to decide the answer
+ * stubs this module, and binds nothing.
+ */
+export const portTaken = async (port: number): Promise<boolean> =>
+  await new Promise<boolean>(settle => {
+    const probe = createServer();
+    probe.once('error', () => {
+      settle(true);
+    });
+    probe.listen({ port, host: LOOPBACK_HOST }, () => {
+      probe.close(() => {
+        settle(false);
+      });
+    });
+  });
 
 const spawnServer = (modelPath: string, port: number, logPath: string): StartOutcome => {
   const { command, args } = serveCommand(modelPath, port);
