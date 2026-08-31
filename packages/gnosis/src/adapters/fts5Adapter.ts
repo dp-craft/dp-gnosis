@@ -594,6 +594,41 @@ const writeEntries = (
   })();
 };
 
+/** The two ways this module opens an index file, named once. */
+const READ_ONLY: Database.Options = { readonly: true };
+const READ_WRITE: Database.Options = {};
+
+/**
+ * THE ONLY open/close owner in this module. Every caller that opens an index
+ * for the span of one operation goes through here, because a `close()` written
+ * after the work releases the handle on the HAPPY PATH ONLY — and the work
+ * throws by design: `stampedAnalyzer` REFUSES a stamp outside `ANALYZERS`, and
+ * the process holding it is long-lived (the MCP server), so a repeated refusal
+ * would accumulate descriptors — and on Windows locks — against an index a
+ * rebuild then cannot replace. `finally` makes the release unconditional.
+ *
+ * The long-lived per-instance handle of {@link openIndex} is deliberately NOT
+ * routed here: it outlives its call by design and is closed by the port.
+ */
+export const withIndex = <T>(
+  indexPath: string,
+  read: (db: Database.Database) => T,
+  options: Database.Options = READ_ONLY
+): T => {
+  const db = new Database(indexPath, options);
+  try {
+    return read(db);
+  } finally {
+    db.close();
+  }
+};
+
+const createSchema = (db: Database.Database): void => {
+  db.exec(CREATE_META_SQL);
+  db.exec(CREATE_FTS_SQL);
+  db.exec(CREATE_INDEX_META_SQL);
+};
+
 /**
  * Rebuild the index wholesale from `atomsDir`. Wholesale rather than
  * incremental because reproducibility is the property under test: the same
@@ -620,23 +655,33 @@ const textSpecOf = (options: BuildFts5IndexOptions): TextSpec => ({
   ...sourceSpecOf(options),
 });
 
+/** Everything the stamp states about THIS build, over the entries it wrote. */
+const stampSpecOf = (
+  options: BuildFts5IndexOptions,
+  entries: readonly IndexEntry[],
+  text: TextSpec
+): StampSpec => ({
+  ...text,
+  corpusDigest: readManifestDigest(options.atomsDir),
+  enrichmentRecords: entries.filter(entry => entry.enrichment !== undefined).length,
+  emptyBodyAtoms: emptyBodyAtoms(entries, text),
+  keywordCensus: keywordCensus(entries, text),
+});
+
 export const buildFts5Index = (options: BuildFts5IndexOptions): number => {
   const entries = collectEntries(options.atomsDir, loadEnrichment(options.enrichmentPath));
   const text = textSpecOf(options);
   rmSync(options.indexPath, { force: true });
   mkdirSync(dirname(options.indexPath), { recursive: true });
-  const db = new Database(options.indexPath);
-  db.exec(CREATE_META_SQL);
-  db.exec(CREATE_FTS_SQL);
-  db.exec(CREATE_INDEX_META_SQL);
-  writeEntries(db, entries, {
-    ...text,
-    corpusDigest: readManifestDigest(options.atomsDir),
-    enrichmentRecords: entries.filter(entry => entry.enrichment !== undefined).length,
-    emptyBodyAtoms: emptyBodyAtoms(entries, text),
-    keywordCensus: keywordCensus(entries, text),
-  });
-  db.close();
+  const stamp = stampSpecOf(options, entries, text);
+  withIndex(
+    options.indexPath,
+    db => {
+      createSchema(db);
+      writeEntries(db, entries, stamp);
+    },
+    READ_WRITE
+  );
   return entries.length;
 };
 
@@ -671,9 +716,7 @@ const stampValue = (db: Database.Database, key: string): string | undefined =>
  * the index, never a zero: a zero is a build that merged nothing.
  */
 export const readEnrichmentRecords = (indexPath: string): number | undefined => {
-  const db = new Database(indexPath, { readonly: true });
-  const value = stampValue(db, ENRICHMENT_RECORDS_KEY);
-  db.close();
+  const value = withIndex(indexPath, db => stampValue(db, ENRICHMENT_RECORDS_KEY));
   return value === undefined ? undefined : asRecordCount(value);
 };
 
@@ -683,9 +726,7 @@ export const readEnrichmentRecords = (indexPath: string): number | undefined => 
  * generated body to be empty, which is a different fact from a zero.
  */
 export const readEmptyBodyAtoms = (indexPath: string): number | undefined => {
-  const db = new Database(indexPath, { readonly: true });
-  const value = stampValue(db, EMPTY_BODY_ATOMS_KEY);
-  db.close();
+  const value = withIndex(indexPath, db => stampValue(db, EMPTY_BODY_ATOMS_KEY));
   return value === undefined ? undefined : asRecordCount(value);
 };
 
@@ -698,13 +739,13 @@ export const readEmptyBodyAtoms = (indexPath: string): number | undefined => {
  * generator, never a constant: an operator MUST read it off their OWN run.
  */
 export const readKeywordCensus = (indexPath: string): KeywordCensus | undefined => {
-  const db = new Database(indexPath, { readonly: true });
-  const kept = stampValue(db, KEYWORDS_KEPT_KEY);
-  const dropped = stampValue(db, KEYWORDS_DROPPED_KEY);
-  db.close();
+  const stamps = withIndex(indexPath, db => ({
+    kept: stampValue(db, KEYWORDS_KEPT_KEY),
+    dropped: stampValue(db, KEYWORDS_DROPPED_KEY),
+  }));
   return censusOf(
-    kept === undefined ? undefined : asRecordCount(kept),
-    dropped === undefined ? undefined : asRecordCount(dropped)
+    stamps.kept === undefined ? undefined : asRecordCount(stamps.kept),
+    stamps.dropped === undefined ? undefined : asRecordCount(stamps.dropped)
   );
 };
 
@@ -755,12 +796,8 @@ export const carriedAnalyzer = (stamped: string | undefined): string =>
  * same stamp the query side reads, through the same fallback, so a diagnostic
  * cannot analyse under a chain the searcher would not use.
  */
-export const readIndexAnalyzer = (indexPath: string): AnalyzerId => {
-  const db = new Database(indexPath, { readonly: true });
-  const analyzer = stampedAnalyzer(db);
-  db.close();
-  return analyzer;
-};
+export const readIndexAnalyzer = (indexPath: string): AnalyzerId =>
+  withIndex(indexPath, stampedAnalyzer);
 
 /**
  * The two INDEX-IDENTITY keys, read off the file being searched. Both are
@@ -791,14 +828,8 @@ const readStamp = (db: Database.Database): IndexStamp => ({
  * index by facts the searcher does not use, and it changes nothing about how
  * that chain then serves the file.
  */
-export const readIndexStamp = (indexPath: string): IndexStamp => {
-  const db = new Database(indexPath, { readonly: true });
-  try {
-    return readStamp(db);
-  } finally {
-    db.close();
-  }
-};
+export const readIndexStamp = (indexPath: string): IndexStamp =>
+  withIndex(indexPath, readStamp);
 
 const rebuildRemedy = (): string =>
   `rebuild it with \`${indexRebuildCommand(FTS5_MODE)}\``;

@@ -24,10 +24,10 @@
  * better-sqlite3 12.11.1): a temp `fts5vocab` over a readonly `main` opens and
  * answers.
  */
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 
 import { analyze, type AnalyzerId, identifierTermOf, partsAnalyzerOf } from '../query.js';
-import { FTS_TABLE } from './fts5Adapter.js';
+import { FTS_TABLE, withIndex } from './fts5Adapter.js';
 
 /** One analysed query term and the number of atoms its posting list reaches. */
 export interface QueryTermPostings {
@@ -196,12 +196,10 @@ export const readVocabularyGap = (
   query: string,
   analyzer: AnalyzerId
 ): VocabularyGap => {
-  const db = new Database(indexPath, { readonly: true });
-  db.exec(CREATE_VOCAB_SQL);
-  const statement = db.prepare(SELECT_POSTINGS_SQL);
-  const terms = distinctProbes(probesOf(query, analyzer)).map(probe =>
-    postingsOf(statement, probe)
-  );
-  db.close();
+  const terms = withIndex(indexPath, db => {
+    db.exec(CREATE_VOCAB_SQL);
+    const statement = db.prepare(SELECT_POSTINGS_SQL);
+    return distinctProbes(probesOf(query, analyzer)).map(probe => postingsOf(statement, probe));
+  });
   return summarizeVocabularyGap(terms);
 };

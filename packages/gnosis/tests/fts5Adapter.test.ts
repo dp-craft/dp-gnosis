@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import {
   buildFts5Index,
   createFts5Adapter,
+  readIndexAnalyzer,
   toAnalyzedMatchExpression,
   toMatchExpression
 } from '../src/adapters/fts5Adapter.js';
@@ -734,6 +735,42 @@ describe('fts5 analyzer stamp', () => {
     const result = await port().retrieve('adr-018', { k: 5 });
 
     expect(result.atoms.map(atom => atom.id)).toEqual(['atom-adjacent']);
+  });
+});
+
+/**
+ * A REFUSAL MUST NOT COST A HANDLE. `readIndexAnalyzer` throws BY DESIGN on a
+ * stamp outside the known chains; the process that reads it is long-lived (the
+ * MCP server), so a refusal that left its `better-sqlite3` handle open would
+ * accumulate descriptors — and on Windows locks — against an index a rebuild
+ * then cannot replace. The handle is observed through `close`: the instance it
+ * was called on MUST be closed by the time the throw reaches the caller.
+ */
+describe('fts5 index handles', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('closes the handle when readIndexAnalyzer refuses an unknown stamp', () => {
+    writeAtom({ file: 'a.md', id: 'atom-a', body: 'zustand selectors stability' });
+    buildFts5Index({ atomsDir, indexPath });
+    const writer = new Database(indexPath);
+    writer.prepare('UPDATE index_meta SET value = ? WHERE key = \'analyzer\'').run('klingon-fold');
+    writer.close();
+
+    const closed: Database.Database[] = [];
+    const realClose = Database.prototype.close;
+    vi.spyOn(Database.prototype, 'close').mockImplementation(function (
+      this: Database.Database
+    ): Database.Database {
+      const result = realClose.call(this);
+      closed.push(this);
+      return result;
+    });
+
+    expect(() => readIndexAnalyzer(indexPath)).toThrow(/unknown analyzer "klingon-fold"/);
+    expect(closed).toHaveLength(1);
+    expect(closed[0]?.open).toBe(false);
   });
 });
 
