@@ -42,6 +42,7 @@ A bare invocation, `--help` or `-h` prints help and exits 0; `--version` or `-v`
 | Code | Meaning |
 |---|---|
 | 0 | everything asked for happened |
+| 1 | unexpected internal error; the message, not a stack, goes to stderr |
 | 2 | bad input or usage; the message names the correction |
 | 3 | **partial** — real output was produced AND something was refused |
 

@@ -12,6 +12,8 @@
 
 /** Everything the run asked for happened. */
 export const EXIT_OK = 0;
+/** An unexpected internal error escaped the command. The message, never a stack. */
+export const EXIT_INTERNAL = 1;
 /** Bad input or usage. The message MUST name the correction, not just the fault. */
 export const EXIT_USAGE = 2;
 /** A PARTIAL result: real output was produced AND something was refused. */

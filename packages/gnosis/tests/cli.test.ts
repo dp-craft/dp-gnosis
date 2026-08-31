@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { lanceDbAvailability } from '../src/adapters/lanceDbAdapter.js';
 import { miniSearchAvailability } from '../src/adapters/miniSearchAdapter.js';
 import { mapSequential } from '../src/bench/sequential.js';
-import { runCli } from '../src/cli/cli.js';
+import { internalFailure, runCli } from '../src/cli/cli.js';
 
 /** Both section bodies clear `ATOM_MIN_CHARS`, so the doc stays two atoms. */
 const DOC = [
@@ -661,5 +661,23 @@ describe('runCli', () => {
         expect(String(data['indexState']).length).toBeGreaterThan(0);
       });
     });
+  });
+});
+
+describe('internalFailure', () => {
+  it('maps an escaped Error to exit 1 with the message, not the stack, on stderr', () => {
+    const result = internalFailure(new Error('index digest reader exploded'));
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('index digest reader exploded\n');
+    expect(result.stderr).not.toContain('at ');
+  });
+
+  it('stringifies a thrown value that is not an Error', () => {
+    const result = internalFailure('plain string blew up');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe('plain string blew up\n');
   });
 });

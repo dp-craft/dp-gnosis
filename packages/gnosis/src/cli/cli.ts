@@ -55,7 +55,7 @@ import {
   undeclaredRepoRoot
 } from './locations.js';
 import type { CommandOutcome } from './outcome.js';
-import { EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
+import { EXIT_INTERNAL, EXIT_OK, EXIT_USAGE, usageError } from './outcome.js';
 import {
   BUDGET_MODE_FLAG,
   DOMAIN_FLAG,
@@ -88,6 +88,16 @@ export interface CliResult {
   readonly stdout: string;
   readonly stderr: string;
 }
+
+/**
+ * The boundary for a throw no command caught. A scripted caller gets exit 1 and
+ * the MESSAGE — a `dist/` stack frame is noise it cannot branch on.
+ */
+export const internalFailure = (error: unknown): CliResult => ({
+  exitCode: EXIT_INTERNAL,
+  stdout: '',
+  stderr: `${error instanceof Error ? error.message : String(error)}\n`,
+});
 
 const COMMANDS: Readonly<Record<string, CommandHandler>> = {
   wizard: runWizardCommand,
