@@ -120,7 +120,7 @@ export const ANALYZER_CHOICES: readonly Choice<AnalyzerId>[] = [
   {
     value: 'ident-porter-fold',
     title: 'ident-porter-fold — English, identifier-aware',
-    when: 'Pick this if your documents are mostly English AND full of code — function names, flags, snake_case or dotted paths.',
+    when: 'Pick this if your documents are mostly English AND full of code — flags, snake_case names or dotted paths.',
     pro: 'it does what the English default does, and adds each code identifier exactly as written as a search term of its own, so an identifier spelled the way your documents spell it matches, where the default keeps only its trimmed parts',
     con: 'that one extra term is all it adds, and on English it costs: this chain shipped as the English default once and was reverted after it measured a significant quality loss on the collection gnosis is measured against',
   },

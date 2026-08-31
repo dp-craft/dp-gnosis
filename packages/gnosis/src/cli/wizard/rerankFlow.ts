@@ -30,7 +30,7 @@ import {
   localRerankerDirectory,
   localRerankScores
 } from '../../localReranker.js';
-import { rerankHealth, rerankUrlFact } from '../../rerank.js';
+import { rerankHealth, resolveRerankUrl } from '../../rerank.js';
 import type { Probed } from '../rerankSetup.js';
 import { candidateUrls, findServer, passed, probeCandidates, selectCandidates } from '../rerankSetup.js';
 import type { Choice, RunMode } from './advice.js';
@@ -876,8 +876,24 @@ const retryCatalogue = async (prompter: Prompter, initial: boolean): Promise<Cat
   return await retryCatalogue(prompter, false);
 };
 
-/** The address the three chat hops will read — `rephrase.ts` resolves the RERANKER's. */
-const chatAddress = (): string => rerankUrlFact().value;
+/**
+ * The address the three chat hops will read ONCE THIS PLAN IS WRITTEN.
+ *
+ * They resolve the RERANKER's endpoint through `rerank.ts:resolveRerankUrl` —
+ * the one owner of the documented `flag > env > config.json > constant`
+ * precedence. But this interview is choosing that endpoint right now, so the
+ * pre-run resolution is the WRONG address to guard against: the probe can find
+ * a server on one port while the reranker the user then downloaded is served on
+ * another, and comparing the catalogue against the stale value passes ids the
+ * hops will never reach.
+ *
+ * An `http` answer becomes `rerank.url` in config.json (`plan.ts:rerankPatch`),
+ * so it IS what the hops will resolve. A `local` answer writes `backend` and
+ * `modelPath` and no url at all, and a declined reranker writes nothing, so in
+ * both of those the url tier is untouched and today's resolution still holds.
+ */
+const chatAddress = (rerank: RerankAnswer | undefined): string =>
+  rerank?.backend === 'http' ? rerank.url : resolveRerankUrl();
 
 /**
  * Why a catalogue from another address is refused rather than offered.
@@ -888,29 +904,37 @@ const chatAddress = (): string => rerankUrlFact().value;
  * an Ollama id here would configure three hops against a port that does not
  * serve it — a component producing nothing, recorded as configuration.
  */
-const OTHER_ADDRESS = (baseUrl: string): readonly string[] => [
+const OTHER_ADDRESS = (baseUrl: string, address: string): readonly string[] => [
   '',
-  `  Those models are served by ${baseUrl}, but the chat hops read ${chatAddress()} — they share the reranker's address and carry none of their own.`,
+  `  Those models are served by ${baseUrl}, but the chat hops read ${address} — they share the reranker's address and carry none of their own.`,
   '  Choosing one would write an id against an address that does not serve it, so the three hops are left unset instead.',
-  `  Serve a chat model on ${chatAddress()}, or write \`models\` into config.json by hand.`,
+  `  Serve a chat model on ${address}, or write \`models\` into config.json by hand.`,
 ];
 
 /** The three questions, but only over ids the chat hops will actually reach. */
-const offerFrom = async (prompter: Prompter, found: Catalogue): Promise<ChatModels | undefined> => {
+const offerFrom = async (prompter: Prompter, found: Catalogue, address: string): Promise<ChatModels | undefined> => {
   if (found.models.length === 0) return undefined;
-  if (found.baseUrl !== chatAddress()) {
-    prompter.say(OTHER_ADDRESS(found.baseUrl));
+  if (found.baseUrl !== address) {
+    prompter.say(OTHER_ADDRESS(found.baseUrl, address));
     return undefined;
   }
   return await chatHops(prompter, found.models);
 };
 
-/** The three chat ids, each CHOSEN by the user from the catalogue — never guessed. */
+/**
+ * The three chat ids, each CHOSEN by the user from the catalogue — never guessed.
+ *
+ * The whole {@link RerankResult} is carried in rather than its catalogue alone:
+ * the catalogue says where the ids CAME from and the answer says where the hops
+ * will LOOK, and the guard is the comparison of the two. Passing the catalogue
+ * by itself is what let ids from the probe's address be offered while the
+ * downloaded reranker was serving on a different one.
+ */
 export const askChatModels = async (
   prompter: Prompter,
-  catalogue: Catalogue | undefined
+  result: RerankResult
 ): Promise<ChatModels | undefined> => {
-  if (catalogue === undefined) prompter.say(NO_CATALOGUE);
-  const found = catalogue ?? (await retryCatalogue(prompter, true));
-  return found === undefined ? undefined : await offerFrom(prompter, found);
+  if (result.catalogue === undefined) prompter.say(NO_CATALOGUE);
+  const found = result.catalogue ?? (await retryCatalogue(prompter, true));
+  return found === undefined ? undefined : await offerFrom(prompter, found, chatAddress(result.rerank));
 };

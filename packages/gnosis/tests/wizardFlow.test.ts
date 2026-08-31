@@ -23,7 +23,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { CommandContext } from '../src/cli/context.js';
 import type { CommandOutcome } from '../src/cli/outcome.js';
 import { OLLAMA_URL } from '../src/cli/rerankSetup.js';
-import { ADAPTER_CHOICES, ANALYZER_CHOICES, RUN_MODE_CHOICES } from '../src/cli/wizard/advice.js';
+import { ADAPTER_CHOICES, ANALYZER_CHOICES, describeChoice, RUN_MODE_CHOICES } from '../src/cli/wizard/advice.js';
 import { localBaseUrl, startServer } from '../src/cli/wizard/backend.js';
 import { askMatching } from '../src/cli/wizard/flow.js';
 import type { HardwareFacts } from '../src/cli/wizard/hardware.js';
@@ -1390,7 +1390,7 @@ describe('askChatModels — an empty catalogue is explained, not skipped', () =>
 
   const ask = async (replies: readonly Reply[]): Promise<{ readonly picked: unknown; readonly prompter: Scripted }> => {
     const prompter = scriptedPrompter(replies);
-    return { picked: await askChatModels(prompter, undefined), prompter };
+    return { picked: await askChatModels(prompter, { rerank: undefined, catalogue: undefined }), prompter };
   };
 
   // The claim has to hold when NOTHING was probed — the declined-reranker case —
@@ -1447,7 +1447,10 @@ describe('askChatModels — an empty catalogue is explained, not skipped', () =>
    * serve them, and nothing recorded that as wrong.
    */
   it('should refuse ids gathered from an address the chat hops will not read', async () => {
-    const picked = await askChatModels(prompter(), { baseUrl: OLLAMA_URL, models: [CHAT_MODEL] });
+    const picked = await askChatModels(prompter(), {
+      rerank: undefined,
+      catalogue: { baseUrl: OLLAMA_URL, models: [CHAT_MODEL] },
+    });
 
     expect(picked).toBeUndefined();
   });
@@ -1455,7 +1458,7 @@ describe('askChatModels — an empty catalogue is explained, not skipped', () =>
   it('should say WHY those ids were not offered, naming both addresses', async () => {
     const scripted = prompter();
 
-    await askChatModels(scripted, { baseUrl: OLLAMA_URL, models: [CHAT_MODEL] });
+    await askChatModels(scripted, { rerank: undefined, catalogue: { baseUrl: OLLAMA_URL, models: [CHAT_MODEL] } });
 
     const said = flatten(scripted.transcript);
     expect(said).toContain(OLLAMA_URL);
@@ -1472,7 +1475,60 @@ describe('askChatModels — an empty catalogue is explained, not skipped', () =>
       { match: /^Model for `enrich`/, answers: [KEEP_DEFAULT] },
     ]);
 
-    const picked = await askChatModels(scripted, { baseUrl: SERVER_URL, models: [CHAT_MODEL] });
+    const picked = await askChatModels(scripted, {
+      rerank: undefined,
+      catalogue: { baseUrl: SERVER_URL, models: [CHAT_MODEL] },
+    });
+
+    expect(picked).toEqual({ rephrase: CHAT_MODEL, synthesize: undefined, enrich: undefined });
+  });
+
+  /**
+   * The address the hops will read is the one the INTERVIEW just chose.
+   *
+   * The probe finds a server on the reranker's default port; the user then
+   * downloads a model, that port is occupied, and the wizard serves it one port
+   * up. The answer carries the new url, and `plan.ts:rerankPatch` writes it — so
+   * the ids the probe collected belong to an address the hops will never read.
+   * Comparing them against the PRE-RUN resolution passed them anyway.
+   */
+  const PROBED_URL = 'http://127.0.0.1:9292';
+  const MOVED_URL = 'http://127.0.0.1:9293';
+
+  const movedTo = (url: string): RerankResult['rerank'] => ({
+    backend: 'http',
+    url,
+    model: 'qwen3-reranker-4b',
+    poolK: 40,
+  });
+
+  it('should refuse ids from the port the probe read when the reranker was served on another', async () => {
+    const scripted = prompter();
+
+    const picked = await askChatModels(scripted, {
+      rerank: movedTo(MOVED_URL),
+      catalogue: { baseUrl: PROBED_URL, models: [CHAT_MODEL] },
+    });
+
+    const said = flatten(scripted.transcript);
+    expect(picked).toBeUndefined();
+    expect(said).toContain(PROBED_URL);
+    expect(said).toContain(MOVED_URL);
+    expect(said).toContain('does not serve it');
+  });
+
+  it('should offer the ids when the reranker is served by the very address that advertised them', async () => {
+    const scripted = scriptedPrompter([
+      { match: /^Configure the chat hops now\?/, answers: [true] },
+      { match: /^Model for `search --rephrase`/, answers: [CHAT_MODEL] },
+      { match: /^Model for `ask --synthesize`/, answers: [KEEP_DEFAULT] },
+      { match: /^Model for `enrich`/, answers: [KEEP_DEFAULT] },
+    ]);
+
+    const picked = await askChatModels(scripted, {
+      rerank: movedTo(MOVED_URL),
+      catalogue: { baseUrl: MOVED_URL, models: [CHAT_MODEL] },
+    });
 
     expect(picked).toEqual({ rephrase: CHAT_MODEL, synthesize: undefined, enrich: undefined });
   });
@@ -1532,13 +1588,18 @@ describe('wizard — what the identifier question and its row claim', () => {
   });
 
   // The chains split camelCase under NEITHER analyzer, so the question must not
-  // offer function names as an example of what they handle.
-  it('should not offer function names as an example the chains handle', async () => {
+  // offer function names as an example of what they handle — and neither may any
+  // menu row, whose `when`, `pro` and `con` all reach the user through
+  // `describeChoice`. Asserting the question alone let the claim survive in `when`.
+  it('should not offer function names as an example the chains handle, in the question or any rendered row', async () => {
     const scripted = scriptedPrompter(matchingScript(false));
 
     await askMatching(scripted);
 
     expect(askedIdentifiers(scripted)).not.toMatch(/function names/i);
+    ANALYZER_CHOICES.forEach(choice => {
+      expect(describeChoice(choice)).not.toMatch(/function names/i);
+    });
   });
 
   // Given English was chosen, When the identifier question is asked, Then its

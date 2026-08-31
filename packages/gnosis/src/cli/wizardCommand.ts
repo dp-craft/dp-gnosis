@@ -503,7 +503,7 @@ const interview = async (prompter: Prompter): Promise<CommandOutcome> => {
     modelsDir: join(root, MODELS_SUBDIR),
     logPath: join(root, SERVER_LOG),
   });
-  const chat = await askChatModels(prompter, rerank.catalogue);
+  const chat = await askChatModels(prompter, rerank);
 
   prompter.say([...section('Build'), ...note(BUILD_EXPLANATION)]);
   return await review(prompter, { chosenRoot, root, chat }, { corpus, rerank });
