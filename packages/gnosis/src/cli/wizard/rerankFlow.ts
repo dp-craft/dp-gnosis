@@ -228,14 +228,26 @@ const fetchModel = async (
   const outcome = await downloadFile(wanted, join(modelsDir, wanted.file), progressOf(prompter, wanted.file));
   prompter.say(['']);
   if (outcome.ok) return outcome.path;
-  prompter.say([`  the download did not verify and was discarded: ${outcome.error}`]);
+  // The lead is NEUTRAL because `downloadFile` fails four different ways — a
+  // disk-space refusal and an HTTP 404 among them — and each has its own remedy
+  // and its own already-correct wording in `download.ts`. Claiming a
+  // verification failure for all four names the wrong cause three times, so the
+  // error is passed through verbatim under a lead that assumes nothing.
+  prompter.say([`  the download did not complete: ${outcome.error}`]);
   return undefined;
 };
 
+/**
+ * The binary is named EXACTLY, because this path serves the file with a
+ * `llama-server` command line and nothing else. Advising "install llama.cpp (or
+ * llama-swap)" on a machine that HAS llama-swap — which `backend.ts` detects
+ * and this path does not drive — tells the reader to install what they already
+ * have, and reads as the wizard contradicting the machine.
+ */
 const NO_BACKEND = (rendered: string): readonly string[] => [
   '',
-  '  No llama.cpp server was found on PATH, so the model cannot be started from here.',
-  '  Install llama.cpp (or llama-swap), then serve the file with:',
+  '  No `llama-server` binary was found on PATH, so the model cannot be started from here.',
+  '  Install llama.cpp to get `llama-server`, then serve the file with:',
   '',
   `    ${rendered}`,
   '',

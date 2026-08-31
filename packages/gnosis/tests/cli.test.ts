@@ -689,6 +689,21 @@ describe('flag scope', () => {
     });
   });
 
+  /**
+   * `wizard` writes its whole interview to `process.stdout` as it happens
+   * (`wizard/prompts.ts:terminalPrompter`), bypassing `CliResult` — so `--json`
+   * would emit prose followed by a JSON object, which no caller can parse. The
+   * scope check runs in `outcomeFor`, ahead of the handler that refuses without
+   * a TTY, so this verdict does not depend on how the suite is run.
+   */
+  it('refuses --json on wizard, which writes its interview straight to stdout', async () => {
+    const result = await runCli(['wizard', '--json']);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain('unknown flag');
+    expect(result.stdout).toContain('--json');
+  });
+
   it('keeps --golden-set on bench, which is the one command that reads it', async () => {
     const result = await runCli(['bench', '--golden-set', '/tmp/does-not-exist.json', '--json']);
 

@@ -36,7 +36,7 @@ import {
   runEnrichCommand
 } from './enrichCommand.js';
 import type { OutputFormat } from './format.js';
-import { FORMAT_FLAG, resolveFormat } from './format.js';
+import { FORMAT_FLAG, JSON_FLAG, resolveFormat } from './format.js';
 import { helpText } from './help.js';
 import {
   BODY_SOURCE_FLAG,
@@ -424,6 +424,22 @@ const misplacedBenchFlag = (args: ParsedArgs): string | undefined =>
     ? undefined
     : BENCH_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
 
+/**
+ * `wizard` is INTERACTIVE by definition: `wizard/prompts.ts:terminalPrompter`
+ * writes the whole interview to `process.stdout` as it happens, bypassing
+ * `CliResult`, so `--json` emitted prose followed by a JSON object — stdout no
+ * caller can parse, which is worse than a refusal. `--format` is already
+ * refused here through `RETRIEVAL_FLAGS`; this closes the other half. It is an
+ * INVERSE list, like `DEMO_REFUSED_FLAGS`: `--json` is global everywhere else,
+ * so it stays out of `SCOPED_FLAG_LISTS`.
+ */
+const WIZARD_REFUSED_FLAGS: readonly string[] = [JSON_FLAG];
+
+const misplacedWizardFlag = (args: ParsedArgs): string | undefined =>
+  args.command === WIZARD_COMMAND
+    ? WIZARD_REFUSED_FLAGS.find(flag => args.flags[flag] !== undefined)
+    : undefined;
+
 const misplacedTopKFlag = (args: ParsedArgs): string | undefined =>
   TOP_K_COMMANDS.includes(args.command ?? '')
     ? undefined
@@ -443,6 +459,7 @@ const SCOPE_CHECKS: readonly ((args: ParsedArgs) => string | undefined)[] = [
   misplacedBenchFlag,
   misplacedTopKFlag,
   misplacedDemoFlag,
+  misplacedWizardFlag,
 ];
 
 /**

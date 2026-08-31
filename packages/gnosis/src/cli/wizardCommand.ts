@@ -43,7 +43,7 @@
  * summary line and that path are shown on BOTH screens, so a run that skipped
  * hundreds of documents says so even when it succeeded.
  */
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { atomFileCount, existingInstance, instancePaths, writeInstance } from '../instance.js';
@@ -121,6 +121,15 @@ const alreadyOccupied = (atomsPath: string, atoms: number): string =>
  * default root says nothing about a root they typed, and neither refusal reads
  * the index path, which is why any resolved one serves to build the triple.
  */
+/**
+ * The half of the guard that reads NOTHING but `paths.ts:userProfilePath`, so
+ * it is knowable before the first question. A re-run of the wizard MUST NOT
+ * spend a question before refusing: the answer would be collected into a run
+ * that cannot proceed whatever it says.
+ */
+const existingProfileRefusal = (): string | undefined =>
+  existsSync(userProfilePath()) ? alreadyExists(userProfilePath()) : undefined;
+
 const instanceRefusal = (root: string): string | undefined => {
   const atomsPath = atomsDirOf(root);
   const found = existingInstance(instancePaths(atomsPath, defaultIndexPath(DEFAULT_ADAPTER, root)));
@@ -313,11 +322,29 @@ const verify = async (plan: WizardPlan, adapter: string): Promise<string> => {
   return state === 'unreadable' && result.exitCode !== EXIT_OK ? `search exited ${String(result.exitCode)}` : state;
 };
 
+/**
+ * The closing screen is the flag vocabulary an average user learns, so it
+ * carries a flag only where the flag CHANGES what the command reads.
+ * `paths.ts:ingestProfilePath` already PREFERS the user profile when it exists,
+ * and `search` defaults to `DEFAULT_ADAPTER` — so on the default instance both
+ * flags are no-ops, and printing them teaches that every future command needs a
+ * 70-character suffix. On any other instance they are load-bearing and stay.
+ */
+const defaultInstance = (profilePath: string, adapter: string): boolean =>
+  adapter === DEFAULT_ADAPTER && profilePath === userProfilePath();
+
+const closingCommands = (profilePath: string, adapter: string): readonly string[] =>
+  defaultInstance(profilePath, adapter)
+    ? [`  ${cliInvocation()} search "<keywords>"`, `  ${cliInvocation()} doctor`]
+    : [
+        `  ${cliInvocation()} search "<keywords>" --adapter ${adapter} --profile ${profilePath}`,
+        `  ${cliInvocation()} doctor --profile ${profilePath}`,
+      ];
+
 const nextSteps = (profilePath: string, adapter: string): readonly string[] => [
   '',
   'Next:',
-  `  ${cliInvocation()} search "<keywords>" --adapter ${adapter} --profile ${profilePath}`,
-  `  ${cliInvocation()} doctor --profile ${profilePath}`,
+  ...closingCommands(profilePath, adapter),
   '',
   'To serve this vault to Claude Desktop, Cursor, Zed, opencode or Obsidian, the client',
   'configuration is in packages/gnosis/INTEGRATION.md.',
@@ -494,6 +521,8 @@ const review = async (
 const interview = async (prompter: Prompter): Promise<CommandOutcome> => {
   prompter.say(banner());
   prompter.say(WELCOME);
+  const existing = existingProfileRefusal();
+  if (existing !== undefined) return refuse(existing);
   const chosenRoot = await askDataRoot(prompter);
   const root = chosenRoot ?? dataRoot();
   const refusal = instanceRefusal(root);

@@ -185,4 +185,4 @@ export const undeclaredRepoRoot = (
  * claimed.
  */
 export const repoRootRefusal = (): string =>
-  `repoRoot is not declared and dp-gnosis is running as an INSTALLED package, so there is no repository to resolve a relative path against — state it with \`${REPO_ROOT_FLAG} <dir>\`, or as "repoRoot" in your profile; \`${cliInvocation()} init <dir>\` writes one for you. It is not guessed: a guessed base would resolve every relative corpusRoot and summarySidecar inside the installed package.`;
+  `repoRoot is not declared and dp-gnosis is running as an INSTALLED package, so there is no repository to resolve a relative path against — state it with \`${REPO_ROOT_FLAG} <dir>\`, or as "repoRoot" in your profile; \`${cliInvocation()} init <dir>\` writes one for you, and \`${cliInvocation()} wizard\` is the guided path that does the same. It is not guessed: a guessed base would resolve every relative corpusRoot and summarySidecar inside the installed package.`;

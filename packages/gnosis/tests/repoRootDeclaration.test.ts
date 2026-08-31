@@ -49,11 +49,15 @@ describe('undeclaredRepoRoot', () => {
 });
 
 describe('repoRootRefusal', () => {
-  it('names BOTH ways to state one, and the command that writes it', () => {
+  it('names BOTH ways to state one, and BOTH commands that write it', () => {
     const message = repoRootRefusal();
     expect(message).toContain('--repo-root');
     expect(message).toContain('repoRoot');
     expect(message).toContain('init');
+    // `wizard` is exempt from this check (`cli.ts:ROOTLESS_COMMANDS`) and is the
+    // documented first run, so a remedy naming only `init` omits the guided way
+    // out of the first refusal an installed-package user ever meets.
+    expect(message).toContain('wizard');
   });
 });
 

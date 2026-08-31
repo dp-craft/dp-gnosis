@@ -642,13 +642,15 @@ describe('wizard — a corpus directory is validated as it is entered', () => {
 });
 
 /**
- * The instance guard reads the root the user CHOSE, so it runs after the one
- * question that can move it and before every other. A guard against the default
- * root cannot see a root typed at the prompt, and both refusals below are about
- * a root the wizard would otherwise write into.
+ * The instance guard is in two halves, and they can be answered at different
+ * moments. The profile half reads NOTHING but `paths.ts:userProfilePath`, so a
+ * re-run of the wizard is knowable before a single question — spending one
+ * before refusing asks the user to answer into a run that cannot proceed. The
+ * atoms half reads the root the user CHOSE, so it runs after the one question
+ * that can move it: a guard against the default root cannot see a typed one.
  */
 describe('wizard — refusals before any answer is collected', () => {
-  it('should refuse an instance that already exists rather than overwriting the profile', async () => {
+  it('should refuse an instance that already exists before asking anything at all', async () => {
     mkdirSync(dirname(profilePath()), { recursive: true });
     writeFileSync(profilePath(), '{"name":"user"}\n', 'utf8');
 
@@ -657,7 +659,7 @@ describe('wizard — refusals before any answer is collected', () => {
     expect(outcome.exitCode).toBe(3);
     expect(outcome.text).toContain(profilePath());
     expect(outcome.text).toContain('MUST NOT overwrite');
-    expect(prompter.asked).toEqual(['Data root']);
+    expect(prompter.asked).toEqual([]);
     expect(readFileSync(profilePath(), 'utf8')).toBe('{"name":"user"}\n');
   });
 
@@ -702,6 +704,30 @@ describe('wizard — the adapter chosen survives the build', () => {
     expect((outcome.data as Record<string, unknown>)['indexState']).toBe('ready');
     expect(outcome.exitCode).toBe(0);
     expect(outcome.text).toContain('search "<keywords>" --adapter minisearch');
+  }, 120_000);
+});
+
+/**
+ * The closing screen is the flag vocabulary an average user learns, so it MUST
+ * NOT teach a suffix the instance does not need: `paths.ts:ingestProfilePath`
+ * already PREFERS the user profile, and the base script builds with
+ * `DEFAULT_ADAPTER`. The lines are read positionally under `Next:` because the
+ * property is that nothing FOLLOWS the command — a `toContain` would pass on a
+ * line that carries the flags too.
+ */
+describe('wizard — the closing commands carry only the flags the instance needs', () => {
+  const closing = (text: string): readonly string[] => {
+    const lines = text.split('\n');
+    const at = lines.indexOf('Next:');
+    return lines.slice(at + 1, at + 3);
+  };
+
+  it('should print bare commands on the default adapter and the default profile', async () => {
+    const { outcome } = await wizard();
+
+    expect(outcome.exitCode).toBe(0);
+    expect(closing(outcome.text)[0]).toMatch(/ search "<keywords>"$/);
+    expect(closing(outcome.text)[1]).toMatch(/ doctor$/);
   }, 120_000);
 });
 
