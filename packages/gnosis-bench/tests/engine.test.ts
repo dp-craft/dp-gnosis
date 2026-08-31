@@ -301,7 +301,7 @@ describe('assertIngestSound', () => {
         coveredDocIds: [],
         inputDocIds: ['a', 'b'],
       });
-    expect(act).toThrow(/indexed ZERO atoms.*ATOM_DOMAINS/s);
+    expect(act).toThrow(/indexed ZERO atoms.*atoms directory/s);
     expect(act).toThrow(expect.objectContaining({ cause: EMPTY_INDEX_CAUSE }));
   });
 

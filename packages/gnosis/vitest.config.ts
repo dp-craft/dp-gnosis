@@ -5,10 +5,9 @@ import { defineConfig } from 'vitest/config';
 
 // Isolated suite. `npm run gnosis:test` from the repo root routes here.
 //
-// ALSO collected by `vitest.tools.config.ts` so `npm run test:tools` covers this
-// package. This config stays the package-local entry point: it owns adapter-gated
+// This config stays the package-local entry point: it owns adapter-gated
 // optionalDependencies that resolve from `packages/gnosis/node_modules`, and a
-// missing one skips its adapter (lazy dynamic import) rather than failing either
+// missing one skips its adapter (lazy dynamic import) rather than failing the
 // suite.
 //
 // Running bare `vitest packages/gnosis` against the APPLICATION config prints

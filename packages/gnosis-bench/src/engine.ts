@@ -25,12 +25,13 @@
  *    writes `corpus-manifest.json` to `dirname(outputDir)`, and
  *    `claimOutputDir`/`pruneOrphans` wipe an atoms directory another profile
  *    owns — so a shared work dir destroys corpora silently.
- * 4. Ingest soundness is ASSERTED, not assumed. `config.ts:257` freezes
- *    `ATOM_DOMAINS` at import time and `fts5Adapter.asDomain:127` narrows
- *    against it, so an atom carrying an off-vocabulary domain is DROPPED at
- *    index time with no error anywhere: an empty index, zero results, and a
- *    green benchmark reporting 0.0 as if it were a quality finding. The assert
- *    below is the only thing between that and a trusted number.
+ * 4. Ingest soundness is ASSERTED, not assumed. A domain arrives as DATA — the
+ *    ingest profile assigns it and the adapter carries it through to
+ *    `atom_meta`; no index-side narrowing rejects one. So nothing downstream
+ *    refuses an ingest that produced no indexable atom: it yields an empty
+ *    index, zero results, and a green benchmark reporting 0.0 as if it were a
+ *    quality finding. The assert below is the only thing between that and a
+ *    trusted number.
  * 5. Corpus IDENTITY is asserted before ingest. Materialization prunes the docs
  *    directory to exactly the current corpus, and `assertCorpusMaterialized`
  *    proves it did. Without that, a corpus that SHRANK left its dropped
@@ -268,10 +269,10 @@ const fail = (message: string, cause: string): never => {
 };
 
 const emptyIndexMessage = (datasetId: string): string =>
-  `dp-gnosis-bench: dataset "${datasetId}" indexed ZERO atoms. The atoms were written but ` +
-  'every one was dropped at index time — the usual cause is an ingest profile declaring a ' +
-  'domain outside the frozen ATOM_DOMAINS vocabulary (packages/gnosis/src/config.ts), which ' +
-  'fts5Adapter.asDomain discards without an error. Use the shipped "docs" domain (see corpus.ts).';
+  `dp-gnosis-bench: dataset "${datasetId}" indexed ZERO atoms although ingest reported ` +
+  'success. The cause is not determined here; plausible ones are an atoms directory whose ' +
+  'files fail the atom grammar, a wrong --atoms-dir, and an index built and then emptied. ' +
+  'Inspect the atoms directory and the index before recording a run.';
 
 const lowCoverageMessage = (facts: IngestSoundness, covered: number): string =>
   `dp-gnosis-bench: dataset "${facts.datasetId}" indexed ${facts.indexedAtomCount} atoms ` +
@@ -431,7 +432,7 @@ const datasetPaths = (options: PrepareDatasetOptions): DatasetPaths => {
  * Ingest, then build the fts5 PROBE index. The probe is built on every arm, not
  * only the fts5 one, because it is the sole artefact this suite can enumerate
  * (`atom_meta`) without re-implementing an adapter's internals — and the fact it
- * proves, that ingest survived the frozen `ATOM_DOMAINS` narrowing with enough
+ * proves, that ingest produced a non-empty indexable corpus with enough
  * document coverage, is a property of the INGEST, which every arm shares. Two
  * arms are therefore comparable on `atomCount` as well as on their metrics.
  *

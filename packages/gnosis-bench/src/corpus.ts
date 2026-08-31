@@ -15,10 +15,11 @@
  * with the same function, before they ever reach this layer.
  *
  * The profile's vocabulary is the SHIPPED one (`docs` / `vendor-doc`). The
- * manifest's `domain` field MUST NOT flow in here: `packages/gnosis/src/config.ts`
- * freezes `ATOM_DOMAINS` at import time and `fts5Adapter.asDomain` narrows
- * against it, so an atom with an unknown domain is dropped at index time — an
- * empty index and zero results, with no error anywhere.
+ * manifest's `domain` field MUST NOT flow in here: a domain is carried as DATA
+ * from the profile through `x_domain` into `atom_meta`, and nothing narrows it
+ * at index time. The closed `ATOM_DOMAINS` vocabulary (`packages/gnosis/src/config.ts`)
+ * binds on the QUERY side instead (`port.ts:assertDomainFilter`), so an
+ * off-vocabulary spelling indexes without complaint and is then unfilterable.
  */
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
