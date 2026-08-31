@@ -86,7 +86,7 @@ flowchart TB
 | 6 | parse | `parseAtom` (`atom.ts`) | `string` → `ParseAtomResult` → `Atom` |
 | **7** | **analyze — INDEX side** | § 2 — four implementations | `string` → `string` \| `readonly string[]` |
 | 8 | build index | § 4 — four artifacts | → `.db` \| Lance table \| JSON \| `CorpusScan` |
-| 9 | CLI query | `runRetrieveCommand` (`cli/retrieveCommand.ts`) | → `string` (RAW; `buildQuery` has NO caller) |
+| 9 | CLI query | `runRetrieveCommand` (`cli/retrieveCommand.ts`) | → `string` (RAW; the dead `buildQuery` was DELETED 2026-08-31, owner decision D3) |
 | **10** | **port** | `KnowledgePort.retrieve` (`port.ts`) | `string × RetrieveOptions` → `RetrievalResult` |
 | **11** | **analyze — QUERY side** | § 2 — same four, again | `string` → adapter-specific |
 | 12 | score | § 3 — four BM25 implementations | → `readonly RetrievedAtom[]` |
@@ -150,7 +150,7 @@ flowchart TB
 | Length norm | `1 − b + b × length / avgLength`, where `length` = **token count** |
 | Term score | `weight × freq × (k1 + 1) / (freq + k1 × norm)` |
 
-**The same IDF formula is written twice** — `idf` in `query.ts` (private, reached only by `buildQuery`, which has NO production caller) and again in `linearScanAdapter.ts`. Only the constant is shared. Changing one does not change the other.
+**The IDF formula is written once** — in `linearScanAdapter.ts`, over the shared `BM25_IDF_SMOOTHING`. The second copy (`query.ts:idf`, reached only by the dead `buildQuery`) was DELETED 2026-08-31 (owner decision D3).
 
 **MUST NOT read an adapter delta as a scorer delta** — they differ in parameters, tokenizer AND indexed text simultaneously. See `GNOSIS-GUIDE.md` § Adapters.
 
@@ -193,7 +193,7 @@ flowchart TB
 | Weight a non-`body` field differently | 8 + 12 | `FTS_COLUMNS` / `DEFAULT_FIELD_WEIGHTS` (`config.ts`) | **Corrected 2026-08-25** — this row read *"impossible without a schema change, the table is single-column"*. That schema change has landed: seven columns exist and `--field-weights` merges over the body-only default, so column weighting is a flag, not a rebuild. What is still NOT a column is the atom TITLE — `linear` tokenizes `frontmatter.title` and `fts5` does not, which is one reason the two disagree |
 | Change the IDF | 12 | `linearScanAdapter.ts` | The copy in `query.ts` is dead for retrieval; changing it alone changes NOTHING |
 | Change phrase behaviour | 11 | `toMatchExpression` | It analyses PER whitespace chunk so `adr-018` stays an adjacency phrase. Flattening to one term list silently degrades phrases to bag-of-words |
-| Change query construction / rephrasing | **9 only** | `buildQuery`, and `packages/gnosis/QUERYING.md` § Query rephrasing | `buildQuery` has no production caller — the rule lives with the CALLER, not the engine |
+| Change query construction / rephrasing | **9 only** | `packages/gnosis/QUERYING.md` § Query rephrasing | there is no engine-side query builder (`buildQuery` DELETED 2026-08-31, D3) — the rule lives with the CALLER, not the engine |
 | Change the rerank protocol | 14-15 | `RERANK_FUSION_PRESETS` (`config.ts`) | `K_INIT` and the URL are NOT caller-settable |
 | Add an adapter | 10 | implement `KnowledgePort` | It MUST re-analyze identically, and nothing checks that it does |
 | Debug "no results" | 13 | `indexState` first | `unavailable` means nothing was searched — never "no matches" |

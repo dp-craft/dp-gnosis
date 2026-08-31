@@ -553,17 +553,6 @@ export const HYBRID_FUSION = {
 } as const satisfies RerankFusion;
 
 /**
- * Hard cap on how many terms a constructed retrieval query may carry.
- *
- * A task's targets, test contract and spec excerpts together run to thousands
- * of tokens, and BM25 scores a 2000-token blob nothing like a focused query:
- * every additional low-IDF term adds score mass to documents that match it
- * incidentally. 32 keeps the query in the range lexical scoring was designed
- * for while still admitting several distinct identifiers per input section.
- */
-export const QUERY_MAX_TERMS = 32;
-
-/**
  * The smoothing term of the BM25 inverse-document-frequency formula
  * `ln(1 + (N - n + 0.5) / (n + 0.5))`, where N is the corpus size and n the
  * number of documents containing the term. It appears on both sides of that

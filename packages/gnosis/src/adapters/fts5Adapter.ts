@@ -54,11 +54,12 @@
  * not read, each report `mismatched` with NO search — an index answered from
  * after the corpus moved is a ranking over content that is no longer there.
  *
- * NO `prefix=` index — RECORDED CHOICE AND TRAP. `buildQuery` (`query.ts`) emits
- * plain terms only, so a prefix index would index nothing anyone asks for. If a
- * future query builder ever emits `term*`, a prefix query against a table
- * without a prefix index measured ~256 MB peak allocation and roughly a 1000x
- * slowdown — add `prefix=` in the SAME change that starts emitting `term*`.
+ * NO `prefix=` index — RECORDED CHOICE AND TRAP. `toMatchExpression` (below) is
+ * the only thing that reaches `MATCH`, and it emits plain terms and quoted
+ * phrases only, so a prefix index would index nothing anyone asks for. If it
+ * ever starts emitting `term*`, a prefix query against a table without a prefix
+ * index measured ~256 MB peak allocation and roughly a 1000x slowdown — add
+ * `prefix=` in the SAME change that starts emitting `term*`.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -1008,9 +1009,10 @@ const chunkDisjuncts = (
  * as `adr-018` stays the adjacency-requiring phrase `"adr 018"` it already was
  * — the analyzer changes the terms, never the query's shape.
  *
- * Disjunction, not FTS5's implicit AND: a `buildQuery` string carries up to 32
- * distilled terms, and requiring all of them would match nothing. `undefined`
- * for a term-free query — an empty `MATCH` is a syntax error.
+ * Disjunction, not FTS5's implicit AND: the query string is the caller's raw
+ * text, so it can carry many terms and requiring all of them would match
+ * nothing. `undefined` for a term-free query — an empty `MATCH` is a syntax
+ * error.
  *
  * `adjacency` is ADDITIVE SCORING, never a filter: it ADDS each individual term
  * of a multi-token raw token beside the phrase that token already produced, so
