@@ -143,6 +143,9 @@ export const METRIC_LABELS: Readonly<Record<MetricName, string>> = {
 /** `error.cause` when a run carries not one of the metrics a figure asked it for. */
 export const CHART_NO_METRICS_CAUSE = 'dp-gnosis-bench/chart-run-has-no-requested-metric';
 
+/** `error.cause` when a declared comparison's paired test returned no verdict. */
+export const CHART_TEST_REFUSED_CAUSE = 'dp-gnosis-bench/chart-paired-test-refused';
+
 const fail = (what: string, cause?: string): never => {
   throw new Error(`dp-gnosis-bench charts: ${what}`, { cause });
 };
@@ -205,9 +208,8 @@ const verdictOf = (
   }
   const label = a.dataset === b.dataset ? a.dataset : `${a.dataset} → ${b.dataset}`;
   const result = pairedScores(label, comparison.metric, scoresOf(context, a), scoresOf(context, b));
-  return result.kind === 'verdict'
-    ? result
-    : fail(`"${comparison.label}": the paired test was refused (${result.kind})`);
+  const refused = `"${comparison.label}": the paired test was refused (${result.kind})`;
+  return result.kind === 'verdict' ? result : fail(refused, CHART_TEST_REFUSED_CAUSE);
 };
 
 interface ComparedPair {

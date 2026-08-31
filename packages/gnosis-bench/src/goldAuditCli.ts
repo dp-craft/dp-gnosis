@@ -23,35 +23,62 @@
  */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { type BeirDoc, readCorpus, readQrels } from './beir.js';
+import {
+  cell,
+  exitCodeOf,
+  flagValue,
+  invokedDirectly,
+  messageOf,
+  TOOL_EXIT_OK,
+  TOOL_EXIT_REFUSED,
+  TOOL_EXIT_USAGE
+} from './cli/shared.js';
 import { auditDuplicates, type DuplicateLink, type PrepareDatasetOptions } from './engine.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
-import { readRunFile } from './forensics.js';
-import { auditGold, type GoldAudit, rePointQrels } from './goldAudit.js';
-import { type DatasetEntry, loadManifest } from './manifest.js';
+import { MALFORMED_RUN_LINE_CAUSE, readRunFile } from './forensics.js';
+import {
+  auditGold,
+  GOLD_AUDIT_NO_CORPUS_CAUSE,
+  GOLD_AUDIT_NO_JUDGMENTS_CAUSE,
+  type GoldAudit,
+  rePointQrels
+} from './goldAudit.js';
+import { type DatasetEntry, loadManifest, qrelsSplitOf } from './manifest.js';
 import { meanMetrics, type Metrics, type Qrel, scoreTopic } from './metrics.js';
 import { effectiveAtomMaxChars, ensureDataset, goldIdsOf, MANIFEST_PATH, WORK_ROOT } from './run.js';
 
 /** The audit ran and every requested dataset was measured. */
-export const GOLD_AUDIT_EXIT_OK = 0;
+export const GOLD_AUDIT_EXIT_OK = TOOL_EXIT_OK;
 
 /** The invocation itself is unusable: no `--dataset`, an unknown id, or a missing run file. */
-export const GOLD_AUDIT_EXIT_USAGE = 2;
+export const GOLD_AUDIT_EXIT_USAGE = TOOL_EXIT_USAGE;
+
+/** Refused — the inputs read fine, and the data is not what the invocation claims. */
+export const GOLD_AUDIT_EXIT_REFUSED = TOOL_EXIT_REFUSED;
 
 /** `error.cause` when the `--run` file exists yet ranks not one topic. */
 export const GOLD_AUDIT_EMPTY_RUN_CAUSE = 'dp-gnosis-bench/gold-audit-empty-run';
+
+/**
+ * The `error.cause` values THIS tool answers with a refusal. A malformed run
+ * line is among them: a truncated artefact is a state mismatch, not a typo in
+ * the invocation that read it.
+ */
+const GOLD_AUDIT_REFUSAL_CAUSES: readonly string[] = [
+  GOLD_AUDIT_EMPTY_RUN_CAUSE,
+  GOLD_AUDIT_NO_CORPUS_CAUSE,
+  GOLD_AUDIT_NO_JUDGMENTS_CAUSE,
+  MALFORMED_RUN_LINE_CAUSE,
+];
 
 const fail = (message: string, cause: string): never => {
   throw new Error(message, { cause });
 };
 
-const DIGITS = 4;
-
 /** How many empty-ranking topic ids one report names before it stops listing. */
 const NAMED_EMPTY_TOPICS = 10;
-const BRIGHT_QRELS_SPLIT = 'test';
 
 export const GOLD_AUDIT_HELP = [
   'gnosis:goldaudit — zero-GPU audit of the gold lost to the ingest exact-body dedupe.',
@@ -68,6 +95,8 @@ export const GOLD_AUDIT_HELP = [
   'exit codes:',
   `  ${GOLD_AUDIT_EXIT_OK}  the audit ran`,
   `  ${GOLD_AUDIT_EXIT_USAGE}  unusable invocation (no --dataset, unknown id, unreadable --run)`,
+  `  ${GOLD_AUDIT_EXIT_REFUSED}  refused — the data is not what the invocation claims (an empty or`,
+  '     malformed run, a corpus with no document, a golden set with no judgment)',
   '',
 ].join('\n');
 
@@ -79,9 +108,6 @@ export interface GoldAuditArgs {
 
 const flagValues = (argv: readonly string[], flag: string): readonly string[] =>
   argv.flatMap((token, index) => (token === flag ? [argv[index + 1] ?? ''] : []));
-
-const flagValue = (argv: readonly string[], flag: string): string | undefined =>
-  flagValues(argv, flag).at(-1);
 
 /** Every flag this tool reads, `--help` included; anything else is refused by name. */
 export const GOLD_AUDIT_FLAGS: FlagSpec = {
@@ -113,9 +139,6 @@ const entryFor = (manifest: readonly DatasetEntry[], id: string): DatasetEntry =
   return entry;
 };
 
-const qrelsSplit = (entry: DatasetEntry): string =>
-  entry.format === 'bright' ? BRIGHT_QRELS_SPLIT : entry.qrels;
-
 /**
  * The ingest the audit measures MUST be the one production runs: `run.ts` hands
  * a derived dataset the ids its judgments name, and the dedupe survivor rule is
@@ -143,7 +166,7 @@ export interface DatasetAudit {
 
 const auditDataset = async (entry: DatasetEntry): Promise<DatasetAudit> => {
   const dir = await ensureDataset(entry);
-  const qrels = readQrels(dir, qrelsSplit(entry));
+  const qrels = readQrels(dir, qrelsSplitOf(entry));
   const docs = readCorpus(dir);
   const audited = await auditDuplicates(auditIngestOptions(entry, docs, qrels));
   const audit = auditGold({
@@ -172,9 +195,6 @@ const auditLines = (result: DatasetAudit): readonly string[] => {
     `  orphan→survivor links   ${result.links.length}`,
   ];
 };
-
-/** An unmeasurable cell is EMPTY, never `0`. */
-const cell = (value: number | undefined): string => (value === undefined ? '' : value.toFixed(DIGITS));
 
 const depthOf = (run: ReadonlyMap<string, readonly string[]>): number =>
   [...run.values()].reduce((deepest, ranking) => Math.max(deepest, ranking.length), 0);
@@ -290,9 +310,6 @@ const auditAll = async (
     Promise.resolve([])
   );
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 export const main = async (argv: readonly string[], now: string): Promise<number> => {
   if (argv.includes('--help')) {
     process.stdout.write(GOLD_AUDIT_HELP);
@@ -309,14 +326,11 @@ export const main = async (argv: readonly string[], now: string): Promise<number
     return GOLD_AUDIT_EXIT_OK;
   } catch (error) {
     process.stderr.write(`${messageOf(error)}\n`);
-    return GOLD_AUDIT_EXIT_USAGE;
+    return exitCodeOf(error, GOLD_AUDIT_REFUSAL_CAUSES);
   }
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), new Date().toISOString());
 }

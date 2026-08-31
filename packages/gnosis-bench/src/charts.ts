@@ -15,23 +15,45 @@
  * | Exit | Meaning |
  * |---|---|
  * | 0 | every declared chart was written |
- * | 2 | the spec, a selector, or a refused paired test stopped it — nothing was drawn |
+ * | 2 | unusable invocation — an unknown flag, an unreadable or malformed spec |
+ * | 3 | refused — the data is not what the spec claims; nothing was drawn |
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-import { buildCharts, type Chart } from './chartData.js';
+import {
+  buildCharts,
+  type Chart,
+  CHART_NO_METRICS_CAUSE,
+  CHART_TEST_REFUSED_CAUSE
+} from './chartData.js';
 import { readChartsSpec } from './chartSpec.js';
 import { renderChartSvg } from './chartSvg.js';
+import {
+  exitCodeOf,
+  invokedDirectly,
+  messageOf,
+  TOOL_EXIT_OK,
+  TOOL_EXIT_REFUSED,
+  TOOL_EXIT_USAGE
+} from './cli/shared.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { HISTORY_FILE, readHistory } from './report.js';
 import { SUITE_ROOT } from './run.js';
 
-export const CHARTS_EXIT_OK = 0;
+export const CHARTS_EXIT_OK = TOOL_EXIT_OK;
 
-/** The spec, a selector, or a statistic refused — no figure was written. */
-export const CHARTS_EXIT_USAGE = 2;
+/** An unknown flag, or a spec that could not be read — no figure was written. */
+export const CHARTS_EXIT_USAGE = TOOL_EXIT_USAGE;
+
+/** A drawing guard refused: the runs are readable but not what the spec claims. */
+export const CHARTS_EXIT_REFUSED = TOOL_EXIT_REFUSED;
+
+/** The `error.cause` values THIS tool answers with a refusal rather than a usage code. */
+const CHARTS_REFUSAL_CAUSES: readonly string[] = [
+  CHART_NO_METRICS_CAUSE,
+  CHART_TEST_REFUSED_CAUSE,
+];
 
 /** The committed figure declaration, next to the suite it draws. */
 export const CHARTS_SPEC_FILE = 'charts.json';
@@ -44,9 +66,6 @@ export interface ChartsOptions {
   readonly resultsDir: string;
   readonly outDir: string;
 }
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 const writeChart = (outDir: string, chart: Chart): string => {
   const path = resolve(outDir, `${chart.id}.svg`);
@@ -85,14 +104,11 @@ export const main = (options: ChartsOptions, argv: readonly string[] = []): numb
     return CHARTS_EXIT_OK;
   } catch (error) {
     process.stderr.write(`${messageOf(error)}\n`);
-    return CHARTS_EXIT_USAGE;
+    return exitCodeOf(error, CHARTS_REFUSAL_CAUSES);
   }
 };
 
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   const repoRoot = resolve(SUITE_ROOT, '../..');
   process.exitCode = main(
     {

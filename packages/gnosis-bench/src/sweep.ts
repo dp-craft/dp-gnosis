@@ -27,13 +27,13 @@
  * and each dataset owns an exclusive work directory (`engine.ts` rule 3).
  */
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { readQrels, readQueries } from './beir.js';
+import { flagValue, invokedDirectly, messageOf } from './cli/shared.js';
 import { openPort } from './engine.js';
 import { readExcluded } from './fetch/bright.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
-import { type DatasetEntry, enabledDatasets, loadManifest } from './manifest.js';
+import { type DatasetEntry, enabledDatasets, loadManifest, qrelsSplitOf } from './manifest.js';
 import { currentGitSha, runStamp } from './report.js';
 import {
   ensureDataset,
@@ -97,11 +97,6 @@ export interface SweepOptions {
   readonly bs: readonly number[];
   readonly depth: number;
 }
-
-const flagValue = (argv: readonly string[], name: string): string | undefined => {
-  const index = argv.indexOf(name);
-  return index === -1 ? undefined : argv[index + 1];
-};
 
 const csv = (value: string | undefined): readonly string[] =>
   value === undefined
@@ -188,7 +183,7 @@ interface DatasetContext {
 
 const contextFor = async (entry: DatasetEntry): Promise<DatasetContext> => {
   const dir = await ensureDataset(entry);
-  const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
+  const qrels = readQrels(dir, qrelsSplitOf(entry));
   return {
     entry,
     qrels,
@@ -299,9 +294,6 @@ const sweepDataset = async (
   const context = await contextFor(entry);
   return await measureAll(context, run, before);
 };
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 const attempt = async (
   entry: DatasetEntry,
@@ -427,9 +419,6 @@ export const main = async (argv: readonly string[], gitSha: string): Promise<num
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), currentGitSha(SUITE_ROOT));
 }

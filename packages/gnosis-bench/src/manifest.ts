@@ -98,6 +98,9 @@ export interface MilqaDataset extends DatasetBase {
 
 export type DatasetEntry = BeirDataset | BrightDataset | MilqaDataset;
 
+/** BRIGHT materialises one split, named `test`. */
+const BRIGHT_QRELS_SPLIT = 'test';
+
 const BEIR_FORMATS: readonly string[] = ['beir-zip', 'beir-local'];
 const FORMATS_TEXT = '"beir-zip", "beir-local", "bright" or "milqa"';
 const GRANULARITIES: readonly string[] = ['long', 'passage'];
@@ -357,6 +360,14 @@ export const datasetsInLayer = (
   entries: readonly DatasetEntry[],
   layer: LayerName
 ): readonly DatasetEntry[] => entries.filter(entry => entry.layers.includes(layer));
+
+/**
+ * The `qrels/<split>.tsv` basename an entry is scored under. BRIGHT's fetcher
+ * materialises a single `test` split and carries no `qrels` key, so the format
+ * decides. Owned here because five tools MUST agree with `run.ts` on it.
+ */
+export const qrelsSplitOf = (entry: DatasetEntry): string =>
+  entry.format === 'bright' ? BRIGHT_QRELS_SPLIT : entry.qrels;
 
 /** The entries a run actually processes. */
 export const enabledDatasets = (

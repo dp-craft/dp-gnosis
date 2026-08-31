@@ -15,6 +15,9 @@ import {
   emptyRankingLines,
   emptyRankingTopics,
   GOLD_AUDIT_EMPTY_RUN_CAUSE,
+  GOLD_AUDIT_EXIT_REFUSED,
+  GOLD_AUDIT_EXIT_USAGE,
+  main,
   requireRunFile,
   scoreRun
 } from '../src/goldAuditCli.js';
@@ -41,6 +44,8 @@ const beirEntry = (derive: boolean): DatasetEntry => {
 };
 
 const JUDGED = qrelsOf([['q1', new Map([['d1', 1]])]]);
+
+const NOW = '2026-09-01T00:00:00.000Z';
 
 describe('auditIngestOptions — the audit measures the dedupe PRODUCTION performs', () => {
   it('hands the golden ids to a derived dataset, as run.ts does', () => {
@@ -70,6 +75,21 @@ describe('requireRunFile — a run file that ranks nothing is refused, not score
 
   it('accepts a .trec that ranks at least one topic', () => {
     expect(() => requireRunFile(trecAt('q1 Q0 d1 1 1.0 run\n'))).not.toThrow();
+  });
+
+  /**
+   * The invocation named its dataset and its run file, and both were readable —
+   * only the CONTENT refused. Exit 2 would file that under "you typed it wrong".
+   */
+  it('exits refused from main for an empty run file, and usage for a missing --dataset', async () => {
+    const argv = ['--dataset', 'fixture', '--run', trecAt('\n')];
+    await expect(main(argv, NOW)).resolves.toBe(GOLD_AUDIT_EXIT_REFUSED);
+    await expect(main([], NOW)).resolves.toBe(GOLD_AUDIT_EXIT_USAGE);
+  });
+
+  it('exits refused from main for a run file holding a malformed TREC line', async () => {
+    const argv = ['--dataset', 'fixture', '--run', trecAt('q1 Q0\n')];
+    await expect(main(argv, NOW)).resolves.toBe(GOLD_AUDIT_EXIT_REFUSED);
   });
 });
 

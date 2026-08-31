@@ -32,8 +32,8 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
+import { flagValue, invokedDirectly, messageOf } from './cli/shared.js';
 import { type ProvenanceChange, scaleChanges, treatmentChanges } from './compare.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 import {
@@ -116,11 +116,6 @@ export const PAIR_HELP = [
   `  ${PAIR_EXIT_USAGE}  unusable invocation (unknown flag, unknown flag value, ambiguous or unmatched selector)`,
   '',
 ].join('\n');
-
-const flagValue = (argv: readonly string[], name: string): string | undefined => {
-  const index = argv.indexOf(name);
-  return index === -1 ? undefined : argv[index + 1];
-};
 
 const csv = (value: string | undefined): readonly string[] =>
   value === undefined
@@ -403,9 +398,6 @@ export const pairReport = (request: PairRequest): PairReport => {
   return pairRows(request, a.row, b.row);
 };
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 const emit = (report: PairReport): number => {
   process.stdout.write(`${report.lines.join('\n')}\n`);
   if (report.reasons.length > 0) process.stderr.write(`${report.reasons.join('\n')}\n`);
@@ -429,9 +421,6 @@ export const main = (argv: readonly string[], resultsDir: string): number => {
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2), resolve(SUITE_ROOT, 'results'));
 }

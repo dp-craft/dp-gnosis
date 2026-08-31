@@ -16,6 +16,7 @@ import {
   main,
   readTopics,
   VOCAB_GAP_EXIT_OK,
+  VOCAB_GAP_EXIT_REFUSED,
   VOCAB_GAP_EXIT_USAGE,
   VOCAB_GAP_NO_TOPICS_CAUSE,
   type VocabGapRecord,
@@ -124,6 +125,15 @@ describe('main', () => {
     expect(lines).toHaveLength(TOPICS.length);
     const parsed = lines.map(line => JSON.parse(line) as VocabGapRecord);
     expect(parsed.map(record => record.topicId)).toEqual(['q1', 'q2', 'q3']);
+  });
+
+  /**
+   * The argv was usable and both files were readable — what failed is the DATA,
+   * so the code has to separate it from a mistyped invocation.
+   */
+  it('exits refused, not usage, when the queries file names no topic', () => {
+    writeFileSync(queriesPath, '\n   \n\n', 'utf8');
+    expect(main(['--index', indexPath, '--queries', queriesPath])).toBe(VOCAB_GAP_EXIT_REFUSED);
   });
 
   it('refuses an invocation missing either explicit source', () => {

@@ -25,6 +25,7 @@
  *
  * The statistic itself is `significance.ts`, called and never re-implemented.
  */
+import { flagValue } from './cli/shared.js';
 import type { ProvenanceChange } from './compare.js';
 import { BASELINE_FLAG, FAIL_UNDER_FLAG } from './flags.js';
 import { resolveRun, type RunSelection } from './pair.js';
@@ -66,11 +67,6 @@ export interface GateReport {
   readonly lines: readonly string[];
   readonly exitCode: number;
 }
-
-const flagValue = (argv: readonly string[], name: string): string | undefined => {
-  const index = argv.indexOf(name);
-  return index === -1 ? undefined : argv[index + 1];
-};
 
 /**
  * A fractional tolerance is the point; a negative one is not. `--fail-under -1`

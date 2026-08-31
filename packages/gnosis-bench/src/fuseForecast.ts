@@ -25,6 +25,7 @@
  * DISK and must reproduce its RECORDED nDCG@10. A run that no longer reproduces
  * is not evidence, and a forecast built on it forecasts nothing.
  */
+import { cell } from './cli/shared.js';
 import { PROVENANCE_FIELDS, type ProvenanceField } from './compare.js';
 import type { Qrel } from './metrics.js';
 import type { HistoryRow } from './report.js';
@@ -49,9 +50,6 @@ export const REPRODUCTION_TOLERANCE = 1e-9;
 export const TIE_TOLERANCE = 1e-9;
 
 const DIGITS = 4;
-
-/** An unmeasurable cell is EMPTY, never `0` — the `report.ts:tsvCell` precedent. */
-const EMPTY_CELL = '';
 
 /**
  * The fields the forecast deliberately VARIES across its legs: the adapter and
@@ -115,6 +113,12 @@ export const provenanceDrift = (legs: readonly Leg[]): readonly ProvenanceDrift[
 const describeDrift = (drift: ProvenanceDrift): string =>
   `${drift.field}: ${drift.values.map(item => `${item.label}=${item.value}`).join(', ')}`;
 
+/** `error.cause` when the legs handed to a fusion did not measure the same thing. */
+export const FUSE_PROVENANCE_DRIFT_CAUSE = 'dp-gnosis-bench/fuse-forecast-provenance-drift';
+
+/** `error.cause` when a leg's persisted `.trec` no longer yields its recorded number. */
+export const FUSE_NO_REPRODUCE_CAUSE = 'dp-gnosis-bench/fuse-forecast-leg-not-reproduced';
+
 /**
  * REFUSE a set of legs that do not describe the same measurement. The message
  * names every drifted field and every leg's value — a bare "provenance differs"
@@ -125,7 +129,8 @@ export const assertProvenanceMatch = (legs: readonly Leg[]): void => {
   if (drift.length === 0) return;
   throw new Error(
     `dp-gnosis-bench: the fusion legs do not share provenance — ${drift.length} field(s) drifted:` +
-      `\n  ${drift.map(describeDrift).join('\n  ')}`
+      `\n  ${drift.map(describeDrift).join('\n  ')}`,
+    { cause: FUSE_PROVENANCE_DRIFT_CAUSE }
   );
 };
 
@@ -146,7 +151,8 @@ export const assertReproduces = (label: string, recorded: number, recomputed: nu
   throw new Error(
     `dp-gnosis-bench: leg "${label}" no longer reproduces its recorded nDCG@10 — ` +
       `recorded ${recorded.toFixed(DIGITS)} vs re-scored ${recomputed.toFixed(DIGITS)}. ` +
-      'A run that no longer reproduces is not evidence.'
+      'A run that no longer reproduces is not evidence.',
+    { cause: FUSE_NO_REPRODUCE_CAUSE }
   );
 };
 
@@ -339,9 +345,6 @@ export const headToHead = (left: ForecastArm, right: ForecastArm): HeadToHead =>
     ties: countOf(outcomes, 'tie'),
   };
 };
-
-const cell = (value: number | undefined): string =>
-  value === undefined ? EMPTY_CELL : value.toFixed(DIGITS);
 
 const armRow = (arm: ForecastArm): string =>
   `| ${arm.label} | ${cell(arm.score.mean.ndcg10)} | ${cell(arm.score.mean.recall100)} |`;

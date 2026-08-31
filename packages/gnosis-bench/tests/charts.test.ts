@@ -13,7 +13,7 @@ import {
   type RecallDepthChart,
   RERANK_WINDOW
 } from '../src/chartData.js';
-import { CHARTS_EXIT_OK, CHARTS_EXIT_USAGE, main } from '../src/charts.js';
+import { CHARTS_EXIT_OK, CHARTS_EXIT_REFUSED, CHARTS_EXIT_USAGE, main } from '../src/charts.js';
 import { parseChartsSpec } from '../src/chartSpec.js';
 import { renderChartSvg } from '../src/chartSvg.js';
 import { HISTORY_FILE, type HistoryRow, PER_TOPIC_DIR } from '../src/report.js';
@@ -365,5 +365,55 @@ describe('charts cli', () => {
       outDir,
     });
     expect(code).toBe(CHARTS_EXIT_USAGE);
+  });
+
+  /**
+   * A refused GUARD is not an unusable invocation: the argv was fine and the
+   * artefacts were readable, so the code has to say "the data is not what the
+   * invocation claims" rather than "you typed it wrong".
+   */
+  it('exits refused when a run records none of the requested metrics', () => {
+    const found = deltaFixture();
+    const outDir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-charts-out-'));
+    const code = main({
+      specPath: specFile({
+        ...ARMS_SPEC,
+        charts: [{ ...ARMS_SPEC.charts[0], metrics: ['recall300', 'recall1000'] }],
+      }),
+      resultsDir: found.resultsDir,
+      outDir,
+    });
+    expect(code).toBe(CHARTS_EXIT_REFUSED);
+  });
+
+  it('exits refused when a declared paired test cannot be run', () => {
+    const found = fixture([
+      ['solo-a-fts5-vault', {}, FLAT],
+      ['solo-b-fts5-vault', {}, LIFTED],
+    ]);
+    const outDir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-charts-out-'));
+    const code = main({
+      specPath: specFile({
+        corpusDocuments: { vault: 500 },
+        charts: [
+          {
+            kind: 'delta',
+            id: 'deltas',
+            title: 'Deltas',
+            comparisons: [
+              {
+                label: 'unmeasured cutoff',
+                a: 'solo-a-fts5-vault',
+                b: 'solo-b-fts5-vault',
+                metric: 'recall300',
+              },
+            ],
+          },
+        ],
+      }),
+      resultsDir: found.resultsDir,
+      outDir,
+    });
+    expect(code).toBe(CHARTS_EXIT_REFUSED);
   });
 });

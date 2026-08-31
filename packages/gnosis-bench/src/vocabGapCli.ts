@@ -21,12 +21,21 @@
  *
  * EXIT CODES: 0 — the measurement ran (a large gap still exits 0; the verdict is
  * the data, not the status). 2 — unusable invocation, or an unreadable index or
- * queries file.
+ * queries file. 3 — refused: the data is not what the invocation claims, as a
+ * queries file that names no topic at all.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
+import {
+  exitCodeOf,
+  flagValue,
+  invokedDirectly,
+  messageOf,
+  TOOL_EXIT_OK,
+  TOOL_EXIT_REFUSED,
+  TOOL_EXIT_USAGE
+} from './cli/shared.js';
 import {
   type QueryTermPostings,
   readIndexAnalyzer,
@@ -35,13 +44,19 @@ import {
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 
 /** The measurement ran and every topic was reported. */
-export const VOCAB_GAP_EXIT_OK = 0;
+export const VOCAB_GAP_EXIT_OK = TOOL_EXIT_OK;
 
 /** Unusable invocation, or the index / queries file could not be read. */
-export const VOCAB_GAP_EXIT_USAGE = 2;
+export const VOCAB_GAP_EXIT_USAGE = TOOL_EXIT_USAGE;
+
+/** Refused — the data is not what the invocation claims, though both files read fine. */
+export const VOCAB_GAP_EXIT_REFUSED = TOOL_EXIT_REFUSED;
 
 /** `error.cause` when the queries file named not one topic to measure. */
 export const VOCAB_GAP_NO_TOPICS_CAUSE = 'dp-gnosis-bench/vocab-gap-no-topics';
+
+/** The `error.cause` values THIS tool answers with a refusal rather than a usage code. */
+const VOCAB_GAP_REFUSAL_CAUSES: readonly string[] = [VOCAB_GAP_NO_TOPICS_CAUSE];
 
 const fail = (message: string, cause: string): never => {
   throw new Error(message, { cause });
@@ -85,13 +100,9 @@ export const VOCAB_GAP_HELP = [
   'exit codes:',
   `  ${VOCAB_GAP_EXIT_OK}  the measurement ran`,
   `  ${VOCAB_GAP_EXIT_USAGE}  unusable invocation, or an unreadable --index / --queries`,
+  `  ${VOCAB_GAP_EXIT_REFUSED}  refused — the data is not what the invocation claims (no topic to measure)`,
   '',
 ].join('\n');
-
-const flagValue = (argv: readonly string[], flag: string): string | undefined =>
-  argv.flatMap((token, index) => (token === flag ? [argv[index + 1] ?? ''] : []))
-    .filter(value => value.length > 0)
-    .at(-1);
 
 /**
  * Every flag this tool reads, `--help` included. The ANALYSER is not among them
@@ -178,9 +189,6 @@ const emit = (text: string, outPath: string | undefined): void => {
   else writeFileSync(resolve(outPath), text, 'utf8');
 };
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 export const main = (argv: readonly string[]): number => {
   try {
     const args = parseVocabGapArgs(argv);
@@ -193,14 +201,11 @@ export const main = (argv: readonly string[]): number => {
     return VOCAB_GAP_EXIT_OK;
   } catch (error) {
     process.stderr.write(`gnosis:vocabgap: ${messageOf(error)}\n`);
-    return VOCAB_GAP_EXIT_USAGE;
+    return exitCodeOf(error, VOCAB_GAP_REFUSAL_CAUSES);
   }
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }

@@ -27,9 +27,9 @@
  */
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { readQrels } from './beir.js';
+import { cell, flagValue, invokedDirectly, messageOf } from './cli/shared.js';
 import {
   type AtomDomain,
   defaultAtomType,
@@ -40,7 +40,7 @@ import {
 import { readAtomDocs } from './fetch/vault.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { readRunFile, topicForensics } from './forensics.js';
-import { type DatasetEntry, loadManifest } from './manifest.js';
+import { type DatasetEntry, loadManifest, qrelsSplitOf } from './manifest.js';
 import {
   meanMetrics,
   type Metrics,
@@ -133,11 +133,6 @@ export interface ForensicsArgs {
   readonly servedK: number;
   readonly budget: number;
 }
-
-const flagValue = (argv: readonly string[], name: string): string | undefined => {
-  const index = argv.indexOf(name);
-  return index === -1 ? undefined : argv[index + 1];
-};
 
 /** A non-integer or non-positive count is a caller bug, never clamped. */
 const positiveInt = (raw: string | undefined, name: string, fallback: number): number => {
@@ -232,8 +227,7 @@ export const FORENSICS_COLUMNS: readonly string[] = [
 ];
 
 /** An unmeasurable cell is EMPTY — `report.ts:tsvCell`'s rule, not a second one. */
-export const forensicsCell = (value: number | undefined): string =>
-  value === undefined ? '' : value.toFixed(DIGITS);
+export const forensicsCell: (value: number | undefined) => string = cell;
 
 /** A rank is an ordinal, not a measure — it serializes without decimals. */
 const rankCell = (value: number | undefined): string =>
@@ -515,9 +509,6 @@ const meanSummary = (label: string, values: readonly (number | undefined)[]): st
     : `${label} ${mean(present).toFixed(DIGITS)} over ${present.length} topics`;
 };
 
-const cell = (value: number | undefined): string =>
-  value === undefined ? 'n/a' : value.toFixed(DIGITS);
-
 /**
  * Every run-level mean, from `meanMetrics` — the same aggregator the recorded
  * rows were written with, so a number here and a number in `history.jsonl` are
@@ -616,10 +607,6 @@ const entryFor = (dataset: string): DatasetEntry => {
   return entry;
 };
 
-/** The split `run.ts` scores this format under — read from there, never guessed. */
-const splitOf = (entry: DatasetEntry): string =>
-  entry.format === 'bright' ? 'test' : entry.qrels;
-
 /**
  * The atoms directory whose bodies the budget simulation reads, or `undefined`
  * when the dataset has no 1:1 atom-to-document projection.
@@ -683,7 +670,7 @@ interface Loaded {
 const loadDataset = async (row: HistoryRow): Promise<Loaded> => {
   const entry = entryFor(row.dataset);
   const dir = await ensureDataset(entry);
-  const qrels = readQrels(dir, splitOf(entry));
+  const qrels = readQrels(dir, qrelsSplitOf(entry));
   const atomsDir = atomsDirOf(entry);
   const mtimeMs = atomsDir === undefined ? 0 : latestMtimeMs(atomsDir);
   const stale = atomsDir !== undefined && mtimeMs > Date.parse(row.ts);
@@ -752,9 +739,6 @@ const emit = (outcome: ForensicsOutcome): number => {
   return outcome.kind === 'usage' ? FORENSICS_EXIT_USAGE : FORENSICS_EXIT_REFUSED;
 };
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 export const main = async (argv: readonly string[], resultsDir: string): Promise<number> => {
   if (argv.includes('--help')) {
     process.stdout.write(FORENSICS_HELP);
@@ -773,9 +757,6 @@ export const main = async (argv: readonly string[], resultsDir: string): Promise
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), resolve(SUITE_ROOT, 'results'));
 }

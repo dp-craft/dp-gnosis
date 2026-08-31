@@ -37,8 +37,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
+import { invokedDirectly, messageOf } from './cli/shared.js';
 import {
   analyze,
   type EnrichmentRecord,
@@ -120,9 +120,6 @@ interface Unresolved {
   readonly record: EnrichmentRecord;
   readonly reason: string;
 }
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 const readFragment = (atomsDir: string, source: string): Resolved['fragment'] => {
   const parsed = parseAtom(readFileSync(resolve(atomsDir, source), 'utf8'));
@@ -366,9 +363,6 @@ export const main = (argv: readonly string[]): number => {
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }

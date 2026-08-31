@@ -1,5 +1,10 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
+import { exitCodeOf } from '../src/cli/shared.js';
 import {
   alignedRankings,
   assertProvenanceMatch,
@@ -7,6 +12,8 @@ import {
   forecastArms,
   forecastReport,
   FUSE_GUARDED_FIELDS,
+  FUSE_NO_REPRODUCE_CAUSE,
+  FUSE_PROVENANCE_DRIFT_CAUSE,
   FUSE_VARIED_FIELDS,
   fusionSpecs,
   headToHead,
@@ -17,9 +24,13 @@ import {
   THREE_WAY_SHARE
 } from '../src/fuseForecast.js';
 import {
+  FUSE_FORECAST_EXIT_REFUSED,
+  FUSE_FORECAST_EXIT_USAGE,
   FUSE_FORECAST_HELP,
+  FUSE_FORECAST_REFUSAL_CAUSES,
   FUSE_LEG_SPECS,
   isFusableRow,
+  main,
   parseFuseForecastArgs,
   requireLegRow,
   selectLegRow
@@ -122,6 +133,8 @@ describe('provenance guard', () => {
     expect(() => assertProvenanceMatch(legs)).toThrow(/atomCount/);
     expect(() => assertProvenanceMatch(legs)).toThrow(/linear=296/);
     expect(() => assertProvenanceMatch(legs)).toThrow(/fts5=100/);
+    expect(() => assertProvenanceMatch(legs))
+      .toThrow(expect.objectContaining({ cause: FUSE_PROVENANCE_DRIFT_CAUSE }));
   });
 
   it('treats an absent field as absent, never as a measured zero', () => {
@@ -140,6 +153,8 @@ describe('assertReproduces', () => {
 
   it('refuses a leg that no longer reproduces its recorded number', () => {
     expect(() => assertReproduces('fts5', 0.5, 0.51)).toThrow(/no longer reproduces/);
+    expect(() => assertReproduces('fts5', 0.5, 0.51))
+      .toThrow(expect.objectContaining({ cause: FUSE_NO_REPRODUCE_CAUSE }));
   });
 });
 
@@ -308,5 +323,28 @@ describe('fuseForecastCli argument and leg selection', () => {
   it('documents its exit codes in --help', () => {
     expect(FUSE_FORECAST_HELP).toContain('exit codes:');
     expect(FUSE_FORECAST_HELP).toContain('--only');
+    expect(FUSE_FORECAST_HELP).toContain(`  ${FUSE_FORECAST_EXIT_REFUSED}  refused`);
+  });
+
+  /**
+   * Both guards are reached only after the legs and their qrels are loaded, so
+   * the exit mapping is pinned on the causes themselves — the same list `main`
+   * hands `exitCodeOf`.
+   */
+  it('maps each of its own refusal causes to the refused code, and anything else to usage', () => {
+    const codeFor = (cause: string | undefined): number =>
+      exitCodeOf(new Error('x', { cause }), FUSE_FORECAST_REFUSAL_CAUSES);
+    expect(FUSE_FORECAST_REFUSAL_CAUSES).toEqual([
+      FUSE_PROVENANCE_DRIFT_CAUSE,
+      FUSE_NO_REPRODUCE_CAUSE,
+    ]);
+    expect(codeFor(FUSE_PROVENANCE_DRIFT_CAUSE)).toBe(FUSE_FORECAST_EXIT_REFUSED);
+    expect(codeFor(FUSE_NO_REPRODUCE_CAUSE)).toBe(FUSE_FORECAST_EXIT_REFUSED);
+    expect(codeFor(undefined)).toBe(FUSE_FORECAST_EXIT_USAGE);
+  });
+
+  it('still exits usage when the results dir names no leg at all', async () => {
+    const resultsDir = mkdtempSync(resolve(tmpdir(), 'gnosis-bench-fuseforecast-'));
+    await expect(main(['--only', 'vault'], resultsDir)).resolves.toBe(FUSE_FORECAST_EXIT_USAGE);
   });
 });

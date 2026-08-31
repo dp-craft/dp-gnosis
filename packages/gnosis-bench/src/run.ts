@@ -28,7 +28,7 @@
  */
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 import {
   type Qrel,
@@ -38,6 +38,7 @@ import {
   readQueryFacets,
   type TopicFacets
 } from './beir.js';
+import { flagValue, invokedDirectly, messageOf } from './cli/shared.js';
 import { compareAll, type Comparison, formatComparison } from './compare.js';
 import {
   ADAPTER_NAMES,
@@ -106,6 +107,7 @@ import {
   type LayerName,
   LAYERS_TEXT,
   loadManifest,
+  qrelsSplitOf,
   resolveLayer
 } from './manifest.js';
 import {
@@ -311,11 +313,6 @@ export interface Topic {
   readonly id: string;
   readonly text: string;
 }
-
-const flagValue = (argv: readonly string[], name: string): string | undefined => {
-  const index = argv.indexOf(name);
-  return index === -1 ? undefined : argv[index + 1];
-};
 
 const csv = (value: string | undefined): readonly string[] =>
   value === undefined ? [] : value.split(',').map(part => part.trim()).filter(part => part.length > 0);
@@ -1806,7 +1803,7 @@ const topicsFor = (
 
 const runDataset = async (entry: DatasetEntry, options: CliOptions): Promise<DatasetResult> => {
   const dir = await ensureDataset(entry, options.includeHistory);
-  const qrels = readQrels(dir, entry.format === 'bright' ? 'test' : entry.qrels);
+  const qrels = readQrels(dir, qrelsSplitOf(entry));
   const topics = topicsFor(dir, entry.id, qrels);
   const request: PrepareRequest = {
     entry,
@@ -1860,9 +1857,6 @@ const summaryLine = (result: DatasetResult): string =>
   `MRR@10 ${metric(result.metrics.mrr10)}  ` +
   `(${result.topics} topics, ${result.atomCount} atoms, ${result.ingestMs}ms ingest, ` +
   `${result.queryMs}ms query)`;
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 /**
  * The two halves of one dataset's turn, injected so the loop below can be driven
@@ -2235,9 +2229,6 @@ export const main = async (argv: readonly string[], gitSha: string): Promise<num
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), currentGitSha(SUITE_ROOT));
 }

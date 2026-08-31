@@ -25,9 +25,9 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { type Qrel, readCorpus, readQrels } from './beir.js';
+import { flagValue, invokedDirectly, messageOf } from './cli/shared.js';
 import { safeDocId } from './docId.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 import {
@@ -220,11 +220,6 @@ export const EXTERNAL_HELP = [
   '',
 ].join('\n');
 
-const flagValue = (argv: readonly string[], name: string): string | undefined => {
-  const index = argv.indexOf(name);
-  return index === -1 ? undefined : argv[index + 1];
-};
-
 const required = (argv: readonly string[], name: string): string => {
   const value = flagValue(argv, name);
   if (value === undefined || value.startsWith('--')) {
@@ -386,9 +381,6 @@ const scoreExternal = (args: ExternalArgs, suiteRoot: string): number => {
   return recordRun({ args, rankings: aligned, score, checksum }, suiteRoot);
 };
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 export const main = (argv: readonly string[], suiteRoot: string): number => {
   if (argv.includes('--help')) {
     process.stdout.write(EXTERNAL_HELP);
@@ -403,9 +395,6 @@ export const main = (argv: readonly string[], suiteRoot: string): number => {
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2), resolve(import.meta.dirname, '..'));
 }

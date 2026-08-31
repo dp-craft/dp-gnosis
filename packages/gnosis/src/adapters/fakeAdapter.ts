@@ -13,8 +13,9 @@
  * The known-answer reason above is the one that earns the module its place.)
  *
  * It still honours the parts of the port contract the harness leans on — `k`
- * truncation and the `domain` filter — so that a harness bug cannot hide
- * behind fake-specific behaviour.
+ * truncation, the `domain` filter, the `type` filter, and the boundary refusals
+ * of an empty `types` or `domains` — so that a harness bug cannot hide behind
+ * fake-specific behaviour.
  */
 
 import type {
@@ -24,6 +25,7 @@ import type {
   RetrievedAtom,
   RetrieveOptions
 } from '../port.js';
+import { assertDomainFilter, assertTypeFilter } from '../port.js';
 
 /** `mode` reported by the fake, so a persisted report can never read as measured. */
 const FAKE_MODE = 'fake';
@@ -33,9 +35,11 @@ const selectAtoms = (
   opts: RetrieveOptions
 ): readonly RetrievedAtom[] => {
   const domains = opts.domains;
-  const filtered =
+  const types = opts.types;
+  const byDomain =
     domains === undefined ? atoms : atoms.filter(atom => domains.includes(atom.domain));
-  return filtered.slice(0, opts.k);
+  const byType = types === undefined ? byDomain : byDomain.filter(atom => types.includes(atom.type));
+  return byType.slice(0, opts.k);
 };
 
 /**
@@ -47,6 +51,9 @@ export const createFakeAdapter = (
   indexState: IndexState = 'ready'
 ): KnowledgePort => ({
   name: FAKE_MODE,
-  retrieve: (_query: string, opts: RetrieveOptions): Promise<RetrievalResult> =>
-    Promise.resolve({ atoms: selectAtoms(atoms, opts), mode: FAKE_MODE, indexState }),
+  retrieve: async (_query: string, opts: RetrieveOptions): Promise<RetrievalResult> => {
+    assertTypeFilter(opts.types);
+    assertDomainFilter(opts.domains);
+    return { atoms: selectAtoms(atoms, opts), mode: FAKE_MODE, indexState };
+  },
 });

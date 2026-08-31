@@ -39,10 +39,10 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import Database from 'better-sqlite3';
 
+import { flagValue, invokedDirectly, messageOf } from './cli/shared.js';
 import {
   analyze,
   type AnalyzerId,
@@ -325,11 +325,6 @@ const writeSidecar = (path: string, records: readonly EnrichmentRecord[]): void 
   writeFileSync(path, records.map(serializeEnrichmentRecord).join(''), 'utf8');
 };
 
-const flagValue = (argv: readonly string[], flag: string): string | undefined =>
-  argv.flatMap((token, index) => (token === flag ? [argv[index + 1] ?? ''] : []))
-    .filter(value => value.length > 0)
-    .at(-1);
-
 /** The three flags with no default; absent any one of them, the invocation is unusable. */
 const requiredPaths = (
   argv: readonly string[]
@@ -370,9 +365,6 @@ const run = (args: DetEnrichArgs): number => {
   return DET_ENRICH_EXIT_OK;
 };
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 export const main = (argv: readonly string[]): number => {
   try {
     const args = parseDetEnrichArgs(argv);
@@ -388,9 +380,6 @@ export const main = (argv: readonly string[]): number => {
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }

@@ -1,11 +1,17 @@
 import { createFakeAdapter } from '../src/adapters/fakeAdapter.js';
 import type { RetrievedAtom } from '../src/port.js';
+import { emptyDomainsMessage, emptyTypesMessage } from '../src/port.js';
 
-const atom = (id: string, domain: RetrievedAtom['domain'], score: number): RetrievedAtom => ({
+const atom = (
+  id: string,
+  domain: RetrievedAtom['domain'],
+  score: number,
+  type: RetrievedAtom['type'] = 'knowledge'
+): RetrievedAtom => ({
   id,
   title: `title-${id}`,
   domain,
-  type: 'knowledge',
+  type,
   body: `body-${id}`,
   score,
   sourcePath: `RUNNER-${id}.md`,
@@ -15,6 +21,7 @@ const atom = (id: string, domain: RetrievedAtom['domain'], score: number): Retri
 const RUNNER_A = atom('a', 'runner', 0.9);
 const RUNNER_B = atom('b', 'runner', 0.5);
 const STANDARDS_C = atom('c', 'standards', 0.7);
+const ADR_D = atom('d', 'runner', 0.6, 'adr');
 
 describe('createFakeAdapter', () => {
   it('names itself unmistakably', () => {
@@ -66,6 +73,27 @@ describe('createFakeAdapter', () => {
     });
 
     expect(result.atoms).toEqual([RUNNER_A, RUNNER_B]);
+  });
+
+  it('excludes foreign-type atoms when a type filter is set', async () => {
+    const result = await createFakeAdapter([RUNNER_A, ADR_D, RUNNER_B]).retrieve('q', {
+      k: 10,
+      types: ['adr'],
+    });
+
+    expect(result.atoms).toEqual([ADR_D]);
+  });
+
+  it('refuses an empty types filter with the port wording', async () => {
+    const port = createFakeAdapter([RUNNER_A]);
+
+    await expect(port.retrieve('q', { k: 10, types: [] })).rejects.toThrow(emptyTypesMessage());
+  });
+
+  it('refuses an empty domains filter with the port wording', async () => {
+    const port = createFakeAdapter([RUNNER_A]);
+
+    await expect(port.retrieve('q', { k: 10, domains: [] })).rejects.toThrow(emptyDomainsMessage());
   });
 
   it('echoes the configured indexState back', async () => {

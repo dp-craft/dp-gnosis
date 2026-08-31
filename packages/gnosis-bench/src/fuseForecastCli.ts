@@ -18,28 +18,51 @@
  *    measured different corpora.
  */
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { readQrels } from './beir.js';
+import {
+  exitCodeOf,
+  flagValue,
+  invokedDirectly,
+  messageOf,
+  TOOL_EXIT_OK,
+  TOOL_EXIT_REFUSED,
+  TOOL_EXIT_USAGE
+} from './cli/shared.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { readRunFile } from './forensics.js';
 import {
   type ForecastInput,
   forecastReport,
   FUSE_DEPTH,
+  FUSE_NO_REPRODUCE_CAUSE,
+  FUSE_PROVENANCE_DRIFT_CAUSE,
   type Leg,
   RERANK_RRF_K
 } from './fuseForecast.js';
-import { type DatasetEntry, loadManifest } from './manifest.js';
+import { type DatasetEntry, loadManifest, qrelsSplitOf } from './manifest.js';
 import type { Qrel } from './metrics.js';
 import { HISTORY_FILE, type HistoryRow, readHistory, runFilePath } from './report.js';
 import { ensureDataset, MANIFEST_PATH, SUITE_ROOT } from './run.js';
 
 /** The forecast was written. */
-export const FUSE_FORECAST_EXIT_OK = 0;
+export const FUSE_FORECAST_EXIT_OK = TOOL_EXIT_OK;
 
-/** Unusable invocation, or a guard refused: bad `--only`, a missing leg, drift, no reproduction. */
-export const FUSE_FORECAST_EXIT_USAGE = 2;
+/** Unusable invocation: a bad `--only`, an unknown dataset, a missing or unnamed leg. */
+export const FUSE_FORECAST_EXIT_USAGE = TOOL_EXIT_USAGE;
+
+/** Refused — the legs read fine, and the data is not what the invocation claims. */
+export const FUSE_FORECAST_EXIT_REFUSED = TOOL_EXIT_REFUSED;
+
+/**
+ * The `error.cause` values THIS tool answers with a refusal rather than a usage
+ * code. EXPORTED because both guards fire deep inside `forecastReport`, so the
+ * mapping is pinned on the list rather than on a re-staged fusion.
+ */
+export const FUSE_FORECAST_REFUSAL_CAUSES: readonly string[] = [
+  FUSE_PROVENANCE_DRIFT_CAUSE,
+  FUSE_NO_REPRODUCE_CAUSE,
+];
 
 /** The datasets the plan forecasts, in report order. */
 export const FUSE_FORECAST_DATASETS: readonly string[] = ['vault', 'nfcorpus'];
@@ -74,18 +97,14 @@ export const FUSE_FORECAST_HELP = [
   '',
   'exit codes:',
   `  ${FUSE_FORECAST_EXIT_OK}  the forecast was written`,
-  `  ${FUSE_FORECAST_EXIT_USAGE}  unusable invocation, or a guard refused`,
+  `  ${FUSE_FORECAST_EXIT_USAGE}  unusable invocation, or no recorded row qualifies as a leg`,
+  `  ${FUSE_FORECAST_EXIT_REFUSED}  refused — the data is not what the invocation claims (drift, no reproduction)`,
   '',
 ].join('\n');
 
 export interface FuseForecastArgs {
   readonly datasets: readonly string[];
 }
-
-const flagValue = (argv: readonly string[], name: string): string | undefined => {
-  const index = argv.indexOf(name);
-  return index === -1 ? undefined : argv[index + 1];
-};
 
 /** Every flag this tool reads, `--help` included; anything else is refused by name. */
 export const FUSE_FORECAST_FLAGS: FlagSpec = { value: ['--only'], boolean: ['--help'] };
@@ -156,13 +175,9 @@ const entryFor = (dataset: string): DatasetEntry => {
   return entry;
 };
 
-/** The split `run.ts` scores this format under — read from there, never guessed. */
-const splitOf = (entry: DatasetEntry): string =>
-  entry.format === 'bright' ? 'test' : entry.qrels;
-
 const qrelsOf = async (dataset: string): Promise<ReadonlyMap<string, Qrel>> => {
   const entry = entryFor(dataset);
-  return readQrels(await ensureDataset(entry), splitOf(entry));
+  return readQrels(await ensureDataset(entry), qrelsSplitOf(entry));
 };
 
 export const forecastInput = async (
@@ -181,9 +196,6 @@ const reportFor = async (
   dataset: string
 ): Promise<readonly string[]> =>
   forecastReport(await forecastInput(resultsDir, history, dataset));
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 const reportAll = async (
   resultsDir: string,
@@ -207,14 +219,11 @@ export const main = async (argv: readonly string[], resultsDir: string): Promise
     return FUSE_FORECAST_EXIT_OK;
   } catch (error) {
     process.stderr.write(`${messageOf(error)}\n`);
-    return FUSE_FORECAST_EXIT_USAGE;
+    return exitCodeOf(error, FUSE_FORECAST_REFUSAL_CAUSES);
   }
 };
 
 /** Guarded so the exported helpers stay importable from a test. */
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (invokedDirectly(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), resolve(SUITE_ROOT, 'results'));
 }
