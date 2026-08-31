@@ -39,12 +39,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { parseAtom } from '../../gnosis/src/atom.js';
 import {
+  analyze,
   type EnrichmentRecord,
-  loadEnrichmentSidecar
-} from '../../gnosis/src/enrichment.js';
-import { analyze } from '../../gnosis/src/query.js';
+  loadEnrichmentSidecar,
+  parseAtom
+} from './engine.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 
 /** The measurement ran and the report was written. */

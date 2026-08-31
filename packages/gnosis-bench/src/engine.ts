@@ -6,6 +6,16 @@
  * point of the suite (`beirIndex.ts`, the harness this replaces, built its own
  * index and its own SQL and therefore could not see an engine regression).
  *
+ * THE EXEMPTION: this is the ONE file allowed to reach into `packages/gnosis/src`
+ * by relative path, past the engine's public barrel — `eslint.config.mjs` makes
+ * that an error everywhere else under `packages/gnosis-bench/src`. The reach is
+ * deliberate: a gate must measure the REAL engine, including internals the
+ * published surface does not expose (`fts5Adapter`'s table, `cli/adapter`'s
+ * route taxonomy, `budget`'s cap), so the benchmark cannot be run against an
+ * installed package and `COMMON.md` § Module Encapsulation is suspended here by
+ * design rather than by drift. Everything the rest of the bench needs comes
+ * back out through the CONTRACT RE-EXPORT section below.
+ *
  * Five rules, each verified against the engine source, each silent when broken:
  *
  * 1. The RAW query text goes to `port.retrieve` — `retrieveCommand.ts:349`
@@ -80,6 +90,102 @@ import type {
 import type { PrfParams } from '../../gnosis/src/prf.js';
 import type { AnalyzerId } from '../../gnosis/src/query.js';
 import { probeRerankDiscrimination, rerankAtoms } from '../../gnosis/src/rerank.js';
+/*
+ * ── THE ENGINE CONTRACT ──────────────────────────────────────────────────────
+ * Every engine symbol the REST of the benchmark consumes, re-exported here so
+ * the seam claim above is literally true. This list IS the declared contract:
+ * an engine export absent from it is one no bench file depends on, and an
+ * engine refactor that moves one of these breaks exactly this file. Add a line
+ * only when a bench file actually needs the symbol.
+ *
+ * The section sits ABOVE this file's own `./*.js` imports and MUST stay there:
+ * `report.ts` imports `FTS_COLUMNS` from here and evaluates it at module scope,
+ * while this file imports `report.ts` back. Re-exports declared after that
+ * import are still undefined when the cycle reaches `report.ts` (17 suites
+ * failed on `Cannot read properties of undefined (reading 'map')`).
+ */
+
+/** `vocabGapCli` and `deterministicEnrichment` read the built FTS5 index directly. */
+export { FTS_TABLE, readIndexAnalyzer } from '../../gnosis/src/adapters/fts5Adapter.js';
+/** `vocabGapCli` reports the query terms the index holds no postings for. */
+export {
+  type QueryTermPostings,
+  readVocabularyGap
+} from '../../gnosis/src/adapters/fts5VocabularyGap.js';
+/** `run.ts` asks whether a dense route fuses legs before it labels an arm. */
+export { fusesLegs } from '../../gnosis/src/adapters/lanceDbDenseAdapter.js';
+/** `fetch/vault` and `enrichmentGate` parse vault atoms with the engine's own parser. */
+export { parseAtom } from '../../gnosis/src/atom.js';
+/** `run.ts` names the reranker's extract strategy in an arm label. */
+export type { ExtractStrategy } from '../../gnosis/src/bench/reranker.js';
+/** The CLI's presentation cap — `run.ts` behind `--budget`, `forensicsCli` for display. */
+export { fitToTokenBudget } from '../../gnosis/src/budget.js';
+/** `run.ts` resolves and validates `--adapter` exactly as the CLI does. */
+export {
+  ADAPTER_NAMES,
+  adapterError,
+  type AdapterName,
+  denseRouteOf,
+  resolveAdapter
+} from '../../gnosis/src/cli/adapter.js';
+/** Served-config defaults and vocabularies — `run.ts` flags, `compare.ts` provenance,
+ *  `report.ts` field weights, `chartData.ts` rerank window, `forensicsCli` token budget. */
+export {
+  ATOM_MAX_CHARS,
+  BODY_SOURCES,
+  type BodySource,
+  DEFAULT_BODY_SOURCE,
+  DEFAULT_ENRICHMENT_COLUMN_SPEC,
+  DEFAULT_ENRICHMENT_COLUMNS,
+  DEFAULT_FIELD_WEIGHTS,
+  DEFAULT_KEYWORD_FILTER,
+  DEFAULT_RERANK_PRESET,
+  EMBED_MODEL_ID,
+  type EnrichmentColumnSpec,
+  enrichmentColumnVocabulary,
+  type FieldWeights,
+  FTS_COLUMNS,
+  type FtsColumn,
+  HYBRID_FUSION,
+  KEYWORD_FILTERS,
+  type KeywordFilter,
+  parseEnrichmentColumns,
+  RERANK_DOC_MAX_CHARS,
+  RERANK_FUSION_PRESETS,
+  RERANK_K_INIT,
+  RERANK_MODEL_ID,
+  type RerankFusion,
+  RETRIEVE_TOKEN_BUDGET
+} from '../../gnosis/src/config.js';
+/** The enrichment sidecar format — `deterministicEnrichment` writes it, `enrichmentGate` reads it. */
+export {
+  type EnrichmentRecord,
+  loadEnrichmentSidecar,
+  parseEnrichmentLine,
+  serializeEnrichmentRecord
+} from '../../gnosis/src/enrichment.js';
+/** `corpus.ts` builds the profile `prepareDataset` hands to `ingest()`. */
+export type { IngestProfile } from '../../gnosis/src/ingestProfile.js';
+/** The retrieval surface `run.ts` and `forensicsCli` score. */
+export type { KnowledgePort, RetrievedAtom } from '../../gnosis/src/port.js';
+/** PRF defaults — a `--prf` arm's parameters and the provenance `compare.ts` guards on. */
+export { DEFAULT_PRF_PARAMS, type PrfParams } from '../../gnosis/src/prf.js';
+/** The analyzer vocabulary — `run.ts` flags, and the tokenizer the enrichment gates apply. */
+export {
+  analyze,
+  type AnalyzerId,
+  ANALYZERS,
+  DEFAULT_ANALYZER
+} from '../../gnosis/src/query.js';
+/** `run.ts` resolves `--rerank-fusion` and the extract strategy through the engine's rules. */
+export { EXTRACT_STRATEGY, resolveRerankFusion } from '../../gnosis/src/rerank.js';
+/** The closed atom vocabulary — gold-reachability filtering and forensic atom typing. */
+export {
+  type AtomDomain,
+  defaultAtomType,
+  defaultExcludedTypes
+} from '../../gnosis/src/vocabulary.js';
+
 import type { BeirDoc } from './beir.js';
 import { buildProfile, materializeCorpus, type MaterializedCorpus } from './corpus.js';
 import { assertIndexedGoldReachable } from './fetch/vault.js';

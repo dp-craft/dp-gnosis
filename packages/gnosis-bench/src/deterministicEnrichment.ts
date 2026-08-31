@@ -43,13 +43,15 @@ import { pathToFileURL } from 'node:url';
 
 import Database from 'better-sqlite3';
 
-import { FTS_TABLE, readIndexAnalyzer } from '../../gnosis/src/adapters/fts5Adapter.js';
 import {
+  analyze,
+  type AnalyzerId,
   type EnrichmentRecord,
+  FTS_TABLE,
   parseEnrichmentLine,
+  readIndexAnalyzer,
   serializeEnrichmentRecord
-} from '../../gnosis/src/enrichment.js';
-import { analyze, type AnalyzerId } from '../../gnosis/src/query.js';
+} from './engine.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 
 /** Both sidecars were written. */

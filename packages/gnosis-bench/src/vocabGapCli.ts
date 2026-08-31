@@ -27,11 +27,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { readIndexAnalyzer } from '../../gnosis/src/adapters/fts5Adapter.js';
 import {
   type QueryTermPostings,
+  readIndexAnalyzer,
   readVocabularyGap
-} from '../../gnosis/src/adapters/fts5VocabularyGap.js';
+} from './engine.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 
 /** The measurement ran and every topic was reported. */

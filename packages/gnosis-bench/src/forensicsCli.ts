@@ -29,13 +29,14 @@ import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'nod
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { fitToTokenBudget } from '../../gnosis/src/budget.js';
-import {
-  RETRIEVE_TOKEN_BUDGET
-} from '../../gnosis/src/config.js';
-import type { RetrievedAtom } from '../../gnosis/src/port.js';
-import { type AtomDomain, defaultAtomType } from '../../gnosis/src/vocabulary.js';
 import { readQrels } from './beir.js';
+import {
+  type AtomDomain,
+  defaultAtomType,
+  fitToTokenBudget,
+  RETRIEVE_TOKEN_BUDGET,
+  type RetrievedAtom
+} from './engine.js';
 import { readAtomDocs } from './fetch/vault.js';
 import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { readRunFile, topicForensics } from './forensics.js';

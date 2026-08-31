@@ -38,12 +38,12 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import type { TopicFacets } from './beir.js';
 import {
   DEFAULT_FIELD_WEIGHTS,
   type FieldWeights,
   FTS_COLUMNS
-} from '../../gnosis/src/config.js';
-import type { TopicFacets } from './beir.js';
+} from './engine.js';
 import { countNonEmptyLines } from './lines.js';
 import type { Metrics } from './metrics.js';
 import type { AtomSpread, AxisStratum, DocumentScore, TopicScore } from './score.js';

@@ -24,8 +24,8 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { IngestProfile } from '../../gnosis/src/ingestProfile.js';
 import type { BeirDoc } from './beir.js';
+import type { IngestProfile } from './engine.js';
 
 const MARKDOWN_EXT = '.md';
 

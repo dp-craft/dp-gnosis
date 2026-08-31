@@ -44,18 +44,18 @@
  * precisely the thing a delta is supposed to measure.
  */
 import {
+  DEFAULT_ANALYZER,
   DEFAULT_BODY_SOURCE,
   DEFAULT_ENRICHMENT_COLUMNS,
   DEFAULT_KEYWORD_FILTER,
+  DEFAULT_PRF_PARAMS,
   DEFAULT_RERANK_PRESET,
   EMBED_MODEL_ID,
   HYBRID_FUSION,
   RERANK_FUSION_PRESETS,
   RERANK_MODEL_ID,
   type RerankFusion
-} from '../../gnosis/src/config.js';
-import { DEFAULT_PRF_PARAMS } from '../../gnosis/src/prf.js';
-import { DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
+} from './engine.js';
 import {
   DEFAULT_FIELD_WEIGHTS_TEXT,
   type HistoryRow,

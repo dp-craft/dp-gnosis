@@ -30,43 +30,6 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { fusesLegs } from '../../gnosis/src/adapters/lanceDbDenseAdapter.js';
-import type { ExtractStrategy } from '../../gnosis/src/bench/reranker.js';
-import { fitToTokenBudget } from '../../gnosis/src/budget.js';
-import {
-  ADAPTER_NAMES,
-  adapterError,
-  type AdapterName,
-  denseRouteOf,
-  resolveAdapter
-} from '../../gnosis/src/cli/adapter.js';
-import {
-  ATOM_MAX_CHARS,
-  BODY_SOURCES,
-  type BodySource,
-  DEFAULT_BODY_SOURCE,
-  DEFAULT_ENRICHMENT_COLUMN_SPEC,
-  DEFAULT_FIELD_WEIGHTS,
-  DEFAULT_KEYWORD_FILTER,
-  DEFAULT_RERANK_PRESET,
-  EMBED_MODEL_ID,
-  type EnrichmentColumnSpec,
-  enrichmentColumnVocabulary,
-  type FieldWeights,
-  FTS_COLUMNS,
-  type FtsColumn,
-  KEYWORD_FILTERS,
-  type KeywordFilter,
-  parseEnrichmentColumns,
-  RERANK_DOC_MAX_CHARS,
-  RERANK_K_INIT,
-  RERANK_MODEL_ID,
-  type RerankFusion } from '../../gnosis/src/config.js';
-import type { KnowledgePort, RetrievedAtom } from '../../gnosis/src/port.js';
-import { DEFAULT_PRF_PARAMS, type PrfParams } from '../../gnosis/src/prf.js';
-import { type AnalyzerId, ANALYZERS, DEFAULT_ANALYZER } from '../../gnosis/src/query.js';
-import { EXTRACT_STRATEGY, resolveRerankFusion } from '../../gnosis/src/rerank.js';
-import { defaultExcludedTypes } from '../../gnosis/src/vocabulary.js';
 import {
   type Qrel,
   readCorpus,
@@ -77,14 +40,52 @@ import {
 } from './beir.js';
 import { compareAll, type Comparison, formatComparison } from './compare.js';
 import {
+  ADAPTER_NAMES,
+  adapterError,
+  type AdapterName,
+  type AnalyzerId,
+  ANALYZERS,
   assertRerankDiscriminates,
+  ATOM_MAX_CHARS,
+  BODY_SOURCES,
+  type BodySource,
+  DEFAULT_ANALYZER,
+  DEFAULT_BODY_SOURCE,
+  DEFAULT_ENRICHMENT_COLUMN_SPEC,
+  DEFAULT_FIELD_WEIGHTS,
+  DEFAULT_KEYWORD_FILTER,
+  DEFAULT_PRF_PARAMS,
+  DEFAULT_RERANK_PRESET,
+  defaultExcludedTypes,
+  denseRouteOf,
+  EMBED_MODEL_ID,
+  type EnrichmentColumnSpec,
+  enrichmentColumnVocabulary,
+  EXTRACT_STRATEGY,
+  type ExtractStrategy,
+  type FieldWeights,
+  fitToTokenBudget,
+  FTS_COLUMNS,
+  type FtsColumn,
+  fusesLegs,
+  KEYWORD_FILTERS,
+  type KeywordFilter,
+  type KnowledgePort,
   openPort,
+  parseEnrichmentColumns,
   prepareDataset,
   type PreparedDataset,
+  type PrfParams,
   probePortSoundness,
+  RERANK_DOC_MAX_CHARS,
+  RERANK_K_INIT,
+  RERANK_MODEL_ID,
+  type RerankFusion,
   rerankIfRequested,
-  retrieveDocs
-} from './engine.js';
+  resolveAdapter,
+  resolveRerankFusion,
+  type RetrievedAtom,
+  retrieveDocs } from './engine.js';
 import { ensureBeirDataset } from './fetch/beirZip.js';
 import { ensureBrightDataset, readExcluded } from './fetch/bright.js';
 import { ensureMilqaDataset } from './fetch/milqa.js';

@@ -217,6 +217,34 @@ export default tseslint.config(
     },
   },
   {
+    // THE SEAM, enforced. `packages/gnosis-bench/src/engine.ts` claims to be the
+    // benchmark's only contact with the engine; before this rule, ten other src
+    // files reached into `packages/gnosis/src/**` by relative path and falsified
+    // it. engine.ts keeps the reach (a gate must measure the real engine, past
+    // its published barrel) and re-exports the contract; every other src file
+    // takes it from there, so an engine refactor lands in one file, not ten.
+    // Scoped to src/ deliberately: the bench's own tests may still reach in.
+    // MUST stay AFTER the package rule block above.
+    files: ['packages/gnosis-bench/src/**/*.ts'],
+    ignores: ['packages/gnosis-bench/src/engine.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/gnosis/src', '**/gnosis/src/*', '**/gnosis/src/**'],
+              message:
+                'The engine is reachable only through the seam: import from '
+                + '`engine.ts` (add a line to its CONTRACT RE-EXPORT section if the '
+                + 'symbol is not there yet). Only engine.ts may reach into packages/gnosis/src.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Plain-.mjs Node scripts (typescript-eslint disables no-undef for .ts, so only
     // these need the ambient Node globals declared).
     files: ['**/*.mjs'],
