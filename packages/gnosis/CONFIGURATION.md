@@ -85,8 +85,9 @@ plausible path the user never asked for is the failure this project polices.
 
 **`rerank` is what makes the reranker configurable once instead of per-invocation.**
 Before it existed the URL was environment-only and the model was `--rerank-model`
-on every single call. Both now resolve **flag → environment → `config.json` →
-built-in constant**:
+on every single call. The model id now resolves **flag → environment →
+`config.json` → built-in constant**; the endpoint has no flag, so it resolves
+**environment → `config.json` → built-in constant**:
 
 | Setting | Flag | Environment | `config.json` | Constant |
 |---|---|---|---|---|
