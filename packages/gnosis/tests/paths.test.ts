@@ -44,7 +44,7 @@ describe('paths', () => {
 
 describe('resolveCorpusRoots', () => {
   it('defaults to the declared corpus roots when the override is absent or blank', () => {
-    expect(CORPUS_ROOTS).toEqual(['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md']);
+    expect(CORPUS_ROOTS).toEqual([]);
     expect(resolveCorpusRoots({})).toEqual(CORPUS_ROOTS);
     expect(resolveCorpusRoots({ [CORPUS_ROOTS_ENV_VAR]: '' })).toEqual(CORPUS_ROOTS);
     expect(resolveCorpusRoots({ [CORPUS_ROOTS_ENV_VAR]: ' , ' })).toEqual(CORPUS_ROOTS);

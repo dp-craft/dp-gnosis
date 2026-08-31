@@ -427,14 +427,14 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 
 ### Configuration
 
-`CORPUS_ROOTS` (`src/config.ts`) is the corpus SCOPE — the only thing deciding what `ingest` reads. Default: `['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md']` (`config.ts`). **In THIS repository `doc/` and `RUNNER-*.md` do not exist**, so a bare `ingest` exits 2 naming the unmatched root — override with `DP_GNOSIS_CORPUS_ROOTS` or a profile's `corpusRoots`.
+`CORPUS_ROOTS` (`src/config.ts`) is the corpus SCOPE — the only thing deciding what `ingest` reads. Default: **empty** (`config.ts`). The scope is never guessed, so an `ingest` with no root declared exits 2 and names the three ways to state one: `init <dir…>`, a `--profile` whose profile declares `corpusRoots`, or `DP_GNOSIS_CORPUS_ROOTS`.
 
 | Entry form | Resolution |
 |---|---|
 | contains `*` | glob against the repo root; contributes the matching `.md` FILES |
 | anything else | directory, walked recursively for `.md` |
 
-A root matching **zero** files THROWS, naming that root — a typo would otherwise index nothing in silence, and the only symptom would be empty queries. Override with `DP_GNOSIS_CORPUS_ROOTS=<comma-separated repo-relative roots>`; unset, empty or all-blank falls back to the default. `SOURCE_ROOT_DOMAINS` maps a source path prefix → `x_domain` (`runner|standards|adr|docs|claude`), longest prefix wins; a source under no declared root is skipped with a reason, never guessed.
+A root matching **zero** files THROWS, naming that root — a typo would otherwise index nothing in silence, and the only symptom would be empty queries. Override with `DP_GNOSIS_CORPUS_ROOTS=<comma-separated repo-relative roots>`; unset, empty or all-blank falls back to the profile's `corpusRoots`, else to the shipped default, which is empty. `SOURCE_ROOT_DOMAINS` maps a source path prefix → `x_domain` (`runner|standards|adr|docs|claude`), longest prefix wins; a source under no declared root is skipped with a reason, never guessed.
 
 ### Analyzers — the chain that builds AND queries an index
 
@@ -510,7 +510,7 @@ Three profiles ship. `web-research` and `hu-tax` are the worked proof that a new
 
 | Profile file | Domain(s) | Corpus it reads | Atoms dir · index path | Corpus ships? |
 |---|---|---|---|---|
-| `profiles/default.profile.json` | `runner` `standards` `adr` `docs` `claude` | repo `CORPUS_ROOTS` under the repository root | defaults — `benchmark-data/vault/atoms` · per-adapter under `benchmark-data/cache/index/` | yes (this repo) |
+| `profiles/default.profile.json` | `runner` `standards` `adr` `docs` `claude` | none implicitly — it declares no `corpusRoots`, so the scope comes from `DP_GNOSIS_CORPUS_ROOTS` or a profile | defaults — `benchmark-data/vault/atoms` · per-adapter under `benchmark-data/cache/index/` | **no** — the scope must be declared first |
 | `profiles/web-research.profile.json` | `web-research` | `docs/research` under the repository root | `benchmark-data/cache/atoms-web-research` · `benchmark-data/cache/index/atoms-web-research-fts5.db` | yes (this repo) |
 | `profiles/hu-tax.profile.json` | `hu-tax` | `analizis` `leiras` `melo` under the mount point `benchmark-data/corpora/hu-tax` | `benchmark-data/cache/atoms-hu-tax` · `benchmark-data/cache/index/atoms-hu-tax-fts5.db` | **no** — profile only |
 

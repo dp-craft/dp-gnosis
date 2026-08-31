@@ -181,8 +181,8 @@ describe('ingest', () => {
     ]);
   });
 
-  it('declares the whole authored knowledge base as the default scope', () => {
-    expect(CORPUS_ROOTS).toEqual(['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md']);
+  it('ships no default scope at all, so no corpus is ever walked unasked', () => {
+    expect(CORPUS_ROOTS).toEqual([]);
   });
 
   it('contributes the files a glob root matches, and only those', async () => {

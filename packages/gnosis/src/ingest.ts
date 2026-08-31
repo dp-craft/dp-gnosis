@@ -7,12 +7,13 @@ import type { Atom } from './atom.js';
 import { serializeAtom } from './atom.js';
 import type { MarkdownChunk } from './chunker.js';
 import { chunkMarkdown, frontMatterTitle, headingLine, headingPath } from './chunker.js';
-import { bodyMaxChars, corpusRootStatements, resolveCorpusRoots } from './config.js';
+import { bodyMaxChars, CORPUS_ROOTS_ENV_VAR, corpusRootStatements, resolveCorpusRoots } from './config.js';
 import type { CorpusManifestInput, ManifestAtom } from './corpusManifest.js';
 import { buildCorpusManifest, CORPUS_MANIFEST_FILE, serializeCorpusManifest } from './corpusManifest.js';
 import { expandUserPath } from './env.js';
 import type { IngestProfile } from './ingestProfile.js';
 import { domainForPath, typeForPath } from './ingestProfile.js';
+import { cliInvocation } from './invocation.js';
 import { atomsDir, REPO_ROOT } from './paths.js';
 import { loadSummarySidecar } from './summarySidecar.js';
 import { readExistingIds, validateAtom } from './validate.js';
@@ -211,10 +212,21 @@ const resolveRoot = async (repoRoot: string, root: string): Promise<readonly str
   );
 };
 
+/**
+ * An EMPTY scope is not an empty corpus either, and it is the one case no root
+ * can name itself out of: nothing was declared, so nothing is wrong to point
+ * at. The scope is never guessed — a guessed root would ingest whatever tree
+ * the command happened to run in — so the refusal carries every way of stating
+ * one, because none of them is discoverable from the failure.
+ */
+const emptyScopeRefusal = (): string =>
+  `no corpus root is declared, so ingest has no corpus to walk — the scope is never guessed. State it in one of three ways: \`${cliInvocation()} init <dir…>\` writes a profile declaring those directories as corpusRoots; \`--profile <file>\` uses a profile that declares "corpusRoots"; ${CORPUS_ROOTS_ENV_VAR}=<comma-separated roots> overrides both for one run.`;
+
 const expandCorpus = async (
   repoRoot: string,
   corpusRoots: readonly string[]
 ): Promise<readonly string[]> => {
+  if (corpusRoots.length === 0) throw new Error(emptyScopeRefusal());
   const nested = await Promise.all(corpusRoots.map(root => resolveRoot(repoRoot, root)));
   return [...new Set(nested.flat())];
 };

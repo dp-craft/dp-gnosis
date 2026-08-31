@@ -45,7 +45,7 @@ A green `npm test` is not evidence that a narrower command passes. Different col
 npm run gnosis -- ingest && npm run gnosis -- index --adapter fts5
 ```
 
-**In THIS repository a bare `ingest` exits 2**: the shipped `CORPUS_ROOTS` default (`config.ts`) still names `doc/` and `RUNNER-*.md`, which came from the repository gnosis was extracted from and do not exist here. Name the roots you mean — `DP_GNOSIS_CORPUS_ROOTS=docs ...` — or point `--profile` at one that declares its own `corpusRoots`.
+**A bare `ingest` exits 2 anywhere**: the shipped `CORPUS_ROOTS` default (`config.ts`) is EMPTY and the scope is never guessed, so the refusal names the three ways to state one. Name the roots you mean — `DP_GNOSIS_CORPUS_ROOTS=docs ...` — point `--profile` at one that declares its own `corpusRoots`, or run `npm run gnosis -- init <dir…>` to write a profile that does.
 
 An `ingest` alone leaves the index carrying the previous digest, and the next query refuses with exit 3 — correctly, and silently as far as any test suite is concerned.
 

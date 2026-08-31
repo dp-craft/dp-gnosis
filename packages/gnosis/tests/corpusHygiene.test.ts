@@ -54,8 +54,8 @@ const ingestFixture = async (fixture: Fixture, roots: readonly string[]): Promis
   await ingest({ corpusRoots: roots, outputDir: fixture.out, repoRoot: fixture.root });
 
 describe('docs/ as a corpus root', () => {
-  it('declares docs/ in the shipped scope alongside doc/ and claude-artifacts/', () => {
-    expect(CORPUS_ROOTS).toContain('docs');
+  it('ships an EMPTY scope, so docs/ is labelled here but guessed by nobody', () => {
+    expect(CORPUS_ROOTS).toEqual([]);
   });
 
   it('labels every authored docs/ subtree from the existing 15-type vocabulary', () => {

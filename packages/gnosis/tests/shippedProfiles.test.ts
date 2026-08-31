@@ -132,6 +132,30 @@ describe('shipped profiles', () => {
   });
 
   /**
+   * The shipped scope is EMPTY (owner decision D2) — the default profile
+   * declares no `corpusRoots` and `CORPUS_ROOTS` names none, so a bare `ingest`
+   * has nothing to walk. It refuses instead of guessing a tree, and the refusal
+   * has to carry all three ways a scope is stated, because none of them is
+   * discoverable from the failure itself.
+   *
+   * `--atoms-dir` is stated only to satisfy `ingestBlastRadius.test.ts` — an
+   * ingest in this suite MUST name its own output directory. It does not touch
+   * corpus-scope resolution, so the refusal under test is the same one a bare
+   * `ingest` gets.
+   */
+  it('refuses an ingest with exit 2 when no corpus root is declared, naming init, --profile and the env var', async () => {
+    const out = await mkdtemp(join(tmpdir(), 'gnosis-empty-scope-'));
+    const result = await runCli(['ingest', '--atoms-dir', out]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toMatch(/no corpus root is declared/);
+    expect(result.stderr).toContain('init');
+    expect(result.stderr).toContain('--profile');
+    expect(result.stderr).toContain(CORPUS_ROOTS_ENV_VAR);
+  });
+
+  /**
    * The refusal above names three places a corpus root can be stated, but
    * CORPUS_ROOTS lives in TypeScript source that an install does not ship, so
    * naming it there is a dead end rather than a remedy. The two branches are

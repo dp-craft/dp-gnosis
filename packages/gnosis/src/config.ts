@@ -539,31 +539,24 @@ export const QUERY_MAX_TERMS = 32;
 export const BM25_IDF_SMOOTHING = 0.5;
 
 /**
- * The repo-relative roots ingest walks — the corpus SCOPE, stated explicitly
- * rather than implied by whatever `SOURCE_ROOT_DOMAINS` happens to list. Scope
- * (what is read) and labelling (what domain a read file gets) are two
+ * The repo-relative roots ingest walks — the corpus SCOPE — and it ships EMPTY.
+ * Scope (what is read) and labelling (what domain a read file gets) are two
  * decisions, and conflating them means widening either one silently widens the
  * other.
  *
+ * The scope is never GUESSED. This list used to name the author's own
+ * repository layout (`doc`, `docs`, `claude-artifacts`, `RUNNER-*.md`), which
+ * is a scope every other instance is wrong about: it either matched nothing and
+ * refused with a root nobody declared, or — worse — matched a same-named tree
+ * and ingested a corpus the caller never asked for. There is no layout that is
+ * right by default, so there is no default: `ingest` refuses on an empty scope
+ * and names the three places one is stated (see {@link corpusRootStatements}).
+ *
  * An entry containing `*` is a glob resolved against the repo root and
  * contributes the matching FILES; every other entry is a directory walked
- * recursively. `RUNNER-*.md` is the repo-root runner doc set, which has no
- * containing directory of its own.
- *
- * Scope covers the whole authored knowledge base, not `doc/` alone: the frozen
- * golden set draws 46 of its 103 atoms from `claude-artifacts/` and 30 from the
- * repo-root `RUNNER-*.md` files, so a `doc/`-only corpus leaves most of the
- * benchmark unscoreable.
- *
- * `docs` (with an s) is a SECOND, unrelated tree, and it is in scope as of
- * T2.1: it holds the research notes, plans, ADRs, reviews and lessons-learned
- * a question about this project is most often asking for, and until now every
- * one of them failed the scope gate silently. It is also where the machine
- * output lives — 22 597 of its 22 808 markdown files are generated — so the
- * root is only usable together with the profile's `excludePaths`, which drop
- * `docs/tmp` and `docs/benchmarks` before anything is read.
+ * recursively.
  */
-export const CORPUS_ROOTS: readonly string[] = ['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md'];
+export const CORPUS_ROOTS: readonly string[] = [];
 
 /** Comma-separated override of `CORPUS_ROOTS`, read in `resolveCorpusRoots` alone. */
 export const CORPUS_ROOTS_ENV_VAR = 'DP_GNOSIS_CORPUS_ROOTS';
@@ -609,8 +602,8 @@ const EDITABLE_STATEMENTS = `in the profile's corpusRoots, or in ${CORPUS_ROOTS_
  * there is a dead end rather than a remedy: the defect `invocation.ts` exists to
  * prevent for commands, stated here for the tiers this file owns.
  *
- * A CHECKOUT keeps all three, and must -- the shipped profile declares no
- * `corpusRoots`, so `CORPUS_ROOTS` is genuinely where its scope comes from.
+ * A CHECKOUT keeps all three -- `CORPUS_ROOTS` ships empty, but editing it is
+ * still a way a checkout can state a scope, so the remedy names it there.
  *
  * `installed` is a parameter for the same reason `cliInvocation`'s is: both
  * branches have to be pinned against the package's own evidence rather than a
