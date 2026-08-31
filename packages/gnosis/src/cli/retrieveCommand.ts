@@ -78,13 +78,16 @@ const NO_QUERY =
 const kError = (raw: string): string =>
   `-k must be a positive integer — got "${raw}"; pass e.g. \`-k 5\``;
 
+/** The result-count flag: `search`, `ask` and `demo` honour it, nothing else. */
+export const TOP_K_FLAG = '-k';
+
 const parseK = (raw: string): number | undefined => {
   const value = Number(raw);
   return Number.isInteger(value) && value > 0 ? value : undefined;
 };
 
 const resolveK = (flags: FlagValues): number | undefined => {
-  const raw = stringFlag(flags, '-k');
+  const raw = stringFlag(flags, TOP_K_FLAG);
   return raw === undefined ? DEFAULT_K : parseK(raw);
 };
 
@@ -1431,7 +1434,7 @@ const resolveBudget = (flags: FlagValues): BudgetResult => {
 const resolveCounts = (flags: FlagValues): CountsResult => {
   const k = resolveK(flags);
   const budget = resolveBudget(flags);
-  if (k === undefined) return { ok: false, error: kError(rawFlag(flags, '-k')) };
+  if (k === undefined) return { ok: false, error: kError(rawFlag(flags, TOP_K_FLAG)) };
   return budget.ok
     ? { ok: true, k, maxTokens: budget.maxTokens, budgetMode: budget.budgetMode }
     : budget;

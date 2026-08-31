@@ -100,8 +100,11 @@ const measure = async (
   };
 };
 
+/** The frozen query set to measure over: `bench` alone reads it. */
+export const GOLDEN_SET_FLAG = '--golden-set';
+
 export const runBenchCommand = async (context: CommandContext): Promise<CommandOutcome> => {
-  const path = stringFlag(context.flags, '--golden-set') ?? GOLDEN_SET_PATH;
+  const path = stringFlag(context.flags, GOLDEN_SET_FLAG) ?? GOLDEN_SET_PATH;
   const loaded = await readGoldenSetSource(path, context.atomsDir);
   return loaded.ok
     ? await measure(context, { path, set: loaded.set, hash: loaded.hash })

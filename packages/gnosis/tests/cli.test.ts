@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { lanceDbAvailability } from '../src/adapters/lanceDbAdapter.js';
 import { miniSearchAvailability } from '../src/adapters/miniSearchAdapter.js';
 import { mapSequential } from '../src/bench/sequential.js';
-import { internalFailure, runCli } from '../src/cli/cli.js';
+import { FLAGS } from '../src/cli/args.js';
+import { internalFailure, runCli, SCOPED_FLAG_LISTS } from '../src/cli/cli.js';
 
 /** Both section bodies clear `ATOM_MIN_CHARS`, so the doc stays two atoms. */
 const DOC = [
@@ -660,6 +661,76 @@ describe('runCli', () => {
         expect(data['mode']).toBeTypeOf('string');
         expect(String(data['indexState']).length).toBeGreaterThan(0);
       });
+    });
+  });
+});
+
+/**
+ * Flag SCOPE, from the other side: a flag no command can honour MUST NOT exit
+ * 0 with the token dropped. `doctor` stands in for every non-honouring command
+ * because it reads nothing but the instance state, so a flag reaching it is
+ * unambiguously ignored rather than quietly meaningful.
+ */
+describe('flag scope', () => {
+  const REFUSED_ON_DOCTOR: readonly (readonly string[])[] = [
+    ['--rerank-pool', '5'],
+    ['--no-prf'],
+    ['--golden-set', '/tmp/x.json'],
+    ['-k', '9'],
+  ];
+
+  REFUSED_ON_DOCTOR.forEach(flag => {
+    it(`refuses ${flag[0]} on doctor the way an unknown flag is refused`, async () => {
+      const result = await runCli(['doctor', ...flag, '--json']);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain('unknown flag');
+      expect(result.stdout).toContain(flag[0]);
+    });
+  });
+
+  it('keeps --golden-set on bench, which is the one command that reads it', async () => {
+    const result = await runCli(['bench', '--golden-set', '/tmp/does-not-exist.json', '--json']);
+
+    // It still refuses — the file is absent — but as a GOLDEN-SET refusal,
+    // which is proof the flag reached the reader instead of the scope guard.
+    expect(result.stdout).not.toContain('unknown flag');
+    expect(result.stdout).toContain('/tmp/does-not-exist.json');
+  });
+
+  /**
+   * The completeness gate: a flag added to `FLAGS` without a scope decision is
+   * a silently-ignored token waiting to happen, so every key MUST be reachable
+   * from exactly ONE positive scope list — or be declared global HERE, which
+   * makes the omission a deliberate, reviewed line rather than an oversight.
+   */
+  const GLOBAL_FLAGS: readonly string[] = [
+    '--adapter',
+    '--atoms-dir',
+    '--index-path',
+    '--repo-root',
+    '--profile',
+    '--json',
+    '--help',
+    '-h',
+    '--version',
+    '-v',
+  ];
+
+  const scopeCount = (flag: string): number =>
+    SCOPED_FLAG_LISTS.filter(list => list.includes(flag)).length;
+
+  it('scopes every flag in FLAGS to exactly one command set, or declares it global', () => {
+    Object.keys(FLAGS).forEach(flag => {
+      expect(scopeCount(flag), `${flag} has no scope decision`).toBe(
+        GLOBAL_FLAGS.includes(flag) ? 0 : 1
+      );
+    });
+  });
+
+  it('declares no global that a scope list also claims', () => {
+    GLOBAL_FLAGS.forEach(flag => {
+      expect(Object.keys(FLAGS), `${flag} is not a real flag`).toContain(flag);
     });
   });
 });

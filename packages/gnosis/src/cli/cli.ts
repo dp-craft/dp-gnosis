@@ -24,7 +24,7 @@ import { adapterError, DEFAULT_ADAPTER, resolveAdapter } from './adapter.js';
 import { runAnswerCommand, SYNTHESIZE_FLAG } from './answerCommand.js';
 import type { ParsedArgs } from './args.js';
 import { parseArgs, stringFlag, unknownFlagMessage } from './args.js';
-import { runBenchCommand } from './benchCommand.js';
+import { GOLDEN_SET_FLAG, runBenchCommand } from './benchCommand.js';
 import { staleBuildRefusal } from './buildFreshness.js';
 import type { CommandContext, CommandHandler } from './context.js';
 import { runDemoCommand } from './demoCommand.js';
@@ -66,6 +66,7 @@ import {
   MAX_PER_DOC_FLAG,
   MAX_TOKENS_FLAG,
   MIN_RELEVANCE_FLAG,
+  NO_PRF_FLAG,
   PRF_ALPHA_FLAG,
   PRF_DOCS_FLAG,
   PRF_FLAG,
@@ -73,9 +74,11 @@ import {
   REPHRASE_FLAG,
   RERANK_FLAG,
   RERANK_MODEL_FLAG,
+  RERANK_POOL_FLAG,
   RERANK_PROFILE_FLAG,
   RERANK_WEIGHT_FLAG,
   runRetrieveCommand,
+  TOP_K_FLAG,
   TYPE_FLAG
 } from './retrieveCommand.js';
 import { runSetupCommand, SETUP_COMMAND } from './setupCommand.js';
@@ -264,8 +267,10 @@ const RETRIEVAL_FLAGS: readonly string[] = [
   RERANK_MODEL_FLAG,
   RERANK_PROFILE_FLAG,
   RERANK_WEIGHT_FLAG,
+  RERANK_POOL_FLAG,
   REPHRASE_FLAG,
   PRF_FLAG,
+  NO_PRF_FLAG,
   PRF_DOCS_FLAG,
   PRF_TERMS_FLAG,
   PRF_ALPHA_FLAG,
@@ -350,6 +355,26 @@ const DEMO_REFUSED_FLAGS: readonly string[] = [
 ];
 
 /**
+ * `--golden-set` names the frozen query set a measurement runs over, and
+ * `bench` is the only command that opens it. Accepting it on `doctor` or
+ * `index` would let a caller believe a run was scoped to a query set nothing
+ * ever read — the measurement equivalent of a dropped token.
+ */
+const BENCH_COMMAND = 'bench';
+
+const BENCH_ONLY_FLAGS: readonly string[] = [GOLDEN_SET_FLAG];
+
+/**
+ * `-k` is the RESULT COUNT, so only the three commands that produce a ranking
+ * can honour it: the two retrieval commands and `demo`, which runs the same
+ * pipeline over its own corpus. Everywhere else it looked accepted and changed
+ * nothing, which is exactly the silently-dropped token this parser refuses.
+ */
+const TOP_K_COMMANDS: readonly string[] = [SEARCH_COMMAND, ASK_COMMAND, DEMO_COMMAND];
+
+const TOP_K_FLAGS: readonly string[] = [TOP_K_FLAG];
+
+/**
  * `setup` honours `--rerank-model` — it names the ONE id to probe, instead of
  * the ids it would select off the catalogue. Every other retrieval flag stays
  * refused there: `setup` runs no query, so nothing else has a reading.
@@ -394,6 +419,16 @@ const misplacedSidecarFlag = (args: ParsedArgs): string | undefined =>
     ? undefined
     : SIDECAR_FLAGS.find(flag => args.flags[flag] !== undefined);
 
+const misplacedBenchFlag = (args: ParsedArgs): string | undefined =>
+  args.command === BENCH_COMMAND
+    ? undefined
+    : BENCH_ONLY_FLAGS.find(flag => args.flags[flag] !== undefined);
+
+const misplacedTopKFlag = (args: ParsedArgs): string | undefined =>
+  TOP_K_COMMANDS.includes(args.command ?? '')
+    ? undefined
+    : TOP_K_FLAGS.find(flag => args.flags[flag] !== undefined);
+
 /**
  * Every scope check, in one list. A `??` chain would grow one branch per scope;
  * the fold keeps the complexity flat as the vocabulary grows.
@@ -405,7 +440,26 @@ const SCOPE_CHECKS: readonly ((args: ParsedArgs) => string | undefined)[] = [
   misplacedIngestFlag,
   misplacedIndexFlag,
   misplacedSidecarFlag,
+  misplacedBenchFlag,
+  misplacedTopKFlag,
   misplacedDemoFlag,
+];
+
+/**
+ * The POSITIVE scope lists, in one place, so a test can assert that every flag
+ * in the vocabulary reaches exactly one of them. `DEMO_REFUSED_FLAGS` is
+ * deliberately absent: it is an inverse list over flags that are global
+ * everywhere else, and counting it would claim a scope those flags do not have.
+ */
+export const SCOPED_FLAG_LISTS: readonly (readonly string[])[] = [
+  RETRIEVAL_FLAGS,
+  ANSWER_ONLY_FLAGS,
+  ENRICH_ONLY_FLAGS,
+  INGEST_ONLY_FLAGS,
+  INDEX_ONLY_FLAGS,
+  SIDECAR_FLAGS,
+  BENCH_ONLY_FLAGS,
+  TOP_K_FLAGS,
 ];
 
 const misplacedFlag = (args: ParsedArgs): string | undefined =>
