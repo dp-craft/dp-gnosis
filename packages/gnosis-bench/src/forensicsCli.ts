@@ -37,6 +37,7 @@ import type { RetrievedAtom } from '../../gnosis/src/port.js';
 import { type AtomDomain, defaultAtomType } from '../../gnosis/src/vocabulary.js';
 import { readQrels } from './beir.js';
 import { readAtomDocs } from './fetch/vault.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { readRunFile, topicForensics } from './forensics.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
 import {
@@ -155,12 +156,25 @@ const requiredSelector = (argv: readonly string[]): string => {
   return value;
 };
 
-export const parseForensicsArgs = (argv: readonly string[]): ForensicsArgs => ({
-  run: requiredSelector(argv),
-  k: positiveInt(flagValue(argv, '--k'), '--k', DEFAULT_CUT),
-  servedK: positiveInt(flagValue(argv, '--served-k'), '--served-k', DEFAULT_SERVED_K),
-  budget: positiveInt(flagValue(argv, '--budget'), '--budget', RETRIEVE_TOKEN_BUDGET),
-});
+/**
+ * Every flag this tool reads, `--help` included: an unrecognised one used to be
+ * dropped in silence and the TSV recorded the DEFAULT cut under the operator's
+ * intended label — `flags.ts`'s failure class exactly.
+ */
+export const FORENSICS_FLAGS: FlagSpec = {
+  value: ['--run', '--k', '--served-k', '--budget'],
+  boolean: ['--help'],
+};
+
+export const parseForensicsArgs = (argv: readonly string[]): ForensicsArgs => {
+  assertKnownFlags(argv, FORENSICS_FLAGS);
+  return {
+    run: requiredSelector(argv),
+    k: positiveInt(flagValue(argv, '--k'), '--k', DEFAULT_CUT),
+    servedK: positiveInt(flagValue(argv, '--served-k'), '--served-k', DEFAULT_SERVED_K),
+    budget: positiveInt(flagValue(argv, '--budget'), '--budget', RETRIEVE_TOKEN_BUDGET),
+  };
+};
 
 /**
  * One topic's row of the forensics TSV.

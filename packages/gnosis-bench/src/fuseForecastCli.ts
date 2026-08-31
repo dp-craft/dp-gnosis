@@ -21,6 +21,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { readQrels } from './beir.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { readRunFile } from './forensics.js';
 import {
   type ForecastInput,
@@ -86,8 +87,12 @@ const flagValue = (argv: readonly string[], name: string): string | undefined =>
   return index === -1 ? undefined : argv[index + 1];
 };
 
+/** Every flag this tool reads, `--help` included; anything else is refused by name. */
+export const FUSE_FORECAST_FLAGS: FlagSpec = { value: ['--only'], boolean: ['--help'] };
+
 /** An unknown `--only` is a caller bug, named against the manifest of forecastable ids. */
 export const parseFuseForecastArgs = (argv: readonly string[]): FuseForecastArgs => {
+  assertKnownFlags(argv, FUSE_FORECAST_FLAGS);
   const only = flagValue(argv, '--only');
   if (only === undefined) return { datasets: FUSE_FORECAST_DATASETS };
   if (only.startsWith('--')) throw new Error('dp-gnosis-bench: --only <dataset> is required');

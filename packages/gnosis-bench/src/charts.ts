@@ -24,6 +24,7 @@ import { pathToFileURL } from 'node:url';
 import { buildCharts, type Chart } from './chartData.js';
 import { readChartsSpec } from './chartSpec.js';
 import { renderChartSvg } from './chartSvg.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { HISTORY_FILE, readHistory } from './report.js';
 import { SUITE_ROOT } from './run.js';
 
@@ -69,8 +70,16 @@ const regenerate = (options: ChartsOptions): readonly string[] => {
   return charts.map(chart => writeChart(options.outDir, chart));
 };
 
-export const main = (options: ChartsOptions): number => {
+/**
+ * EMPTY on purpose: every figure is declared in `charts.json`, so this script
+ * reads no flag at all and a `--only` handed to it would have redrawn the whole
+ * set while reading as a selection.
+ */
+export const CHARTS_FLAGS: FlagSpec = { value: [], boolean: [] };
+
+export const main = (options: ChartsOptions, argv: readonly string[] = []): number => {
   try {
+    assertKnownFlags(argv, CHARTS_FLAGS);
     const written = regenerate(options);
     process.stdout.write(`${written.join('\n')}\n`);
     return CHARTS_EXIT_OK;
@@ -85,9 +94,12 @@ const invokedDirectly =
 
 if (invokedDirectly) {
   const repoRoot = resolve(SUITE_ROOT, '../..');
-  process.exitCode = main({
-    specPath: resolve(SUITE_ROOT, CHARTS_SPEC_FILE),
-    resultsDir: resolve(SUITE_ROOT, 'results'),
-    outDir: resolve(repoRoot, CHARTS_OUT_DIR),
-  });
+  process.exitCode = main(
+    {
+      specPath: resolve(SUITE_ROOT, CHARTS_SPEC_FILE),
+      resultsDir: resolve(SUITE_ROOT, 'results'),
+      outDir: resolve(repoRoot, CHARTS_OUT_DIR),
+    },
+    process.argv.slice(2)
+  );
 }

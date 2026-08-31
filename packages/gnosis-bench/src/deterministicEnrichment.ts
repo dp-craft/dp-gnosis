@@ -50,6 +50,7 @@ import {
   serializeEnrichmentRecord
 } from '../../gnosis/src/enrichment.js';
 import { analyze, type AnalyzerId } from '../../gnosis/src/query.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 
 /** Both sidecars were written. */
 export const DET_ENRICH_EXIT_OK = 0;
@@ -339,7 +340,14 @@ const requiredPaths = (
     : { indexPath, corpusPath, sidecarPath };
 };
 
+/** Every flag this tool reads, `--help` included; anything else is refused by name. */
+export const DET_ENRICH_FLAGS: FlagSpec = {
+  value: ['--index', '--corpus', '--sidecar', '--out'],
+  boolean: ['--help'],
+};
+
 export const parseDetEnrichArgs = (argv: readonly string[]): DetEnrichArgs | undefined => {
+  assertKnownFlags(argv, DET_ENRICH_FLAGS);
   const paths = argv.includes('--help') ? undefined : requiredPaths(argv);
   return paths === undefined ? undefined : { ...paths, outDir: flagValue(argv, '--out') };
 };
@@ -364,12 +372,12 @@ const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 export const main = (argv: readonly string[]): number => {
-  const args = parseDetEnrichArgs(argv);
-  if (args === undefined) {
-    process.stdout.write(DET_ENRICH_HELP);
-    return DET_ENRICH_EXIT_USAGE;
-  }
   try {
+    const args = parseDetEnrichArgs(argv);
+    if (args === undefined) {
+      process.stdout.write(DET_ENRICH_HELP);
+      return DET_ENRICH_EXIT_USAGE;
+    }
     return run(args);
   } catch (error) {
     process.stderr.write(`gnosis:detenrich: ${messageOf(error)}\n`);

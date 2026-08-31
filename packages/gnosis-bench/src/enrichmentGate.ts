@@ -45,6 +45,7 @@ import {
   loadEnrichmentSidecar
 } from '../../gnosis/src/enrichment.js';
 import { analyze } from '../../gnosis/src/query.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 
 /** The measurement ran and the report was written. */
 export const ENRICHMENT_GATE_EXIT_OK = 0;
@@ -346,7 +347,14 @@ export const gateReport = (
 export const ENRICHMENT_GATE_HELP =
   'usage: npm run gnosis:enrichgate -- <sidecar.jsonl> <atomsDir>\n';
 
+/**
+ * Both inputs are POSITIONAL, so the only flag is `--help` — every other
+ * `--token` reached the positional slots as if it were a path.
+ */
+export const ENRICHMENT_GATE_FLAGS: FlagSpec = { value: [], boolean: ['--help'] };
+
 export const main = (argv: readonly string[]): number => {
+  assertKnownFlags(argv, ENRICHMENT_GATE_FLAGS);
   const [sidecar, atomsDir] = argv;
   if (sidecar === undefined || atomsDir === undefined || argv.includes('--help')) {
     process.stdout.write(ENRICHMENT_GATE_HELP);

@@ -27,6 +27,7 @@ import { pathToFileURL } from 'node:url';
 
 import { type BeirDoc, readCorpus, readQrels } from './beir.js';
 import { auditDuplicates, type DuplicateLink, type PrepareDatasetOptions } from './engine.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 import { readRunFile } from './forensics.js';
 import { auditGold, type GoldAudit, rePointQrels } from './goldAudit.js';
 import { type DatasetEntry, loadManifest } from './manifest.js';
@@ -75,7 +76,14 @@ const flagValues = (argv: readonly string[], flag: string): readonly string[] =>
 const flagValue = (argv: readonly string[], flag: string): string | undefined =>
   flagValues(argv, flag).at(-1);
 
+/** Every flag this tool reads, `--help` included; anything else is refused by name. */
+export const GOLD_AUDIT_FLAGS: FlagSpec = {
+  value: ['--dataset', '--run', '--out'],
+  boolean: ['--help'],
+};
+
 export const parseGoldAuditArgs = (argv: readonly string[]): GoldAuditArgs => {
+  assertKnownFlags(argv, GOLD_AUDIT_FLAGS);
   const datasets = flagValues(argv, '--dataset').filter(id => id.length > 0);
   if (datasets.length === 0) {
     throw new Error('gnosis:goldaudit: name at least one dataset with --dataset <id>');

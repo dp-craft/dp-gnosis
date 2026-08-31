@@ -32,6 +32,7 @@ import {
   type QueryTermPostings,
   readVocabularyGap
 } from '../../gnosis/src/adapters/fts5VocabularyGap.js';
+import { assertKnownFlags, type FlagSpec } from './flags.js';
 
 /** The measurement ran and every topic was reported. */
 export const VOCAB_GAP_EXIT_OK = 0;
@@ -85,7 +86,17 @@ const flagValue = (argv: readonly string[], flag: string): string | undefined =>
     .filter(value => value.length > 0)
     .at(-1);
 
+/**
+ * Every flag this tool reads, `--help` included. The ANALYSER is not among them
+ * by design (rule 3 above), so a `--analyzer` is refused rather than ignored.
+ */
+export const VOCAB_GAP_FLAGS: FlagSpec = {
+  value: ['--index', '--queries', '--out'],
+  boolean: ['--help'],
+};
+
 export const parseVocabGapArgs = (argv: readonly string[]): VocabGapArgs | undefined => {
+  assertKnownFlags(argv, VOCAB_GAP_FLAGS);
   const indexPath = flagValue(argv, '--index');
   const queriesPath = flagValue(argv, '--queries');
   if (indexPath === undefined || queriesPath === undefined || argv.includes('--help')) {
@@ -154,12 +165,12 @@ const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 export const main = (argv: readonly string[]): number => {
-  const args = parseVocabGapArgs(argv);
-  if (args === undefined) {
-    process.stdout.write(VOCAB_GAP_HELP);
-    return VOCAB_GAP_EXIT_USAGE;
-  }
   try {
+    const args = parseVocabGapArgs(argv);
+    if (args === undefined) {
+      process.stdout.write(VOCAB_GAP_HELP);
+      return VOCAB_GAP_EXIT_USAGE;
+    }
     const topics = readTopics(resolve(args.queriesPath));
     emit(serialize(vocabGapReport(resolve(args.indexPath), topics)), args.outPath);
     return VOCAB_GAP_EXIT_OK;
