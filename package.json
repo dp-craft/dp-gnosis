@@ -29,7 +29,7 @@
     "bench:test": "vitest run --config packages/gnosis-bench/vitest.config.ts",
     "test": "npm run gnosis:test && npm run bench:test",
     "typecheck": "tsc -p packages/gnosis/tsconfig.json --noEmit && tsc -p packages/gnosis-bench/tsconfig.json --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint . --max-warnings 306"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
