@@ -1,9 +1,9 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 import { runCli } from '../src/cli/cli.js';
-import { atomsDir, DEMO_CORPUS_ROOTS, demoAtomsDir, demoIndexDir, demoProfilePath, indexDir, runtimeRoot } from '../src/paths.js';
+import { atomsDir, DEMO_CORPUS_ROOTS, demoAtomsDir, demoIndexDir, demoProfilePath, indexDir, packageDir, runtimeRoot } from '../src/paths.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 
 /** Both homes are redirected, so the run cannot read or write the developer's own state. */
@@ -169,5 +169,21 @@ describe('demo — the shipped roots and the profile that claims them', () => {
     const shipped = new Set(DEMO_CORPUS_ROOTS);
     const orphaned = claimedPrefixes().filter(prefix => !shipped.has(prefix));
     expect(orphaned, `claimed by a demo domainRule but absent from DEMO_CORPUS_ROOTS: ${orphaned.join(', ')}`).toEqual([]);
+  });
+
+  /**
+   * The other half of the same prose invariant: a root the manifest does not
+   * ship is present in a checkout and absent from an install, so the defect
+   * appears only for the stranger running `demo` first — and appears as a
+   * smaller corpus, never as an error.
+   */
+  it('ships every shipped root — package.json files carries each DEMO_CORPUS_ROOTS entry', () => {
+    const manifest: unknown = JSON.parse(readFileSync(resolve(packageDir(), 'package.json'), 'utf8'));
+    const files = (manifest as Record<string, unknown>)['files'];
+    if (!Array.isArray(files)) throw new Error('package.json states no "files" array');
+
+    const shipped = new Set(files.map(entry => String(entry)));
+    const unshipped = DEMO_CORPUS_ROOTS.filter(root => !shipped.has(root));
+    expect(unshipped, `in DEMO_CORPUS_ROOTS but not shipped by package.json "files": ${unshipped.join(', ')}`).toEqual([]);
   });
 });
