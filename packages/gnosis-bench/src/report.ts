@@ -64,11 +64,20 @@ export const RUN_FILE_DIR = 'runs';
 /** The score files sit beside the run files, one row per ranked document. */
 export const SCORES_DIR = 'scores';
 
-/** Facts true of the whole run — identical on every dataset's history row. */
-export interface RunProvenance {
+/**
+ * WHICH run this is, as opposed to what it measured. Split out of
+ * {@link RunProvenance} so `compare.ts` can name the deliberately unguarded keys
+ * by type rather than by convention: a changed engine commit is precisely what a
+ * delta exists to measure, so neither of these is a scale or a treatment.
+ */
+export interface ProvenanceIdentity {
   /** ISO timestamp; the report stem is derived from it, so the two cannot drift. */
   readonly ts: string;
   readonly gitSha: string;
+}
+
+/** Facts true of the whole run — identical on every dataset's history row. */
+export interface RunProvenance extends ProvenanceIdentity {
   readonly adapter: string;
   readonly depth: number;
   readonly rerank: boolean;

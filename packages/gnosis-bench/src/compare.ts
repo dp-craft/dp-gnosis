@@ -61,7 +61,9 @@ import {
   type HistoryRow,
   NO_ENRICHMENT,
   NO_FUSE_LEGS,
-  NO_TYPE_FILTER
+  NO_TYPE_FILTER,
+  type ProvenanceIdentity,
+  type RunProvenance
 } from './report.js';
 
 const DELTA_DIGITS = 4;
@@ -122,6 +124,31 @@ export const PROVENANCE_FIELDS: readonly ProvenanceField[] = [
   ...SCALE_FIELDS,
   ...TREATMENT_FIELDS,
 ];
+
+/**
+ * The {@link RunProvenance} fields this module classified as NEITHER scale nor
+ * treatment, minus the {@link ProvenanceIdentity} keys that are unguarded by
+ * design. `never` while coverage holds.
+ *
+ * A field added to `RunProvenance` and stamped by `run.ts:provenanceOf` but left
+ * out of both lists is an arm nothing guards: two rows differing only in it are
+ * subtracted as like-for-like, which is the error this module exists to refuse.
+ * The assertion below turns that omission into a `tsc` failure naming the field.
+ *
+ * Directional on purpose — `PROVENANCE_FIELDS` also carries dataset-level
+ * {@link HistoryRow} fields (`corpusBytes`, `atomCount`, `enrichment`, …) that
+ * are not run provenance, so the reverse inclusion does not hold.
+ */
+export type UnclassifiedProvenanceField = Exclude<
+  Exclude<keyof RunProvenance, keyof ProvenanceIdentity>,
+  ProvenanceField
+>;
+
+/** Compile-time only: the `extends never` constraint IS the assertion. */
+type AssertNever<T extends never> = T;
+
+/** Resolves only while every run-provenance field is classified. Never read. */
+export type ProvenanceCoverage = AssertNever<UnclassifiedProvenanceField>;
 
 /** A guarded field that moved between the two runs, with both of its values. */
 export interface ProvenanceChange {
