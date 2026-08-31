@@ -17,9 +17,9 @@ import type { CommandOutcome } from '../src/cli/outcome.js';
 import { configHome } from '../src/env.js';
 import { ATOMS_OWNER_FILE } from '../src/ingest.js';
 import { domainForPath, loadIngestProfile } from '../src/ingestProfile.js';
-import { SERVED_PRF_PARAMS } from '../src/prf.js';
 import { cliInvocation } from '../src/invocation.js';
 import { atomsDir, dataRoot, fts5IndexPath, ingestProfilePath, USER_PROFILE_FILE } from '../src/paths.js';
+import { SERVED_PRF_PARAMS } from '../src/prf.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 import { activeProfile } from '../src/vocabulary.js';
 

@@ -8,8 +8,8 @@
  * the shipped `http` path MUST be byte-identical to what it was before the
  * selector existed — a default that moved would re-rank every recorded run.
  */
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,12 +18,12 @@ import {
   RERANK_BACKEND_ENV_VAR,
   RERANK_DEFAULT_BACKEND,
   RERANK_MODEL_ID,
-  RERANK_MODEL_PATH_ENV_VAR,
+  RERANK_MODEL_PATH_ENV_VAR
 } from '../src/config.js';
 import { LOCAL_RERANKER_INSTALL_COMMAND, localRerankerAvailability } from '../src/localReranker.js';
 import { rerankBackendFact, resetRerankProbeCache, resolveRerankBackend } from '../src/rerank.js';
-import { activeProfile } from '../src/vocabulary.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
+import { activeProfile } from '../src/vocabulary.js';
 
 const emptyConfigDir = (): string => {
   const home = mkdtempSync(join(tmpdir(), 'gnosis-backend-cfg-'));

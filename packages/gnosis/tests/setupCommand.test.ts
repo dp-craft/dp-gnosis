@@ -22,6 +22,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import type { FlagValues } from '../src/cli/args.js';
+import type { CommandContext } from '../src/cli/context.js';
+import type { CommandOutcome } from '../src/cli/outcome.js';
+import { EXIT_OK, EXIT_PARTIAL, EXIT_USAGE } from '../src/cli/outcome.js';
+import { MAX_PROBED_MODELS, OLLAMA_URL, runSetupCommand } from '../src/cli/setupCommand.js';
 import {
   ENRICH_MODEL_ENV_VAR,
   ENRICH_MODEL_ID,
@@ -30,11 +35,6 @@ import {
   RERANK_MODEL_ID,
   SYNTHESIZE_MODEL_ENV_VAR
 } from '../src/config.js';
-import type { CommandContext } from '../src/cli/context.js';
-import type { FlagValues } from '../src/cli/args.js';
-import type { CommandOutcome } from '../src/cli/outcome.js';
-import { EXIT_OK, EXIT_PARTIAL, EXIT_USAGE } from '../src/cli/outcome.js';
-import { MAX_PROBED_MODELS, OLLAMA_URL, runSetupCommand } from '../src/cli/setupCommand.js';
 import { configHome } from '../src/env.js';
 import { atomsDir, fts5IndexPath, ingestProfilePath } from '../src/paths.js';
 import { resetRerankProbeCache } from '../src/rerank.js';

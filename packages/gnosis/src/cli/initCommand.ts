@@ -38,7 +38,7 @@ import {
   existingInstance,
   instancePaths,
   profileTemplate,
-  writeInstance,
+  writeInstance
 } from '../instance.js';
 import { cliInvocation } from '../invocation.js';
 import { dataRoot, USER_PROFILE_NAME } from '../paths.js';

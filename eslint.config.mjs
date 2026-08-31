@@ -104,6 +104,8 @@ export default tseslint.config(
       'packages/gnosis-bench/work',
       // Runtime state (vault atoms, caches, corpora) written by the engine at run time.
       'benchmark-data/',
+      // Separate, locked git worktrees — a divergent checkout of this package, not this tree's code.
+      '.claude/worktrees/',
       // Recorded artefacts of past campaigns, kept as evidence of a run rather
       // than as maintained code — same category as `results/` above. The one
       // lintable file here, `docs/test/2026-08-11T16-22-v2-m3/rerank-test.mts`,

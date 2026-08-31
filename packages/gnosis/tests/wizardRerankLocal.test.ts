@@ -15,13 +15,13 @@
  */
 import { existsSync } from 'node:fs';
 
-import { RERANK_K_INIT, RERANK_PROBE_MIN_SCORE } from '../src/config.js';
+import type { RunMode } from '../src/cli/wizard/advice.js';
+import { LOCAL_ENGINE_ADVICE, RUN_MODE_CHOICES } from '../src/cli/wizard/advice.js';
 import type { PlanLocations, RerankAnswer, WizardAnswers } from '../src/cli/wizard/plan.js';
 import { buildPlan } from '../src/cli/wizard/plan.js';
-import { LOCAL_ENGINE_ADVICE, RUN_MODE_CHOICES } from '../src/cli/wizard/advice.js';
-import type { RunMode } from '../src/cli/wizard/advice.js';
-import { rerankCalibrationKey, rerankHealth } from '../src/rerank.js';
+import { RERANK_K_INIT, RERANK_PROBE_MIN_SCORE } from '../src/config.js';
 import { resetLocalRerankerCache } from '../src/localReranker.js';
+import { rerankCalibrationKey, rerankHealth } from '../src/rerank.js';
 
 const LOCATIONS: PlanLocations = {
   profilePath: '/tmp/gnosis-wizard/profiles/user.profile.json',

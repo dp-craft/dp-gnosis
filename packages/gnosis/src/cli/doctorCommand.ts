@@ -25,6 +25,7 @@ import type { IndexStamp } from '../adapters/fts5Adapter.js';
 import { carriedAnalyzer, INDEX_SCHEMA_VERSION, readIndexStamp } from '../adapters/fts5Adapter.js';
 import { lanceDbAvailability } from '../adapters/lanceDbAdapter.js';
 import { miniSearchAvailability } from '../adapters/miniSearchAdapter.js';
+import { chatModelFact } from '../chat.js';
 import { DECLARED_TYPES, foreignVocabularyMessage, foreignVocabularyValue, RERANK_DEFAULT_BACKEND } from '../config.js';
 import type { SourceIdentity } from '../corpusManifest.js';
 import {
@@ -36,16 +37,15 @@ import {
 import { DATA_HOME_VAR, DP_GNOSIS_HOME_VARS, statedVar } from '../env.js';
 import { ATOMS_OWNER_FILE, loadCorpus } from '../ingest.js';
 import { indexRebuildCommand, ingestCommand } from '../invocation.js';
-import type { DataRootFact } from '../paths.js';
-import { dataRoot, dataRootFact } from '../paths.js';
-import { chatModelFact } from '../chat.js';
-import { rephraseModelFact } from '../rephrase.js';
-import type { RerankBackendFact, RerankFact, RerankHealth } from '../rerank.js';
-import type { SettingFact } from '../settingFact.js';
-import { synthesizeModelFact } from '../synthesize.js';
 import type { LocalRerankerAvailability } from '../localReranker.js';
 import { localRerankerAvailability } from '../localReranker.js';
+import type { DataRootFact } from '../paths.js';
+import { dataRoot, dataRootFact } from '../paths.js';
+import { rephraseModelFact } from '../rephrase.js';
+import type { RerankBackendFact, RerankFact, RerankHealth } from '../rerank.js';
 import { rerankBackendFact, rerankHealth, rerankModelFact, rerankUrlFact, resolveRerankModelPath } from '../rerank.js';
+import type { SettingFact } from '../settingFact.js';
+import { synthesizeModelFact } from '../synthesize.js';
 import type { RerankBackend } from '../userConfig.js';
 import { isUserConfigError } from '../userConfig.js';
 import type { AdapterName } from './adapter.js';
@@ -139,12 +139,12 @@ interface DoctorFacts {
  */
 type RerankScan =
   | {
-      readonly ok: true;
-      readonly url: RerankFact;
-      readonly model: RerankFact;
-      /** Narrow, so a reader of the scan keeps the two-name vocabulary. */
-      readonly backend: RerankBackendFact;
-    }
+    readonly ok: true;
+    readonly url: RerankFact;
+    readonly model: RerankFact;
+    /** Narrow, so a reader of the scan keeps the two-name vocabulary. */
+    readonly backend: RerankBackendFact;
+  }
   | { readonly ok: false; readonly reason: string };
 
 const scanRerank = (env: NodeJS.ProcessEnv): RerankScan => {
@@ -178,11 +178,11 @@ const probeRerank = async (scan: RerankScan): Promise<RerankHealth> =>
  */
 type ChatScan =
   | {
-      readonly ok: true;
-      readonly rephrase: SettingFact;
-      readonly synthesize: SettingFact;
-      readonly enrich: SettingFact;
-    }
+    readonly ok: true;
+    readonly rephrase: SettingFact;
+    readonly synthesize: SettingFact;
+    readonly enrich: SettingFact;
+  }
   | { readonly ok: false; readonly reason: string };
 
 const scanChat = (env: NodeJS.ProcessEnv): ChatScan => {

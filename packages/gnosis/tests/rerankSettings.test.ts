@@ -15,7 +15,7 @@ import {
   RERANK_DEFAULT_URL,
   RERANK_MODEL_ENV_VAR,
   RERANK_MODEL_ID,
-  RERANK_URL_ENV_VAR,
+  RERANK_URL_ENV_VAR
 } from '../src/config.js';
 import {
   rerankHealth,
@@ -23,7 +23,7 @@ import {
   rerankUrlFact,
   resetRerankProbeCache,
   resolveRerankModel,
-  resolveRerankUrl,
+  resolveRerankUrl
 } from '../src/rerank.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 
