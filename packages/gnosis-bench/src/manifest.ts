@@ -187,6 +187,47 @@ const layersOf = (
       );
 };
 
+/**
+ * Every key `baseOf` reads, plus `format` — which `toEntry` reads — plus one
+ * ANNOTATION ALLOWANCE: `comment`. No builder reads `comment`; it is the
+ * human-provenance convention the shipped manifest, `profiles/default.profile.json`
+ * and `package.json` all use, and `tests/manifest.test.ts` asserts its measured
+ * content on `trec-covid` and `webis-touche2020`. It is admitted here and
+ * nowhere else — it enters no entry type and no builder.
+ *
+ * Each list below owns its format's surface: extend the builder, extend the list
+ * beside it, or the new key is refused.
+ */
+const BASE_KEYS: readonly string[] = [
+  'format',
+  'id',
+  'domain',
+  'docShape',
+  'queryShape',
+  'atomMaxChars',
+  'enabled',
+  'layers',
+  'comment',
+];
+
+/**
+ * A key no builder reads is a typo, and a dropped `atomMaxChars` typo makes the
+ * run stamp the engine default into a row that claims a per-corpus scale.
+ */
+const refuseSurplus = (
+  record: Readonly<Record<string, unknown>>,
+  allowed: readonly string[],
+  where: string
+): void => {
+  const surplus = Object.keys(record).find(key => !allowed.includes(key));
+  if (surplus === undefined) return;
+  const format = String(record['format']);
+  fail(
+    `${where} (${JSON.stringify(record['id'])}) has an unknown key ${JSON.stringify(surplus)} for format "${format}"`,
+    `drop it or fix the spelling — format "${format}" reads only ${allowed.map(key => `"${key}"`).join(', ')}`
+  );
+};
+
 const baseOf = (record: Readonly<Record<string, unknown>>, where: string): DatasetBase => ({
   id: requireString(record, 'id', where),
   domain: requireString(record, 'domain', where),
@@ -215,27 +256,37 @@ const deriveOf = (
       );
 };
 
+const BEIR_KEYS: readonly string[] = [...BASE_KEYS, 'source', 'qrels', 'derive'];
+
 const beirOf = (
   format: BeirDataset['format'],
   record: Readonly<Record<string, unknown>>,
   where: string
-): BeirDataset => ({
-  ...baseOf(record, where),
-  format,
-  source: requireString(record, 'source', where),
-  qrels: requireString(record, 'qrels', where),
-  derive: deriveOf(record, where),
-});
+): BeirDataset => {
+  refuseSurplus(record, BEIR_KEYS, where);
+  return {
+    ...baseOf(record, where),
+    format,
+    source: requireString(record, 'source', where),
+    qrels: requireString(record, 'qrels', where),
+    derive: deriveOf(record, where),
+  };
+};
+
+const MILQA_KEYS: readonly string[] = [...BASE_KEYS, 'source', 'qrels'];
 
 const milqaOf = (
   record: Readonly<Record<string, unknown>>,
   where: string
-): MilqaDataset => ({
-  ...baseOf(record, where),
-  format: 'milqa',
-  source: requireString(record, 'source', where),
-  qrels: requireString(record, 'qrels', where),
-});
+): MilqaDataset => {
+  refuseSurplus(record, MILQA_KEYS, where);
+  return {
+    ...baseOf(record, where),
+    format: 'milqa',
+    source: requireString(record, 'source', where),
+    qrels: requireString(record, 'qrels', where),
+  };
+};
 
 const isGranularity = (value: unknown): value is BrightGranularity =>
   typeof value === 'string' && GRANULARITIES.includes(value);
@@ -255,15 +306,20 @@ const granularityOf = (
       );
 };
 
+const BRIGHT_KEYS: readonly string[] = [...BASE_KEYS, 'split', 'granularity'];
+
 const brightOf = (
   record: Readonly<Record<string, unknown>>,
   where: string
-): BrightDataset => ({
-  ...baseOf(record, where),
-  format: 'bright',
-  split: requireString(record, 'split', where),
-  granularity: granularityOf(record, where),
-});
+): BrightDataset => {
+  refuseSurplus(record, BRIGHT_KEYS, where);
+  return {
+    ...baseOf(record, where),
+    format: 'bright',
+    split: requireString(record, 'split', where),
+    granularity: granularityOf(record, where),
+  };
+};
 
 const isBeirFormat = (format: string): format is BeirDataset['format'] =>
   BEIR_FORMATS.includes(format);

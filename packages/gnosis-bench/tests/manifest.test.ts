@@ -21,6 +21,18 @@ const entry = (over: Record<string, unknown> = {}): Record<string, unknown> => (
   ...over,
 });
 
+// A bright entry carries no source/qrels — those are the beir surface.
+const brightEntry = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  id: 'x',
+  format: 'bright',
+  split: 'pony',
+  domain: 'demo',
+  docShape: 'page',
+  enabled: true,
+  layers: [],
+  ...over,
+});
+
 const wrap = (...entries: Record<string, unknown>[]): unknown => ({ datasets: entries });
 
 describe('parseManifest', () => {
@@ -83,20 +95,20 @@ describe('parseManifest', () => {
   });
 
   it('defaults a bright entry to "long" granularity, so older entries keep working', () => {
-    const parsed = parseManifest(wrap(entry({ format: 'bright', split: 'pony' })));
+    const parsed = parseManifest(wrap(brightEntry()));
     expect(parsed[0]).toMatchObject({ granularity: 'long' });
   });
 
   it('reads granularity: "passage" — the same queries against the gold passages', () => {
     const parsed = parseManifest(
-      wrap(entry({ format: 'bright', split: 'biology', granularity: 'passage' }))
+      wrap(brightEntry({ split: 'biology', granularity: 'passage' }))
     );
     expect(parsed[0]).toMatchObject({ granularity: 'passage' });
   });
 
   it('names the fix when a bright entry has an unknown granularity', () => {
     expect(() =>
-      parseManifest(wrap(entry({ format: 'bright', split: 'pony', granularity: 'chunk' })))
+      parseManifest(wrap(brightEntry({ granularity: 'chunk' })))
     ).toThrow(/invalid "granularity" "chunk".*"long".*"passage"/s);
   });
 
@@ -113,9 +125,9 @@ describe('parseManifest', () => {
   });
 
   it('names the missing field when a bright entry has no split', () => {
-    expect(() => parseManifest(wrap(entry({ format: 'bright' })))).toThrow(
-      /datasets\[0\] has no "split"/
-    );
+    const broken = brightEntry();
+    delete broken['split'];
+    expect(() => parseManifest(wrap(broken))).toThrow(/datasets\[0\] has no "split"/);
   });
 
   it('rejects a non-boolean enabled', () => {
@@ -128,6 +140,60 @@ describe('parseManifest', () => {
     expect(() => parseManifest(wrap(entry({ atomMaxChars: '4000' })))).toThrow(
       /non-numeric "atomMaxChars"/
     );
+  });
+
+  // A dropped scale key is the dangerous case: run.ts stamps the engine default
+  // and the row records a SCALE provenance the manifest never asked for.
+  it('names the surplus key when a beir entry typos atomMaxChars', () => {
+    expect(() => parseManifest(wrap(entry({ atomMaxChar: 6000 })))).toThrow(
+      /datasets\[0\] \("x"\) has an unknown key "atomMaxChar" for format "beir-local".*atomMaxChars.*derive/s
+    );
+  });
+
+  it('names the surplus key when a milqa entry typos atomMaxChars', () => {
+    expect(() =>
+      parseManifest(wrap(entry({ format: 'milqa', atomMaxChar: 6000 })))
+    ).toThrow(/unknown key "atomMaxChar" for format "milqa".*atomMaxChars/s);
+  });
+
+  it('names the surplus key when a bright entry typos atomMaxChars', () => {
+    expect(() =>
+      parseManifest(wrap(brightEntry({ atomMaxChar: 6000 })))
+    ).toThrow(/unknown key "atomMaxChar" for format "bright".*granularity/s);
+  });
+
+  // A key another format owns is still surplus here — that is the whole point.
+  it('refuses a beir key on a bright entry', () => {
+    expect(() => parseManifest(wrap(entry({ format: 'bright', split: 'pony' })))).toThrow(
+      /unknown key "(source|qrels)" for format "bright"/
+    );
+  });
+
+  it('parses a valid entry of every format with no surplus key', () => {
+    const parsed = parseManifest(
+      wrap(
+        entry(),
+        entry({ id: 'z', format: 'beir-zip', source: 'https://x/y.zip' }),
+        entry({ id: 'm', format: 'milqa' }),
+        {
+          id: 'b',
+          format: 'bright',
+          split: 'pony',
+          domain: 'demo',
+          docShape: 'page',
+          enabled: true,
+          layers: [],
+        }
+      )
+    );
+    expect(parsed.map(e => e.format)).toEqual(['beir-local', 'beir-zip', 'milqa', 'bright']);
+  });
+
+  // Annotation allowance: `comment` is a human-provenance convention on every
+  // format, read by no builder — see the manifest's own entries.
+  it('admits a comment key on any format', () => {
+    const parsed = parseManifest(wrap(entry({ comment: 'why this entry exists' })));
+    expect(parsed[0]?.id).toBe('x');
   });
 
   it('rejects a root without a datasets array', () => {
