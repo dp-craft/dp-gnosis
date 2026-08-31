@@ -319,6 +319,44 @@ describe('the stdio loop — framing survives a split chunk', () => {
   });
 });
 
+const THROWING_RUN: AnswerRunner = async () => {
+  await Promise.resolve();
+  throw new Error('boom');
+};
+
+describe('the stdio loop — an escaped throw still owes the client a reply', () => {
+  it('answers the request id with a JSON-RPC error carrying the thrown message', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const written = collect(output);
+    serveStdio({ input, output }, THROWING_RUN);
+
+    input.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 42,
+        method: 'tools/call',
+        params: { name: TOOL_NAME, arguments: { question: 'anything' } },
+      })}\n`
+    );
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // The silent failure this pins: the rejection was discarded, so the client
+    // waited forever on a request in flight — and under
+    // --unhandled-rejections=throw the process died with nothing on stdout.
+    const lines = written.lines();
+    expect(lines).toHaveLength(1);
+    const response = JSON.parse(lines[0] ?? '') as Json;
+    expect(response['jsonrpc']).toBe('2.0');
+    expect(response['id']).toBe(42);
+    // The message, never the stack: stdout is the protocol.
+    const error = response['error'] as Json;
+    expect(String(error['message'])).toContain('boom');
+    expect(String(error['message'])).not.toContain('at ');
+    expect(response['result']).toBeUndefined();
+  });
+});
+
 const MCP_SOURCES = ['protocol.ts', 'server.ts', 'main.ts'] as const;
 
 const importsOf = (file: string): readonly string[] => {

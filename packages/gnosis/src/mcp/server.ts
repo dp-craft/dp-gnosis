@@ -15,8 +15,8 @@ import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 
 import { runCli } from '../cli/cli.js';
-import type { AnswerInput, AnswerRunner } from './protocol.js';
-import { answerArgv, handleLine } from './protocol.js';
+import type { AnswerInput, AnswerRunner, RpcResponse } from './protocol.js';
+import { answerArgv, handleLine, internalErrorResponse } from './protocol.js';
 
 /** The real seam: ONE `ask --json` invocation, and the pack is read out of it. */
 export const runAnswer: AnswerRunner = async (input: AnswerInput) =>
@@ -26,6 +26,19 @@ export interface StdioStreams {
   readonly input: Readable;
   readonly output: Writable;
 }
+
+/**
+ * The transport's error boundary. A throw that escapes the runner would other-
+ * wise reject the promise `onLine` discards — killing the process under Node's
+ * `--unhandled-rejections=throw` with NO response written for that id.
+ */
+const responseFor = async (line: string, run: AnswerRunner): Promise<RpcResponse | undefined> => {
+  try {
+    return await handleLine(line, run);
+  } catch (error: unknown) {
+    return internalErrorResponse(line, error);
+  }
+};
 
 /**
  * Responses are written as each one completes rather than in request order.
@@ -38,7 +51,7 @@ const emit = async (
   line: string,
   run: AnswerRunner
 ): Promise<void> => {
-  const response = await handleLine(line, run);
+  const response = await responseFor(line, run);
   if (response !== undefined) output.write(`${JSON.stringify(response)}\n`);
 };
 

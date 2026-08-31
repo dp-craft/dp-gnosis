@@ -91,6 +91,7 @@ export interface RpcResponse {
 }
 
 const PARSE_ERROR = -32700;
+const INTERNAL_ERROR = -32603;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 
@@ -362,4 +363,25 @@ export const handleLine = async (
 ): Promise<RpcResponse | undefined> => {
   const message = parsedLine(line);
   return message.ok ? await handleRequest(message.value, run) : PARSE_FAILURE;
+};
+
+/** The MESSAGE, never the stack: stdout is the protocol, not a log. */
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * A throw that ESCAPED the runner is answered `-32603` on the ORIGINATING id,
+ * which is why the line is re-parsed here rather than the id being carried: a
+ * dropped response leaves the client waiting forever on a request it believes
+ * is in flight. An id that cannot be recovered answers `null`, the same
+ * unknowable-id convention {@link PARSE_FAILURE} already uses.
+ */
+export const internalErrorResponse = (line: string, error: unknown): RpcResponse => {
+  const message = parsedLine(line);
+  const id = message.ok ? idOf(asRecord(message.value)) : undefined;
+  return {
+    jsonrpc: '2.0',
+    id: id ?? null,
+    error: { code: INTERNAL_ERROR, message: errorMessage(error) },
+  };
 };
