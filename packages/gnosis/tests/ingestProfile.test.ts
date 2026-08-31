@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { ingest } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { domainForPath, loadIngestProfile, parseIngestProfile, typeForPath } from '../src/ingestProfile.js';
-import { INGEST_PROFILE_PATH } from '../src/paths.js';
+import { ingestProfilePath } from '../src/paths.js';
 import { validateAtom } from '../src/validate.js';
 import { activeProfile } from '../src/vocabulary.js';
 
@@ -225,7 +225,7 @@ describe('ingest profile parsing', () => {
 
 describe('shipped default profile', () => {
   it('is the source of the shipped vocabularies and rules', () => {
-    const shipped = loadIngestProfile(INGEST_PROFILE_PATH);
+    const shipped = loadIngestProfile(ingestProfilePath());
 
     expect(shipped).toEqual(activeProfile());
     expect(shipped.domains).toEqual(['runner', 'standards', 'adr', 'docs', 'claude']);
@@ -235,7 +235,7 @@ describe('shipped default profile', () => {
   });
 
   it('declares the shipped path exclusions and the default-excluded history types', () => {
-    const shipped = loadIngestProfile(INGEST_PROFILE_PATH);
+    const shipped = loadIngestProfile(ingestProfilePath());
 
     expect(shipped.excludePaths).toEqual([
       'docs/tmp/',

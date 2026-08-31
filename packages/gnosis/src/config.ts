@@ -3,7 +3,12 @@
  * `paths.ts` (SRP): that module owns WHERE things live, this one owns the
  * limits an atom must satisfy.
  *
- * PURE: nothing here reads the filesystem, at import time or ever. The
+ * PURE AT IMPORT: loading this module touches no file, and
+ * `tests/configImportPurity.test.ts` asserts that of the whole graph it pulls
+ * in. The two refusals that quote the active profile's path call
+ * `ingestProfilePath()` from inside the refusing function, so the one
+ * `existsSync` in this module's reach happens when a caller refuses, never on
+ * import. The
  * vocabularies and the path→label tables are DATA carried by an ingest
  * profile, and they live in `vocabulary.ts`, which resolves them LAZILY. What
  * stays here is the one piece that is NOT profile data — the mirrored type

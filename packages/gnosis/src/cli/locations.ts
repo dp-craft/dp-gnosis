@@ -16,7 +16,7 @@
 import { CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from '../config.js';
 import type { IngestProfile } from '../ingestProfile.js';
 import { cliInvocation } from '../invocation.js';
-import { atomsDir, isInstalled, REPO_ROOT } from '../paths.js';
+import { atomsDir, isInstalled, repoRoot } from '../paths.js';
 import type { AdapterName } from './adapter.js';
 import { defaultIndexPath } from './adapter.js';
 import type { FlagValues } from './args.js';
@@ -150,7 +150,7 @@ export const resolveLocations = (
 ): ResolvedLocations => ({
   atomsDir: pick(stringFlag(flags, ATOMS_DIR_FLAG), profile.atomsDir, atomsDir()),
   indexPath: pick(stringFlag(flags, INDEX_PATH_FLAG), profile.indexPath, defaultIndexPath(adapter)),
-  repoRoot: pick(stringFlag(flags, REPO_ROOT_FLAG), profile.repoRoot, REPO_ROOT),
+  repoRoot: pick(stringFlag(flags, REPO_ROOT_FLAG), profile.repoRoot, repoRoot()),
   corpusRoots: resolveCorpusRoots(process.env, profile.corpusRoots),
 });
 

@@ -11,7 +11,7 @@ import { CORPUS_ROOTS, CORPUS_ROOTS_ENV_VAR } from '../src/config.js';
 import { ATOMS_OWNER_FILE, ingest } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
-import { ATOMS_DIR, REPO_ROOT } from '../src/paths.js';
+import { atomsDir, repoRoot } from '../src/paths.js';
 import { activeProfile } from '../src/vocabulary.js';
 
 /** Long enough to clear the minimum body length, so the section becomes an atom. */
@@ -77,9 +77,9 @@ describe('location precedence — flag > profile > default', () => {
     const locations = resolveLocations({}, 'fts5', activeProfile());
 
     expect(locations).toEqual({
-      atomsDir: ATOMS_DIR,
+      atomsDir: atomsDir(),
       indexPath: defaultIndexPath('fts5'),
-      repoRoot: REPO_ROOT,
+      repoRoot: repoRoot(),
       corpusRoots: CORPUS_ROOTS,
     });
   });

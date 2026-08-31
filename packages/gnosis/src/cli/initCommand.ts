@@ -94,7 +94,7 @@ const resolveRoots = (positionals: readonly string[]): RootsResult => {
 /**
  * The base a RELATIVE corpus root and `summarySidecar` resolve against. Read
  * off the FLAG rather than the resolved context: with no flag the context still
- * falls back to the frozen `REPO_ROOT`, which an installed package resolves
+ * falls back to `repoRoot()`, which an installed package resolves
  * inside `node_modules`, while an instance's own base is its data root.
  */
 const initRepoRoot = (context: CommandContext): string =>

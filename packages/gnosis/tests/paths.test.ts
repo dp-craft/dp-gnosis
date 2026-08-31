@@ -2,15 +2,28 @@ import { isAbsolute } from 'node:path';
 
 import { ATOM_CHUNK_TARGET_CHARS, ATOM_MAX_CHARS, CORPUS_ROOTS, CORPUS_ROOTS_ENV_VAR, resolveCorpusRoots } from '../src/config.js';
 import {
-  ATOMS_DIR,
-  DOCS_TEST_DIR,
-  INDEX_DIR,
-  PROPOSALS_DIR,
-  REPO_ROOT,
-  RUNTIME_ROOT,
-  VAULT_ROOT
+  atomsDir,
+  docsTestDir,
+  indexDir,
+  proposalsDir,
+  repoRoot,
+  runtimeRoot,
+  vaultRoot
 } from '../src/paths.js';
 import { atomDomains, domainForSource, sourceRootDomains } from '../src/vocabulary.js';
+
+/**
+ * The layout every assertion below is about, resolved ONCE against the
+ * repository root — the same values the deleted `REPO_ROOT` … `DOCS_TEST_DIR`
+ * constants held, now derived at call time instead of at import time.
+ */
+const REPO_ROOT = repoRoot();
+const VAULT_ROOT = vaultRoot(REPO_ROOT);
+const ATOMS_DIR = atomsDir(REPO_ROOT);
+const PROPOSALS_DIR = proposalsDir(REPO_ROOT);
+const RUNTIME_ROOT = runtimeRoot(REPO_ROOT);
+const INDEX_DIR = indexDir(REPO_ROOT);
+const DOCS_TEST_DIR = docsTestDir(REPO_ROOT);
 
 describe('paths', () => {
   it('exposes only absolute paths', () => {
@@ -36,7 +49,7 @@ describe('paths', () => {
     expect(DOCS_TEST_DIR.startsWith(RUNTIME_ROOT)).toBe(false);
   });
 
-  it('anchors REPO_ROOT on this package, not the working directory', () => {
+  it('anchors repoRoot() on this package, not the working directory', () => {
     expect(REPO_ROOT.endsWith('/packages/gnosis')).toBe(false);
     expect(ATOMS_DIR).toContain('/benchmark-data/vault/atoms');
   });

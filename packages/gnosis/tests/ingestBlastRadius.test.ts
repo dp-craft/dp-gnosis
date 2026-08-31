@@ -3,7 +3,7 @@
  *
  * Measured 2026-08-22: `cli.test.ts` ran `runCli(['ingest', '--budget-mode',
  * 'tokens'])` with neither `--atoms-dir` nor `--repo-root`. `ingest` resolves
- * `options.outputDir ?? ATOMS_DIR`, so the command's output directory WAS the
+ * `options.outputDir ?? atomsDir()`, so the command's output directory WAS the
  * real vault; it survived only because the flag refusal under test exits 2
  * before ingest runs — the test's safety was contingent on the very defect it
  * asserted. When that ordering did not hold, the vault went 14269 → 10490
@@ -28,7 +28,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ATOMS_DIR } from '../src/paths.js';
+import { atomsDir } from '../src/paths.js';
 
 const TESTS_DIR = fileURLToPath(new URL('.', import.meta.url));
 const SELF = 'ingestBlastRadius.test.ts';
@@ -43,6 +43,14 @@ const INGEST_IDENT = /\bingest\(([A-Za-z_$][\w$]*)\)/g;
 const NON_ARGV = /(?:describe|it|toContain|toBe|toMatch)\(\s*$/;
 
 const ARGV_PINS = ['--atoms-dir', '--profile'] as const;
+
+/**
+ * The production atoms directory, in either spelling a test could reach it by:
+ * the deprecated `ATOMS_DIR` constant this suite used to import, and the
+ * rootless `atomsDir()` call that replaced it. An `atomsDir(<root>)` with a
+ * stated root is a caller-owned tree and is deliberately not matched.
+ */
+const PRODUCTION_ATOMS_DIR = /\bATOMS_DIR\b|\batomsDir\(\)/;
 
 interface Span {
   readonly from: number;
@@ -94,10 +102,10 @@ const uncoveredLiteral = (file: string, source: string): readonly Offence[] => {
     .map(match => ({ file, snippet: compact(source.slice(match.index ?? 0, (match.index ?? 0) + 80)), why: 'ingest command literal outside any scanned argv array' }));
 };
 
-/** ATOMS_DIR MUST NOT be handed to an ingest call site, whatever the flags say. */
+/** The production atoms dir MUST NOT be handed to an ingest call site, whatever the flags say. */
 const productionDirPassed = (file: string, source: string): readonly Offence[] =>
   [...matchesOf(source, INGEST_ARGV), ...matchesOf(source, INGEST_OPTIONS)]
-    .filter(match => /\bATOMS_DIR\b/.test(match[0]))
+    .filter(match => PRODUCTION_ATOMS_DIR.test(match[0]))
     .map(match => ({ file, snippet: compact(match[0]), why: 'ingest call site names the production ATOMS_DIR' }));
 
 const offencesIn = (file: string, source: string): readonly Offence[] => [
@@ -109,8 +117,8 @@ const offencesIn = (file: string, source: string): readonly Offence[] => [
 ];
 
 describe('no test may ingest into the production vault', () => {
-  it('resolves ATOMS_DIR to the tracked vault, so the guard has a real subject', () => {
-    expect(ATOMS_DIR.endsWith(join('benchmark-data', 'vault', 'atoms'))).toBe(true);
+  it('resolves atomsDir() to the tracked vault, so the guard has a real subject', () => {
+    expect(atomsDir().endsWith(join('benchmark-data', 'vault', 'atoms'))).toBe(true);
   });
 
   it('scans a non-empty set of sibling test files', () => {

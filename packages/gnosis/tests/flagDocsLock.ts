@@ -20,7 +20,7 @@ import { DEFAULT_ADAPTER } from '../src/cli/adapter.js';
 import { ENRICHMENT_FILE_NAME } from '../src/cli/enrichCommand.js';
 import { DEFAULT_MAX_PER_DOC } from '../src/cli/grouping.js';
 import { DEFAULT_BODY_SOURCE, DEFAULT_BUDGET_MODE, DEFAULT_ENRICHMENT_COLUMNS, DEFAULT_FIELD_WEIGHTS, DEFAULT_KEYWORD_FILTER, DEFAULT_RERANK_PRESET, ENRICH_MODEL_ID, RERANK_K_INIT, RERANK_MODEL_ID, RERANK_RRF_WEIGHT, RETRIEVE_TOKEN_BUDGET } from '../src/config.js';
-import { ATOMS_DIR, GOLDEN_SET_PATH, INDEX_DIR, REPO_ROOT } from '../src/paths.js';
+import { atomsDir, goldenSetPath, indexDir, repoRoot } from '../src/paths.js';
 import { DEFAULT_PRF_PARAMS } from '../src/prf.js';
 import { defaultExcludedTypes } from '../src/vocabulary.js';
 
@@ -37,7 +37,7 @@ const owned = (constant: string, value: string | number): DefaultOwner => ({
 
 const unowned = (why: string): DefaultOwner => ({ kind: 'unowned', why });
 
-const repoRelative = (absolute: string): string => relative(REPO_ROOT, absolute);
+const repoRelative = (absolute: string): string => relative(repoRoot(), absolute);
 
 /**
  * EXHAUSTIVE over `FLAGS` — asserted, not assumed. A flag whose default no
@@ -46,11 +46,11 @@ const repoRelative = (absolute: string): string => relative(REPO_ROOT, absolute)
  */
 export const DEFAULT_OWNERS: Readonly<Record<string, DefaultOwner>> = {
   '--adapter': owned('DEFAULT_ADAPTER (src/cli/adapter.ts)', DEFAULT_ADAPTER),
-  '--atoms-dir': owned('ATOMS_DIR (src/paths.ts)', repoRelative(ATOMS_DIR)),
-  '--index-path': owned('INDEX_DIR (src/paths.ts)', repoRelative(INDEX_DIR)),
+  '--atoms-dir': owned('atomsDir() (src/paths.ts)', repoRelative(atomsDir())),
+  '--index-path': owned('indexDir() (src/paths.ts)', repoRelative(indexDir())),
   '--repo-root': unowned('the repo root is discovered from the CLI location, not a documented value'),
   '--profile': unowned('no default profile exists — the cell states the built-in defaults apply'),
-  '--golden-set': owned('GOLDEN_SET_PATH (src/paths.ts)', repoRelative(GOLDEN_SET_PATH)),
+  '--golden-set': owned('goldenSetPath() (src/paths.ts)', repoRelative(goldenSetPath())),
   '--gold-ids': unowned('no constant owns it — the source is DECLARED by the loaded profile ("goldIdsPath"), and a profile that declares none ingests with no gold tie-break'),
   '-k': unowned('DEFAULT_K is a module-private literal in src/cli/retrieveCommand.ts'),
   '--format': unowned('the default output mode is a literal in the formatter, not a config constant'),
@@ -127,7 +127,7 @@ export const defaultCellDrift = (
 
 /** `.claude/skills/dp-gnosis-search/SKILL.md` — outside the package, resolved from the repo root. */
 export const SKILL_PATH: string = resolve(
-  REPO_ROOT,
+  repoRoot(),
   '.claude',
   'skills',
   'dp-gnosis-search',

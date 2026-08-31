@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 
 import { loadIngestProfile } from '../src/ingestProfile.js';
-import { PROFILES_DIR } from '../src/paths.js';
+import { profilesDir } from '../src/paths.js';
 import {
   activeProfile,
   atomDomains,
@@ -38,7 +38,7 @@ describe('vocabulary', () => {
   });
 
   it('reads every derived value off the profile a caller installs', () => {
-    const huTax = loadIngestProfile(resolve(PROFILES_DIR, 'hu-tax.profile.json'));
+    const huTax = loadIngestProfile(resolve(profilesDir(), 'hu-tax.profile.json'));
     setActiveProfile(huTax);
     expect(activeProfile()).toBe(huTax);
     expect(atomDomains()).toEqual(huTax.domains);
@@ -50,7 +50,7 @@ describe('vocabulary', () => {
 
   it('restores the shipped profile on reset, so an install never leaks', () => {
     const shipped = activeProfile();
-    setActiveProfile(loadIngestProfile(resolve(PROFILES_DIR, 'hu-tax.profile.json')));
+    setActiveProfile(loadIngestProfile(resolve(profilesDir(), 'hu-tax.profile.json')));
     expect(activeProfile().name).not.toBe(shipped.name);
     resetActiveProfile();
     expect(activeProfile().name).toBe(shipped.name);
@@ -60,7 +60,7 @@ describe('vocabulary', () => {
   it('labels a source path from the ACTIVE profile, not from an import-time snapshot', () => {
     expect(domainForSource('docs/research/x.md')).toBe('docs');
     expect(typeForSource('docs/research/x.md')).toBe('research');
-    setActiveProfile(loadIngestProfile(resolve(PROFILES_DIR, 'hu-tax.profile.json')));
+    setActiveProfile(loadIngestProfile(resolve(profilesDir(), 'hu-tax.profile.json')));
     expect(domainForSource('docs/research/x.md')).toBeUndefined();
   });
 });

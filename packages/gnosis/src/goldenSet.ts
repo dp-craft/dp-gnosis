@@ -16,7 +16,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseAtom } from './atom.js';
-import { atomsDir as defaultAtomsDir, GOLDEN_SET_PATH } from './paths.js';
+import { atomsDir as defaultAtomsDir, goldenSetPath } from './paths.js';
 
 /**
  * The closed axis vocabulary. Each axis isolates one retrieval regime, so a
@@ -227,12 +227,12 @@ export const validateGoldenSetAgainstCorpus = (
 };
 
 /** Read and structurally validate the golden set — corpus check NOT included. */
-export const loadGoldenSet = (path: string = GOLDEN_SET_PATH): GoldenSet =>
+export const loadGoldenSet = (path: string = goldenSetPath()): GoldenSet =>
   parseGoldenSet(readFileSync(path, 'utf8'));
 
 /** The only entry point a benchmark may use: structurally valid AND corpus-resolvable. */
 export const loadVerifiedGoldenSet = (
-  path: string = GOLDEN_SET_PATH,
+  path: string = goldenSetPath(),
   atomsDir: string = defaultAtomsDir()
 ): GoldenSet => {
   const set = loadGoldenSet(path);

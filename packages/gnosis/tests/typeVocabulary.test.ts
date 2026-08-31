@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 
 import { expectVocabulary } from '../src/config.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
-import { PROFILES_DIR } from '../src/paths.js';
+import { profilesDir } from '../src/paths.js';
 import { atomTypes } from '../src/vocabulary.js';
 
 /**
@@ -40,7 +40,7 @@ describe('expectVocabulary', () => {
   });
 
   it('accepts the hu-tax profile, which declares four of the shipped types', () => {
-    const huTax = loadIngestProfile(resolve(PROFILES_DIR, 'hu-tax.profile.json'));
+    const huTax = loadIngestProfile(resolve(profilesDir(), 'hu-tax.profile.json'));
     expect(huTax.types.length).toBeLessThan(atomTypes().length);
     expect(expectVocabulary(huTax.types, atomTypes(), 'types')).toEqual(atomTypes());
   });

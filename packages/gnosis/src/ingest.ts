@@ -14,7 +14,7 @@ import { expandUserPath } from './env.js';
 import type { IngestProfile } from './ingestProfile.js';
 import { domainForPath, typeForPath } from './ingestProfile.js';
 import { cliInvocation } from './invocation.js';
-import { atomsDir, REPO_ROOT } from './paths.js';
+import { atomsDir, repoRoot as defaultRepoRoot } from './paths.js';
 import { loadSummarySidecar } from './summarySidecar.js';
 import { readExistingIds, validateAtom } from './validate.js';
 import { activeProfile } from './vocabulary.js';
@@ -1040,7 +1040,7 @@ const profileSummaries = (
 
 export const ingest = async (options: IngestOptions): Promise<IngestSummary> => {
   const outputDir = options.outputDir ?? atomsDir();
-  const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const repoRoot = options.repoRoot ?? defaultRepoRoot();
   const profile = profileOf(options);
   const loaded = await loadCorpus(repoRoot, options.corpusRoots ?? resolveCorpusRoots(), profile);
   const unmapped = unmappedSkips(loaded, profile);

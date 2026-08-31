@@ -22,7 +22,7 @@ import { buildFts5Index, createFts5Adapter } from '../src/adapters/fts5Adapter.j
 import { createLinearScanAdapter } from '../src/adapters/linearScanAdapter.js';
 import type { AtomFrontmatter, AtomStatus } from '../src/atom.js';
 import { serializeAtom } from '../src/atom.js';
-import { REPO_ROOT } from '../src/paths.js';
+import { repoRoot } from '../src/paths.js';
 import type { KnowledgePort, RetrievedAtom } from '../src/port.js';
 
 const execFileAsync = promisify(execFile);
@@ -133,7 +133,7 @@ const retrieveInChildProcess = async (
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', 'tsx', CHILD_SCRIPT, adapterName, atomsDir, query],
-    { cwd: REPO_ROOT }
+    { cwd: repoRoot() }
   );
   const parsed: unknown = JSON.parse(stdout);
   return Array.isArray(parsed) ? (parsed as readonly (readonly [string, number])[]) : [];

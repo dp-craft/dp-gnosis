@@ -24,7 +24,7 @@ import { resolveCorpusRoots } from '../src/config.js';
 import { documentSummary, loadCorpus } from '../src/ingest.js';
 import type { IngestProfile } from '../src/ingestProfile.js';
 import { loadIngestProfile } from '../src/ingestProfile.js';
-import { PROFILES_DIR, REPO_ROOT } from '../src/paths.js';
+import { profilesDir, repoRoot as defaultRepoRoot } from '../src/paths.js';
 import { serializeSummarySidecar } from '../src/summarySidecar.js';
 import { activeProfile } from '../src/vocabulary.js';
 
@@ -84,7 +84,7 @@ const writeSidecar = async (outPath: string, summaries: ReadonlyMap<string, stri
  * touches a tracked file.
  */
 export const runExtract = async (options: ExtractOptions): Promise<ExtractReport> => {
-  const repoRoot = options.profile.repoRoot ?? REPO_ROOT;
+  const repoRoot = options.profile.repoRoot ?? defaultRepoRoot();
   const roots = resolveCorpusRoots(process.env, options.profile.corpusRoots);
   const loaded = await loadCorpus(repoRoot, roots, options.profile);
   const extracted = loaded.map(
@@ -156,7 +156,7 @@ const parseArgs = (argv: readonly string[]): ArgState => {
 const profilePath = (value: string): string =>
   value.includes('/') || value.endsWith('.json')
     ? resolve(value)
-    : join(PROFILES_DIR, `${value}${PROFILE_SUFFIX}`);
+    : join(profilesDir(), `${value}${PROFILE_SUFFIX}`);
 
 const profileOf = (state: ArgState): IngestProfile => {
   const value = state.values.get('profile');
@@ -167,7 +167,7 @@ const profileOf = (state: ArgState): IngestProfile => {
 const declaredOut = (profile: IngestProfile): string | undefined =>
   profile.summarySidecar === undefined
     ? undefined
-    : join(profile.repoRoot ?? REPO_ROOT, profile.summarySidecar);
+    : join(profile.repoRoot ?? defaultRepoRoot(), profile.summarySidecar);
 
 const outOf = (state: ArgState, profile: IngestProfile): string | undefined => {
   const flag = state.values.get('out');

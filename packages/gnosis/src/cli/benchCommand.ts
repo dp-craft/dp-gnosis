@@ -24,7 +24,7 @@ import { readGoldenSetSource } from '../bench/goldenSetSource.js';
 import { writeBenchReport } from '../bench/report.js';
 import { mapSequential } from '../bench/sequential.js';
 import type { GoldenSet } from '../goldenSet.js';
-import { benchWorkDir, DOCS_TEST_DIR, GOLDEN_SET_PATH } from '../paths.js';
+import { benchWorkDir, docsTestDir, goldenSetPath } from '../paths.js';
 import { stringFlag } from './args.js';
 import type { CommandContext } from './context.js';
 import type { CommandOutcome } from './outcome.js';
@@ -92,7 +92,7 @@ const measure = async (
   golden: LoadedGoldenSet
 ): Promise<CommandOutcome> => {
   const report = await runBenchmark(await optionsFor(context, golden));
-  const written = await writeBenchReport(report, DOCS_TEST_DIR);
+  const written = await writeBenchReport(report, docsTestDir());
   return {
     exitCode: exitCodeFor(report),
     data: payload(report, written.markdownPath, written.jsonPath),
@@ -104,7 +104,7 @@ const measure = async (
 export const GOLDEN_SET_FLAG = '--golden-set';
 
 export const runBenchCommand = async (context: CommandContext): Promise<CommandOutcome> => {
-  const path = stringFlag(context.flags, GOLDEN_SET_FLAG) ?? GOLDEN_SET_PATH;
+  const path = stringFlag(context.flags, GOLDEN_SET_FLAG) ?? goldenSetPath();
   const loaded = await readGoldenSetSource(path, context.atomsDir);
   return loaded.ok
     ? await measure(context, { path, set: loaded.set, hash: loaded.hash })

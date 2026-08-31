@@ -11,8 +11,8 @@
  *    scored, and the final ordering is an explicit `(score DESC, atomId ASC)`
  *    sort. Nothing here may depend on directory order, on `Promise` settle
  *    order, or on a sort being stable by accident.
- * 2. Location-based retrievability. This adapter reads `ATOMS_DIR` and only
- *    `ATOMS_DIR`. A markdown file sitting in `PROPOSALS_DIR` is structurally
+ * 2. Location-based retrievability. This adapter reads `atomsDir()` and only
+ *    `atomsDir()`. A markdown file sitting in `proposalsDir()` is structurally
  *    unreachable — it is never opened, not filtered out after the fact.
  */
 import { createHash } from 'node:crypto';
@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import type { Atom } from '../atom.js';
 import { parseAtom } from '../atom.js';
 import { BM25_IDF_SMOOTHING } from '../config.js';
-import { ATOMS_DIR } from '../paths.js';
+import { atomsDir as defaultAtomsDir } from '../paths.js';
 import type {
   AtomOrigin,
   IndexState,
@@ -461,8 +461,8 @@ const contextFor = (dir: string, options: LinearScanOptions): ScanContext => ({
 
 /**
  * Build the linear-scan port over `atomsDir`. The directory is injectable so a
- * test can point at a fixture tree; it defaults to the real `ATOMS_DIR`, and
- * `PROPOSALS_DIR` is not reachable through any argument this factory takes.
+ * test can point at a fixture tree; it defaults to the real `atomsDir()`, and
+ * `proposalsDir()` is not reachable through any argument this factory takes.
  *
  * The corpus is re-read on EVERY `retrieve`, which is what satisfies the port's
  * read-at-call-time body rule: an edit on disk is visible to the very next call
@@ -471,7 +471,7 @@ const contextFor = (dir: string, options: LinearScanOptions): ScanContext => ({
  * benchmark sweep; see its own comment for what it costs.
  */
 export const createLinearScanAdapter = (
-  atomsDir: string = ATOMS_DIR,
+  atomsDir: string = defaultAtomsDir(),
   options: LinearScanOptions = {}
 ): KnowledgePort => ({
   name: ADAPTER_NAME,
