@@ -292,7 +292,7 @@ interface CorpusSignature {
 const NO_MTIME = 0;
 /** Paired with `NO_MTIME`: an unstattable file still contributes a fixed entry. */
 const NO_SIZE = -1;
-const MANIFEST_SEPARATOR = ' ';
+const MANIFEST_SEPARATOR = '\u0000';
 const SIGNATURE_ALGORITHM = 'sha256';
 
 /** One manifest row: identity, size and mtime of a single atom file. */
