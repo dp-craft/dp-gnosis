@@ -31,7 +31,7 @@
  * its own index path, so its recorded row stays reproducible. This module is
  * additive in every direction: new names, new paths, new table schema.
  *
- * FUSION HAPPENS IN `fuseLegs` (`rerank.ts`), the two-leg form of the ONE fusion
+ * FUSION HAPPENS IN `fuseLegs` (`rerankFusion.ts`), the two-leg form of the ONE fusion
  * this package owns. LanceDB's own `RRFReranker` is deliberately NOT used — a
  * second fusion implementation would make a hybrid number incomparable with
  * every reranked number already recorded.
@@ -76,7 +76,7 @@ import type {
 } from '../port.js';
 import { assertDomainFilter, assertTypeFilter, atomOrigin } from '../port.js';
 import { stemText } from '../query.js';
-import { fuseLegs } from '../rerank.js';
+import { fuseLegs } from '../rerankFusion.js';
 import { isRetrievable } from '../retrievability.js';
 import {
   type AtomDomain,
