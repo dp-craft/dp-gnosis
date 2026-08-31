@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DuplicateLink } from '../src/engine.js';
-import { auditGold, rePointQrels } from '../src/goldAudit.js';
+import {
+  auditGold,
+  GOLD_AUDIT_NO_CORPUS_CAUSE,
+  GOLD_AUDIT_NO_JUDGMENTS_CAUSE,
+  rePointQrels
+} from '../src/goldAudit.js';
 import type { Qrel } from '../src/metrics.js';
 
 const qrelsOf = (rows: Readonly<Record<string, Readonly<Record<string, number>>>>): ReadonlyMap<string, Qrel> =>
@@ -46,6 +51,21 @@ describe('auditGold', () => {
     expect(audit.lostJudgments).toBe(0);
     expect(audit.affectedTopics).toBe(0);
     expect(audit.totalRelevantJudgments).toBe(1);
+  });
+
+  /**
+   * Nothing to count is not a clean corpus: every field would print 0 and the
+   * block would read as an audit that found no ceiling.
+   */
+  it('refuses a corpus holding no document, with a named cause', () => {
+    const act = (): unknown => auditGold({ ...input, corpusDocIds: [], representedDocIds: [] });
+    expect(act).toThrow(expect.objectContaining({ cause: GOLD_AUDIT_NO_CORPUS_CAUSE }));
+  });
+
+  /** With no relevant judgment there is no denominator, so no ceiling is measurable. */
+  it('refuses a golden set with no relevant judgment, with a named cause', () => {
+    const act = (): unknown => auditGold({ ...input, qrels: qrelsOf({ t1: { d4: 0 } }) });
+    expect(act).toThrow(expect.objectContaining({ cause: GOLD_AUDIT_NO_JUDGMENTS_CAUSE }));
   });
 
   it('reports a clean corpus as zero orphans', () => {

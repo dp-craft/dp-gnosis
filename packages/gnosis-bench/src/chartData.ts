@@ -140,9 +140,31 @@ export const METRIC_LABELS: Readonly<Record<MetricName, string>> = {
   rbpResidual: 'RBP residual (p=0.8)',
 };
 
-const fail = (what: string): never => {
-  throw new Error(`dp-gnosis-bench charts: ${what}`);
+/** `error.cause` when a run carries not one of the metrics a figure asked it for. */
+export const CHART_NO_METRICS_CAUSE = 'dp-gnosis-bench/chart-run-has-no-requested-metric';
+
+const fail = (what: string, cause?: string): never => {
+  throw new Error(`dp-gnosis-bench charts: ${what}`, { cause });
 };
+
+/**
+ * A missing metric is OMITTED, which is right for one cutoff a run never
+ * retrieved to and wrong for all of them: a series with no point still gets its
+ * legend entry, so the figure states the run was drawn when nothing was. Judged
+ * over the WHOLE requested set — a partial series is a real measurement.
+ */
+const requireSeries = <T>(
+  drawn: readonly T[],
+  row: HistoryRow,
+  metrics: readonly MetricName[]
+): readonly T[] =>
+  drawn.length > 0
+    ? drawn
+    : fail(
+        `run records none of ${metrics.join(', ')}, so its series would be EMPTY under a ` +
+          `legend entry that says it was drawn: ${describeRun(row)}`,
+        CHART_NO_METRICS_CAUSE
+      );
 
 const runOf = (context: ChartContext, selector: string): HistoryRow => {
   const selection = resolveRun(context.history, selector);
@@ -231,10 +253,14 @@ const buildDelta = (
 };
 
 const pointsOf = (row: HistoryRow): readonly RecallPoint[] =>
-  CUTOFF_METRICS.flatMap(([cutoff, metric]) => {
-    const recall = row[metric];
-    return recall === undefined ? [] : [{ cutoff, recall }];
-  });
+  requireSeries(
+    CUTOFF_METRICS.flatMap(([cutoff, metric]) => {
+      const recall = row[metric];
+      return recall === undefined ? [] : [{ cutoff, recall }];
+    }),
+    row,
+    CUTOFF_METRICS.map(pair => pair[1])
+  );
 
 const documentsOf = (context: ChartContext, dataset: string): number =>
   context.corpusDocuments[dataset] ??
@@ -274,10 +300,14 @@ const buildRecallDepth = (
 };
 
 const armBars = (row: HistoryRow, metrics: readonly MetricName[]): readonly ArmBar[] =>
-  metrics.flatMap(metric => {
-    const value = row[metric];
-    return value === undefined ? [] : [{ metric, value }];
-  });
+  requireSeries(
+    metrics.flatMap(metric => {
+      const value = row[metric];
+      return value === undefined ? [] : [{ metric, value }];
+    }),
+    row,
+    metrics
+  );
 
 const buildArms = (
   context: ChartContext,

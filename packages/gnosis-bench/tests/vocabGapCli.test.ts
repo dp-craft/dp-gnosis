@@ -17,6 +17,7 @@ import {
   readTopics,
   VOCAB_GAP_EXIT_OK,
   VOCAB_GAP_EXIT_USAGE,
+  VOCAB_GAP_NO_TOPICS_CAUSE,
   type VocabGapRecord,
   vocabGapReport
 } from '../src/vocabGapCli.js';
@@ -69,6 +70,18 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
+});
+
+describe('readTopics', () => {
+  /**
+   * An all-blank queries file yields `topics = []`, `serialize([])` writes a bare
+   * newline and the tool exits 0 — a report of nothing, recorded as data.
+   */
+  it('refuses a queries file that names no topic at all, with a named cause', () => {
+    writeFileSync(queriesPath, '\n   \n\n', 'utf8');
+    const act = (): unknown => readTopics(queriesPath);
+    expect(act).toThrow(expect.objectContaining({ cause: VOCAB_GAP_NO_TOPICS_CAUSE }));
+  });
 });
 
 describe('vocabGapReport', () => {

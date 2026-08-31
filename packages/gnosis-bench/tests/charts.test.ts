@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCharts,
   type Chart,
+  CHART_NO_METRICS_CAUSE,
   type ChartContext,
   type DeltaChart,
   type RecallDepthChart,
@@ -241,6 +242,32 @@ describe('chart data', () => {
     const floor = charts.filter(isRecall)[0]?.floors[0];
     expect(floor?.documents).toBe(500);
     expect(floor?.points.map(point => point.recall)).toEqual([0.02, 0.04, 0.2, 0.6, 1]);
+  });
+
+  /**
+   * A missing metric is flatMap-ed away, so a run recording NONE of them drew an
+   * empty group that still carried its legend entry — a figure of nothing.
+   */
+  it('refuses an arm whose run records none of the requested metrics', () => {
+    const found = deltaFixture();
+    const spec = parseChartsSpec({
+      ...ARMS_SPEC,
+      charts: [{ ...ARMS_SPEC.charts[0], metrics: ['recall300', 'recall1000'] }],
+    });
+    expect(() => buildCharts(contextOf(found), spec))
+      .toThrow(expect.objectContaining({ cause: CHART_NO_METRICS_CAUSE }));
+  });
+
+  it('refuses a depth curve whose run records no recall at any cutoff', () => {
+    const found = fixture([
+      ['blind-fts5-vault', { recall10: undefined, recall20: undefined, recall100: undefined }, FLAT],
+    ]);
+    const spec = parseChartsSpec({
+      ...RECALL_SPEC,
+      charts: [{ ...RECALL_SPEC.charts[0], runs: [{ label: 'blind', selector: 'blind-fts5-vault' }] }],
+    });
+    expect(() => buildCharts(contextOf(found), spec))
+      .toThrow(expect.objectContaining({ cause: CHART_NO_METRICS_CAUSE }));
   });
 
   it('captions every chart with the dataset, adapter, depth and sha it drew', () => {

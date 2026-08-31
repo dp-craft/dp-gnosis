@@ -40,6 +40,13 @@ export const VOCAB_GAP_EXIT_OK = 0;
 /** Unusable invocation, or the index / queries file could not be read. */
 export const VOCAB_GAP_EXIT_USAGE = 2;
 
+/** `error.cause` when the queries file named not one topic to measure. */
+export const VOCAB_GAP_NO_TOPICS_CAUSE = 'dp-gnosis-bench/vocab-gap-no-topics';
+
+const fail = (message: string, cause: string): never => {
+  throw new Error(message, { cause });
+};
+
 /** One topic's line of the JSONL report. */
 export interface VocabGapRecord {
   readonly topicId: string;
@@ -112,10 +119,19 @@ const toTopic = (line: string): Topic => {
   return { topicId: asString(row['_id']), query: asString(row['text']) };
 };
 
+const noTopicsMessage = (queriesPath: string): string =>
+  `${queriesPath}: the queries file names ZERO topics — every line is blank, or the file is ` +
+  'empty. The whole measured set is empty, so the report would be a single empty line written ' +
+  'at exit 0: nothing measured, recorded as data.';
+
 /**
  * A blank line is skipped; a topic with no id or no text is DROPPED and would
  * be indistinguishable from one that was never there, so it is refused instead
  * — a quietly shrinking denominator is the failure this project keeps hitting.
+ *
+ * Zero topics is the same failure at full size and is refused too. The judgment
+ * is over the WHOLE file: a topic whose terms are all in the index is a real
+ * measurement of no gap, and only a file naming no topic at all refuses.
  */
 export const readTopics = (queriesPath: string): readonly Topic[] => {
   const topics = readFileSync(queriesPath, 'utf8')
@@ -126,6 +142,7 @@ export const readTopics = (queriesPath: string): readonly Topic[] => {
   if (bad.length > 0) {
     throw new Error(`${queriesPath}: ${bad.length} line(s) carry no "_id" or no "text"`);
   }
+  if (topics.length === 0) fail(noTopicsMessage(queriesPath), VOCAB_GAP_NO_TOPICS_CAUSE);
   return topics;
 };
 

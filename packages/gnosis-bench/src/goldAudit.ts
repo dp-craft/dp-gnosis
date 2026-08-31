@@ -70,12 +70,48 @@ const lostPerTopic = (
 const totalRelevant = (qrels: ReadonlyMap<string, Qrel>): number =>
   [...qrels.values()].reduce((sum, qrel) => sum + relevantDocsOf(qrel).length, 0);
 
+/** `error.cause` when the corpus the audit was handed holds no document. */
+export const GOLD_AUDIT_NO_CORPUS_CAUSE = 'dp-gnosis-bench/gold-audit-empty-corpus';
+
+/** `error.cause` when the golden set carries no relevant judgment to bound. */
+export const GOLD_AUDIT_NO_JUDGMENTS_CAUSE = 'dp-gnosis-bench/gold-audit-no-relevant-judgments';
+
+const fail = (message: string, cause: string): never => {
+  throw new Error(message, { cause });
+};
+
+const noCorpusMessage = (datasetId: string): string =>
+  `dp-gnosis-bench: dataset "${datasetId}" was audited against ZERO corpus documents. Every ` +
+  'count in the block — orphans, lost judgments, topics affected — would print 0 and read as a ' +
+  'corpus with no recall ceiling, which is what an unread corpus file looks like too.';
+
+const noJudgmentsMessage = (datasetId: string): string =>
+  `dp-gnosis-bench: dataset "${datasetId}" was audited against a golden set holding no RELEVANT ` +
+  'judgment. The ceiling this audit reports is a share of that denominator, so the block would ' +
+  'state 0 lost of 0 — an unmeasurable cell printed as a measured zero.';
+
+/**
+ * The two populations the whole audit is a fraction of. Judged over the WHOLE
+ * set, exactly as `assertPortSound` judges its probe: a topic whose relevant
+ * documents all survived is a real result, and only a corpus or a golden set
+ * that is empty END TO END refuses.
+ */
+const assertAuditable = (input: GoldAuditInput): void => {
+  if (new Set(input.corpusDocIds).size === 0) {
+    fail(noCorpusMessage(input.datasetId), GOLD_AUDIT_NO_CORPUS_CAUSE);
+  }
+  if (totalRelevant(input.qrels) === 0) {
+    fail(noJudgmentsMessage(input.datasetId), GOLD_AUDIT_NO_JUDGMENTS_CAUSE);
+  }
+};
+
 /**
  * The audit. `representedDocs` is intersected with the corpus rather than taken
  * as given: an atoms directory left by a DIFFERENT corpus would otherwise inflate
  * the represented count and hide the very orphans this exists to find.
  */
 export const auditGold = (input: GoldAuditInput): GoldAudit => {
+  assertAuditable(input);
   const orphaned = new Set(orphanedIds(input));
   const lost = lostPerTopic(input.qrels, orphaned);
   const lostIds = new Set(lost.flat());

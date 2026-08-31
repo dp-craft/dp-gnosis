@@ -3,6 +3,10 @@
  * incomparable to a recorded row: which dedupe it measures, which topics it
  * averages over, and whether a topic that retrieved NOTHING is visible.
  */
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type { BeirDoc } from '../src/beir.js';
@@ -10,6 +14,8 @@ import {
   auditIngestOptions,
   emptyRankingLines,
   emptyRankingTopics,
+  GOLD_AUDIT_EMPTY_RUN_CAUSE,
+  requireRunFile,
   scoreRun
 } from '../src/goldAuditCli.js';
 import type { BeirDataset, DatasetEntry } from '../src/manifest.js';
@@ -43,6 +49,27 @@ describe('auditIngestOptions — the audit measures the dedupe PRODUCTION perfor
 
   it('stays gold-blind for a non-derived dataset, as run.ts does', () => {
     expect(auditIngestOptions(beirEntry(false), DOCS, JUDGED).goldIds).toBeUndefined();
+  });
+});
+
+describe('requireRunFile — a run file that ranks nothing is refused, not scored', () => {
+  const trecAt = (body: string): string => {
+    const path = resolve(mkdtempSync(resolve(tmpdir(), 'gnosis-goldaudit-')), 'run.trec');
+    writeFileSync(path, body, 'utf8');
+    return path;
+  };
+
+  /**
+   * An existing but empty `.trec` scores every qrels topic at depth 0 and prints
+   * a confident `nDCG@10 0.0000` beside the recorded rows.
+   */
+  it('refuses an existing .trec holding no ranking line, with a named cause', () => {
+    const act = (): unknown => requireRunFile(trecAt('\n'));
+    expect(act).toThrow(expect.objectContaining({ cause: GOLD_AUDIT_EMPTY_RUN_CAUSE }));
+  });
+
+  it('accepts a .trec that ranks at least one topic', () => {
+    expect(() => requireRunFile(trecAt('q1 Q0 d1 1 1.0 run\n'))).not.toThrow();
   });
 });
 

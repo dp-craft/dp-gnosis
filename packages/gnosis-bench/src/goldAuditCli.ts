@@ -40,6 +40,13 @@ export const GOLD_AUDIT_EXIT_OK = 0;
 /** The invocation itself is unusable: no `--dataset`, an unknown id, or a missing run file. */
 export const GOLD_AUDIT_EXIT_USAGE = 2;
 
+/** `error.cause` when the `--run` file exists yet ranks not one topic. */
+export const GOLD_AUDIT_EMPTY_RUN_CAUSE = 'dp-gnosis-bench/gold-audit-empty-run';
+
+const fail = (message: string, cause: string): never => {
+  throw new Error(message, { cause });
+};
+
 const DIGITS = 4;
 
 /** How many empty-ranking topic ids one report names before it stops listing. */
@@ -256,10 +263,23 @@ const writeMapping = (outPath: string, mapping: MappingFile): void => {
   writeFileSync(outPath, `${JSON.stringify(mapping, undefined, 2)}\n`, 'utf8');
 };
 
-const requireRunFile = (runPath: string | undefined): void => {
-  if (runPath !== undefined && !existsSync(runPath)) {
+const emptyRunMessage = (runPath: string): string =>
+  `gnosis:goldaudit: the TREC run file ${runPath} holds no ranking line at all. Scoring it ` +
+  'averages every qrels topic at depth 0 and prints a confident nDCG@10 0.0000 beside recorded ' +
+  'rows — an empty artefact read as a measured result.';
+
+/**
+ * Both checks run BEFORE the ingest, so an unusable `--run` costs no corpus
+ * work. Emptiness is judged over the WHOLE file: topics the run legitimately
+ * retrieved nothing for are already named by `emptyRankingLines`, and only a
+ * file that ranks not one topic refuses.
+ */
+export const requireRunFile = (runPath: string | undefined): void => {
+  if (runPath === undefined) return;
+  if (!existsSync(runPath)) {
     throw new Error(`gnosis:goldaudit: no TREC run file at ${runPath}`);
   }
+  if (readRunFile(runPath).size === 0) fail(emptyRunMessage(runPath), GOLD_AUDIT_EMPTY_RUN_CAUSE);
 };
 
 const auditAll = async (
