@@ -43,7 +43,7 @@ A malformed line answers `-32700` (`id: null`), an unknown method `-32601`, an u
 
 ## Second consumer — point another client at this vault, without editing TypeScript
 
-`17` DoD #5. Everything here is a **client-side** snippet: nothing in this repository has to change, and the
+Everything here is a **client-side** snippet: nothing in this repository has to change, and the
 repository deliberately ships **no `.mcp.json`** — the file belongs to the consumer, whose absolute paths differ.
 
 **There are two launch forms, because there are two audiences.** `src/invocation.ts` already owns this
@@ -58,8 +58,8 @@ are then the whole configuration, and both are stable properties of the checkout
 
 | Placeholder | What to substitute | Why absolute |
 |---|---|---|
-| `<REPO>` | the absolute path of this checkout, e.g. `/home/dev/work/dippe/dp-gnosis` | an MCP client launches the server with an unspecified working directory |
-| `<NODE_BIN>` | the directory holding `node`, e.g. `/home/dev/.nvm/versions/node/v24.14.0/bin` | needed only when the client's `PATH` does not already carry a Node ≥ 22 — `tsx`'s shebang is `env node` |
+| `<REPO>` | the absolute path of this checkout, e.g. `/home/user/src/dp-gnosis` | an MCP client launches the server with an unspecified working directory |
+| `<NODE_BIN>` | the directory holding `node`, e.g. `/home/user/.nvm/versions/node/v24.14.0/bin` | needed only when the client's `PATH` does not already carry a Node ≥ 22 — `tsx`'s shebang is `env node` |
 
 **The server does not read the working directory.** `REPO_ROOT` is derived from the module's own location
 (`src/paths.ts`), so the vault, the index and the profile resolve identically from any cwd. That is what makes an
@@ -80,7 +80,7 @@ absolute-path launch sufficient — and it is why the installed form needs no pa
 ```
 
 If the client's `PATH` does not carry the npm global bin directory, substitute the absolute path `npm bin -g`
-reports, e.g. `/home/dev/.nvm/versions/node/v24.14.0/bin/dp-gnosis-mcp`.
+reports, e.g. `/home/user/.nvm/versions/node/v24.14.0/bin/dp-gnosis-mcp`.
 
 *Checkout:*
 

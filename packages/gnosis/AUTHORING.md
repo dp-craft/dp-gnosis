@@ -15,46 +15,47 @@ A file must clear **two independent gates**, in order. Scope (what `ingest` read
 
 | Gate | Owner | Failure |
 |---|---|---|
-| **Scope** — is the path under a corpus root? | `CORPUS_ROOTS` = `['doc', 'docs', 'claude-artifacts', 'RUNNER-*.md']` (or `DP_GNOSIS_CORPUS_ROOTS`, or a profile's `corpusRoots`) | never read, never reported |
-| **Label** — does a prefix claim it? | `SOURCE_ROOT_DOMAINS`, longest prefix wins | `x_domain` is `undefined` → the document yields **zero** candidates; reported once in `skipped[]`, run exits 3 |
+| **Scope** — is the path under a corpus root? | the loaded profile's `corpusRoots` (`DP_GNOSIS_CORPUS_ROOTS` overrides it for one run; with neither, `CORPUS_ROOTS` in `src/config.ts`, which ships EMPTY — a scope is never guessed) | never read, never reported |
+| **Label** — does a prefix claim it? | the profile's `domainRules`, longest prefix wins | `x_domain` is `undefined` → the document yields **zero** candidates; reported once in `skipped[]`, run exits 3 |
 
 An unlabelled document is **dropped whole** — never chunked, never indexed, never retrievable. A caller querying for it gets a normal exit 0 and other atoms; there is **no error at query time**.
 
-| Path prefix | `x_domain` | In default scope? |
-|---|---|---|
-| `RUNNER-` | `runner` | yes (`RUNNER-*.md` glob) |
-| `tools/agentic-code-runner/` | `runner` | no — override only |
-| `claude-artifacts/standards/` | `standards` | yes |
-| `doc/40-code-standards/90-decisions/` | `adr` | yes |
-| `claude-artifacts/` | `standards` | yes |
-| `doc/` | `docs` | yes |
-| `.claude/` | `claude` | no — override only |
-| `benchmark-data/corpus-hu/` | `docs` | no — override only |
-| `benchmark-data/cache/bench/corpus-ext/` | `docs` | no — override only |
+**Both gates read YOUR profile, not a shipped path table.** `dp-gnosis init <dir…>` writes one: every directory you name becomes a `corpusRoots` entry AND a `domainRules` prefix claiming it, under a domain named after the directory. So a document is in scope and labelled exactly when it sits under one of the directories you declared. `CONFIGURATION.md` § 3 owns the assignment rules and § 4.1 owns what a prefix is matched against.
 
-**`docs/` (with an s) is a corpus root as of T2.1, and a `docs/` domain prefix claims it.** It was invisible to retrieval before that — it matched no root and no prefix, so it failed at the SCOPE gate and was not even listed in `skipped[]`. What made the root usable is the profile's three-entry `excludePaths` — `docs/tmp/`, `docs/benchmarks/`, `doc/_meta/corpus-digest.md` — dropped by path BEFORE anything is read, so they are ingested nowhere and counted nowhere. `docs/` holds 22 808 markdown files and 22 597 of them are machine output (`docs/tmp` 12 211, `docs/benchmarks` 10 386). `doc/_meta/corpus-digest.md` is excluded as a NAVIGATION artefact, not as generated bulk: it produces 204 atoms carrying one line of vocabulary from every document in the corpus, so it scores on almost any query. Only that one file — the rest of `doc/_meta/` is authored and stays. A DIRECTORY entry MUST carry a trailing slash, because the match is a plain repo-relative `startsWith` prefix: `docs/benchmarks/` MUST NOT swallow the sibling `docs/benchmarking/`, which is authored and kept. The ~211 authored files under `docs/` remain (~3 400 atoms), and `docs/research/`, `docs/plans/`, `docs/implementation-lessons-learned/`, `docs/adrs/`, `docs/reviews/` and `docs/analysis/` each carry a type rule of their own.
+| Profile key | Decides | Written by `init` as |
+|---|---|---|
+| `corpusRoots` | which directories `ingest` walks | one entry per directory you named |
+| `domains` | the closed domain vocabulary | one label per directory, derived by `domainOf` (`src/instance.ts`) |
+| `domainRules` | path prefix → domain | one `{ prefix, domain }` per directory |
+| `typeRules` / `segmentRules` | path prefix / path segment → `type` | **empty** — every source falls to `defaultType` until you add rules |
+| `excludePaths` | paths dropped BEFORE anything is read | absent unless you declare it |
+
+`excludePaths` is how a generated subtree stays out of the corpus without narrowing the root above it — machine output ingested nowhere and counted nowhere. A DIRECTORY entry MUST carry a trailing slash, because the match is a plain `startsWith` prefix on the source's identity: `docs/benchmarks/` MUST NOT swallow the sibling `docs/benchmarking/`.
 
 ## 2. Type table — what the directory says the document is
 
-`SOURCE_ROOT_TYPES`, longest prefix wins. The `95-brainstorms` **whole-segment** rule is checked first and **overrides every prefix rule**. Anything unclaimed falls back to `knowledge`.
+Types come from the same profile: `typeRules` (path prefix, longest wins) and `segmentRules` (a whole path SEGMENT, checked first and **overriding every prefix rule**). Anything unclaimed falls back to the profile's `defaultType` — `DEFAULT_TYPE` (`src/instance.ts`) is `knowledge`.
 
-| Path rule | `type` | What it is for / what query it answers |
-|---|---|---|
-| segment `95-brainstorms` (any parent) | `brainstorm` | pre-decisional exploration — **not ratified** |
-| `doc/90-history/10-feature-log/` | `feature-log` | development history |
-| `doc/80-research-library/papers/` | `paper` | external paper |
-| `doc/90-history/20-benchmark-runs/` | `benchmark` | measured run |
-| `doc/90-history/30-reviews/` | `review` | found defects |
-| `doc/40-code-standards/90-decisions/` | `adr` | ratified decision |
-| `doc/80-research-library/vendor-docs/` | `vendor-doc` | external published doc |
-| `doc/85-teaching/` | `teaching` | teaching material |
-| `doc/_meta/` | `meta` | vault conventions |
-| `claude-artifacts/agentic-runner-rules/` | `runner-rule` | normative rule for the runner |
-| `claude-artifacts/standards/` | `standard` | reference / normative rule |
-| `doc/40-code-standards/` | `standard` | reference / normative rule |
-| `doc/50-testing-strategy/` | `standard` | reference / normative rule |
-| `benchmark-data/cache/bench/corpus-ext/` | `vendor-doc` | external published doc (benchmark corpus) |
-| anything else | `knowledge` | fallback prose — the type nobody filters on |
+The type VOCABULARY is closed, and it is not open by profile the way domains are: `DECLARED_TYPES` (`src/config.ts`) is what every filter, adapter and `--type` flag is typed against, and a profile disagreeing with it is refused at startup. A rule may only name a type from that list:
+
+| `type` | What it is for / what query it answers |
+|---|---|
+| `knowledge` | fallback prose — the type nobody filters on |
+| `adr` | ratified decision |
+| `standard` | reference / normative rule |
+| `runner-rule` | normative rule for an agentic runner |
+| `plan` | intended work — accurate about intent only |
+| `research` | prior art, surveys, external investigation |
+| `paper` / `vendor-doc` | external paper · external published doc |
+| `teaching` | teaching material |
+| `meta` | vault conventions |
+| `feature-log` | development history |
+| `benchmark` | measured run |
+| `review` | found defects |
+| `lessons-learned` | what a completed piece of work taught |
+| `brainstorm` | pre-decisional exploration — **not ratified** |
+
+Four of them — `feature-log`, `benchmark`, `review`, `brainstorm` (`DEFAULT_EXCLUDED_TYPES`, `src/instance.ts`) — are what `init` writes into `defaultExcludedTypes`, so an unfiltered `search` subtracts them. They stay ingested and indexed; it is a presentation default, not a corpus one.
 
 ## 3. Structure rules — the chunker decides where atoms begin
 
@@ -94,14 +95,14 @@ Author rules that follow mechanically:
 
 ## 5. Pre-save checklist
 
-1. Is the path under `doc/`, `docs/` (outside `docs/tmp` and `docs/benchmarks`), `claude-artifacts/`, or a repo-root `RUNNER-*.md`?
-2. Does a `SOURCE_ROOT_DOMAINS` prefix claim it, so `x_domain` resolves?
+1. Is the path under one of the profile's `corpusRoots`, and outside every `excludePaths` prefix?
+2. Does a `domainRules` prefix claim it, so `x_domain` resolves?
 3. Does the directory give the `type` a caller would filter on, or does it silently fall back to `knowledge`?
 4. Does every block of prose sit under a heading?
 5. Is every section between 200 and ~3200 characters, with any oversize figure inside a single fence?
 6. Does the document carry an `<!-- LLM-PRIMARY: … -->` line as its summary?
 7. Is any section's whole body an HTML comment (it would be refused)?
 
-**Consolidation is proposed, not implemented.** `docs/benchmarks/2026-08-13-dp-gnosis-hu-en-measurement-results.md` §9.5 proposes collapsing the 12 types into **7** (`feature-log`, `record`, `reference`, `explanation`, `brainstorm`, `decision`, `tutorial`; origin moved to a separate `project` axis) — the revision that supersedes the earlier 12 → 6 form in the same section on measured grounds. Nothing of it is in the code; the 12-value vocabulary above is what runs.
+**Consolidation is proposed, not implemented.** `docs/benchmarks/2026-08-13-dp-gnosis-hu-en-measurement-results.md` §9.5 proposes collapsing the 12 types into **7** (`feature-log`, `record`, `reference`, `explanation`, `brainstorm`, `decision`, `tutorial`; origin moved to a separate `project` axis) — the revision that supersedes the earlier 12 → 6 form in the same section on measured grounds. Nothing of it is in the code; `DECLARED_TYPES` above is what runs.
 
 **The measured stake.** A `type` filter carrying the *correct* type is the single largest quality lever measured: recall@10 0.5353 → 0.6552, **+12 recall points** on the 11k English repo corpus (oracle ceiling, §4 of the same report). A *wrong* type returns **0.0000 recall in 1 498 of 1 498 cells** (M1, §9.5). A misfiled document is therefore not mislabelled — it is unreachable under any type-filtered query.

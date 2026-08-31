@@ -39,7 +39,7 @@ The five rules:
 
 These rules are also EXECUTABLE: `search --rephrase` hands the question to a local chat model under exactly this prompt and searches its rewrite (`packages/gnosis/README.md` § CLI → `--rephrase`). The flag is opt-in and its rewrite is reported, so a caller can always see — and check — what was actually searched.
 
-**Measured 2026-08-18, the flag does NOT reproduce the rules above.** Against the same golden topics the hand rewrite improves, the model's rewrite is inert on Hungarian (nDCG@10 +0.0086, p=0.9164) and significantly harmful on English (nDCG@10 −0.0679, p=0.0089) — it answers Hungarian queries in English, and rewrites the queries rule 5 says to leave alone. Apply the rules yourself; use the flag only to test or re-measure it. Record: `docs/analysis/2026-08-18-dp-gnosis-full-review/10-rephrase-arm-measurement.md`.
+**Measured 2026-08-18, the flag does NOT reproduce the rules above.** Against the same golden topics the hand rewrite improves, the model's rewrite is INERT on Hungarian and measurably HARMFUL on English — it answers Hungarian queries in English, and rewrites the queries rule 5 says to leave alone. Apply the rules yourself; use the flag only to test or re-measure it. Record: `docs/analysis/2026-08-18-dp-gnosis-full-review/10-rephrase-arm-measurement.md`.
 
 **Prompt v2 (`REPHRASE_PROMPT_VERSION = 'v2'`) addresses both diagnosed causes and is UNMEASURED.** The language rule is now rule 1 and carries worked Hungarian examples — v1 had transcribed the non-English rule below as *"emit the ENGLISH word stem"*, one word that no rule here has ever said and that produced the measured Hungarian failure on its own. Rule 5 is additionally enforced in CODE (`carriesExactRareTerm`), short-circuiting BEFORE the cache and the model: a query already carrying an identifier, symbol, path, flag or error string is returned VERBATIM and never reaches the rewriter, so `rephrased "q" -> "q"` is a correct outcome, not a no-op failure. **The advice above stands unchanged until the arms are re-measured** — and re-measuring first needs the frozen `vault-autorephrased` / `vault-hu-autorephrased` goldens regenerated under v2 (`scripts/regenerate-autorephrased-golden.ts`), because they hold v1 rewrites.
 
@@ -70,8 +70,8 @@ REWRITE THE QUERY FIRST — MANDATORY
 This engine matches stemmed words. It does not understand questions. Rewriting a
 natural-language question changes ~90% of the top-10 results, so pass keywords,
 never the user's sentence. Measured on a paired benchmark: on a non-English
-corpus this is worth +0.2407 nDCG@10 (p=0.0002); on English it buys deep recall
-(+0.0848 R@100, p=0.0009) rather than a better top-10.
+corpus this is a large top-10 gain; on English it buys deep recall rather than a
+better top-10.
 1. Strip intent framing: "how to", "I want", "show me", "info about", "available".
 2. Use the vocabulary the documents use, not the user's.
 3. Add synonyms yourself — there is no synonymy ("e2e" will not match

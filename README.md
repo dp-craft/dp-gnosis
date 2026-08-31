@@ -340,7 +340,8 @@ that parse. `setup` rejects those by name instead of configuring one.
 `packages/gnosis/OPTIONAL.md` § Setting up the reranker has the manual path and the two GGUF repos
 that are not silently broken. The pool floor binds
 even when you ask for `-k 5`, so a small result set does not make it cheaper. If the server is
-absent the query is **refused**, not silently answered from the unreranked order.
+absent the reranking is refused and the first-pass ranking is still returned, unreranked, with the
+refusal in `note` and exit 3 — `packages/gnosis/README.md` § Exit codes owns that contract.
 
 Use it for research questions where you will read the top few carefully. Leave it off for
 navigational lookups where you already know roughly what you are looking for.

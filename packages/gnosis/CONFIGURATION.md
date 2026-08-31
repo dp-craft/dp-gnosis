@@ -66,7 +66,7 @@ plausible path the user never asked for is the failure this project polices.
 
 ```json
 {
-  "dataRoot": "/home/dev/vaults/work",
+  "dataRoot": "/home/user/vaults/work",
   "rerank": { "url": "http://127.0.0.1:9292", "model": "qwen3-reranker-4b" },
   "models": { "rephrase": "qwen3-27b", "synthesize": "qwen3-27b", "enrich": "qwen3-30b-a3b" }
 }
@@ -115,6 +115,20 @@ your run will be refused for, by name.
 | rephrase model | — | `DP_GNOSIS_LLM_MODEL` | `models.rephrase` | `REPHRASE_MODEL_ID` |
 | synthesize model | — | `DP_GNOSIS_SYNTHESIZE_MODEL` | `models.synthesize` | `SYNTHESIZE_MODEL_ID` |
 | enrich model | `--enrich-model` | `DP_GNOSIS_ENRICH_MODEL` | `models.enrich` | `ENRICH_MODEL_ID` |
+
+**The EMBEDDING endpoint has no `config.json` key.** It is read only by the
+dense LanceDB adapter, which is a research path rather than a serving one, so it
+resolves **environment → built-in constant** and nothing else:
+
+| Setting | Flag | Environment | `config.json` | Constant |
+|---|---|---|---|---|
+| embedding endpoint | — | `DP_GNOSIS_EMBED_URL` | — | `EMBED_DEFAULT_URL` |
+| embedding model id | — | — | — | `EMBED_MODEL_ID` |
+
+The model id is a constant with no override on purpose: the embedding cache keys
+on it, so two encoders under one id would serve one model's vectors under the
+other's name. A server that does not advertise the id REFUSES by name, and the
+refusal names `DP_GNOSIS_EMBED_URL` as the way to point at the host that does.
 
 **`setup` MUST NOT pick a chat model for you.** A reranker can be probed — score
 a relevant and an irrelevant passage and see whether the pair separates — and
@@ -208,7 +222,7 @@ The directories ingest walks. An entry may be:
 | Form | Resolved against |
 |---|---|
 | relative (`doc`, `docs/adr`) | the profile's `repoRoot` |
-| absolute (`/home/dev/work/aichatney/doc`) | used as-is |
+| absolute (`/srv/work/some-project/docs`) | used as-is |
 | `~`-prefixed (`~/knowledge/standards`) | the user's home. `~user/` is REFUSED by name rather than read as a directory |
 
 `DP_GNOSIS_CORPUS_ROOTS` overrides the whole list for one invocation, comma
@@ -277,8 +291,8 @@ Two consequences:
 - **It takes effect only on a REBUILD.** An existing index keeps its own stamp. Changing the profile alone changes nothing served.
 - **A profile that declares a chain its index was not built with is REFUSED** — exit 3, naming both chains and the remedy — rather than being served silently by the stamp.
 
-**Language is the real index boundary.** The Hungarian chain measured +0.1369
-nDCG@10 on a Hungarian corpus and −0.0634 on English; the tradeoff is a property
+**Language is the real index boundary.** The Hungarian chain measured better on
+a Hungarian corpus and measurably WORSE on English; the tradeoff is a property
 of the documents, not of the tool. So a second LANGUAGE needs its own profile
 and its own index. A second PROJECT does not.
 
@@ -291,8 +305,10 @@ what follows is the vocabulary it writes, and what to edit afterwards.
 
 ### 7.1 One project
 
-The shipped default. No `corpusRoots`, no `repoRoot` — ingest walks the shipped
-`CORPUS_ROOTS` under the resolved data root.
+The shipped default declares no `corpusRoots` and no `repoRoot` — and the
+shipped `CORPUS_ROOTS` fallback is empty, so a bare `ingest` refuses, naming
+`init`, `--profile` and `DP_GNOSIS_CORPUS_ROOTS` as the ways to state a scope
+(§ 4). One project means one profile declaring that project's directories.
 
 ### 7.2 Several projects plus shared standards, ONE index
 
@@ -302,20 +318,20 @@ ingest, domains as the discriminator.
 ```json
 {
   "name": "work",
-  "domains": ["aichatney", "gnosis", "standards"],
+  "domains": ["some-project", "other-project", "standards"],
   "corpusRoots": [
-    "/home/dev/work/aichatney/doc",
-    "/home/dev/work/dippe/dp-gnosis/docs",
+    "~/work/some-project/docs",
+    "~/work/other-project/docs",
     "~/knowledge/standards"
   ],
   "domainRules": [
-    { "prefix": "/home/dev/work/aichatney/doc",       "domain": "aichatney" },
-    { "prefix": "/home/dev/work/dippe/dp-gnosis/docs", "domain": "gnosis" },
-    { "prefix": "~/knowledge/standards",               "domain": "standards" }
+    { "prefix": "~/work/some-project/docs",  "domain": "some-project" },
+    { "prefix": "~/work/other-project/docs", "domain": "other-project" },
+    { "prefix": "~/knowledge/standards",     "domain": "standards" }
   ],
   "types": ["adr", "knowledge", "standard"],
   "defaultType": "knowledge",
-  "typeRules": [{ "prefix": "/home/dev/work/aichatney/doc/adr", "type": "adr" }],
+  "typeRules": [{ "prefix": "~/work/some-project/docs/adr", "type": "adr" }],
   "segmentRules": [],
   "atomsDir":  "~/.local/share/dp-gnosis/work/atoms",
   "indexPath": "~/.local/share/dp-gnosis/work/index/atoms-fts5.db"
@@ -327,8 +343,8 @@ Then:
 | Intent | Command |
 |---|---|
 | cross-project discovery — the DEFAULT | `gnosis search "<q>" --profile work` |
-| narrowed to one project | `… --domain aichatney` |
-| that project's decisions only | `… --domain aichatney --type adr` |
+| narrowed to one project | `… --domain some-project` |
+| that project's decisions only | `… --domain some-project --type adr` |
 
 **Do not filter by default.** The reranker scores query–document pairs
 independently of which project a document came from, so the right answer wins on
@@ -376,10 +392,10 @@ Measured on the two product corpora, cutting the pool from 100 to 60:
 
 | Corpus | Effect of 100 → 60 |
 |---|---|
-| `vault` (English) | 14.4 s → 8.6 s per query, paired CI **[−0.0042, +0.0005]**, 56 of 60 topics bit-identical — a ~40 % latency cut for no measurable quality |
-| `vault-hu` (Hungarian) | nDCG@10 **−0.0181**, CI EXCLUDING zero — a real loss |
+| `vault` (English) | 14.4 s → 8.6 s per query, 56 of 60 topics bit-identical — a ~40 % latency cut for no measurable quality |
+| `vault-hu` (Hungarian) | a real, measured quality LOSS — the smaller corpus needs the deeper pool |
 
-Source: `docs/analysis/2026-08-27-full-dp-gnosis-overview/04-next-steps-and-gaps.md` N4.
+`handbook/GNOSIS-BASELINES.md` owns the recorded numbers and the serving config each was measured under.
 
 Precedence, highest first: the `--rerank-pool` flag, then the profile's `rerankPoolK`, then
 `RERANK_K_INIT`. **The shipped default is unchanged at 100** — a profile that says nothing behaves

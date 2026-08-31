@@ -74,7 +74,7 @@ Exit 3 cases: at least one atom SKIPPED by the `--max-tokens` budget (in EITHER 
 | `enrich` | none | `--atoms-dir`, `--enrichment`, `--limit`, `--enrich-model`, `--profile`, `--json` |
 | `index` | none | `--adapter`, `--atoms-dir`, `--index-path`, `--enrichment`, `--body-source`, `--keyword-filter`, `--enrichment-columns`, `--json` |
 | `update` | **none** (passing one is exit 2 — it is `ingest`'s refusal, and `index` never runs) | the union of `ingest` and `index`: `--atoms-dir`, `--repo-root`, `--gold-ids`, `--adapter`, `--index-path`, `--enrichment`, `--body-source`, `--keyword-filter`, `--enrichment-columns`, `--profile`, `--json` |
-| `search <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` / `--rerank-pool` |
+| `search <query…>` | query terms, joined with spaces | `--adapter`, `--atoms-dir`, `--index-path`, `--repo-root`, `-k`, `--format`, `--json`, `--rerank` + `--rerank-model` / `--rerank-profile` / `--rerank-weight` / `--rerank-pool`, and every flag the table below marks **`search` and `ask`** |
 | `ask <query…>` | query terms, joined with spaces | every `search` flag except `--flat` and `--format xml`, both exit 2 |
 | `bench` | none | `--atoms-dir`, `--golden-set`, `--json` |
 
@@ -155,7 +155,7 @@ Exit codes: **0** the pair was written · **3** a server answered but no candida
 
 **RM3 feedback is a SERVED default on both shipped profiles**, at the MEASURED frozen cell `fbDocs 10 · fbTerms 40 · alpha 0.5` — owned by `SERVED_PRF_PARAMS` (`src/prf.ts`) and stated as data by `profiles/default.profile.json` and `profiles/hu-tax.profile.json`. It is a **retrieve-time** default exactly as `defaultExcludedTypes` is: nothing in ingest, the port or an adapter reads it, so the bench measures the unexpanded first pass and every recorded number stands. Every run that expands REPORTS the cell it expanded under: `prf` `{fbDocs, fbTerms, alpha, source}` in `--json` and one `search: prf …` line in the text rendering, on `search` and `ask` alike. Both are **absent when no pass ran**, so presence is the signal — exactly as `rerankScore` says a reranker scored an atom; `source` names which switch turned it on, the one fact the cell cannot carry. Resolution is **explicit flag > profile default > OFF**; `--no-prf` turns the profile default off, `--prf` and `--no-prf` together exit 2, and a `--prf-*` flag overrides one member of whichever cell won. A profile default on a non-`fts5` adapter does NOT refuse the run — it retrieves **unexpanded** and says so in `note`, because refusing would make `--adapter linear` unusable and ignoring it silently would be a wrong answer reported as a clean one. Only an EXPLICIT `--prf` there exits 2.
 
-**An unfiltered `search` excludes `defaultExcludedTypes`** — never on ingest, so those types stay ingested and indexed, and `--include-history` searches them. **Corrected 2026-08-22 (`16` § 5 C7/C9): "never in the bench" was false.** The bench subtracts the SAME list when it derives `vault` / `vault-hu` (`fetch/vault.ts`, off `--include-history`); it is untouched only on a non-derived dataset. Recorded numbers still stand — every one was measured under the same filter — but a CLI result is still not a bench result: the CLI drops these types while scanning one index over the whole vault, the bench indexes only the survivors, so the two compute different collection statistics.
+**An unfiltered `search` excludes `defaultExcludedTypes`** — never on ingest, so those types stay ingested and indexed, and `--include-history` searches them. **Corrected 2026-08-22: "never in the bench" was false.** The bench subtracts the SAME list when it derives `vault` / `vault-hu` (`fetch/vault.ts`, off `--include-history`); it is untouched only on a non-derived dataset. Recorded numbers still stand — every one was measured under the same filter — but a CLI result is still not a bench result: the CLI drops these types while scanning one index over the whole vault, the bench indexes only the survivors, so the two compute different collection statistics.
 
 **The three `lancedb-*` dense routes need an embedding server** (`bge-m3` at `127.0.0.1:9292`) and refuse loudly without one. They are **MEASUREMENT routes, not shipped ones** — a correctly-tuned hybrid ties `fts5` and costs an embedding server, a 1.1 GB model, a vector column and a cache. `handbook/GNOSIS-BASELINES.md` § Phase D.
 
@@ -434,7 +434,7 @@ Swapping the adapter changes **ranking and speed only**. Every subcommand sees a
 | contains `*` | glob against the repo root; contributes the matching `.md` FILES |
 | anything else | directory, walked recursively for `.md` |
 
-A root matching **zero** files THROWS, naming that root — a typo would otherwise index nothing in silence, and the only symptom would be empty queries. Override with `DP_GNOSIS_CORPUS_ROOTS=<comma-separated repo-relative roots>`; unset, empty or all-blank falls back to the profile's `corpusRoots`, else to the shipped default, which is empty. `SOURCE_ROOT_DOMAINS` maps a source path prefix → `x_domain` (`runner|standards|adr|docs|claude`), longest prefix wins; a source under no declared root is skipped with a reason, never guessed.
+A root matching **zero** files THROWS, naming that root — a typo would otherwise index nothing in silence, and the only symptom would be empty queries. Override with `DP_GNOSIS_CORPUS_ROOTS=<comma-separated repo-relative roots>`; unset, empty or all-blank falls back to the profile's `corpusRoots`, else to the shipped default, which is empty. The loaded profile's `domainRules` maps a source path prefix → `x_domain`, longest prefix wins; a source under no declared prefix is skipped with a reason, never guessed (`CONFIGURATION.md` § 3).
 
 ### Analyzers — the chain that builds AND queries an index
 
@@ -450,19 +450,19 @@ An **analyzer** is the token chain `index` runs over every body and `search` run
 
 **The two Hungarian chains landed 2026-08-26 (`9ee408d`), both OPT-IN.** `DEFAULT_ANALYZER` is unchanged, so nothing moved for a caller who names no analyzer. First stage, `fts5`, `vault-hu`, 31 topics:
 
-| Arm | nDCG@10 | Δ | p | 95 % CI | zero-posting query terms |
-|---|---|---|---|---|---|
-| `porter-fold` (shipped) | 0.4868 | — | — | — | 51 / 360 = 14.2 % |
-| `hulight-fold` | 0.5665 | **+0.0798** | 0.0335 | [+0.0109, +0.1497] | 14 / 360 = 3.9 % |
-| `ident-hulight-fold` | 0.6237 | **+0.1369** | 0.0002 | [+0.0731, +0.2000] | see the `gnosis:vocabgap` landmine — the tool is INVALID on an `ident-*` chain |
+| Arm | nDCG@10 | Δ | zero-posting query terms |
+|---|---|---|---|
+| `porter-fold` (shipped) | 0.4868 | — | 51 / 360 = 14.2 % |
+| `hulight-fold` | 0.5665 | **+0.0798** | 14 / 360 = 3.9 % |
+| `ident-hulight-fold` | 0.6237 | **+0.1369** | see the `gnosis:vocabgap` landmine — the tool is INVALID on an `ident-*` chain |
 
-That is **72.5 % gap closure** against a 74 % ceiling predicted from the prefix probe.
+Both improvements are measured; `handbook/GNOSIS-BASELINES.md` owns every recorded number and the serving config it was measured under.
 
-**Which of the two, decided by evidence and not by language.** Out of sample on `milqa-hu` — 16 885 topics of Hungarian Wikipedia prose — the order REVERSES: baseline 0.6826, `hulight-fold` **0.7678** (+0.0852, p=0.0001, CI [+0.0810, +0.0894]), `ident-hulight-fold` **0.7631** (+0.0805, p=0.0001, CI [+0.0763, +0.0848]). On prose with no identifiers to protect, plain `hulight-fold` wins. So: `ident-hulight-fold` for a Hungarian corpus carrying technical identifiers (the `hu-tax` vault), `hulight-fold` for Hungarian prose without them. MUST NOT pick either from the language alone.
+**Which of the two, decided by evidence and not by language.** Out of sample on `milqa-hu` — Hungarian Wikipedia prose — the order REVERSES: `hulight-fold` beats `ident-hulight-fold`. On prose with no identifiers to protect, plain `hulight-fold` wins. So: `ident-hulight-fold` for a Hungarian corpus carrying technical identifiers (the `hu-tax` vault), `hulight-fold` for Hungarian prose without them. MUST NOT pick either from the language alone.
 
-**The reranked confirmation is NOT significant, and the claim does not rest on it.** At the served config (`qwen3-reranker-4b`, pool 100, `vault-hu`, 31 topics) `porter-fold` 0.7699 → `ident-hulight-fold` 0.8231, Δ **+0.0533 at p=0.0727 — not significant at n=31**; MAP +0.0635 (p=0.0319). First-stage-to-delivered conversion 39 %. The evidence for the chain is the first-stage result and the out-of-sample `milqa-hu` result; the reranked row is consistent with them and MUST NOT be quoted as a gate that fired.
+**The reranked confirmation does not carry the claim.** At the served config the same reversal-free improvement is visible but weaker, and the evidence for the chain is the first-stage result together with the out-of-sample `milqa-hu` result. The reranked row is consistent with them and MUST NOT be quoted as a gate that fired.
 
-**Corpus-scoped by measurement, never global.** The chain costs English **−0.0634 (p=0.0005)**. That is why it is a per-profile opt-in and why it MUST NOT be proposed as `DEFAULT_ANALYZER`.
+**Corpus-scoped by measurement, never global.** The chain COSTS quality on English, measurably. That is why it is a per-profile opt-in and why it MUST NOT be proposed as `DEFAULT_ANALYZER`.
 
 ### Profiles — one named instance, and the two-instance contract
 
@@ -479,7 +479,7 @@ A **profile** is one named, versionable unit: the labelling vocabulary AND the l
 | `indexPath` | where this instance's index is built (a DIRECTORY for `lancedb`) |
 | `defaultAnalyzer` | the analysis chain this instance's index is BUILT with — a key of `ANALYZERS` (§ Analyzers). ABSENT means `DEFAULT_ANALYZER` |
 
-**`defaultAnalyzer` is an INDEX-BUILD default, unlike `defaultPrf`, which is retrieve-time** (`31c9523`). The chain is STAMPED into the index at build time and the query side reads the stamp back — `Fts5AdapterOptions` deliberately carries no `analyzer` — so query and index cannot disagree, and there is no way to serve a query analysed by a chain the postings were not built with. ABSENT means unchanged, verified byte for byte: an omitted key and an explicit `undefined` produce the SAME index sha256 `4f608207…` over 454 atoms, where `ident-hulight-fold` produces `d91f72ee…`. **It takes effect only on a REBUILD** — an existing index keeps its own stamp, so setting the key and not re-running `index` changes nothing and reports nothing. Set today on `profiles/hu-tax.profile.json` alone.
+**`defaultAnalyzer` is an INDEX-BUILD default, unlike `defaultPrf`, which is retrieve-time** (`31c9523`). The chain is STAMPED into the index at build time and the query side reads the stamp back — `Fts5AdapterOptions` deliberately carries no `analyzer` — so query and index cannot disagree, and there is no way to serve a query analysed by a chain the postings were not built with. ABSENT means unchanged, verified byte for byte: an omitted key and an explicit `undefined` produce the SAME index over the same atoms, where `ident-hulight-fold` produces a different one. **It takes effect only on a REBUILD** — an existing index keeps its own stamp, so setting the key and not re-running `index` changes nothing and reports nothing. Set today on `profiles/hu-tax.profile.json` alone.
 
 The four location keys are OPTIONAL, and a relative one resolves against the directory the profile file lives in — a profile is copied and moved as one file, so `process.cwd()` would point somewhere else for every caller.
 
