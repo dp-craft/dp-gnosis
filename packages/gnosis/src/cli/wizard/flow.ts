@@ -296,10 +296,20 @@ const askPreset = async (
   return presetSelections(chosen, hungarian, identifiers);
 };
 
-/** Everything section 4 settles: the two language answers, the preset, the chain. */
+/**
+ * Everything section 4 settles: the two language answers, the preset, the
+ * chain, the ranking route and PRF.
+ *
+ * All six are ASKED here, under the one heading that prints them, because the
+ * amend menu re-asks a section by calling the function that owns it — and a
+ * section whose last two questions lived in the caller was amendable only in
+ * part, with the menu row still promising the whole of what the screen showed.
+ */
 export interface MatchingAnswers {
   readonly language: LanguageAnswer;
   readonly preset: PresetSelections;
+  readonly adapter: AdapterName;
+  readonly prf: boolean;
 }
 
 export const askMatching = async (prompter: Prompter): Promise<MatchingAnswers> => {
@@ -313,7 +323,8 @@ export const askMatching = async (prompter: Prompter): Promise<MatchingAnswers> 
     choices: ordered(ANALYZER_CHOICES, preset.analyzer),
     custom: preset.custom,
   });
-  return { language: { hungarian, analyzer }, preset };
+  const adapter = await askAdapter(prompter, preset);
+  return { language: { hungarian, analyzer }, preset, adapter, prf: await askPrf(prompter, preset.prf) };
 };
 
 /**
@@ -480,16 +491,7 @@ export const askCorpus = async (prompter: Prompter, repoRoot: string): Promise<C
   const excludePaths = await askExclusions(prompter, repoRoot, roots);
   const types = await askTypes(prompter);
   const matching = await askMatching(prompter);
-  const adapter = await askAdapter(prompter, matching.preset);
-  return {
-    roots,
-    excludePaths,
-    ...types,
-    language: matching.language,
-    preset: matching.preset,
-    adapter,
-    prf: await askPrf(prompter, matching.preset.prf),
-  };
+  return { roots, excludePaths, ...types, ...matching };
 };
 
 /**

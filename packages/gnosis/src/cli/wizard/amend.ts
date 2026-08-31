@@ -66,13 +66,16 @@ const amendTypes = async (prompter: Prompter, _repoRoot: string, draft: Draft): 
   corpus: { ...draft.corpus, ...(await askTypes(prompter)) },
 });
 
-const amendMatching = async (prompter: Prompter, _repoRoot: string, draft: Draft): Promise<Draft> => {
-  const matching = await askMatching(prompter);
-  return {
-    ...draft,
-    corpus: { ...draft.corpus, language: matching.language, preset: matching.preset },
-  };
-};
+/**
+ * The WHOLE of what section 4 asked, spread back over the draft. Naming the
+ * fields individually is what let the ranking adapter and the PRF answer fall
+ * out of this row while the menu still offered it; the spread carries whatever
+ * `askMatching` returns, so the row and the section cannot part again.
+ */
+const amendMatching = async (prompter: Prompter, _repoRoot: string, draft: Draft): Promise<Draft> => ({
+  ...draft,
+  corpus: { ...draft.corpus, ...(await askMatching(prompter)) },
+});
 
 /**
  * Built AROUND the answer that already exists, rather than guarding for one:

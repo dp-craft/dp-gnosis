@@ -520,6 +520,8 @@ describe('wizard — a preset collapses the two expert menus', () => {
     const scripted = scriptedPrompter([
       { match: /^Use .+ \(recommended\)\?/, answers: [false] },
       { match: /^Analysis chain/, answers: [byName('hulight-fold — Hungarian')] },
+      { match: /^Ranking adapter/, answers: [KEEP_DEFAULT] },
+      { match: /^Serve pseudo-relevance feedback/, answers: [KEEP_DEFAULT] },
       { match: /^What language/, answers: [KEEP_DEFAULT] },
       { match: /^Do they contain code identifiers/, answers: [KEEP_DEFAULT] },
       { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
@@ -837,6 +839,28 @@ describe('wizard — the summary can amend one answer before writing', () => {
     expect(countAsked(prompter, /^Corpus directory/)).toBe(1);
     expect(countAsked(prompter, /^What language/)).toBe(1);
     expect(countAsked(prompter, /^Paths to skip/)).toBe(1);
+  }, 120_000);
+
+  // Given a user who amends the one row that COVERS the ranking adapter and the
+  // PRF question — both printed under the `How text is matched` heading on the
+  // first pass — When the row is re-asked, Then those two answers are re-asked
+  // too and the amended values are what is built and written. A row that re-asks
+  // four of a section's six questions and leaves two silently at their first
+  // answer is the failure this menu exists to prevent.
+  it('should re-ask the ranking adapter and the PRF question when the matching row is amended', async () => {
+    const script = amending('How text is matched', [
+      { match: /^Ranking adapter/, answers: [KEEP_DEFAULT, 'minisearch'] },
+      { match: /^Serve pseudo-relevance feedback/, answers: [KEEP_DEFAULT, false] },
+    ]);
+
+    const { outcome, prompter } = await wizard(script);
+
+    expect(outcome.exitCode).toBe(0);
+    expect(countAsked(prompter, /^Ranking adapter/)).toBe(2);
+    expect(countAsked(prompter, /^Serve pseudo-relevance feedback/)).toBe(2);
+    expect(outcome.text).toContain('--adapter minisearch');
+    expect(readProfile()['defaultPrf']).toBeUndefined();
+    expect(countAsked(prompter, /^Corpus directory/)).toBe(1);
   }, 120_000);
 
   // The amended plan is REBUILT and shown again, so the answer that was changed
@@ -1704,6 +1728,8 @@ describe('wizard — what the identifier question and its row claim', () => {
     { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
     { match: /^Use .+ \(recommended\)\?/, answers: [false] },
     { match: /^Analysis chain/, answers: [KEEP_DEFAULT] },
+    { match: /^Ranking adapter/, answers: [KEEP_DEFAULT] },
+    { match: /^Serve pseudo-relevance feedback/, answers: [KEEP_DEFAULT] },
   ];
 
   const askedIdentifiers = (scripted: Scripted): string => {
