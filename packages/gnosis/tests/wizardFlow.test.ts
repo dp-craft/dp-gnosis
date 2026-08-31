@@ -25,10 +25,10 @@ import type { CommandOutcome } from '../src/cli/outcome.js';
 import { OLLAMA_URL } from '../src/cli/rerankSetup.js';
 import { ADAPTER_CHOICES, ANALYZER_CHOICES, describeChoice, RUN_MODE_CHOICES } from '../src/cli/wizard/advice.js';
 import { localBaseUrl, startServer } from '../src/cli/wizard/backend.js';
-import { askMatching } from '../src/cli/wizard/flow.js';
+import { askCorpus, askMatching } from '../src/cli/wizard/flow.js';
 import type { HardwareFacts } from '../src/cli/wizard/hardware.js';
 import { recommendedModel, recommendedQuant } from '../src/cli/wizard/models.js';
-import { PRESETS } from '../src/cli/wizard/preset.js';
+import { CUSTOM_PRESET, PRESETS } from '../src/cli/wizard/preset.js';
 import type { Option, Prompter } from '../src/cli/wizard/prompts.js';
 import { CANCELLED } from '../src/cli/wizard/prompts.js';
 import type { RerankPreference, RerankResult, ServeLocations } from '../src/cli/wizard/rerankFlow.js';
@@ -236,6 +236,11 @@ const baseScript = (): Reply[] => [
   { match: /^What language/, answers: [KEEP_DEFAULT] },
   { match: /^Do they contain code identifiers/, answers: [KEEP_DEFAULT] },
   { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
+  // A preset collapses the two expert menus to a confirm. The base script takes
+  // the ESCAPE row on both, so every assertion about the full menus still sees
+  // them; the accepted-recommendation path has its own describe below.
+  { match: /^Use porter-fold/, answers: [false] },
+  { match: /^Use fts5/, answers: [false] },
   { match: /^Analysis chain/, answers: [KEEP_DEFAULT] },
   { match: /^Ranking adapter/, answers: [KEEP_DEFAULT] },
   { match: /^Serve pseudo-relevance feedback/, answers: [KEEP_DEFAULT] },
@@ -452,6 +457,105 @@ describe('wizard — the confirmed happy path', () => {
     expect(joined.indexOf('building the search index')).toBeGreaterThan(
       joined.indexOf('splitting your documents into atoms')
     );
+  });
+});
+
+/**
+ * F1 — a named preset stops walking the user through the two 7-row expert
+ * menus. Each collapses to a one-keystroke confirm carrying an escape row, so
+ * the preset design rule holds: a preset moves a cursor, it never closes a
+ * door. `custom` is the preset that closes nothing and collapses nothing.
+ *
+ * The adapter menu is the sharper half: four of its seven rows tell the reader
+ * not to pick them, and one of those — `lancedb-vec` — is measured HARMFUL on
+ * the product corpus. Offering it on the path an average user walks is the
+ * defect, not the row's existence.
+ */
+describe('wizard — a preset collapses the two expert menus', () => {
+  const CUSTOM_ROW = CUSTOM_PRESET.title;
+
+  /** Sections 1-4, answered by message, with the preset answer left to the caller. */
+  const corpusScript = (overrides: readonly Reply[]): readonly Reply[] => [
+    ...overrides,
+    { match: /^Corpus directory/, answers: [corpusDir] },
+    { match: /^Domain label for/, answers: [KEEP_DEFAULT] },
+    { match: /^Add another corpus directory\?/, answers: [false] },
+    { match: /^Paths to skip/, answers: [KEEP_DEFAULT] },
+    { match: /^Default atom type/, answers: [KEEP_DEFAULT] },
+    { match: /^Types to hide/, answers: [KEEP_DEFAULT] },
+    { match: /^What language/, answers: [KEEP_DEFAULT] },
+    { match: /^Do they contain code identifiers/, answers: [KEEP_DEFAULT] },
+    { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
+    { match: /^Use .+ \(recommended\)\?/, answers: [KEEP_DEFAULT] },
+    { match: /^Analysis chain/, answers: [KEEP_DEFAULT] },
+    { match: /^Ranking adapter/, answers: [KEEP_DEFAULT] },
+    { match: /^Serve pseudo-relevance feedback/, answers: [KEEP_DEFAULT] },
+  ];
+
+  const rowsOf = (scripted: Scripted, message: string): readonly string[] =>
+    scripted.menus.filter(menu => menu.message === message).flatMap(menu => menu.names);
+
+  // Given the recommended `quality` preset, When the interview reaches the two
+  // expert questions, Then neither 7-row menu is rendered — each is a two-row
+  // confirm, and `lancedb-vec` is never offered on this path.
+  it('should render two confirms instead of the two 7-row menus under a named preset', async () => {
+    const scripted = scriptedPrompter(corpusScript([]));
+
+    const corpus = await askCorpus(scripted, home);
+
+    expect(rowsOf(scripted, 'Analysis chain')).toEqual([]);
+    expect(rowsOf(scripted, 'Ranking adapter')).toEqual([]);
+    expect(rowsOf(scripted, 'Use porter-fold (recommended)?')).toHaveLength(2);
+    expect(rowsOf(scripted, 'Use fts5 (recommended)?')).toHaveLength(2);
+    expect(scripted.menus.flatMap(menu => [...menu.names, ...menu.descriptions]).join('\n')).not.toContain(
+      'lancedb-vec'
+    );
+    expect(corpus.language.analyzer).toBe('porter-fold');
+    expect(corpus.adapter).toBe('fts5');
+  });
+
+  // Given the escape row, When it is taken, Then today's full menu opens and an
+  // off-recommendation row is honoured — the door is one keystroke, not closed.
+  it('should open the full 7-row analysis menu from the escape row and honour an off-recommendation row', async () => {
+    const scripted = scriptedPrompter([
+      { match: /^Use .+ \(recommended\)\?/, answers: [false] },
+      { match: /^Analysis chain/, answers: [byName('hulight-fold — Hungarian')] },
+      { match: /^What language/, answers: [KEEP_DEFAULT] },
+      { match: /^Do they contain code identifiers/, answers: [KEEP_DEFAULT] },
+      { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
+    ]);
+
+    const matching = await askMatching(scripted);
+
+    expect(rowsOf(scripted, 'Analysis chain')).toHaveLength(ANALYZER_CHOICES.length);
+    expect(matching.language.analyzer).toBe('hulight-fold');
+  });
+
+  // Given `custom` — "ask me everything" — Then both full menus open with every
+  // row, and no confirm stands in front of either.
+  it('should ask both full menus, and no confirm, under the custom preset', async () => {
+    const scripted = scriptedPrompter(
+      corpusScript([{ match: /^Which of these fits you\?/, answers: [byName(CUSTOM_ROW)] }])
+    );
+
+    await askCorpus(scripted, home);
+
+    expect(rowsOf(scripted, 'Analysis chain')).toHaveLength(ANALYZER_CHOICES.length);
+    expect(rowsOf(scripted, 'Ranking adapter')).toHaveLength(ADAPTER_CHOICES.length);
+    expect(scripted.asked.filter(question => /\(recommended\)\?$/.test(question))).toEqual([]);
+  });
+
+  // The explanation printed above the preset menu MUST describe the interview
+  // the user is about to get. It promised "every question is still asked".
+  it('should tell the user the expert questions arrive as a confirm with a way back to the full menu', async () => {
+    const scripted = scriptedPrompter(corpusScript([]));
+
+    await askCorpus(scripted, home);
+
+    const said = flatten(scripted.transcript);
+    expect(said).not.toContain('every question is still asked');
+    expect(said).toContain('Show all options');
+    expect(said).toContain('custom');
   });
 });
 
@@ -1559,6 +1663,7 @@ describe('wizard — what the identifier question and its row claim', () => {
     { match: /^What language/, answers: [hungarian] },
     { match: /^Do they contain code identifiers/, answers: [KEEP_DEFAULT] },
     { match: /^Which of these fits you\?/, answers: [KEEP_DEFAULT] },
+    { match: /^Use .+ \(recommended\)\?/, answers: [false] },
     { match: /^Analysis chain/, answers: [KEEP_DEFAULT] },
   ];
 

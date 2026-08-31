@@ -147,11 +147,23 @@ describe('presetSelections — a preset pre-selects, it never invents', () => {
   });
 
   // Today's pre-selection is the reranker offered at the shipped depth, which
-  // is what `quality` reproduces — so recommending it moves no default.
+  // is what `quality` reproduces — so recommending it moves no default. The
+  // comparison is over the pre-selected VALUES: `custom` is not one of them, it
+  // is the flag saying whether the expert menus open in full, and the two
+  // presets differ there by definition.
   it('should have quality select exactly what the interview already defaulted to', () => {
-    const quality = presetSelections(byId('quality'), false, false);
+    const { custom: _quality, ...quality } = presetSelections(byId('quality'), false, false);
+    const { custom: _custom, ...asked } = presetSelections(CUSTOM_PRESET, false, false);
 
-    expect(quality).toEqual(presetSelections(CUSTOM_PRESET, false, false));
+    expect(quality).toEqual(asked);
+  });
+
+  // The flag the two expert menus branch on: exactly one preset carries it, and
+  // it is the one whose whole meaning is "ask me everything".
+  it('should mark custom, and only custom, as the preset that opens every menu in full', () => {
+    const marked = ALL.filter(preset => presetSelections(preset, false, false).custom);
+
+    expect(marked.map(preset => preset.id)).toEqual([CUSTOM_PRESET.id]);
   });
 
   // `custom` means "ask me everything, pre-select nothing new", so its

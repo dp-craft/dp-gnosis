@@ -93,13 +93,20 @@ export const CUSTOM_PRESET: Preset = {
   pool: 'shipped',
 };
 
-/** What a preset hands to the menus that follow it. Every field is an `initial`. */
+/**
+ * What a preset hands to the menus that follow it. Every value field is an
+ * `initial` — and {@link PresetSelections.custom} says whether the menu that
+ * receives it opens at all, because `custom` is the one preset that pre-selects
+ * nothing and so has nothing to confirm on the user's behalf.
+ */
 export interface PresetSelections {
   readonly analyzer: AnalyzerId;
   readonly adapter: AdapterName;
   readonly prf: boolean;
   readonly rerank: boolean;
   readonly poolK: number;
+  /** True only under {@link CUSTOM_PRESET}: every expert menu opens in full. */
+  readonly custom: boolean;
 }
 
 /**
@@ -145,6 +152,7 @@ export const presetSelections = (
   prf: true,
   rerank: preset.rerank,
   poolK: poolFor(preset.pool, hungarian),
+  custom: preset.id === CUSTOM_PRESET.id,
 });
 
 /** The width of each column of {@link presetTable}, in the order they print. */

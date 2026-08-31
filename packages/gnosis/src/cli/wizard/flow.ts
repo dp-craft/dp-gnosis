@@ -102,8 +102,15 @@ const MATCHING_EXPLANATION = [
   'These four answers decide how your words are matched against your documents. They are stamped into the index, so changing one later means rebuilding it.',
 ];
 
+/**
+ * The escape row of a collapsed menu, named once: the preset explanation
+ * promises it by this exact wording, and {@link pickOrConfirm} renders it.
+ */
+const SHOW_ALL = 'Show all options';
+
 const PRESET_EXPLANATION = [
-  'A preset answers the rest of the interview for you. It only PRE-SELECTS a row each menu already offers — every question is still asked, every row is still choosable, and nothing gnosis ships with is changed by picking one.',
+  'A preset answers the rest of the interview for you. It only picks a row each menu already offers, and nothing gnosis ships with is changed by picking one.',
+  `The two expert questions below then arrive as a one-line confirm on the row it picked, each with a "${SHOW_ALL}" row that opens the full menu — every row stays choosable. Choose \`custom\` to be asked every menu in full instead.`,
 ];
 
 const ADD_MORE = 'Add another corpus directory?';
@@ -154,6 +161,48 @@ const pick = async <T extends string>(
   message: string,
   choices: readonly Choice<T>[]
 ): Promise<T> => await prompter.select(message, choices.map(optionOf), recommended(choices));
+
+/** The two rows a collapsed menu offers: take the recommendation, or open the menu. */
+const confirmOptions = <T extends string>(choice: Choice<T>): readonly Option<boolean>[] => [
+  { value: true, name: choice.title, description: describeChoice(choice) },
+  { value: false, name: SHOW_ALL, description: '  the full menu, each row with who should pick it' },
+];
+
+/** A menu that a preset may answer on the user's behalf. */
+interface CollapsibleMenu<T extends string> {
+  readonly message: string;
+  /** Recommendation FIRST — {@link ordered} guarantees it, and the confirm reads row zero. */
+  readonly choices: readonly Choice<T>[];
+  readonly custom: boolean;
+}
+
+/**
+ * The expert menus, asked the way the chosen preset warrants.
+ *
+ * Under a named preset a 7-row menu of retrieval jargon adds nothing over the
+ * recommendation the wizard has just computed and printed — and the adapter
+ * table's own copy tells the reader not to pick four of its rows, one of which
+ * (`lancedb-vec`) measured a real quality LOSS on the corpus gnosis is measured
+ * against. So the menu collapses to one keystroke, with an escape row that
+ * opens it in full: the preset moves the cursor, it still closes no door.
+ *
+ * Both expert menus route through here so the two cannot drift into two
+ * different affordances for the same decision. `custom` skips the collapse
+ * entirely — it is the preset whose whole meaning is "ask me everything".
+ */
+const pickOrConfirm = async <T extends string>(
+  prompter: Prompter,
+  menu: CollapsibleMenu<T>
+): Promise<T> => {
+  const top = menu.choices[0];
+  if (menu.custom || top === undefined) return await pick(prompter, menu.message, menu.choices);
+  const accepted = await prompter.select<boolean>(
+    `Use ${top.value} (recommended)?`,
+    confirmOptions(top),
+    true
+  );
+  return accepted ? top.value : await pick(prompter, menu.message, menu.choices);
+};
 
 const LANGUAGE_NOTE = [
   '',
@@ -233,7 +282,11 @@ export const askMatching = async (prompter: Prompter): Promise<MatchingAnswers> 
   const hungarian = await askHungarian(prompter);
   const preset = await askPreset(prompter, hungarian, await askIdentifiers(prompter, hungarian));
   prompter.say([`  → recommended chain: ${preset.analyzer}`]);
-  const analyzer = await pick(prompter, 'Analysis chain', ordered(ANALYZER_CHOICES, preset.analyzer));
+  const analyzer = await pickOrConfirm(prompter, {
+    message: 'Analysis chain',
+    choices: ordered(ANALYZER_CHOICES, preset.analyzer),
+    custom: preset.custom,
+  });
   return { language: { hungarian, analyzer }, preset };
 };
 
@@ -386,6 +439,14 @@ const askPrf = async (prompter: Prompter, initial: boolean): Promise<boolean> =>
   return await prompter.confirm('Serve pseudo-relevance feedback by default?', initial);
 };
 
+/** The ranking route, collapsed to a confirm by every preset but `custom`. */
+const askAdapter = async (prompter: Prompter, preset: PresetSelections): Promise<AdapterName> =>
+  await pickOrConfirm(prompter, {
+    message: 'Ranking adapter',
+    choices: ordered(ADAPTER_CHOICES, preset.adapter),
+    custom: preset.custom,
+  });
+
 /** The whole corpus half of the interview, in the one order it can be asked in. */
 export const askCorpus = async (prompter: Prompter, repoRoot: string): Promise<CorpusAnswers> => {
   prompter.say([...section('What to index'), ...note(CORPUS_EXPLANATION)]);
@@ -393,7 +454,7 @@ export const askCorpus = async (prompter: Prompter, repoRoot: string): Promise<C
   const excludePaths = await askExclusions(prompter, repoRoot, roots);
   const types = await askTypes(prompter);
   const matching = await askMatching(prompter);
-  const adapter = await pick(prompter, 'Ranking adapter', ordered(ADAPTER_CHOICES, matching.preset.adapter));
+  const adapter = await askAdapter(prompter, matching.preset);
   return {
     roots,
     excludePaths,
