@@ -38,7 +38,6 @@ import { stemTerm, tokenize } from '../query.js';
 import { isRetrievable } from '../retrievability.js';
 import {
   type AtomDomain,
-  atomDomains,
   type AtomType,
   atomTypes,
   defaultAtomType
@@ -168,10 +167,6 @@ const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 
-/** Membership test rather than a cast: an unknown domain is not an `AtomDomain`. */
-const asDomain = (value: string): AtomDomain | undefined =>
-  atomDomains().find(domain => domain === value);
-
 /**
  * An unknown or absent `type` falls back to the default rather than dropping the
  * atom: the type vocabulary classifies an atom, it does not gate scanning, so a
@@ -217,14 +212,13 @@ const documentTerms = (context: ScanContext, atom: Atom): readonly string[] =>
  * `stale_after` rules are deliberately not re-stated here.
  */
 const fromAtom = (context: ScanContext, file: string, atom: Atom): ScannedDoc | undefined => {
-  const domain = asDomain(atom.frontmatter.x_domain);
-  return domain === undefined || !isRetrievable(atom.frontmatter, context.now)
+  return !isRetrievable(atom.frontmatter, context.now)
     ? undefined
     : withFreq({
         id: atom.frontmatter.id,
         origin: atomOrigin(atom.frontmatter),
         title: atom.frontmatter.title,
-        domain,
+        domain: atom.frontmatter.x_domain,
         type: asType(atom.frontmatter.type),
         body: atom.body,
         sourcePath: join(context.dir, file),

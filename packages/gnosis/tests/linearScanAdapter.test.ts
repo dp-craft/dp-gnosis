@@ -193,6 +193,25 @@ describe('createLinearScanAdapter', () => {
     expect(result.atoms[0]?.domain).toBe('standards');
   });
 
+  it('retrieves an atom whose domain is outside the profile vocabulary, verbatim', async () => {
+    const dir = await atomsDir();
+    await writeAll(dir, [
+      {
+        file: 'a.md',
+        id: 'off-vocab-atom',
+        body: 'gate pipeline escalation',
+        overrides: { x_domain: 'off-vocabulary' },
+      },
+    ]);
+
+    const result = await createLinearScanAdapter(dir, { now: NOW }).retrieve('pipeline', {
+      k: 10,
+    });
+
+    expect(ids(result)).toEqual(['off-vocab-atom']);
+    expect(result.atoms[0]?.domain).toBe('off-vocabulary');
+  });
+
   it('excludes foreign types when a type filter is given', async () => {
     const dir = await atomsDir();
     await writeAll(dir, [
