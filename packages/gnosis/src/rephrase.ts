@@ -33,10 +33,10 @@ import {
   REPHRASE_MODEL_ID,
   REPHRASE_PROMPT_VERSION,
   REPHRASE_TIMEOUT_MS,
-  RERANK_DEFAULT_URL,
   RERANK_URL_ENV_VAR
 } from './config.js';
 import { statedVar } from './env.js';
+import { resolveRerankUrl } from './rerank.js';
 import type { SettingFact } from './settingFact.js';
 import { factOf } from './settingFact.js';
 import { configuredModels } from './userConfig.js';
@@ -127,14 +127,6 @@ export interface RephraseOptions {
 export type RephraseOutcome =
   | { readonly ok: true; readonly rewritten: string; readonly cached: boolean }
   | { readonly ok: false; readonly error: string };
-
-/** The base URL to call. The env override outranks the default, as a flag would. */
-export const resolveRephraseUrl = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): string => {
-  const declared = (env[RERANK_URL_ENV_VAR] ?? '').trim();
-  return declared.length > 0 ? declared : RERANK_DEFAULT_URL;
-};
 
 /**
  * The rewriter id WITH the tier that named it, resolved
@@ -418,7 +410,7 @@ const rewriteOrRefuse = async (
 };
 
 const rephraseEndpoint = (options: RephraseOptions): Endpoint => ({
-  baseUrl: options.baseUrl ?? resolveRephraseUrl(),
+  baseUrl: options.baseUrl ?? resolveRerankUrl(),
   model: options.model ?? resolveRephraseModel(),
 });
 

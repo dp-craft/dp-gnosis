@@ -34,10 +34,10 @@ import {
   ENRICH_SEED,
   ENRICH_TEMPERATURE,
   ENRICH_TIMEOUT_MS,
-  RERANK_DEFAULT_URL,
   RERANK_URL_ENV_VAR
 } from './config.js';
 import { statedVar } from './env.js';
+import { resolveRerankUrl } from './rerank.js';
 import type { SettingFact } from './settingFact.js';
 import { factOf } from './settingFact.js';
 import { configuredModels } from './userConfig.js';
@@ -98,14 +98,6 @@ export interface ChatProvider {
   readonly id: string;
   readonly complete: (req: ChatRequest) => Promise<ChatOutcome>;
 }
-
-/** The base URL to call. The env override outranks the default, as a flag would. */
-export const resolveChatUrl = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): string => {
-  const declared = (env[RERANK_URL_ENV_VAR] ?? '').trim();
-  return declared.length > 0 ? declared : RERANK_DEFAULT_URL;
-};
 
 /**
  * The generator id WITH the tier that named it, resolved
@@ -303,7 +295,7 @@ export const createHttpChatProvider = (
   options: { readonly baseUrl?: string; readonly model?: string } = {}
 ): ChatProvider => {
   const endpoint: Endpoint = {
-    baseUrl: options.baseUrl ?? resolveChatUrl(),
+    baseUrl: options.baseUrl ?? resolveRerankUrl(),
     model: options.model ?? resolveChatModel(),
   };
   return {

@@ -16,14 +16,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ChatRequest } from '../src/chat.js';
-import { chatModelFact, createHttpChatProvider, resolveChatModel, resolveChatUrl } from '../src/chat.js';
+import { chatModelFact, createHttpChatProvider, resolveChatModel } from '../src/chat.js';
 import {
   ENRICH_MAX_TOKENS,
   ENRICH_MODEL_ENV_VAR,
   ENRICH_MODEL_ID,
   ENRICH_SEED,
-  ENRICH_TEMPERATURE,
-  RERANK_DEFAULT_URL
+  ENRICH_TEMPERATURE
 } from '../src/config.js';
 import { clearUserConfigCache } from '../src/userConfig.js';
 
@@ -74,17 +73,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('endpoint resolution mirrors the rewriter, deliberately', () => {
-  it('falls back to the shipped reranker address when no override is set', () => {
-    expect(resolveChatUrl({})).toBe(RERANK_DEFAULT_URL);
-  });
-
-  it('lets the env override outrank the default, as a flag would', () => {
-    expect(resolveChatUrl({ DP_GNOSIS_RERANK_URL: 'http://elsewhere:1234' })).toBe(
-      'http://elsewhere:1234'
-    );
-  });
-
+/**
+ * The ADDRESS is no longer resolved here: `rerank.ts:resolveRerankUrl` owns the
+ * documented `flag > env > config.json > constant` precedence for every hop,
+ * and `chatEndpointPrecedence.test.ts` asserts all four tiers against the
+ * address this provider actually calls. Only the model id is chat's own.
+ */
+describe('generator id resolution mirrors the rewriter, deliberately', () => {
   it('defaults to the shipped generator id', () => {
     expect(resolveChatModel({})).toBe(ENRICH_MODEL_ID);
   });

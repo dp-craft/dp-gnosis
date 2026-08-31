@@ -24,7 +24,6 @@
  * who has fixed one has already read the other.
  */
 import {
-  RERANK_DEFAULT_URL,
   RERANK_URL_ENV_VAR,
   SYNTHESIZE_MAX_TOKENS,
   SYNTHESIZE_MODEL_ENV_VAR,
@@ -32,6 +31,7 @@ import {
   SYNTHESIZE_TIMEOUT_MS
 } from './config.js';
 import { statedVar } from './env.js';
+import { resolveRerankUrl } from './rerank.js';
 import type { SettingFact } from './settingFact.js';
 import { factOf } from './settingFact.js';
 import { configuredModels } from './userConfig.js';
@@ -89,14 +89,6 @@ export interface SynthesizeOptions {
 export type SynthesizeOutcome =
   | { readonly ok: true; readonly answer: string }
   | { readonly ok: false; readonly error: string };
-
-/** The base URL to call. The env override outranks the default, as a flag would. */
-export const resolveSynthesizeUrl = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): string => {
-  const declared = (env[RERANK_URL_ENV_VAR] ?? '').trim();
-  return declared.length > 0 ? declared : RERANK_DEFAULT_URL;
-};
 
 /**
  * The synthesiser id WITH the tier that named it, resolved
@@ -271,7 +263,7 @@ const fetchCompletion = async (
 };
 
 const synthesizeEndpoint = (options: SynthesizeOptions): Endpoint => ({
-  baseUrl: options.baseUrl ?? resolveSynthesizeUrl(),
+  baseUrl: options.baseUrl ?? resolveRerankUrl(),
   model: options.model ?? resolveSynthesizeModel(),
 });
 
