@@ -45,6 +45,15 @@ import {
   type RerankPresetName
 } from './config.js';
 import { configHome, statedVar } from './env.js';
+import {
+  type Catalogue,
+  catalogueRefusal,
+  causeOf,
+  type Endpoint,
+  fetchCatalogue,
+  MODELS_PATH,
+  type RefusalMessages,
+  servingTimeoutMs } from './llamaSwap.js';
 import { localRerankerAvailability, localRerankScores } from './localReranker.js';
 import type { RetrievedAtom } from './port.js';
 import type { SettingFact } from './settingFact.js';
@@ -69,7 +78,12 @@ export const EXTRACT_STRATEGY: ExtractStrategy = 'head';
  */
 const MAX_BATCH_TOKENS = 8000;
 
-/** One HTTP call's ceiling. A reranker pass is a foreground CLI wait. */
+/**
+ * One HTTP call's ceiling. A reranker pass is a foreground CLI wait — and
+ * against a loopback server it is not a ceiling at all: {@link servingTimeoutMs}
+ * lifts it there, which is what the cold-load landmine below always needed, and
+ * floors it at two minutes anywhere else (owner decision D6, 2026-08-31).
+ */
 const TIMEOUT_MS = 60000;
 
 /**
@@ -80,9 +94,6 @@ const TIMEOUT_MS = 60000;
  * requires before an arm, so it MUST NOT itself time out on a cold load.
  */
 const PROBE_TIMEOUT_MS = 300000;
-
-/** The llama-swap model catalogue, per the OpenAI-compatible API. */
-const MODELS_PATH = '/v1/models';
 
 /**
  * The reranker's own name for a resolved setting. The precedence itself is
@@ -367,16 +378,6 @@ export type RerankOutcome =
   | { readonly ok: true; readonly atoms: readonly RetrievedAtom[] }
   | { readonly ok: false; readonly error: string };
 
-/**
- * Where to score, and under which id. The model travels WITH the URL because
- * every refusal message names both: a message that named the shipped id while
- * another was requested would send the reader to fix the wrong entry.
- */
-interface Endpoint {
-  readonly baseUrl: string;
-  readonly model: string;
-}
-
 const request = (model: string): string =>
   `search --rerank: reranker model "${model}" was requested`;
 
@@ -397,70 +398,28 @@ const notServedMessage = (endpoint: Endpoint, served: readonly string[]): string
 const callFailedMessage = (endpoint: Endpoint, cause: string): string =>
   `${request(endpoint.model)}; the server at ${endpoint.baseUrl} accepted GET ${MODELS_PATH} but the rerank call failed (${cause})${requirement(endpoint.model)}check that the id names a RERANKER (a chat model answers /v1/models but not /v1/rerank), then re-run${DROP}`;
 
-const causeOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null;
-
-const modelIds = (payload: unknown): readonly string[] => {
-  if (!isRecord(payload) || !Array.isArray(payload.data)) return [];
-  return payload.data.flatMap((entry: unknown) =>
-    isRecord(entry) && typeof entry.id === 'string' ? [entry.id] : []
-  );
-};
-
 /**
  * What `GET /v1/models` answered: the served ids, or why the call did not
  * complete. Exported because `setup` has to READ the catalogue rather than ask
  * about one id — it selects which ids are worth probing at all.
  */
-export type RerankCatalogue =
-  | { readonly ok: true; readonly models: readonly string[] }
-  | { readonly ok: false; readonly cause: string };
-
-type Catalogue = RerankCatalogue;
+export type RerankCatalogue = Catalogue;
 
 /**
- * A ceiling for a caller that MUST come back: `doctor` is an offline pass, and
- * the default `127.0.0.1` refuses instantly, but a `DP_GNOSIS_RERANK_URL`
- * pointing at an unreachable HOST would otherwise hang on the connect. The
- * serving path passes none — a slow catalogue there is worth waiting for.
- */
-const CATALOGUE_TIMEOUT_MS = 5000;
-
-const catalogueInit = (timeoutMs: number | undefined): RequestInit =>
-  timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(timeoutMs) };
-
-const fetchCatalogue = async (baseUrl: string, timeoutMs?: number): Promise<Catalogue> => {
-  try {
-    const response = await fetch(`${baseUrl}${MODELS_PATH}`, catalogueInit(timeoutMs));
-    const body = await response.text();
-    return response.ok
-      ? { ok: true, models: modelIds(JSON.parse(body)) }
-      : { ok: false, cause: `HTTP ${response.status}` };
-  } catch (error) {
-    return { ok: false, cause: causeOf(error) };
-  }
-};
-
-/**
- * The catalogue at `baseUrl`, under the bounded timeout every diagnostic uses:
- * `setup` walks candidate ADDRESSES, and an unreachable host MUST NOT hang the
- * walk before the next address is tried.
+ * The catalogue at `baseUrl`. Every caller is bounded by the shared client's
+ * one ceiling: `setup` walks candidate ADDRESSES and an unreachable host MUST
+ * NOT hang the walk, and since owner decision D6 (2026-08-31) the SERVING path
+ * is bounded too — it used to pass no timeout at all, which is what let a
+ * `DP_GNOSIS_RERANK_URL` pointing at a filtered host hang `search --rerank` on
+ * the connect.
  */
 export const rerankCatalogue = async (baseUrl: string): Promise<RerankCatalogue> =>
-  await fetchCatalogue(baseUrl, CATALOGUE_TIMEOUT_MS);
+  await fetchCatalogue(baseUrl);
 
-/** `undefined` when the model is served; otherwise the message to refuse with. */
-const catalogueRefusal = async (
-  endpoint: Endpoint,
-  timeoutMs?: number
-): Promise<string | undefined> => {
-  const catalogue = await fetchCatalogue(endpoint.baseUrl, timeoutMs);
-  if (!catalogue.ok) return unreachableMessage(endpoint, catalogue.cause);
-  return catalogue.models.includes(endpoint.model)
-    ? undefined
-    : notServedMessage(endpoint, catalogue.models);
+/** This hop's two catalogue faults, in ITS words — the shared client picks one. */
+const MESSAGES: RefusalMessages = {
+  unreachable: unreachableMessage,
+  notServed: notServedMessage,
 };
 
 type ScoreResult =
@@ -482,7 +441,12 @@ interface DocWindow {
 interface ScoreRequest {
   readonly query: string;
   readonly documents: readonly string[];
-  /** The probe passes `PROBE_TIMEOUT_MS`; a served pass passes `TIMEOUT_MS`. */
+  /**
+   * The CEILING this call would take against a remote server. The probe passes
+   * `PROBE_TIMEOUT_MS`; a served pass passes `TIMEOUT_MS`. What actually reaches
+   * the wire is {@link servingTimeoutMs} of it — `null`, meaning no abort at
+   * all, against a loopback host (owner decision D6, 2026-08-31).
+   */
   readonly timeoutMs: number;
 }
 
@@ -491,7 +455,7 @@ const scoreTexts = async (endpoint: Endpoint, request: ScoreRequest): Promise<Sc
   const client = createRerankerClient(
     endpoint.baseUrl,
     endpoint.model,
-    request.timeoutMs,
+    servingTimeoutMs(endpoint.baseUrl, request.timeoutMs) ?? null,
     MAX_BATCH_TOKENS
   );
   try {
@@ -571,9 +535,9 @@ const scorerOf = (settings: Resolved): ScorerResult => {
 };
 
 /** `undefined` when this scorer can be scored with at all. */
-const scorerRefusal = async (scorer: Scorer, timeoutMs?: number): Promise<string | undefined> =>
+const scorerRefusal = async (scorer: Scorer): Promise<string | undefined> =>
   scorer.kind === 'http'
-    ? await catalogueRefusal(scorer.endpoint, timeoutMs)
+    ? await catalogueRefusal(scorer.endpoint, MESSAGES)
     : await localRefusal(scorer.modelPath);
 
 /**
@@ -995,7 +959,7 @@ const healthOf = (probe: RerankProbeOutcome): RerankHealth =>
 export const rerankHealth = async (options: RerankOptions = {}): Promise<RerankHealth> => {
   const selected = scorerOf(resolved(options));
   if (!selected.ok) return { kind: 'unavailable', detail: selected.error };
-  const refusal = await scorerRefusal(selected.scorer, CATALOGUE_TIMEOUT_MS);
+  const refusal = await scorerRefusal(selected.scorer);
   if (refusal !== undefined) return { kind: 'unavailable', detail: refusal };
   return healthOf(await probeOnce(selected.scorer));
 };

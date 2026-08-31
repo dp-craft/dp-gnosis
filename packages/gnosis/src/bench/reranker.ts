@@ -168,11 +168,19 @@ const chunkDocuments = (
   return chunks;
 };
 
-/** HTTP reranker client factory — auto-chunks to fit context windows. */
+/**
+ * HTTP reranker client factory — auto-chunks to fit context windows.
+ *
+ * `timeoutMs` accepts `null` for NO abort at all (owner decision D6,
+ * 2026-08-31): a loopback llama-swap loading a model on demand was measured at
+ * 1 m 59 s, past the 60 s default, and aborting there kills the very load the
+ * call is waiting for. Every existing caller passes a number or omits it, so
+ * the default and the bench's recorded measurement config are unchanged.
+ */
 export const createRerankerClient = (
   baseUrl: string,
   modelId: string,
-  timeoutMs: number = 60000,
+  timeoutMs: number | null = 60000,
   maxContextTokens: number = 4096,
   maxDocsPerChunk: number = Infinity
 ) => {
@@ -182,7 +190,7 @@ export const createRerankerClient = (
     baseIndex: number
   ): Promise<RerankResult[]> => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timeout = timeoutMs === null ? undefined : setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(`${baseUrl}/v1/rerank`, {

@@ -196,6 +196,35 @@ export const RERANK_DEFAULT_URL = 'http://127.0.0.1:9292';
 export const RERANK_URL_ENV_VAR = 'DP_GNOSIS_RERANK_URL';
 
 /**
+ * The ceiling on EVERY `GET /v1/models` — one value for all five llama-swap
+ * hops, read only by `llamaSwap.ts:fetchCatalogue` (owner decision D6,
+ * 2026-08-31).
+ *
+ * The catalogue is the cheap question: it lists ids, it loads no model, and a
+ * server that has not answered it in five seconds is not going to. The serving
+ * path used to pass none — "a slow catalogue there is worth waiting for" — and
+ * that is what let a `DP_GNOSIS_RERANK_URL` pointing at a filtered host hang
+ * `search --rerank` on the connect with no output at all. The wait a cold load
+ * legitimately needs belongs to the SERVING call ({@link
+ * NON_LOOPBACK_TIMEOUT_FLOOR_MS}), never to the catalogue.
+ */
+export const CATALOGUE_TIMEOUT_MS = 5000;
+
+/**
+ * The floor under a serving call that leaves this machine (owner decision D6,
+ * 2026-08-31). A LOOPBACK serving call is unbounded — llama-swap loads a model
+ * on demand and a first call after an eviction was MEASURED at 1 m 59 s, past
+ * every 60 s ceiling this repository used to set. Off the loopback there is a
+ * network that can swallow a connect, so the wait is bounded — but never below
+ * two minutes, which is above that measured cold load.
+ *
+ * A FLOOR, not a value: a hop whose own ceiling is already higher
+ * (`REPHRASE_TIMEOUT_MS`, `SYNTHESIZE_TIMEOUT_MS`, `ENRICH_TIMEOUT_MS`) keeps
+ * it. `llamaSwap.ts:servingTimeoutMs` is the only reader.
+ */
+export const NON_LOOPBACK_TIMEOUT_FLOOR_MS = 120_000;
+
+/**
  * Environment override for {@link RERANK_MODEL_ID}, read in `resolveRerankModel`
  * alone.
  *

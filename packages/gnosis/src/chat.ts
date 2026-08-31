@@ -37,16 +37,21 @@ import {
   RERANK_URL_ENV_VAR
 } from './config.js';
 import { statedVar } from './env.js';
+import {
+  catalogueRefusal,
+  CHAT_PATH,
+  type Endpoint,
+  isRecord,
+  messageContent,
+  MODELS_PATH,
+  postChat,
+  type PostOutcome,
+  type RefusalMessages
+} from './llamaSwap.js';
 import { resolveRerankUrl } from './rerank.js';
 import type { SettingFact } from './settingFact.js';
 import { factOf } from './settingFact.js';
 import { configuredModels } from './userConfig.js';
-
-/** The llama-swap model catalogue, per the OpenAI-compatible API. */
-const MODELS_PATH = '/v1/models';
-
-/** The chat endpoint the generation itself goes to. */
-const CHAT_PATH = '/v1/chat/completions';
 
 /**
  * One generation. `schema` is the JSON Schema the answer MUST satisfy and
@@ -116,16 +121,6 @@ export const chatModelFact = (env: NodeJS.ProcessEnv = process.env): SettingFact
 export const resolveChatModel = (env: NodeJS.ProcessEnv = process.env): string =>
   chatModelFact(env).value;
 
-/**
- * Where to generate, and under which id. The model travels WITH the URL because
- * every refusal message names both: a message naming the shipped id while
- * another was requested would send the reader to fix the wrong entry.
- */
-interface Endpoint {
-  readonly baseUrl: string;
-  readonly model: string;
-}
-
 const request = (model: string): string =>
   `enrich: generator model "${model}" was requested`;
 
@@ -157,41 +152,10 @@ const NOT_JSON = 'the model returned content that is not JSON — response_forma
 /** An empty answer is the same class of fault: nothing was generated. */
 const EMPTY_CONTENT = 'the model returned no content';
 
-const causeOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null;
-
-const modelIds = (payload: unknown): readonly string[] => {
-  if (!isRecord(payload) || !Array.isArray(payload.data)) return [];
-  return payload.data.flatMap((entry: unknown) =>
-    isRecord(entry) && typeof entry.id === 'string' ? [entry.id] : []
-  );
-};
-
-type Catalogue =
-  | { readonly ok: true; readonly models: readonly string[] }
-  | { readonly ok: false; readonly cause: string };
-
-const fetchCatalogue = async (baseUrl: string): Promise<Catalogue> => {
-  try {
-    const response = await fetch(`${baseUrl}${MODELS_PATH}`);
-    const body = await response.text();
-    return response.ok
-      ? { ok: true, models: modelIds(JSON.parse(body)) }
-      : { ok: false, cause: `HTTP ${response.status}` };
-  } catch (error) {
-    return { ok: false, cause: causeOf(error) };
-  }
-};
-
-/** `undefined` when the model is served; otherwise the message to refuse with. */
-const catalogueRefusal = async (endpoint: Endpoint): Promise<string | undefined> => {
-  const catalogue = await fetchCatalogue(endpoint.baseUrl);
-  if (!catalogue.ok) return unreachableMessage(endpoint, catalogue.cause);
-  return catalogue.models.includes(endpoint.model)
-    ? undefined
-    : notServedMessage(endpoint, catalogue.models);
+/** This hop's two catalogue faults, in ITS words — the shared client picks one. */
+const MESSAGES: RefusalMessages = {
+  unreachable: unreachableMessage,
+  notServed: notServedMessage,
 };
 
 /**
@@ -225,38 +189,16 @@ const chatBody = (model: string, req: ChatRequest): unknown => ({
   chat_template_kwargs: { enable_thinking: false },
 });
 
-const firstChoice = (payload: unknown): unknown =>
-  isRecord(payload) && Array.isArray(payload.choices) ? payload.choices[0] : undefined;
-
-const messageOf = (choice: unknown): unknown => (isRecord(choice) ? choice.message : undefined);
-
-const messageContent = (payload: unknown): string => {
-  const message = messageOf(firstChoice(payload));
-  return isRecord(message) && typeof message.content === 'string' ? message.content : '';
-};
-
 const usageOf = (payload: unknown): unknown => (isRecord(payload) ? payload.usage : undefined);
 
-type ChatResult =
-  | { readonly ok: true; readonly payload: unknown }
-  | { readonly ok: false; readonly cause: string };
-
-const fetchCompletion = async (endpoint: Endpoint, req: ChatRequest): Promise<ChatResult> => {
-  try {
-    const response = await fetch(`${endpoint.baseUrl}${CHAT_PATH}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(chatBody(endpoint.model, req)),
-      signal: AbortSignal.timeout(ENRICH_TIMEOUT_MS),
-    });
-    const text = await response.text();
-    return response.ok
-      ? { ok: true, payload: JSON.parse(text) }
-      : { ok: false, cause: `HTTP ${response.status}` };
-  } catch (error) {
-    return { ok: false, cause: causeOf(error) };
-  }
-};
+/**
+ * The generation POST. The body is built HERE and the wire is the shared
+ * client's; {@link ENRICH_TIMEOUT_MS} is this hop's ceiling, which the D6 policy
+ * applies or lifts according to where the server is (owner decision D6,
+ * 2026-08-31).
+ */
+const fetchCompletion = async (endpoint: Endpoint, req: ChatRequest): Promise<PostOutcome> =>
+  await postChat(endpoint, chatBody(endpoint.model, req), ENRICH_TIMEOUT_MS);
 
 /** `undefined` for content that is not JSON — the caller turns that into a refusal. */
 const parsedContent = (content: string): unknown | undefined => {
@@ -278,7 +220,7 @@ const toOutcome = (endpoint: Endpoint, payload: unknown): ChatOutcome => {
 };
 
 const completeAt = async (endpoint: Endpoint, req: ChatRequest): Promise<ChatOutcome> => {
-  const refusal = await catalogueRefusal(endpoint);
+  const refusal = await catalogueRefusal(endpoint, MESSAGES);
   if (refusal !== undefined) return { ok: false, error: refusal, kind: 'transport' };
   const completion = await fetchCompletion(endpoint, req);
   return completion.ok

@@ -24,12 +24,22 @@ import {
   EMBED_URL_ENV_VAR
 } from './config.js';
 import type { EmbeddingCache } from './embedCache.js';
+import {
+  catalogueRefusal,
+  causeOf,
+  type Endpoint,
+  isRecord,
+  MODELS_PATH,
+  type RefusalMessages,
+  servingInit } from './llamaSwap.js';
 
-/** One HTTP call's ceiling. An embedding pass is a foreground wait. */
+/**
+ * One HTTP call's ceiling. An embedding pass is a foreground wait — and against
+ * a loopback server it is not a ceiling at all: {@link servingInit} lifts it
+ * there and floors it at two minutes anywhere else (owner decision D6,
+ * 2026-08-31).
+ */
 const TIMEOUT_MS = 60000;
-
-/** The llama-swap model catalogue, per the OpenAI-compatible API. */
-const MODELS_PATH = '/v1/models';
 
 /** The embedding endpoint, per the OpenAI-compatible API. */
 const EMBEDDINGS_PATH = '/v1/embeddings';
@@ -44,12 +54,6 @@ export const resolveEmbedUrl = (
   const declared = (env[EMBED_URL_ENV_VAR] ?? '').trim();
   return declared.length > 0 ? declared : EMBED_DEFAULT_URL;
 };
-
-/** Where to embed, and under which id — every refusal message names both. */
-interface Endpoint {
-  readonly baseUrl: string;
-  readonly model: string;
-}
 
 const request = (model: string): string => `embed: embedding model "${model}" was requested`;
 
@@ -71,44 +75,13 @@ const callFailedMessage = (endpoint: Endpoint, cause: string): string =>
 const incompleteCause = (expected: number): string =>
   `the response did not return an embedding for all ${String(expected)} texts`;
 
-const causeOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null;
-
 const isNumberArray = (value: unknown): value is readonly number[] =>
   Array.isArray(value) && value.every(entry => typeof entry === 'number');
 
-const modelIds = (payload: unknown): readonly string[] => {
-  if (!isRecord(payload) || !Array.isArray(payload.data)) return [];
-  return payload.data.flatMap((entry: unknown) =>
-    isRecord(entry) && typeof entry.id === 'string' ? [entry.id] : []
-  );
-};
-
-type Catalogue =
-  | { readonly ok: true; readonly models: readonly string[] }
-  | { readonly ok: false; readonly cause: string };
-
-const fetchCatalogue = async (baseUrl: string): Promise<Catalogue> => {
-  try {
-    const response = await fetch(`${baseUrl}${MODELS_PATH}`);
-    const body = await response.text();
-    return response.ok
-      ? { ok: true, models: modelIds(JSON.parse(body)) }
-      : { ok: false, cause: `HTTP ${response.status}` };
-  } catch (error) {
-    return { ok: false, cause: causeOf(error) };
-  }
-};
-
-/** `undefined` when the model is served; otherwise the message to refuse with. */
-const catalogueRefusal = async (endpoint: Endpoint): Promise<string | undefined> => {
-  const catalogue = await fetchCatalogue(endpoint.baseUrl);
-  if (!catalogue.ok) return unreachableMessage(endpoint, catalogue.cause);
-  return catalogue.models.includes(endpoint.model)
-    ? undefined
-    : notServedMessage(endpoint, catalogue.models);
+/** This hop's two catalogue faults, in ITS words — the shared client picks one. */
+const MESSAGES: RefusalMessages = {
+  unreachable: unreachableMessage,
+  notServed: notServedMessage,
 };
 
 /** One `data` entry: its input POSITION and the vector for it. */
@@ -146,7 +119,7 @@ const postEmbeddings = async (endpoint: Endpoint, texts: readonly string[]): Pro
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: endpoint.model, input: [...texts] }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    ...servingInit(endpoint.baseUrl, TIMEOUT_MS),
   });
   const body = await response.text();
   if (!response.ok) {
@@ -160,7 +133,7 @@ const fetchVectors = async (
   endpoint: Endpoint,
   texts: readonly string[]
 ): Promise<EmbedOutcome> => {
-  const refusal = await catalogueRefusal(endpoint);
+  const refusal = await catalogueRefusal(endpoint, MESSAGES);
   if (refusal !== undefined) return { ok: false, error: refusal };
   try {
     const vectors = orderedVectors(await postEmbeddings(endpoint, texts), texts.length);
