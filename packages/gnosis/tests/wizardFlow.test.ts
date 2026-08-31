@@ -598,6 +598,45 @@ describe('wizard — a corpus directory is validated as it is entered', () => {
     expect(outcome.exitCode).toBe(0);
     expect(readProfile()['corpusRoots']).toEqual([corpusDir]);
   });
+
+  // Given a blank answer to the FIRST corpus question — the first substantive
+  // question of the interview — Then the wizard leaves by the documented
+  // cancel path instead of re-asking a question the user cannot answer.
+  it('should cancel the wizard on a blank FIRST corpus directory rather than re-asking forever', async () => {
+    const { outcome, prompter } = await wizard(scriptWith(/^Corpus directory/, ['  ']));
+
+    expect(prompter.asked.filter(message => /^Corpus directory/.test(message))).toHaveLength(1);
+    expect(outcome.exitCode).toBe(3);
+    expect(outcome.text).toContain('no profile and no config were written');
+    expect(existsSync(profilePath())).toBe(false);
+    expect(atomFiles()).toEqual([]);
+  });
+
+  it('should state the blank-to-cancel affordance in the first corpus question', async () => {
+    const { prompter } = await wizard(scriptWith(/^Corpus directory/, ['  ']));
+
+    expect(prompter.asked[1]).toBe('Corpus directory (absolute, or ~/…) (empty: cancel the wizard)');
+  });
+
+  // The affordance is scoped to the first ordinal: once a root is accepted,
+  // "Add another?" is already the way out, so a blank stays a bad path.
+  it('should NOT cancel on a blank answer to a LATER corpus directory', async () => {
+    const second = join(home, 'more');
+    mkdirSync(second, { recursive: true });
+    writeFileSync(join(second, 'more.md'), '# More\n\nA second corpus root with markdown in it.\n', 'utf8');
+
+    const { outcome, prompter } = await wizard(
+      overriding([
+        { match: /^Add another corpus directory\?/, answers: [true, false] },
+        { match: /^Next corpus directory/, answers: ['', second] },
+      ])
+    );
+
+    expect(prompter.asked.filter(message => /^Next corpus directory/.test(message))).toHaveLength(2);
+    expect(prompter.transcript.join('\n')).toContain('that path is relative');
+    expect(outcome.exitCode).toBe(0);
+    expect(readProfile()['corpusRoots']).toEqual([corpusDir, second]);
+  });
 });
 
 /**

@@ -31,6 +31,7 @@ import type { RootAnswer } from './plan.js';
 import type { Preset, PresetSelections } from './preset.js';
 import { CUSTOM_PRESET, PRESETS, presetSelections, presetTable } from './preset.js';
 import type { Option, Prompter } from './prompts.js';
+import { CANCELLED } from './prompts.js';
 import type { RerankPreference } from './rerankFlow.js';
 import { note, section } from './screen.js';
 
@@ -115,11 +116,36 @@ const PRESET_EXPLANATION = [
 
 const ADD_MORE = 'Add another corpus directory?';
 
-/** One root, re-asked until it is usable. */
+/**
+ * The first corpus question states its own way out; a later one already has
+ * one, since declining {@link ADD_MORE} ends the section.
+ */
+const ROOT_QUESTION = 'Corpus directory (absolute, or ~/…) (empty: cancel the wizard)';
+
+const NEXT_ROOT_QUESTION = 'Next corpus directory';
+
+const ROOT_DECLINED = ['', '  Nothing was configured, so no profile and no config are written.'];
+
+const rootQuestion = (ordinal: number): string => (ordinal === 0 ? ROOT_QUESTION : NEXT_ROOT_QUESTION);
+
+/** A blank answer LEAVES, but only where the question said it would. */
+const leaving = (ordinal: number, typed: string): boolean => ordinal === 0 && typed === '';
+
+/**
+ * One root, re-asked until it is usable — or, on the FIRST one, left.
+ *
+ * Every invalid answer used to re-ask unconditionally, so a user who could not
+ * type a path this check accepts had no exit but Ctrl-C at the first
+ * substantive question of the interview. `rerankFlow.ts:askPort` records the
+ * same defect being fixed once. The blank check runs BEFORE `checkRoot`, which
+ * would otherwise report an empty answer as a relative path.
+ */
 const askRoot = async (prompter: Prompter, ordinal: number): Promise<string> => {
-  const typed = await prompter.input(
-    ordinal === 0 ? 'Corpus directory (absolute, or ~/…)' : 'Next corpus directory'
-  );
+  const typed = (await prompter.input(rootQuestion(ordinal))).trim();
+  if (leaving(ordinal, typed)) {
+    prompter.say(ROOT_DECLINED);
+    throw CANCELLED;
+  }
   const checked = checkRoot(typed);
   if (!checked.ok) {
     prompter.say([`  ${checked.problem}`]);
