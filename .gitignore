@@ -24,5 +24,4 @@ docs/benchmarks/*/data/
 *.tgz
 .claude/
 claude-artifacts/
-docs/
 .idea/

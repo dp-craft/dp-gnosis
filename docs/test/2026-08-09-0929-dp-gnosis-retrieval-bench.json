@@ -1,0 +1,1972 @@
+{
+  "generatedAt": "2026-08-09T09:29:49.594Z",
+  "k": 5,
+  "timing": {
+    "warmupIterations": 2,
+    "measuredIterations": 5
+  },
+  "goldenSet": {
+    "path": "/home/dev/work/dippe/AiChatney/.claude/worktrees/050-dp-gnosis/tools/dp-gnosis/golden/golden-set.v1.json",
+    "sha256": "b03fec2f403b10fda60eafbf8d23ff37caa3d0a20e994e0be990cdc1c71d7910",
+    "frozenAt": "2026-08-08",
+    "queryCount": 50,
+    "minimumMeaningfulDifference": {
+      "queries": 50,
+      "recallResolution": 0.02,
+      "statement": "Recall is averaged over 50 queries, so one query flipping moves mean recall by at most 1/50 = 0.02 (2 percentage points). A gap of 1 query (2 pts) between two adapters is indistinguishable from a single judgement call and MUST be read as noise; a gap of 2 queries (4 pts) is suggestive but not a result; only a gap of 3 or more queries (>=6 pts) is interpretable as a real difference. Any claim that adapter A beats adapter B MUST quote the query-count delta, not only the percentage."
+    }
+  },
+  "adapters": [
+    "linear-scan",
+    "fts5",
+    "minisearch",
+    "lancedb"
+  ],
+  "skippedAdapters": [],
+  "corpora": [
+    {
+      "label": "seed",
+      "atomsDir": "/home/dev/work/dippe/AiChatney/.claude/worktrees/050-dp-gnosis/dp-gnosis/cache/bench/corpus-seed",
+      "atomCount": 13846,
+      "scoresMetrics": true
+    },
+    {
+      "label": "synthetic-1000",
+      "atomsDir": "/home/dev/work/dippe/AiChatney/.claude/worktrees/050-dp-gnosis/dp-gnosis/cache/bench/corpus-synthetic-1000",
+      "atomCount": 1000,
+      "scoresMetrics": false
+    },
+    {
+      "label": "synthetic-10000",
+      "atomsDir": "/home/dev/work/dippe/AiChatney/.claude/worktrees/050-dp-gnosis/dp-gnosis/cache/bench/corpus-synthetic-10000",
+      "atomCount": 10000,
+      "scoresMetrics": false
+    }
+  ],
+  "results": [
+    {
+      "adapter": "linear-scan",
+      "corpus": "seed",
+      "atomCount": 13846,
+      "indexBuildMs": 0.018579999999928987,
+      "indexSizeBytes": 0,
+      "coldStartMs": 2047.873716,
+      "singleAtomUpdateMs": 0.01735999999982596,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 2052.512764999992,
+            "p95Ms": 2239.0432780000847,
+            "minMs": 1954.9852769999998,
+            "maxMs": 2765.031434000004,
+            "peakHeapBytes": 619226104
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 2029.2747869999148,
+            "p95Ms": 2161.330696000019,
+            "minMs": 1975.0281240001787,
+            "maxMs": 2225.6855299999006,
+            "peakHeapBytes": 807429176
+          },
+          "cacheHitP50Ms": 0.0003599999472498894
+        }
+      ],
+      "metrics": {
+        "k": 5,
+        "recallAtK": 0.3881666666666666,
+        "mrr": 0.5716666666666667,
+        "scoredQueries": 50,
+        "unscorableQueries": 0
+      },
+      "perQuery": [
+        {
+          "queryId": "q-001",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.6,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-002",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-003",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-004",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-005",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.25
+        },
+        {
+          "queryId": "q-006",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-007",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-008",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-009",
+          "axis": "exact-keyword",
+          "retrievedCount": 4,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-010",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-011",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-012",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-013",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-014",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-015",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-016",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-017",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-018",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-019",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-020",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-021",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-022",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-023",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-024",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-025",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-026",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.2,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-027",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-028",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-029",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-030",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-031",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-032",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-033",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-034",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-035",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-036",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-037",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-038",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-039",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-040",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-041",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-042",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-043",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-044",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-045",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-046",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-047",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-048",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-049",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.6,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-050",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 1
+        }
+      ]
+    },
+    {
+      "adapter": "linear-scan",
+      "corpus": "synthetic-1000",
+      "atomCount": 1000,
+      "indexBuildMs": 0.019330000039190054,
+      "indexSizeBytes": 0,
+      "coldStartMs": 68.73237999994308,
+      "singleAtomUpdateMs": 0.47685100021772087,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 71.48933500004932,
+            "p95Ms": 77.14371800003573,
+            "minMs": 66.32986399997026,
+            "maxMs": 81.9546379998792,
+            "peakHeapBytes": 274782504
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 71.73319399985485,
+            "p95Ms": 77.29058599984273,
+            "minMs": 67.15268300008029,
+            "maxMs": 85.90481500001624,
+            "peakHeapBytes": 275043784
+          },
+          "cacheHitP50Ms": 0.0003100000321865082
+        }
+      ],
+      "perQuery": []
+    },
+    {
+      "adapter": "linear-scan",
+      "corpus": "synthetic-10000",
+      "atomCount": 10000,
+      "indexBuildMs": 0.00482999999076128,
+      "indexSizeBytes": 0,
+      "coldStartMs": 738.7648799999151,
+      "singleAtomUpdateMs": 0.005239999853074551,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 765.768425000133,
+            "p95Ms": 839.7611160001252,
+            "minMs": 727.107451000018,
+            "maxMs": 875.7317760000005,
+            "peakHeapBytes": 400652968
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 758.6947780000046,
+            "p95Ms": 828.5031679999083,
+            "minMs": 723.1200580000877,
+            "maxMs": 873.2753350001294,
+            "peakHeapBytes": 400329872
+          },
+          "cacheHitP50Ms": 0.00036999955773353577
+        }
+      ],
+      "perQuery": []
+    },
+    {
+      "adapter": "fts5",
+      "corpus": "seed",
+      "atomCount": 13846,
+      "indexBuildMs": 1813.341870999895,
+      "indexSizeBytes": 7077888,
+      "coldStartMs": 253.80034400010481,
+      "singleAtomUpdateMs": 1804.471173999831,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 294.9551639999263,
+            "p95Ms": 755.9448790000752,
+            "minMs": 232.2776770000346,
+            "maxMs": 890.0507539999671,
+            "peakHeapBytes": 303622784
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 290.9986270000227,
+            "p95Ms": 763.3884229999967,
+            "minMs": 230.68115899991244,
+            "maxMs": 952.7754399999976,
+            "peakHeapBytes": 311818648
+          },
+          "cacheHitP50Ms": 0.0002899998798966408
+        }
+      ],
+      "metrics": {
+        "k": 5,
+        "recallAtK": 0.39049999999999996,
+        "mrr": 0.4979999999999999,
+        "scoredQueries": 50,
+        "unscorableQueries": 0
+      },
+      "perQuery": [
+        {
+          "queryId": "q-001",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.6,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-002",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-003",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-004",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-005",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.25
+        },
+        {
+          "queryId": "q-006",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-007",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-008",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-009",
+          "axis": "exact-keyword",
+          "retrievedCount": 4,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-010",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-011",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-012",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-013",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-014",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-015",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-016",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-017",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-018",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-019",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-020",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-021",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-022",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-023",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-024",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-025",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-026",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.2,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-027",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-028",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-029",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.2
+        },
+        {
+          "queryId": "q-030",
+          "axis": "rare-technical-token",
+          "retrievedCount": 2,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-031",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.75,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-032",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-033",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-034",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-035",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-036",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-037",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-038",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-039",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-040",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-041",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-042",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-043",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.2
+        },
+        {
+          "queryId": "q-044",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-045",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-046",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.16666666666666666,
+          "reciprocalRank": 0.25
+        },
+        {
+          "queryId": "q-047",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-048",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.375,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-049",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.8,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-050",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.5
+        }
+      ]
+    },
+    {
+      "adapter": "fts5",
+      "corpus": "synthetic-1000",
+      "atomCount": 1000,
+      "indexBuildMs": 77.28483500005677,
+      "indexSizeBytes": 200704,
+      "coldStartMs": 14.530083999969065,
+      "singleAtomUpdateMs": 74.32122100004926,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 14.32456300035119,
+            "p95Ms": 31.721712000202388,
+            "minMs": 13.85979299992323,
+            "maxMs": 34.09342599986121,
+            "peakHeapBytes": 121578832
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 13.941542999818921,
+            "p95Ms": 31.094371000304818,
+            "minMs": 13.610211999621242,
+            "maxMs": 33.8965549999848,
+            "peakHeapBytes": 122021264
+          },
+          "cacheHitP50Ms": 0.0003700000233948231
+        }
+      ],
+      "perQuery": []
+    },
+    {
+      "adapter": "fts5",
+      "corpus": "synthetic-10000",
+      "atomCount": 10000,
+      "indexBuildMs": 582.319213999901,
+      "indexSizeBytes": 1667072,
+      "coldStartMs": 146.84657800011337,
+      "singleAtomUpdateMs": 584.5524670002051,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 151.1449239999056,
+            "p95Ms": 324.0180110000074,
+            "minMs": 146.00615500006825,
+            "maxMs": 340.58472799975425,
+            "peakHeapBytes": 318082160
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 149.51059899991378,
+            "p95Ms": 321.2899449998513,
+            "minMs": 145.8443030002527,
+            "maxMs": 348.94562899973243,
+            "peakHeapBytes": 205421280
+          },
+          "cacheHitP50Ms": 0.0002700001932680607
+        }
+      ],
+      "perQuery": []
+    },
+    {
+      "adapter": "minisearch",
+      "corpus": "seed",
+      "atomCount": 13846,
+      "indexBuildMs": 3014.19386400003,
+      "indexSizeBytes": 11660157,
+      "coldStartMs": 497.6781720002182,
+      "singleAtomUpdateMs": 2986.1456269999035,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 576.5582570000552,
+            "p95Ms": 1014.3819459998049,
+            "minMs": 486.775099999737,
+            "maxMs": 1075.8306509996764,
+            "peakHeapBytes": 675040784
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 308.71340100001544,
+            "p95Ms": 757.272965000011,
+            "minMs": 233.01885200012475,
+            "maxMs": 912.3837810000405,
+            "peakHeapBytes": 859785016
+          },
+          "cacheHitP50Ms": 0.0002599996514618397
+        }
+      ],
+      "metrics": {
+        "k": 5,
+        "recallAtK": 0.38483333333333336,
+        "mrr": 0.5206666666666666,
+        "scoredQueries": 50,
+        "unscorableQueries": 0
+      },
+      "perQuery": [
+        {
+          "queryId": "q-001",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.6,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-002",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-003",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-004",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-005",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.25
+        },
+        {
+          "queryId": "q-006",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-007",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-008",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-009",
+          "axis": "exact-keyword",
+          "retrievedCount": 4,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-010",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-011",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-012",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-013",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-014",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-015",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-016",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-017",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-018",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-019",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-020",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-021",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-022",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-023",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-024",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-025",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-026",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.2,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-027",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-028",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-029",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-030",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-031",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.25
+        },
+        {
+          "queryId": "q-032",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-033",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-034",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-035",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-036",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.2
+        },
+        {
+          "queryId": "q-037",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-038",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-039",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-040",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-041",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-042",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-043",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-044",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-045",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-046",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-047",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-048",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-049",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.6,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-050",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.5
+        }
+      ]
+    },
+    {
+      "adapter": "minisearch",
+      "corpus": "synthetic-1000",
+      "atomCount": 1000,
+      "indexBuildMs": 74.48996599996462,
+      "indexSizeBytes": 293529,
+      "coldStartMs": 17.504526999779046,
+      "singleAtomUpdateMs": 67.5284540001303,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 18.15162800019607,
+            "p95Ms": 32.0370590002276,
+            "minMs": 17.05260600009933,
+            "maxMs": 34.52723399968818,
+            "peakHeapBytes": 705140648
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 14.446982000023127,
+            "p95Ms": 28.27274399995804,
+            "minMs": 13.80722100008279,
+            "maxMs": 30.717298000119627,
+            "peakHeapBytes": 761077360
+          },
+          "cacheHitP50Ms": 0.0002699997276067734
+        }
+      ],
+      "perQuery": []
+    },
+    {
+      "adapter": "minisearch",
+      "corpus": "synthetic-10000",
+      "atomCount": 10000,
+      "indexBuildMs": 701.8402469996363,
+      "indexSizeBytes": 3229037,
+      "coldStartMs": 205.0987080000341,
+      "singleAtomUpdateMs": 702.8863679999486,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 193.01309800008312,
+            "p95Ms": 339.6925049996935,
+            "minMs": 188.73355100024492,
+            "maxMs": 387.2470269999467,
+            "peakHeapBytes": 284803328
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 148.10983800003305,
+            "p95Ms": 297.22702799970284,
+            "minMs": 145.5207839999348,
+            "maxMs": 340.67424499988556,
+            "peakHeapBytes": 303689864
+          },
+          "cacheHitP50Ms": 0.0002699997276067734
+        }
+      ],
+      "perQuery": []
+    },
+    {
+      "adapter": "lancedb",
+      "corpus": "seed",
+      "atomCount": 13846,
+      "indexBuildMs": 2004.731625000015,
+      "indexSizeBytes": 11956913,
+      "coldStartMs": 248.39067200012505,
+      "singleAtomUpdateMs": 1984.3557719998062,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 239.6024500001222,
+            "p95Ms": 255.80888899974525,
+            "minMs": 235.34276799997315,
+            "maxMs": 265.8773790001869,
+            "peakHeapBytes": 137917800
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 236.72818899992853,
+            "p95Ms": 246.68821000028402,
+            "minMs": 232.76069799996912,
+            "maxMs": 252.41746099991724,
+            "peakHeapBytes": 83786208
+          },
+          "cacheHitP50Ms": 0.0002700001932680607
+        }
+      ],
+      "metrics": {
+        "k": 5,
+        "recallAtK": 0.35983333333333334,
+        "mrr": 0.48,
+        "scoredQueries": 50,
+        "unscorableQueries": 0
+      },
+      "perQuery": [
+        {
+          "queryId": "q-001",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.6,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-002",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-003",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-004",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-005",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.25
+        },
+        {
+          "queryId": "q-006",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-007",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-008",
+          "axis": "exact-keyword",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-009",
+          "axis": "exact-keyword",
+          "retrievedCount": 4,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-010",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-011",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-012",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-013",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-014",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-015",
+          "axis": "inflected-form",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-016",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-017",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-018",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-019",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-020",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-021",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-022",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-023",
+          "axis": "multi-word-phrase",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-024",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-025",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-026",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.2,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-027",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-028",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-029",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-030",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-031",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.25,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-032",
+          "axis": "rare-technical-token",
+          "retrievedCount": 5,
+          "recall": 0.5,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-033",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-034",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-035",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-036",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-037",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-038",
+          "axis": "synonym",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-039",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-040",
+          "axis": "domain-filtered",
+          "retrievedCount": 3,
+          "recall": 1,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-041",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-042",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.6666666666666666,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-043",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 0.25
+        },
+        {
+          "queryId": "q-044",
+          "axis": "domain-filtered",
+          "retrievedCount": 5,
+          "recall": 0.3333333333333333,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-045",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.4,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-046",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0,
+          "reciprocalRank": 0
+        },
+        {
+          "queryId": "q-047",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.3333333333333333
+        },
+        {
+          "queryId": "q-048",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.375,
+          "reciprocalRank": 0.5
+        },
+        {
+          "queryId": "q-049",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.6,
+          "reciprocalRank": 1
+        },
+        {
+          "queryId": "q-050",
+          "axis": "production-shaped-long-form",
+          "retrievedCount": 5,
+          "recall": 0.125,
+          "reciprocalRank": 0.5
+        }
+      ]
+    },
+    {
+      "adapter": "lancedb",
+      "corpus": "synthetic-1000",
+      "atomCount": 1000,
+      "indexBuildMs": 79.20383400004357,
+      "indexSizeBytes": 127708,
+      "coldStartMs": 16.84042700007558,
+      "singleAtomUpdateMs": 76.61632200004533,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 16.8522379999049,
+            "p95Ms": 19.1614280003123,
+            "minMs": 15.836883000098169,
+            "maxMs": 21.84249999979511,
+            "peakHeapBytes": 88280512
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 15.688031000085175,
+            "p95Ms": 17.646900999825448,
+            "minMs": 14.75658700009808,
+            "maxMs": 18.854986000340432,
+            "peakHeapBytes": 83029360
+          },
+          "cacheHitP50Ms": 0.0002800002694129944
+        }
+      ],
+      "perQuery": []
+    },
+    {
+      "adapter": "lancedb",
+      "corpus": "synthetic-10000",
+      "atomCount": 10000,
+      "indexBuildMs": 713.2710899999365,
+      "indexSizeBytes": 899491,
+      "coldStartMs": 152.79363099997863,
+      "singleAtomUpdateMs": 693.8101889998652,
+      "regimes": [
+        {
+          "regime": "cold-per-query",
+          "description": "a port is opened (index loaded) for every single query — models a short-lived process",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 150.84922400023788,
+            "p95Ms": 161.8919870001264,
+            "minMs": 148.0623909998685,
+            "maxMs": 168.27579299965873,
+            "peakHeapBytes": 90535352
+          }
+        },
+        {
+          "regime": "warm-shared-index",
+          "description": "index loaded once, then every query runs against it — models a longer-lived caller",
+          "latency": {
+            "samples": 250,
+            "warmupIterations": 2,
+            "measuredIterations": 5,
+            "p50Ms": 149.53320199996233,
+            "p95Ms": 152.24939500028268,
+            "minMs": 146.88421500008553,
+            "maxMs": 154.92593600042164,
+            "peakHeapBytes": 95191480
+          },
+          "cacheHitP50Ms": 0.0002700001932680607
+        }
+      ],
+      "perQuery": []
+    }
+  ]
+}
